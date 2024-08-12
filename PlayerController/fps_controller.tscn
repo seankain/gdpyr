@@ -1,9 +1,12 @@
-[gd_scene load_steps=12 format=3 uid="uid://clhem2jdg0ksx"]
+[gd_scene load_steps=15 format=3 uid="uid://clhem2jdg0ksx"]
 
 [ext_resource type="Script" path="res://PlayerController/scripts/fps_controller.cs" id="1_orfjw"]
 [ext_resource type="Script" path="res://PlayerController/Reticle.cs" id="2_ivo4b"]
 [ext_resource type="Theme" uid="uid://ccnc37lac8tk4" path="res://Ui/theme.tres" id="3_genrv"]
 [ext_resource type="Script" path="res://PlayerController/Debug.cs" id="4_vbn33"]
+[ext_resource type="Script" path="res://PlayerController/scripts/StateMachine.cs" id="5_iasdg"]
+[ext_resource type="Script" path="res://PlayerController/scripts/PlayerWalkingState.cs" id="6_iuqfr"]
+[ext_resource type="Script" path="res://PlayerController/scripts/PlayerIdleState.cs" id="7_cvs6a"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_87822"]
 
@@ -187,8 +190,14 @@ layout_mode = 2
 [node name="VBoxContainer" type="VBoxContainer" parent="UserInterface/DebugPanel/MarginContainer"]
 layout_mode = 2
 
-[node name="PlayerStateMachine" type="Node" parent="."]
+[node name="PlayerStateMachine" type="Node" parent="." node_paths=PackedStringArray("CurrentState")]
+script = ExtResource("5_iasdg")
+CurrentState = NodePath("PlayerIdleState")
 
-[node name="PlayerWalkingState" type="Node" parent="PlayerStateMachine"]
+[node name="PlayerWalkingState" type="Node" parent="PlayerStateMachine" node_paths=PackedStringArray("playerController")]
+script = ExtResource("6_iuqfr")
+playerController = NodePath("../..")
 
-[node name="PlayerIdleState" type="Node" parent="PlayerStateMachine"]
+[node name="PlayerIdleState" type="Node" parent="PlayerStateMachine" node_paths=PackedStringArray("playerController")]
+script = ExtResource("7_cvs6a")
+playerController = NodePath("../..")

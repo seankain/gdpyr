@@ -1,8 +1,15 @@
 using Godot;
 using System;
+using System.Runtime.Serialization;
 
 public partial class State : Node
 {
+[Export]
+public fps_controller playerController;
+
+	public event EventHandler<string> StateTransitioned;
+
+
 	// Called when the node enters the scene tree for the first time.
 	public override void _Ready()
 	{
@@ -13,9 +20,16 @@ public partial class State : Node
 	{
 	}
 
-public void Enter(){}
-public void Update(){}
+	protected virtual void OnStateTransition(string nextStateName)
+	{
+		StateTransitioned?.Invoke(this, nextStateName);
+	}
 
-public void Exit(){}
+	public void Enter() { }
+	public virtual void Update(double delta) { }
+
+	public virtual void PhysicsUpdate(double delta) { }
+
+	public void Exit() { }
 
 }
