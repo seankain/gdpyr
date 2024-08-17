@@ -32,7 +32,7 @@ public partial class Debug : PanelContainer
 		}
 	}
 
-	private void AddDebugProperty(string title, string value)
+	public void AddDebugProperty(string title, string value)
 	{
 		property = new Label();
 		PropertyContainer.AddChild(property);
