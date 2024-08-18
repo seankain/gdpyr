@@ -4,10 +4,13 @@ using System.Runtime.Serialization;
 
 public partial class State : Node
 {
-[Export]
-public fps_controller playerController;
+	[Export]
+	public fps_controller playerController;
 
 	public event EventHandler<string> StateTransitioned;
+
+	[Export]
+	public AnimationPlayer PlayerAnimation;
 
 
 	// Called when the node enters the scene tree for the first time.
@@ -25,7 +28,7 @@ public fps_controller playerController;
 		StateTransitioned?.Invoke(this, nextStateName);
 	}
 
-	public void Enter() { }
+	public virtual void Enter() { }
 	public virtual void Update(double delta) { }
 
 	public virtual void PhysicsUpdate(double delta) { }

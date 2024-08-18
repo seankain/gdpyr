@@ -1,4 +1,4 @@
-[gd_scene load_steps=15 format=3 uid="uid://clhem2jdg0ksx"]
+[gd_scene load_steps=16 format=3 uid="uid://clhem2jdg0ksx"]
 
 [ext_resource type="Script" path="res://PlayerController/scripts/fps_controller.cs" id="1_orfjw"]
 [ext_resource type="Script" path="res://PlayerController/Reticle.cs" id="2_ivo4b"]
@@ -93,10 +93,49 @@ tracks/2/keys = {
 "values": [Vector3(0, 1.5, -0.218), Vector3(0, 0.75, -0.218)]
 }
 
+[sub_resource type="Animation" id="Animation_ue5ri"]
+resource_name = "walking"
+length = 2.0
+loop_mode = 1
+tracks/0/type = "bezier"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("CameraController:position:x")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(0.0147543, -0.25, 0, 0.25, 0, 0, -0.5, 0.00686197, 0.25, 0, -0.0141803, -0.25, 0, 0.25, 0, 0.000700338, -0.25, 0, 0.25, 0, 0.0158565, -0.25, 0, 0.25, 0),
+"times": PackedFloat32Array(0, 0.5, 1, 1.5, 2)
+}
+tracks/1/type = "bezier"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("CameraController:position:y")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(1.50044, -0.25, 0, 0.2, 0.0110227, 1.54453, -0.25, 0, 0.25, 0, 1.50017, -0.2, 0.00661361, 0.2, 0.00688922, 1.54564, -0.3, 0.000551105, 0.25, 0, 1.50017, -0.2, 0.00496018, 0.0999999, 0.00440907),
+"times": PackedFloat32Array(-0.1, 0.4, 0.9, 1.4, 1.9)
+}
+tracks/2/type = "bezier"
+tracks/2/imported = false
+tracks/2/enabled = true
+tracks/2/path = NodePath("CameraController:position:z")
+tracks/2/interp = 1
+tracks/2/loop_wrap = true
+tracks/2/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0, 0),
+"points": PackedFloat32Array(-0.218104, -0.25, 0, 0.25, 0, -0.218104, -0.25, 0, 0.25, 0, -0.218104, -0.25, 0, 0.25, 0, -0.218104, -0.25, 0, 0.25, 0, -0.218104, -0.25, 0, 0.25, 0),
+"times": PackedFloat32Array(0, 0.5, 1, 1.5, 2)
+}
+
 [sub_resource type="AnimationLibrary" id="AnimationLibrary_14aif"]
 _data = {
 "RESET": SubResource("Animation_cy763"),
-"crouch": SubResource("Animation_nbwiq")
+"crouch": SubResource("Animation_nbwiq"),
+"walking": SubResource("Animation_ue5ri")
 }
 
 [sub_resource type="SphereShape3D" id="SphereShape3D_iinwo"]
@@ -195,10 +234,12 @@ layout_mode = 2
 script = ExtResource("5_iasdg")
 CurrentState = NodePath("PlayerIdleState")
 
-[node name="PlayerWalkingState" type="Node" parent="PlayerStateMachine" node_paths=PackedStringArray("playerController")]
+[node name="PlayerWalkingState" type="Node" parent="PlayerStateMachine" node_paths=PackedStringArray("playerController", "PlayerAnimation")]
 script = ExtResource("6_iuqfr")
 playerController = NodePath("../..")
+PlayerAnimation = NodePath("../../AnimationPlayer")
 
-[node name="PlayerIdleState" type="Node" parent="PlayerStateMachine" node_paths=PackedStringArray("playerController")]
+[node name="PlayerIdleState" type="Node" parent="PlayerStateMachine" node_paths=PackedStringArray("playerController", "PlayerAnimation")]
 script = ExtResource("7_cvs6a")
 playerController = NodePath("../..")
+PlayerAnimation = NodePath("../../AnimationPlayer")

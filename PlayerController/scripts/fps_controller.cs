@@ -6,10 +6,12 @@ public partial class fps_controller : CharacterBody3D
 {
 	[Export]
 	public float MoveSpeed = 5.0f;
-
-    [Export]
-    public float CrouchMoveSpeed = 2.0f;
-
+	[Export]
+	public float Acceleration = 0.1f;
+	[Export]
+	public float Deceleration = 0.25f;
+	[Export]
+	public float CrouchMoveSpeed = 2.0f;
 	[Export]
 	public float CrouchSpeed = 2.0f;
 	public const float JumpVelocity = 4.5f;
@@ -35,7 +37,7 @@ public partial class fps_controller : CharacterBody3D
 	CollisionObject3D selfCollider;
 	[Export]
 	public ShapeCast3D headShapeCast;
-	private Node3D _head; 
+	private Node3D _head;
 
 	private bool _isCrouching = false;
 
@@ -57,30 +59,32 @@ public partial class fps_controller : CharacterBody3D
 		Vector3 velocity = Velocity;
 
 		// Add the gravity.
-		if (!IsOnFloor()){
+		if (!IsOnFloor())
+		{
 			velocity.Y -= gravity * (float)delta;
 		}
 
 		UpdateCamera(delta);
 
 		// Handle Jump.
-		if (Input.IsActionJustPressed("jump") && IsOnFloor()){
+		if (Input.IsActionJustPressed("jump") && IsOnFloor())
+		{
 			velocity.Y = JumpVelocity;
 		}
 
-		// Get the input direction and handle the movement/deceleration.
+		// Get the input direction and handle the movement/Deceleration.
 		// As good practice, you should replace UI actions with custom gameplay actions.
 		Vector2 inputDir = Input.GetVector("move_left", "move_right", "move_forward", "move_backward");
 		Vector3 direction = (Transform.Basis * new Vector3(inputDir.X, 0, inputDir.Y)).Normalized();
 		if (direction != Vector3.Zero)
 		{
-			velocity.X = direction.X * _speed;
-			velocity.Z = direction.Z * _speed;
+			velocity.X = Mathf.Lerp(velocity.X, direction.X * _speed, Acceleration);
+			velocity.Y = Mathf.Lerp(velocity.Y, direction.Y * _speed, Acceleration);
 		}
 		else
 		{
-			velocity.X = Mathf.MoveToward(Velocity.X, 0, _speed);
-			velocity.Z = Mathf.MoveToward(Velocity.Z, 0, _speed);
+			velocity.X = Mathf.MoveToward(Velocity.X, 0, Deceleration);
+			velocity.Z = Mathf.MoveToward(Velocity.Z, 0, Deceleration);
 		}
 
 		Velocity = velocity;
@@ -95,15 +99,17 @@ public partial class fps_controller : CharacterBody3D
 			_rotation_input = -((InputEventMouseMotion)@event).Relative.X * MouseSensitivity;
 			_tilt_input = -((InputEventMouseMotion)@event).Relative.Y * MouseSensitivity;
 		}
-		if(@event.IsActionPressed("crouch")){
+		if (@event.IsActionPressed("crouch"))
+		{
 			ToggleCrouch(true);
 		}
-		else if(@event.IsActionReleased("crouch")){
+		else if (@event.IsActionReleased("crouch"))
+		{
 			ToggleCrouch(false);
 
 		}
-		
-		
+
+
 
 		//TODO open menu
 		if (@event is InputEventKey eventKey)
@@ -115,52 +121,63 @@ public partial class fps_controller : CharacterBody3D
 		}
 	}
 
-	public void UpdateCamera(double delta){
+	public void UpdateCamera(double delta)
+	{
 		_mouse_rotation.X += (float)(_tilt_input * delta);
-		_mouse_rotation.X = Mathf.Clamp(_mouse_rotation.X,TiltLowerLimit,TiltUpperLimit);
+		_mouse_rotation.X = Mathf.Clamp(_mouse_rotation.X, TiltLowerLimit, TiltUpperLimit);
 		_mouse_rotation.Y += (float)(_rotation_input * delta);
 		_mouse_rotation.Z = 0;
-		Basis = Basis.FromEuler(new Vector3(0,_mouse_rotation.Y,0));
-		camera.Basis = Basis.FromEuler(new Vector3(_mouse_rotation.X,0,0));
+		Basis = Basis.FromEuler(new Vector3(0, _mouse_rotation.Y, 0));
+		camera.Basis = Basis.FromEuler(new Vector3(_mouse_rotation.X, 0, 0));
 		_rotation_input = 0f;
 		_tilt_input = 0f;
-		
+
 	}
 
-	private void SetMoveSpeed(PlayerMoveState moveState){
-		switch(moveState){
+	private void SetMoveSpeed(PlayerMoveState moveState)
+	{
+		switch (moveState)
+		{
 			case PlayerMoveState.CROUCHING:
-			    _speed = CrouchMoveSpeed;
-			    break;
+				_speed = CrouchMoveSpeed;
+				break;
 			case PlayerMoveState.LADDER:
-			    //TODO
+				//TODO
 				_speed = MoveSpeed;
-			    break;
+				break;
 			default:
-			_speed = MoveSpeed;
-			break;
+				_speed = MoveSpeed;
+				break;
 		}
 	}
 
-	public void ToggleCrouch(bool crouching){
-		if(crouching){
+	public void ToggleCrouch(bool crouching)
+	{
+		if (crouching)
+		{
 			GD.Print("crouch");
-			animationPlayer.Play("crouch",-1,CrouchSpeed);
+			animationPlayer.Play("crouch", -1, CrouchSpeed);
 			SetMoveSpeed(PlayerMoveState.CROUCHING);
 		}
-		else{
-			if(headShapeCast.IsColliding()){return;}
+		else
+		{
+			if (headShapeCast.IsColliding()) { return; }
 			GD.Print("uncrouch");
-			animationPlayer.Play("crouch",-1,-CrouchSpeed,true);
+			animationPlayer.Play("crouch", -1, -CrouchSpeed, true);
 			SetMoveSpeed(PlayerMoveState.DEFAULT);
-			
+
 		}
+	}
+
+	private static float _lerp(float first, float second, float amount)
+	{
+		return first * (1 - amount) + second * amount;
 	}
 }
 
 public enum PlayerMoveState
 {
-DEFAULT,
-CROUCHING,
-LADDER
+	DEFAULT,
+	CROUCHING,
+	LADDER
 }

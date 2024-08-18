@@ -55,7 +55,7 @@ public partial class Reticle : CenterContainer
 		ReticleLines[3].Position = _lerp(ReticleLines[3].Position,pos + new Vector2(-speed*ReticleDistance,0),ReticleSpeed);
 
 	}
-
+//TODO make extension method
 	private static float _lerp(float first, float second, float amount)
 	{
 		return first * (1 - amount) + second * amount;
