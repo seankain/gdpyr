@@ -7,6 +7,8 @@ public partial class fps_controller : CharacterBody3D
 	[Export]
 	public float MoveSpeed = 5.0f;
 	[Export]
+	public float SprintSpeed = 8.0f;
+	[Export]
 	public float Acceleration = 0.1f;
 	[Export]
 	public float Deceleration = 0.25f;
@@ -41,7 +43,7 @@ public partial class fps_controller : CharacterBody3D
 
 	private bool _isCrouching = false;
 
-	private float _speed;
+	public float CurrentMoveSpeed;
 
 	// Get the gravity from the project settings to be synced with RigidBody nodes.
 	public float gravity = ProjectSettings.GetSetting("physics/3d/default_gravity").AsSingle();
@@ -51,7 +53,7 @@ public partial class fps_controller : CharacterBody3D
 		Input.MouseMode = Input.MouseModeEnum.Captured;
 		_head = GetNode<Node3D>("CameraController");
 		headShapeCast.AddException(selfCollider);
-		_speed = MoveSpeed;
+		CurrentMoveSpeed = MoveSpeed;
 	}
 
 	public override void _PhysicsProcess(double delta)
@@ -78,8 +80,8 @@ public partial class fps_controller : CharacterBody3D
 		Vector3 direction = (Transform.Basis * new Vector3(inputDir.X, 0, inputDir.Y)).Normalized();
 		if (direction != Vector3.Zero)
 		{
-			velocity.X = Mathf.Lerp(velocity.X, direction.X * _speed, Acceleration);
-			velocity.Y = Mathf.Lerp(velocity.Y, direction.Y * _speed, Acceleration);
+			velocity.X = Mathf.Lerp(velocity.X, direction.X * CurrentMoveSpeed, Acceleration);
+			velocity.Z = Mathf.Lerp(velocity.Z, direction.Z * CurrentMoveSpeed, Acceleration);
 		}
 		else
 		{
@@ -139,14 +141,14 @@ public partial class fps_controller : CharacterBody3D
 		switch (moveState)
 		{
 			case PlayerMoveState.CROUCHING:
-				_speed = CrouchMoveSpeed;
+				CurrentMoveSpeed = CrouchMoveSpeed;
 				break;
 			case PlayerMoveState.LADDER:
 				//TODO
-				_speed = MoveSpeed;
+				CurrentMoveSpeed = MoveSpeed;
 				break;
 			default:
-				_speed = MoveSpeed;
+				CurrentMoveSpeed = MoveSpeed;
 				break;
 		}
 	}

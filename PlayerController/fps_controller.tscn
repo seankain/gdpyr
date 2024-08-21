@@ -167,7 +167,7 @@ libraries = {
 }
 
 [node name="ShapeCast3D" type="ShapeCast3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.77068, 0)
 shape = SubResource("SphereShape3D_iinwo")
 target_position = Vector3(0, 0.5, 0)
 
