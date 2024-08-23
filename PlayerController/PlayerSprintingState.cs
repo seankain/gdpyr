@@ -18,7 +18,7 @@ public partial class PlayerSprintingState : State
 
 	public override void Enter()
 	{
-		PlayerAnimation.Play("Sprinting", 0.5, 1.0f);
+		PlayerAnimation.Play("sprinting", 0.5, 1.0f);
 		playerController.CurrentMoveSpeed = playerController.SprintSpeed;
 	}
 
@@ -37,7 +37,7 @@ public partial class PlayerSprintingState : State
 	{
 		if (@event.IsActionReleased("sprint"))
 		{
-			OnStateTransition("WalkingPlayerState");
+			OnStateTransition("PlayerWalkingState");
 		}
 	}
 
