@@ -4,6 +4,14 @@ using System.Runtime.Serialization;
 
 public partial class State : Node
 {
+
+	[Export]
+	public float StatePlayerMoveSpeed = 0;
+	[Export]
+	public float StatePlayerAcceleration = 0;
+	[Export]
+	public float StatePlayerDeceleration = 0;
+
 	[Export]
 	public fps_controller playerController;
 
@@ -29,7 +37,12 @@ public partial class State : Node
 	}
 
 	public virtual void Enter() { }
-	public virtual void Update(double delta) { }
+	public virtual void Update(double delta)
+	{
+		playerController.UpdateGravity(delta);
+		playerController.UpdateInput(StatePlayerMoveSpeed, StatePlayerDeceleration, StatePlayerAcceleration);
+		playerController.UpdateVelocity();
+	}
 
 	public virtual void PhysicsUpdate(double delta) { }
 

@@ -17,8 +17,8 @@ public partial class StateMachine : Node
 			if (child is State)
 			{
 				GD.Print($"Adding state {child.Name}");
-				States.Add(child.Name,(State)child);
-				((State)child).StateTransitioned += (o,s)=> {OnChildTransition(s);};
+				States.Add(child.Name, (State)child);
+				((State)child).StateTransitioned += (o, s) => { OnChildTransition(s); };
 				//child.transition.connect(on_child_transition);
 			}
 		}
@@ -43,12 +43,12 @@ public partial class StateMachine : Node
 		CurrentState.Exit();
 		nextState.Enter();
 		CurrentState = nextState;
-		GD.Print("Walking State",CurrentState.Name);
+		GD.Print(CurrentState.Name);
 	}
 
 	private void LogToDebugPanel(string name, string value)
 	{
-		GetNode<Debug>("%DebugPanel").AddDebugProperty(name,value);
+		GetNode<Debug>("%DebugPanel").AddDebugProperty(name, value);
 	}
 
 }

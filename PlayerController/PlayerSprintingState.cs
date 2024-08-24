@@ -19,26 +19,31 @@ public partial class PlayerSprintingState : State
 	public override void Enter()
 	{
 		PlayerAnimation.Play("sprinting", 0.5, 1.0f);
-		playerController.CurrentMoveSpeed = playerController.SprintSpeed;
+		//playerController.CurrentMoveSpeed = StatePlayerMoveSpeed;
 	}
 
 	public override void Update(double delta)
 	{
+		base.Update(delta);
 		SetAnimatonSpeed(playerController.Velocity.Length());
-	}
-
-	public void SetAnimatonSpeed(float speed)
-	{
-		var alpha = Mathf.Remap(speed, 0.0, playerController.SprintSpeed, 0.0, 1.0);
-		PlayerAnimation.SpeedScale = (float)Mathf.Lerp(0.0, TopAnimationSpeed, alpha);
-	}
-
-	public override void _Input(InputEvent @event)
-	{
-		if (@event.IsActionReleased("sprint"))
+		if (Input.IsActionJustReleased("sprint"))
 		{
 			OnStateTransition("PlayerWalkingState");
 		}
 	}
+
+	public void SetAnimatonSpeed(float speed)
+	{
+		var alpha = Mathf.Remap(speed, 0.0, StatePlayerMoveSpeed, 0.0, 1.0);
+		PlayerAnimation.SpeedScale = (float)Mathf.Lerp(0.0, TopAnimationSpeed, alpha);
+	}
+
+	// public override void _Input(InputEvent @event)
+	// {
+	// 	if (@event.IsActionReleased("sprint"))
+	// 	{
+	// 		OnStateTransition("PlayerWalkingState");
+	// 	}
+	// }
 
 }

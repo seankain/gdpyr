@@ -276,15 +276,23 @@ CurrentState = NodePath("PlayerIdleState")
 
 [node name="PlayerWalkingState" type="Node" parent="PlayerStateMachine" node_paths=PackedStringArray("playerController", "PlayerAnimation")]
 script = ExtResource("6_iuqfr")
+StatePlayerMoveSpeed = 5.0
+StatePlayerAcceleration = 0.1
+StatePlayerDeceleration = 0.25
 playerController = NodePath("../..")
 PlayerAnimation = NodePath("../../AnimationPlayer")
 
 [node name="PlayerIdleState" type="Node" parent="PlayerStateMachine" node_paths=PackedStringArray("playerController", "PlayerAnimation")]
 script = ExtResource("7_cvs6a")
+StatePlayerMoveSpeed = 5.0
+StatePlayerAcceleration = 0.1
 playerController = NodePath("../..")
 PlayerAnimation = NodePath("../../AnimationPlayer")
 
 [node name="PlayerSprintingState" type="Node" parent="PlayerStateMachine" node_paths=PackedStringArray("playerController", "PlayerAnimation")]
 script = ExtResource("8_pvahy")
+StatePlayerMoveSpeed = 8.0
+StatePlayerAcceleration = 0.1
+StatePlayerDeceleration = 0.25
 playerController = NodePath("../..")
 PlayerAnimation = NodePath("../../AnimationPlayer")
