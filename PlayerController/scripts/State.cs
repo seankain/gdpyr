@@ -46,6 +46,9 @@ public partial class State : Node
 
 	public virtual void PhysicsUpdate(double delta) { }
 
-	public void Exit() { }
+	public virtual void Exit()
+	{
+		PlayerAnimation.SpeedScale = 1.0f;
+	}
 
 }

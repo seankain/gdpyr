@@ -22,6 +22,10 @@ public partial class PlayerWalkingState : State
 		{
 			OnStateTransition("PlayerIdleState");
 		}
+		if (Input.IsActionJustPressed("crouch"))
+		{
+			OnStateTransition("PlayerCrouchingState");
+		}
 
 	}
 
