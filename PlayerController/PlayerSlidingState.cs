@@ -22,7 +22,11 @@ public partial class PlayerSlidingState : State
 	}
 	public override void Enter()
 	{
-		base.Enter();
+		//SetTilt(playerController.CurrentRotation);
+		var slideAnim = PlayerAnimation.GetAnimation("sliding");
+		slideAnim.TrackSetKeyValue(4, 0, playerController.Velocity.Length());
+		PlayerAnimation.SpeedScale = 1.0f;
+		PlayerAnimation.Play("sliding", -1.0, SlideAnimSpeed);
 	}
 	public override void Update(double delta)
 	{
@@ -32,9 +36,21 @@ public partial class PlayerSlidingState : State
 		playerController.UpdateVelocity();
 	}
 
-	public void SetTilt(float player_rotation)
+	public void SetTilt(float playerRotation)
 	{
+		var tilt = Vector3.Zero;
+		tilt.Z = (float)Mathf.Clamp(TiltAmount * playerRotation, -0.1f, 0.1f);
+		if (tilt.Z == 0.0)
+		{
+			tilt.Z = 0.05f;
+		}
+		PlayerAnimation.GetAnimation("sliding").TrackSetKeyValue(8, 1, tilt);
+		PlayerAnimation.GetAnimation("sliding").TrackSetKeyValue(8, 2, tilt);
+	}
 
+	private void Finish()
+	{
+		OnStateTransition("CrouchingPlayerState");
 	}
 
 }

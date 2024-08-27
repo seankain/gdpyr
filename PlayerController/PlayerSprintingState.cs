@@ -28,7 +28,11 @@ public partial class PlayerSprintingState : State
 		SetAnimatonSpeed(playerController.Velocity.Length());
 		if (Input.IsActionJustReleased("sprint"))
 		{
-			OnStateTransition("PlayerWalkingState");
+			OnStateTransition("PlayerIdleState");
+		}
+		if (Input.IsActionJustPressed("crouch") && playerController.Velocity.Length() > 0)
+		{
+			OnStateTransition("SlidingPlayerState");
 		}
 	}
 
