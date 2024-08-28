@@ -3,7 +3,7 @@ using System;
 
 public partial class PlayerIdleState : State
 {
-	public override void Enter()
+	public override void Enter(State previousState)
 	{
 		PlayerAnimation.Pause();
 	}

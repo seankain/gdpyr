@@ -305,6 +305,7 @@ skeleton = NodePath("../..")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.596318, -0.218104)
 
 [node name="Camera3D" type="Camera3D" parent="CameraController"]
+fov = 75.1111
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="."]
 libraries = {
@@ -312,7 +313,7 @@ libraries = {
 }
 
 [node name="ShapeCast3D" type="ShapeCast3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.99582, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
 shape = SubResource("SphereShape3D_iinwo")
 target_position = Vector3(0, 0.5, 0)
 
@@ -413,5 +414,11 @@ StatePlayerDeceleration = 0.25
 playerController = NodePath("../..")
 PlayerAnimation = NodePath("../../AnimationPlayer")
 
-[node name="PlayerSlidingState" type="Node" parent="PlayerStateMachine"]
+[node name="PlayerSlidingState" type="Node" parent="PlayerStateMachine" node_paths=PackedStringArray("CrouchShapeCast", "playerController", "PlayerAnimation")]
 script = ExtResource("10_0y60l")
+CrouchShapeCast = NodePath("../../ShapeCast3D")
+StatePlayerMoveSpeed = 4.05263
+StatePlayerAcceleration = 0.01
+StatePlayerDeceleration = 0.25
+playerController = NodePath("../..")
+PlayerAnimation = NodePath("../../AnimationPlayer")

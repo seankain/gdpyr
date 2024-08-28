@@ -10,6 +10,8 @@ public partial class PlayerCrouchingState : State
 	[Export]
 	public float CrouchSpeed;
 
+	private bool released = false;
+
 	// Called when the node enters the scene tree for the first time.
 	public override void _Ready()
 	{
@@ -27,12 +29,33 @@ public partial class PlayerCrouchingState : State
 		{
 			Coroutines.StartCoroutine(Uncrouch());
 		}
+		else if (Input.IsActionPressed("crouch") == false && released == false)
+		{
+			released = true;
+			Coroutines.StartCoroutine(Uncrouch());
+		}
 	}
 
-	public override void Enter()
+	public override void Enter(State previousState)
 	{
-		base.Enter();
-		PlayerAnimation.Play("crouch", -1, CrouchSpeed);
+		PlayerAnimation.SpeedScale = 1.0f;
+
+		if (previousState.Name == "PlayerSlidingState")
+		{
+			PlayerAnimation.CurrentAnimation = "Crouching";
+			PlayerAnimation.Seek(1.0, true);
+
+		}
+		else
+		{
+			PlayerAnimation.Play("crouch", -1.0, CrouchSpeed);
+		}
+	}
+
+	public override void Exit()
+	{
+		base.Exit();
+		released = false;
 	}
 
 	private IEnumerable Uncrouch()

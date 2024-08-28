@@ -20,9 +20,9 @@ public partial class PlayerSlidingState : State
 	public override void _Process(double delta)
 	{
 	}
-	public override void Enter()
+	public override void Enter(State previousState)
 	{
-		//SetTilt(playerController.CurrentRotation);
+		SetTilt((float)playerController.CurrentRotation);
 		var slideAnim = PlayerAnimation.GetAnimation("sliding");
 		slideAnim.TrackSetKeyValue(4, 0, playerController.Velocity.Length());
 		PlayerAnimation.SpeedScale = 1.0f;
@@ -44,13 +44,13 @@ public partial class PlayerSlidingState : State
 		{
 			tilt.Z = 0.05f;
 		}
-		PlayerAnimation.GetAnimation("sliding").TrackSetKeyValue(8, 1, tilt);
-		PlayerAnimation.GetAnimation("sliding").TrackSetKeyValue(8, 2, tilt);
+		PlayerAnimation.GetAnimation("sliding").TrackSetKeyValue(7, 1, tilt);
+		PlayerAnimation.GetAnimation("sliding").TrackSetKeyValue(7, 2, tilt);
 	}
 
 	private void Finish()
 	{
-		OnStateTransition("CrouchingPlayerState");
+		OnStateTransition("PlayerCrouchingState");
 	}
 
 }

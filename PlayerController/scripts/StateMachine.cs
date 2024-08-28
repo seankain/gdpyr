@@ -22,7 +22,7 @@ public partial class StateMachine : Node
 				//child.transition.connect(on_child_transition);
 			}
 		}
-		CurrentState.Enter();
+		CurrentState.Enter(CurrentState);
 	}
 
 	// Called every frame. 'delta' is the elapsed time since the previous frame.
@@ -41,7 +41,7 @@ public partial class StateMachine : Node
 		var nextStateExists = States.TryGetValue(nextStateName, out var nextState);
 		if (!nextStateExists) { GD.PushWarning($"Non-existent state name {nextStateName}"); return; }
 		CurrentState.Exit();
-		nextState.Enter();
+		nextState.Enter(CurrentState);
 		CurrentState = nextState;
 		GD.Print(CurrentState.Name);
 	}

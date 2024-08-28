@@ -16,7 +16,7 @@ public partial class PlayerSprintingState : State
 	{
 	}
 
-	public override void Enter()
+	public override void Enter(State previousState)
 	{
 		PlayerAnimation.Play("sprinting", 0.5, 1.0f);
 		//playerController.CurrentMoveSpeed = StatePlayerMoveSpeed;
@@ -30,9 +30,9 @@ public partial class PlayerSprintingState : State
 		{
 			OnStateTransition("PlayerIdleState");
 		}
-		if (Input.IsActionJustPressed("crouch") && playerController.Velocity.Length() > 0)
+		if (Input.IsActionJustPressed("crouch") && playerController.Velocity.Length() > 6)
 		{
-			OnStateTransition("SlidingPlayerState");
+			OnStateTransition("PlayerSlidingState");
 		}
 	}
 

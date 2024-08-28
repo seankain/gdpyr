@@ -36,7 +36,7 @@ public partial class State : Node
 		StateTransitioned?.Invoke(this, nextStateName);
 	}
 
-	public virtual void Enter() { }
+	public virtual void Enter(State previousState) { }
 	public virtual void Update(double delta)
 	{
 		playerController.UpdateGravity(delta);

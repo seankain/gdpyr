@@ -5,7 +5,7 @@ public partial class PlayerWalkingState : State
 {
 	[Export]
 	public float TopAnimationSpeed = 2.2f;
-	public override void Enter()
+	public override void Enter(State previousState)
 	{
 		PlayerAnimation.Play("walking", -1.0, 1.0f);
 		//playerController.CurrentMoveSpeed = StatePlayerMoveSpeed;
