@@ -11,6 +11,9 @@ public partial class PlayerSlidingState : State
 	[Export]
 	public ShapeCast3D CrouchShapeCast;
 
+	private int playerSlidingStateAnimTrackIndex = -1;
+	private int cameraRotationAnimTrackIndex = -1;
+
 	// Called when the node enters the scene tree for the first time.
 	public override void _Ready()
 	{
@@ -24,9 +27,13 @@ public partial class PlayerSlidingState : State
 	{
 		SetTilt((float)playerController.CurrentRotation);
 		var slideAnim = PlayerAnimation.GetAnimation("sliding");
-		slideAnim.TrackSetKeyValue(4, 0, playerController.Velocity.Length());
+		playerSlidingStateAnimTrackIndex = slideAnim.FindTrack("PlayerStateMachine/PlayerSlidingState:StatePlayerMoveSpeed", Animation.TrackType.Value);
+		cameraRotationAnimTrackIndex = slideAnim.FindTrack("CameraController:rotation", Animation.TrackType.Value);
+		slideAnim.TrackSetKeyValue(playerSlidingStateAnimTrackIndex, 0, playerController.Velocity.Length());
 		PlayerAnimation.SpeedScale = 1.0f;
 		PlayerAnimation.Play("sliding", -1.0, SlideAnimSpeed);
+
+
 	}
 	public override void Update(double delta)
 	{
@@ -44,8 +51,8 @@ public partial class PlayerSlidingState : State
 		{
 			tilt.Z = 0.05f;
 		}
-		PlayerAnimation.GetAnimation("sliding").TrackSetKeyValue(7, 1, tilt);
-		PlayerAnimation.GetAnimation("sliding").TrackSetKeyValue(7, 2, tilt);
+		PlayerAnimation.GetAnimation("sliding").TrackSetKeyValue(cameraRotationAnimTrackIndex, 1, tilt);
+		PlayerAnimation.GetAnimation("sliding").TrackSetKeyValue(cameraRotationAnimTrackIndex, 2, tilt);
 	}
 
 	private void Finish()

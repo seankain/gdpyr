@@ -42,7 +42,7 @@ public partial class PlayerCrouchingState : State
 
 		if (previousState.Name == "PlayerSlidingState")
 		{
-			PlayerAnimation.CurrentAnimation = "Crouching";
+			PlayerAnimation.CurrentAnimation = "crouch";
 			PlayerAnimation.Seek(1.0, true);
 
 		}
