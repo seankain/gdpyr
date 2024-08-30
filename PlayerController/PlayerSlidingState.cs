@@ -17,6 +17,9 @@ public partial class PlayerSlidingState : State
 	// Called when the node enters the scene tree for the first time.
 	public override void _Ready()
 	{
+		var slideAnim = PlayerAnimation.GetAnimation("sliding");
+		playerSlidingStateAnimTrackIndex = slideAnim.FindTrack("PlayerStateMachine/PlayerSlidingState:StatePlayerMoveSpeed", Animation.TrackType.Value);
+		cameraRotationAnimTrackIndex = slideAnim.FindTrack("CameraController:rotation", Animation.TrackType.Value);
 	}
 
 	// Called every frame. 'delta' is the elapsed time since the previous frame.
@@ -27,8 +30,7 @@ public partial class PlayerSlidingState : State
 	{
 		SetTilt((float)playerController.CurrentRotation);
 		var slideAnim = PlayerAnimation.GetAnimation("sliding");
-		playerSlidingStateAnimTrackIndex = slideAnim.FindTrack("PlayerStateMachine/PlayerSlidingState:StatePlayerMoveSpeed", Animation.TrackType.Value);
-		cameraRotationAnimTrackIndex = slideAnim.FindTrack("CameraController:rotation", Animation.TrackType.Value);
+		GD.Print($"track ids slide: {playerSlidingStateAnimTrackIndex} camera rot : {cameraRotationAnimTrackIndex}");
 		slideAnim.TrackSetKeyValue(playerSlidingStateAnimTrackIndex, 0, playerController.Velocity.Length());
 		PlayerAnimation.SpeedScale = 1.0f;
 		PlayerAnimation.Play("sliding", -1.0, SlideAnimSpeed);
