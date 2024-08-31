@@ -20,8 +20,12 @@ public partial class PlayerJumpingState : State
 
 	public override void Enter(State previousState)
 	{
+		if (PlayerAnimation.IsPlaying() && PlayerAnimation.CurrentAnimation == "jumpend")
+		{
+			Coroutines.StartCoroutine(WaitForAnimation("jumpend"));
+		}
 		playerController.Velocity += new Vector3(0, JumpVelocity, 0);
-		PlayerAnimation.Pause();
+		PlayerAnimation.Play("jumpstart");
 	}
 
 	public override void Update(double delta)
@@ -33,6 +37,7 @@ public partial class PlayerJumpingState : State
 
 		if (playerController.IsOnFloor())
 		{
+			PlayerAnimation.Play("jumpend");
 			OnStateTransition("PlayerIdleState");
 		}
 	}

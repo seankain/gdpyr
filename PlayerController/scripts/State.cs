@@ -1,5 +1,6 @@
 using Godot;
 using System;
+using System.Collections;
 using System.Runtime.Serialization;
 
 public partial class State : Node
@@ -49,6 +50,14 @@ public partial class State : Node
 	public virtual void Exit()
 	{
 		PlayerAnimation.SpeedScale = 1.0f;
+	}
+
+	public IEnumerable WaitForAnimation(string animationName)
+	{
+		if (PlayerAnimation.IsPlaying() && PlayerAnimation.CurrentAnimation == animationName)
+		{
+			yield return null;
+		}
 	}
 
 }

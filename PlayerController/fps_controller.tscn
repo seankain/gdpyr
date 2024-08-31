@@ -1,4 +1,4 @@
-[gd_scene load_steps=22 format=3 uid="uid://clhem2jdg0ksx"]
+[gd_scene load_steps=24 format=3 uid="uid://clhem2jdg0ksx"]
 
 [ext_resource type="Script" path="res://PlayerController/scripts/fps_controller.cs" id="1_orfjw"]
 [ext_resource type="Script" path="res://PlayerController/Reticle.cs" id="2_ivo4b"]
@@ -275,10 +275,66 @@ tracks/7/keys = {
 "values": [75.0, 80.0, 75.0]
 }
 
+[sub_resource type="Animation" id="Animation_wopnr"]
+resource_name = "jumpstart"
+length = 0.55
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("CameraController:position")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.2, 0.5),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [Vector3(0, 1.5, -0.218), Vector3(0, 1.45, -0.218), Vector3(0, 1.5, -0.218)]
+}
+tracks/1/type = "bezier"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("CollisionShape3D:rotation:x")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(0, -0.25, 0, 0.25, 0, -0.015, -0.25, 0, 0.25, 0, 0, -0.25, 0, 0.25, 0),
+"times": PackedFloat32Array(0, 0.2, 0.5)
+}
+
+[sub_resource type="Animation" id="Animation_4pdbu"]
+resource_name = "jumpend"
+length = 0.55
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("CameraController:position")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.085, 0.4),
+"transitions": PackedFloat32Array(1, 1, 1),
+"update": 0,
+"values": [Vector3(0, 1.5, -0.218), Vector3(0, 1.45, -0.218), Vector3(0, 1.5, -0.218)]
+}
+tracks/1/type = "bezier"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("CollisionShape3D:rotation:x")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0),
+"points": PackedFloat32Array(0, -0.25, 0, 0.25, 0, -0.024, -0.25, 0, 0.25, 0, 0, -0.25, 0, 0.25, 0),
+"times": PackedFloat32Array(0, 0.085, 0.4)
+}
+
 [sub_resource type="AnimationLibrary" id="AnimationLibrary_14aif"]
 _data = {
 "RESET": SubResource("Animation_cy763"),
 "crouch": SubResource("Animation_nbwiq"),
+"jumpend": SubResource("Animation_4pdbu"),
+"jumpstart": SubResource("Animation_wopnr"),
 "sliding": SubResource("Animation_qs3qy"),
 "sprinting": SubResource("Animation_yhu73"),
 "walking": SubResource("Animation_ue5ri")

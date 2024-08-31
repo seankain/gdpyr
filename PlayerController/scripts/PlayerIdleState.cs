@@ -1,10 +1,16 @@
 using Godot;
 using System;
+using System.Collections;
+using System.IO;
 
 public partial class PlayerIdleState : State
 {
 	public override void Enter(State previousState)
 	{
+		if (PlayerAnimation.IsPlaying() && PlayerAnimation.CurrentAnimation == "jumpend")
+		{
+			Coroutines.StartCoroutine(WaitForAnimation("jumpend"));
+		}
 		PlayerAnimation.Pause();
 	}
 
