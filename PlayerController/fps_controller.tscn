@@ -1,4 +1,4 @@
-[gd_scene load_steps=21 format=3 uid="uid://clhem2jdg0ksx"]
+[gd_scene load_steps=22 format=3 uid="uid://clhem2jdg0ksx"]
 
 [ext_resource type="Script" path="res://PlayerController/scripts/fps_controller.cs" id="1_orfjw"]
 [ext_resource type="Script" path="res://PlayerController/Reticle.cs" id="2_ivo4b"]
@@ -10,6 +10,7 @@
 [ext_resource type="Script" path="res://PlayerController/PlayerSprintingState.cs" id="8_pvahy"]
 [ext_resource type="Script" path="res://PlayerController/PlayerCrouchingState.cs" id="9_4x70l"]
 [ext_resource type="Script" path="res://PlayerController/PlayerSlidingState.cs" id="10_0y60l"]
+[ext_resource type="Script" path="res://PlayerController/PlayerJumpingState.cs" id="11_k7axa"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_87822"]
 
@@ -418,6 +419,14 @@ script = ExtResource("10_0y60l")
 CrouchShapeCast = NodePath("../../ShapeCast3D")
 StatePlayerMoveSpeed = 4.0
 StatePlayerAcceleration = 0.01
+StatePlayerDeceleration = 0.25
+playerController = NodePath("../..")
+PlayerAnimation = NodePath("../../AnimationPlayer")
+
+[node name="PlayerJumpingState" type="Node" parent="PlayerStateMachine" node_paths=PackedStringArray("playerController", "PlayerAnimation")]
+script = ExtResource("11_k7axa")
+StatePlayerMoveSpeed = 6.0
+StatePlayerAcceleration = 0.1
 StatePlayerDeceleration = 0.25
 playerController = NodePath("../..")
 PlayerAnimation = NodePath("../../AnimationPlayer")

@@ -1,7 +1,8 @@
-[gd_scene load_steps=12 format=3 uid="uid://wec3a0an2atb"]
+[gd_scene load_steps=14 format=3 uid="uid://wec3a0an2atb"]
 
 [ext_resource type="PackedScene" uid="uid://clhem2jdg0ksx" path="res://PlayerController/fps_controller.tscn" id="1_iif3a"]
 [ext_resource type="Material" uid="uid://cgh5xjavqxrgv" path="res://Levels/materials/PrototypeMat1.tres" id="2_4viys"]
+[ext_resource type="Texture2D" uid="uid://cpd0vl6ggnxlq" path="res://Textures/kenney_prototype/PNG/Green/texture_01.png" id="3_ugpq5"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_xaant"]
 sky_top_color = Color(0.335715, 0.270978, 1, 1)
@@ -31,6 +32,10 @@ size = Vector3(1, 3, 1)
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_bxyf7"]
 size = Vector3(10, 0.5, 10)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_kgbsf"]
+albedo_texture = ExtResource("3_ugpq5")
+uv1_triplanar = true
 
 [node name="Test" type="Node3D"]
 
@@ -121,3 +126,27 @@ material = ExtResource("2_4viys")
 [node name="CSGBox3D" type="CSGBox3D" parent="CSGCombiner3D"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.636475, 2.18485, 1.00824)
 size = Vector3(2.27295, 0.357422, 3.01648)
+
+[node name="JumpyBox" type="CSGBox3D" parent="CSGCombiner3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8.07602, 0.929924, -0.350395)
+material = SubResource("StandardMaterial3D_kgbsf")
+
+[node name="JumpyBox2" type="CSGBox3D" parent="CSGCombiner3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.63762, 1.96347, -0.350395)
+size = Vector3(1, 0.265625, 1)
+material = SubResource("StandardMaterial3D_kgbsf")
+
+[node name="JumpyBox3" type="CSGBox3D" parent="CSGCombiner3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.98572, 1.96347, -0.350395)
+size = Vector3(1, 0.265625, 1)
+material = SubResource("StandardMaterial3D_kgbsf")
+
+[node name="JumpyBox4" type="CSGBox3D" parent="CSGCombiner3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.98572, 1.96347, -3.21066)
+size = Vector3(1, 0.265625, 1)
+material = SubResource("StandardMaterial3D_kgbsf")
+
+[node name="JumpyBox5" type="CSGBox3D" parent="CSGCombiner3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.00756, 1.96347, -3.21066)
+size = Vector3(1, 0.265625, 1)
+material = SubResource("StandardMaterial3D_kgbsf")

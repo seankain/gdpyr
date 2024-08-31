@@ -22,6 +22,11 @@ public partial class PlayerIdleState : State
 			OnStateTransition("PlayerWalkingState");
 		}
 
+		if (Input.IsActionJustPressed("jump") && playerController.IsOnFloor())
+		{
+			OnStateTransition("PlayerJumpingState");
+		}
+
 	}
 
 }

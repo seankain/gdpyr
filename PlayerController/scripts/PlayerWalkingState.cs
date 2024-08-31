@@ -27,6 +27,11 @@ public partial class PlayerWalkingState : State
 			OnStateTransition("PlayerCrouchingState");
 		}
 
+		if (Input.IsActionJustPressed("jump") && playerController.IsOnFloor())
+		{
+			OnStateTransition("PlayerJumpingState");
+		}
+
 	}
 
 	public void SetAnimatonSpeed(float speed)

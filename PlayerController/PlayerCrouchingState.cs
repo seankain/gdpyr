@@ -34,6 +34,10 @@ public partial class PlayerCrouchingState : State
 			released = true;
 			Coroutines.StartCoroutine(Uncrouch());
 		}
+		if (Input.IsActionJustPressed("jump") && playerController.IsOnFloor())
+		{
+			OnStateTransition("PlayerJumpingState");
+		}
 	}
 
 	public override void Enter(State previousState)

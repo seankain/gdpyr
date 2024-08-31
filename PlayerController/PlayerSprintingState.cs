@@ -34,6 +34,10 @@ public partial class PlayerSprintingState : State
 		{
 			OnStateTransition("PlayerSlidingState");
 		}
+		if (Input.IsActionJustPressed("jump") && playerController.IsOnFloor())
+		{
+			OnStateTransition("PlayerJumpingState");
+		}
 	}
 
 	public void SetAnimatonSpeed(float speed)
