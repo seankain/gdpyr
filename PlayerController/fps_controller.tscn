@@ -1,6 +1,7 @@
-[gd_scene load_steps=24 format=3 uid="uid://clhem2jdg0ksx"]
+[gd_scene load_steps=26 format=3 uid="uid://clhem2jdg0ksx"]
 
 [ext_resource type="Script" path="res://PlayerController/scripts/fps_controller.cs" id="1_orfjw"]
+[ext_resource type="PackedScene" uid="uid://dww8adj3w4rkh" path="res://Models/Weapons/geopick.glb" id="2_a68nc"]
 [ext_resource type="Script" path="res://PlayerController/Reticle.cs" id="2_ivo4b"]
 [ext_resource type="Theme" uid="uid://ccnc37lac8tk4" path="res://Ui/theme.tres" id="3_genrv"]
 [ext_resource type="Script" path="res://PlayerController/Debug.cs" id="4_vbn33"]
@@ -11,6 +12,7 @@
 [ext_resource type="Script" path="res://PlayerController/PlayerCrouchingState.cs" id="9_4x70l"]
 [ext_resource type="Script" path="res://PlayerController/PlayerSlidingState.cs" id="10_0y60l"]
 [ext_resource type="Script" path="res://PlayerController/PlayerJumpingState.cs" id="11_k7axa"]
+[ext_resource type="Script" path="res://PlayerController/PlayerFallingState.cs" id="12_x0vuy"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_87822"]
 
@@ -363,6 +365,11 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.596318, -0.218104)
 
 [node name="Camera3D" type="Camera3D" parent="CameraController"]
 
+[node name="WeaponRig" type="Node3D" parent="CameraController/Camera3D"]
+
+[node name="geopick2" parent="CameraController/Camera3D/WeaponRig" instance=ExtResource("2_a68nc")]
+transform = Transform3D(-1.31134e-08, 0, -0.3, 0, 0.3, 0, 0.3, 0, -1.31134e-08, 1.076, -0.595, -0.946)
+
 [node name="AnimationPlayer" type="AnimationPlayer" parent="."]
 libraries = {
 "": SubResource("AnimationLibrary_14aif")
@@ -486,3 +493,6 @@ StatePlayerAcceleration = 0.1
 StatePlayerDeceleration = 0.25
 playerController = NodePath("../..")
 PlayerAnimation = NodePath("../../AnimationPlayer")
+
+[node name="PlayerFallingState" type="Node" parent="PlayerStateMachine"]
+script = ExtResource("12_x0vuy")

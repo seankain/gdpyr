@@ -38,6 +38,11 @@ public partial class PlayerSprintingState : State
 		{
 			OnStateTransition("PlayerJumpingState");
 		}
+
+		if (playerController.Velocity.Y < -3.0 && !playerController.IsOnFloor())
+		{
+			OnStateTransition("PlayerFallingState");
+		}
 	}
 
 	public void SetAnimatonSpeed(float speed)

@@ -7,6 +7,10 @@ public partial class PlayerWalkingState : State
 	public float TopAnimationSpeed = 2.2f;
 	public override void Enter(State previousState)
 	{
+		if (PlayerAnimation.IsPlaying() && PlayerAnimation.CurrentAnimation == "jumpend")
+		{
+			Coroutines.StartCoroutine(WaitForAnimation("jumpend"));
+		}
 		PlayerAnimation.Play("walking", -1.0, 1.0f);
 		//playerController.CurrentMoveSpeed = StatePlayerMoveSpeed;
 	}
@@ -30,6 +34,11 @@ public partial class PlayerWalkingState : State
 		if (Input.IsActionJustPressed("jump") && playerController.IsOnFloor())
 		{
 			OnStateTransition("PlayerJumpingState");
+		}
+
+		if (playerController.Velocity.Y < -3.0 && !playerController.IsOnFloor())
+		{
+			OnStateTransition("PlayerFallingState");
 		}
 
 	}

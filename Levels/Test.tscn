@@ -137,16 +137,16 @@ size = Vector3(1, 0.265625, 1)
 material = SubResource("StandardMaterial3D_kgbsf")
 
 [node name="JumpyBox3" type="CSGBox3D" parent="CSGCombiner3D"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.98572, 1.96347, -0.350395)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.98572, 2.38295, -0.350395)
 size = Vector3(1, 0.265625, 1)
 material = SubResource("StandardMaterial3D_kgbsf")
 
 [node name="JumpyBox4" type="CSGBox3D" parent="CSGCombiner3D"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.98572, 1.96347, -3.21066)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.98572, 3.29468, -3.21066)
 size = Vector3(1, 0.265625, 1)
 material = SubResource("StandardMaterial3D_kgbsf")
 
 [node name="JumpyBox5" type="CSGBox3D" parent="CSGCombiner3D"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.00756, 1.96347, -3.21066)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.24246, 4.01604, -3.21066)
 size = Vector3(1, 0.265625, 1)
 material = SubResource("StandardMaterial3D_kgbsf")

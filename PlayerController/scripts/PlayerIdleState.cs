@@ -33,6 +33,11 @@ public partial class PlayerIdleState : State
 			OnStateTransition("PlayerJumpingState");
 		}
 
+		if (playerController.Velocity.Y < -3.0 && !playerController.IsOnFloor())
+		{
+			OnStateTransition("PlayerFallingState");
+		}
+
 	}
 
 }
