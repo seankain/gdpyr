@@ -1,8 +1,8 @@
-[gd_scene load_steps=26 format=3 uid="uid://clhem2jdg0ksx"]
+[gd_scene load_steps=28 format=3 uid="uid://clhem2jdg0ksx"]
 
 [ext_resource type="Script" path="res://PlayerController/scripts/fps_controller.cs" id="1_orfjw"]
-[ext_resource type="PackedScene" uid="uid://dww8adj3w4rkh" path="res://Models/Weapons/geopick.glb" id="2_a68nc"]
 [ext_resource type="Script" path="res://PlayerController/Reticle.cs" id="2_ivo4b"]
+[ext_resource type="PackedScene" uid="uid://bohn5s05rtb5m" path="res://PlayerController/weapon_geopick.tscn" id="2_pisk1"]
 [ext_resource type="Theme" uid="uid://ccnc37lac8tk4" path="res://Ui/theme.tres" id="3_genrv"]
 [ext_resource type="Script" path="res://PlayerController/Debug.cs" id="4_vbn33"]
 [ext_resource type="Script" path="res://PlayerController/scripts/StateMachine.cs" id="5_iasdg"]
@@ -13,6 +13,8 @@
 [ext_resource type="Script" path="res://PlayerController/PlayerSlidingState.cs" id="10_0y60l"]
 [ext_resource type="Script" path="res://PlayerController/PlayerJumpingState.cs" id="11_k7axa"]
 [ext_resource type="Script" path="res://PlayerController/PlayerFallingState.cs" id="12_x0vuy"]
+[ext_resource type="Script" path="res://PlayerController/WeaponSubViewport.cs" id="14_imije"]
+[ext_resource type="Script" path="res://PlayerController/WeaponCamera.cs" id="14_l52yo"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_87822"]
 
@@ -364,11 +366,11 @@ skeleton = NodePath("../..")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.596318, -0.218104)
 
 [node name="Camera3D" type="Camera3D" parent="CameraController"]
+cull_mask = 1048573
 
 [node name="WeaponRig" type="Node3D" parent="CameraController/Camera3D"]
 
-[node name="geopick2" parent="CameraController/Camera3D/WeaponRig" instance=ExtResource("2_a68nc")]
-transform = Transform3D(-1.31134e-08, 0, -0.3, 0, 0.3, 0, 0.3, 0, -1.31134e-08, 1.076, -0.595, -0.946)
+[node name="WeaponGeopick" parent="CameraController/Camera3D/WeaponRig" instance=ExtResource("2_pisk1")]
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="."]
 libraries = {
@@ -494,5 +496,30 @@ StatePlayerDeceleration = 0.25
 playerController = NodePath("../..")
 PlayerAnimation = NodePath("../../AnimationPlayer")
 
-[node name="PlayerFallingState" type="Node" parent="PlayerStateMachine"]
+[node name="PlayerFallingState" type="Node" parent="PlayerStateMachine" node_paths=PackedStringArray("playerController", "PlayerAnimation")]
 script = ExtResource("12_x0vuy")
+StatePlayerMoveSpeed = 6.0
+StatePlayerAcceleration = 0.1
+StatePlayerDeceleration = 0.25
+playerController = NodePath("../..")
+PlayerAnimation = NodePath("../../AnimationPlayer")
+
+[node name="WeaponViewport" type="SubViewportContainer" parent="."]
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="SubViewport" type="SubViewport" parent="WeaponViewport"]
+transparent_bg = true
+handle_input_locally = false
+size = Vector2i(1920, 1280)
+render_target_update_mode = 0
+script = ExtResource("14_imije")
+
+[node name="Camera3D" type="Camera3D" parent="WeaponViewport/SubViewport"]
+visible = false
+cull_mask = 1048574
+script = ExtResource("14_l52yo")
