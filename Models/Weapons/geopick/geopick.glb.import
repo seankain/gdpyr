@@ -4,12 +4,12 @@ importer="scene"
 importer_version=1
 type="PackedScene"
 uid="uid://bf8ub6y7y24no"
-path="res://.godot/imported/geopick.glb-2591aa12f833034505ef700bdd6764a4.scn"
+path="res://.godot/imported/geopick.glb-9d2a75d0cebf9de45e49d8f2064b1720.scn"
 
 [deps]
 
-source_file="res://Models/Weapons/geopick.glb"
-dest_files=["res://.godot/imported/geopick.glb-2591aa12f833034505ef700bdd6764a4.scn"]
+source_file="res://Models/Weapons/geopick/geopick.glb"
+dest_files=["res://.godot/imported/geopick.glb-9d2a75d0cebf9de45e49d8f2064b1720.scn"]
 
 [params]
 

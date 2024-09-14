@@ -1,8 +1,0 @@
-[gd_scene load_steps=2 format=3 uid="uid://bohn5s05rtb5m"]
-
-[ext_resource type="ArrayMesh" uid="uid://bnch5wr4p40p4" path="res://Models/Weapons/geopick_mesh.res" id="1_jekxp"]
-
-[node name="WeaponGeopick" type="Node3D"]
-
-[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
-mesh = ExtResource("1_jekxp")
