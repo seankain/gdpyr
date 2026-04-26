@@ -4,19 +4,23 @@ importer="scene"
 importer_version=1
 type="PackedScene"
 uid="uid://bf8ub6y7y24no"
-path="res://.godot/imported/geopick.glb-9d2a75d0cebf9de45e49d8f2064b1720.scn"
+path="res://.godot/imported/geopick.glb-6f4d4d1f888d2c06966e41e6e6e4e7aa.scn"
 
 [deps]
 
-source_file="res://Models/Weapons/geopick/geopick.glb"
-dest_files=["res://.godot/imported/geopick.glb-9d2a75d0cebf9de45e49d8f2064b1720.scn"]
+source_file="res://Weapons/geopick/geopick.glb"
+dest_files=["res://.godot/imported/geopick.glb-6f4d4d1f888d2c06966e41e6e6e4e7aa.scn"]
 
 [params]
 
 nodes/root_type=""
 nodes/root_name=""
+nodes/root_script=null
 nodes/apply_root_scale=true
 nodes/root_scale=1.0
+nodes/import_as_skeleton_bones=false
+nodes/use_name_suffixes=true
+nodes/use_node_type_suffixes=true
 meshes/ensure_tangents=true
 meshes/generate_lods=true
 meshes/create_shadow_meshes=true
@@ -28,7 +32,11 @@ animation/import=true
 animation/fps=30
 animation/trimming=false
 animation/remove_immutable_tracks=true
+animation/import_rest_as_RESET=false
 import_script/path=""
+materials/extract=0
+materials/extract_format=0
+materials/extract_path=""
 _subresources={
 "meshes": {
 "geopick_Cube_001": {
@@ -38,8 +46,9 @@ _subresources={
 "lods/normal_merge_angle": 60.0,
 "lods/normal_split_angle": 25.0,
 "save_to_file/enabled": true,
+"save_to_file/fallback_path": "res://Models/Weapons/geopick_mesh.res",
 "save_to_file/make_streamable": "",
-"save_to_file/path": "res://Models/Weapons/geopick_mesh.res"
+"save_to_file/path": "uid://bkeyk0jmi0cr5"
 }
 },
 "nodes": {

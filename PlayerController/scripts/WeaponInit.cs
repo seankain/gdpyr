@@ -22,5 +22,7 @@ public partial class WeaponInit : Node3D
 	private void LoadWeapon()
 	{
 		WeaponMesh.Mesh = WeaponType.Mesh;
+		WeaponMesh.Position = WeaponType.Position;
+		WeaponMesh.RotationDegrees = WeaponType.Rotation;
 	}
 }
