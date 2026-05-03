@@ -1,21 +1,22 @@
-[gd_scene load_steps=29 format=3 uid="uid://clhem2jdg0ksx"]
+[gd_scene format=3 uid="uid://clhem2jdg0ksx"]
 
-[ext_resource type="Script" path="res://PlayerController/scripts/fps_controller.cs" id="1_orfjw"]
+[ext_resource type="Script" uid="uid://qrbasnvs81qx" path="res://PlayerController/scripts/fps_controller.cs" id="1_orfjw"]
 [ext_resource type="PackedScene" uid="uid://bohn5s05rtb5m" path="res://PlayerController/weapon.tscn" id="2_dsfu4"]
-[ext_resource type="Script" path="res://PlayerController/scripts/Reticle.cs" id="2_ivo4b"]
-[ext_resource type="Script" path="res://PlayerController/scripts/WeaponInit.cs" id="3_20sfu"]
+[ext_resource type="Script" uid="uid://4o2rrimy4vth" path="res://PlayerController/scripts/Reticle.cs" id="2_ivo4b"]
+[ext_resource type="Script" uid="uid://bvcr83y0ods62" path="res://PlayerController/scripts/WeaponInit.cs" id="3_20sfu"]
 [ext_resource type="Theme" uid="uid://ccnc37lac8tk4" path="res://Ui/theme.tres" id="3_genrv"]
-[ext_resource type="Script" path="res://PlayerController/scripts/Debug.cs" id="4_vbn33"]
-[ext_resource type="Script" path="res://PlayerController/scripts/StateMachine.cs" id="5_iasdg"]
-[ext_resource type="Script" path="res://PlayerController/scripts/PlayerWalkingState.cs" id="6_iuqfr"]
-[ext_resource type="Script" path="res://PlayerController/scripts/PlayerIdleState.cs" id="7_cvs6a"]
-[ext_resource type="Script" path="res://PlayerController/scripts/PlayerSprintingState.cs" id="8_pvahy"]
-[ext_resource type="Script" path="res://PlayerController/scripts/PlayerCrouchingState.cs" id="9_4x70l"]
-[ext_resource type="Script" path="res://PlayerController/scripts/PlayerSlidingState.cs" id="10_0y60l"]
-[ext_resource type="Script" path="res://PlayerController/scripts/PlayerJumpingState.cs" id="11_k7axa"]
-[ext_resource type="Script" path="res://PlayerController/scripts/PlayerFallingState.cs" id="12_x0vuy"]
-[ext_resource type="Script" path="res://PlayerController/scripts/WeaponSubViewport.cs" id="14_imije"]
-[ext_resource type="Script" path="res://PlayerController/scripts/WeaponCamera.cs" id="14_l52yo"]
+[ext_resource type="Resource" uid="uid://ctyponc4rjid7" path="res://Weapons/geopick/geopick.tres" id="4_drsd5"]
+[ext_resource type="Script" uid="uid://c8whemavd6j78" path="res://PlayerController/scripts/Debug.cs" id="4_vbn33"]
+[ext_resource type="Script" uid="uid://hsc28saqio3v" path="res://PlayerController/scripts/StateMachine.cs" id="5_iasdg"]
+[ext_resource type="Script" uid="uid://b5deq3t2wps5b" path="res://PlayerController/scripts/PlayerWalkingState.cs" id="6_iuqfr"]
+[ext_resource type="Script" uid="uid://5m4fym8gyg20" path="res://PlayerController/scripts/PlayerIdleState.cs" id="7_cvs6a"]
+[ext_resource type="Script" uid="uid://dnoehhrpxt267" path="res://PlayerController/scripts/PlayerSprintingState.cs" id="8_pvahy"]
+[ext_resource type="Script" uid="uid://b6y4rfcufu6l7" path="res://PlayerController/scripts/PlayerCrouchingState.cs" id="9_4x70l"]
+[ext_resource type="Script" uid="uid://bnp70li81rvt1" path="res://PlayerController/scripts/PlayerSlidingState.cs" id="10_0y60l"]
+[ext_resource type="Script" uid="uid://c252rqxp4b0ut" path="res://PlayerController/scripts/PlayerJumpingState.cs" id="11_k7axa"]
+[ext_resource type="Script" uid="uid://cravseauj2rwi" path="res://PlayerController/scripts/PlayerFallingState.cs" id="12_x0vuy"]
+[ext_resource type="Script" uid="uid://chguu6pbiy5xy" path="res://PlayerController/scripts/WeaponSubViewport.cs" id="14_imije"]
+[ext_resource type="Script" uid="uid://dxrw2xale501k" path="res://PlayerController/scripts/WeaponCamera.cs" id="14_l52yo"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_87822"]
 
@@ -336,55 +337,54 @@ tracks/2/keys = {
 
 [sub_resource type="AnimationLibrary" id="AnimationLibrary_14aif"]
 _data = {
-"RESET": SubResource("Animation_cy763"),
-"crouch": SubResource("Animation_nbwiq"),
-"jumpend": SubResource("Animation_4pdbu"),
-"jumpstart": SubResource("Animation_wopnr"),
-"sliding": SubResource("Animation_qs3qy"),
-"sprinting": SubResource("Animation_yhu73"),
-"walking": SubResource("Animation_ue5ri")
+&"RESET": SubResource("Animation_cy763"),
+&"crouch": SubResource("Animation_nbwiq"),
+&"jumpend": SubResource("Animation_4pdbu"),
+&"jumpstart": SubResource("Animation_wopnr"),
+&"sliding": SubResource("Animation_qs3qy"),
+&"sprinting": SubResource("Animation_yhu73"),
+&"walking": SubResource("Animation_ue5ri")
 }
 
 [sub_resource type="SphereShape3D" id="SphereShape3D_iinwo"]
 
-[node name="PlayerController" type="CharacterBody3D" node_paths=PackedStringArray("camera", "animationPlayer", "selfCollider", "headShapeCast")]
+[node name="PlayerController" type="CharacterBody3D" unique_id=1728995393 node_paths=PackedStringArray("camera", "animationPlayer", "selfCollider", "headShapeCast")]
 script = ExtResource("1_orfjw")
 camera = NodePath("CameraController/Camera3D")
 animationPlayer = NodePath("AnimationPlayer")
 selfCollider = NodePath(".")
 headShapeCast = NodePath("ShapeCast3D")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=169227384]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
 shape = SubResource("CapsuleShape3D_87822")
 
-[node name="PlaceholderMesh" type="MeshInstance3D" parent="CollisionShape3D"]
+[node name="PlaceholderMesh" type="MeshInstance3D" parent="CollisionShape3D" unique_id=1150974747]
 material_overlay = SubResource("StandardMaterial3D_rf7sx")
 mesh = SubResource("CapsuleMesh_ox3v2")
 skeleton = NodePath("../..")
 
-[node name="CameraController" type="Node3D" parent="."]
+[node name="CameraController" type="Node3D" parent="." unique_id=1316654868]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.596318, -0.218104)
 
-[node name="Camera3D" type="Camera3D" parent="CameraController"]
+[node name="Camera3D" type="Camera3D" parent="CameraController" unique_id=1006281648]
 
-[node name="WeaponRig" type="Node3D" parent="CameraController/Camera3D"]
+[node name="WeaponRig" type="Node3D" parent="CameraController/Camera3D" unique_id=414985442]
 
-[node name="Weapon" parent="CameraController/Camera3D/WeaponRig" instance=ExtResource("2_dsfu4")]
+[node name="Weapon" parent="CameraController/Camera3D/WeaponRig" unique_id=378112012 instance=ExtResource("2_dsfu4")]
 transform = Transform3D(-4.37114e-08, 0, -1, 0, 1, 0, 1, 0, -4.37114e-08, 0.66, -0.78, -0.688)
 script = ExtResource("3_20sfu")
+WeaponType = ExtResource("4_drsd5")
 
-[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
-libraries = {
-"": SubResource("AnimationLibrary_14aif")
-}
+[node name="AnimationPlayer" type="AnimationPlayer" parent="." unique_id=117529427]
+libraries/ = SubResource("AnimationLibrary_14aif")
 
-[node name="ShapeCast3D" type="ShapeCast3D" parent="."]
+[node name="ShapeCast3D" type="ShapeCast3D" parent="." unique_id=816497504]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
 shape = SubResource("SphereShape3D_iinwo")
 target_position = Vector3(0, 0.5, 0)
 
-[node name="UserInterface" type="Control" parent="."]
+[node name="UserInterface" type="Control" parent="." unique_id=82203470]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -393,7 +393,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 1
 
-[node name="Reticle" type="CenterContainer" parent="UserInterface" node_paths=PackedStringArray("ReticleLines", "PlayerController")]
+[node name="Reticle" type="CenterContainer" parent="UserInterface" unique_id=261724238 node_paths=PackedStringArray("ReticleLines", "PlayerController")]
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -410,23 +410,23 @@ script = ExtResource("2_ivo4b")
 ReticleLines = [NodePath("Top"), NodePath("Right"), NodePath("Bottom"), NodePath("Left")]
 PlayerController = NodePath("../..")
 
-[node name="Top" type="Line2D" parent="UserInterface/Reticle"]
+[node name="Top" type="Line2D" parent="UserInterface/Reticle" unique_id=240026975]
 points = PackedVector2Array(0, -5, 0, -15)
 width = 2.0
 
-[node name="Right" type="Line2D" parent="UserInterface/Reticle"]
+[node name="Right" type="Line2D" parent="UserInterface/Reticle" unique_id=473025132]
 points = PackedVector2Array(5, 0, 15, 0)
 width = 2.0
 
-[node name="Bottom" type="Line2D" parent="UserInterface/Reticle"]
+[node name="Bottom" type="Line2D" parent="UserInterface/Reticle" unique_id=1784980497]
 points = PackedVector2Array(0, 5, 0, 15)
 width = 2.0
 
-[node name="Left" type="Line2D" parent="UserInterface/Reticle"]
+[node name="Left" type="Line2D" parent="UserInterface/Reticle" unique_id=794884766]
 points = PackedVector2Array(-5, 0, -15, 0)
 width = 2.0
 
-[node name="DebugPanel" type="PanelContainer" parent="UserInterface"]
+[node name="DebugPanel" type="PanelContainer" parent="UserInterface" unique_id=1036157794]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(200, 0)
 layout_mode = 0
@@ -437,17 +437,17 @@ offset_bottom = 50.0
 theme = ExtResource("3_genrv")
 script = ExtResource("4_vbn33")
 
-[node name="MarginContainer" type="MarginContainer" parent="UserInterface/DebugPanel"]
+[node name="MarginContainer" type="MarginContainer" parent="UserInterface/DebugPanel" unique_id=861661829]
 layout_mode = 2
 
-[node name="VBoxContainer" type="VBoxContainer" parent="UserInterface/DebugPanel/MarginContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="UserInterface/DebugPanel/MarginContainer" unique_id=2097305421]
 layout_mode = 2
 
-[node name="PlayerStateMachine" type="Node" parent="." node_paths=PackedStringArray("CurrentState")]
+[node name="PlayerStateMachine" type="Node" parent="." unique_id=1690002649 node_paths=PackedStringArray("CurrentState")]
 script = ExtResource("5_iasdg")
 CurrentState = NodePath("PlayerIdleState")
 
-[node name="PlayerWalkingState" type="Node" parent="PlayerStateMachine" node_paths=PackedStringArray("playerController", "PlayerAnimation")]
+[node name="PlayerWalkingState" type="Node" parent="PlayerStateMachine" unique_id=1887539610 node_paths=PackedStringArray("playerController", "PlayerAnimation")]
 script = ExtResource("6_iuqfr")
 StatePlayerMoveSpeed = 5.0
 StatePlayerAcceleration = 0.1
@@ -455,7 +455,7 @@ StatePlayerDeceleration = 0.25
 playerController = NodePath("../..")
 PlayerAnimation = NodePath("../../AnimationPlayer")
 
-[node name="PlayerIdleState" type="Node" parent="PlayerStateMachine" node_paths=PackedStringArray("playerController", "PlayerAnimation")]
+[node name="PlayerIdleState" type="Node" parent="PlayerStateMachine" unique_id=283807912 node_paths=PackedStringArray("playerController", "PlayerAnimation")]
 script = ExtResource("7_cvs6a")
 StatePlayerMoveSpeed = 5.0
 StatePlayerAcceleration = 0.1
@@ -463,7 +463,7 @@ StatePlayerDeceleration = 0.25
 playerController = NodePath("../..")
 PlayerAnimation = NodePath("../../AnimationPlayer")
 
-[node name="PlayerSprintingState" type="Node" parent="PlayerStateMachine" node_paths=PackedStringArray("playerController", "PlayerAnimation")]
+[node name="PlayerSprintingState" type="Node" parent="PlayerStateMachine" unique_id=678633811 node_paths=PackedStringArray("playerController", "PlayerAnimation")]
 script = ExtResource("8_pvahy")
 StatePlayerMoveSpeed = 8.0
 StatePlayerAcceleration = 0.1
@@ -471,7 +471,7 @@ StatePlayerDeceleration = 0.25
 playerController = NodePath("../..")
 PlayerAnimation = NodePath("../../AnimationPlayer")
 
-[node name="PlayerCrouchingState" type="Node" parent="PlayerStateMachine" node_paths=PackedStringArray("CrouchShapeCast", "playerController", "PlayerAnimation")]
+[node name="PlayerCrouchingState" type="Node" parent="PlayerStateMachine" unique_id=1747611147 node_paths=PackedStringArray("CrouchShapeCast", "playerController", "PlayerAnimation")]
 script = ExtResource("9_4x70l")
 CrouchShapeCast = NodePath("../../ShapeCast3D")
 CrouchSpeed = 2.0
@@ -481,7 +481,7 @@ StatePlayerDeceleration = 0.25
 playerController = NodePath("../..")
 PlayerAnimation = NodePath("../../AnimationPlayer")
 
-[node name="PlayerSlidingState" type="Node" parent="PlayerStateMachine" node_paths=PackedStringArray("CrouchShapeCast", "playerController", "PlayerAnimation")]
+[node name="PlayerSlidingState" type="Node" parent="PlayerStateMachine" unique_id=330200346 node_paths=PackedStringArray("CrouchShapeCast", "playerController", "PlayerAnimation")]
 script = ExtResource("10_0y60l")
 CrouchShapeCast = NodePath("../../ShapeCast3D")
 StatePlayerMoveSpeed = 4.0
@@ -490,7 +490,7 @@ StatePlayerDeceleration = 0.25
 playerController = NodePath("../..")
 PlayerAnimation = NodePath("../../AnimationPlayer")
 
-[node name="PlayerJumpingState" type="Node" parent="PlayerStateMachine" node_paths=PackedStringArray("playerController", "PlayerAnimation")]
+[node name="PlayerJumpingState" type="Node" parent="PlayerStateMachine" unique_id=634012263 node_paths=PackedStringArray("playerController", "PlayerAnimation")]
 script = ExtResource("11_k7axa")
 StatePlayerMoveSpeed = 6.0
 StatePlayerAcceleration = 0.1
@@ -498,7 +498,7 @@ StatePlayerDeceleration = 0.25
 playerController = NodePath("../..")
 PlayerAnimation = NodePath("../../AnimationPlayer")
 
-[node name="PlayerFallingState" type="Node" parent="PlayerStateMachine" node_paths=PackedStringArray("playerController", "PlayerAnimation")]
+[node name="PlayerFallingState" type="Node" parent="PlayerStateMachine" unique_id=1362166956 node_paths=PackedStringArray("playerController", "PlayerAnimation")]
 script = ExtResource("12_x0vuy")
 StatePlayerMoveSpeed = 6.0
 StatePlayerAcceleration = 0.1
@@ -506,7 +506,7 @@ StatePlayerDeceleration = 0.25
 playerController = NodePath("../..")
 PlayerAnimation = NodePath("../../AnimationPlayer")
 
-[node name="WeaponViewport" type="SubViewportContainer" parent="."]
+[node name="WeaponViewport" type="SubViewportContainer" parent="." unique_id=785553178]
 process_mode = 4
 visible = false
 anchors_preset = 15
@@ -515,14 +515,14 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="SubViewport" type="SubViewport" parent="WeaponViewport"]
+[node name="SubViewport" type="SubViewport" parent="WeaponViewport" unique_id=136297047]
 transparent_bg = true
 handle_input_locally = false
 size = Vector2i(1920, 1280)
 render_target_update_mode = 0
 script = ExtResource("14_imije")
 
-[node name="Camera3D" type="Camera3D" parent="WeaponViewport/SubViewport"]
+[node name="Camera3D" type="Camera3D" parent="WeaponViewport/SubViewport" unique_id=2061577676]
 visible = false
 cull_mask = 1048574
 script = ExtResource("14_l52yo")

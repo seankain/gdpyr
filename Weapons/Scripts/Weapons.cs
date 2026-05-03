@@ -18,4 +18,18 @@ public partial class Weapons : Resource
     public bool Shadow;
     [Export]
     public float DamageAmount;
+    [ExportCategory("WeaponSway")]
+    [Export]
+    public Vector2 SwayMin = new Vector2(-20,20);
+    [ExportCategory("WeaponSway")]
+    [Export]
+    public Vector2 SwayMax = new Vector2(-20,20);
+    [ExportCategory("WeaponSway")]
+    [Export]
+    public float SwayAmountPosition = 0.1f;
+    [ExportCategory("WeaponSway")]
+    [Export]
+    public float SwayAmountRotation = 30.0f;
+    
+
 }
