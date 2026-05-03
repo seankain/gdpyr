@@ -48,19 +48,20 @@ public partial class WeaponInit : Node3D
 
 	private void SwayWeapon(float delta)
 	{
-		mouseMovement = mouseMovement.Clamp(WeaponType.SwayMin,WeaponType.SwayMax);
-		// lerp position
-		position = WeaponType.Position;
-		position.X = Mathf.Lerp(position.X,WeaponType.Position.X - (mouseMovement.X * 
-		WeaponType.SwayAmountPosition)*delta,WeaponType.SwayAmountPosition);
-		position.Y = Mathf.Lerp(position.Y,WeaponType.Position.Y + (mouseMovement.Y *
-		WeaponType.SwayAmountPosition)*delta, WeaponType.SwayAmountPosition);
-		WeaponType.Position = position;
-		//lerp rotation
-		rotationDegrees.Y = Mathf.Lerp(rotationDegrees.Y, WeaponType.Rotation.Y + (mouseMovement.X *
-		WeaponType.SwayAmountRotation)*delta,WeaponType.SwayAmountRotation);
-		rotationDegrees.X = Mathf.Lerp(rotationDegrees.X, WeaponType.Rotation.X - (mouseMovement.Y *
-		WeaponType.SwayAmountRotation)*delta,WeaponType.SwayAmountRotation);
-		WeaponType.Rotation = rotationDegrees;
+		mouseMovement = mouseMovement.Clamp(WeaponType.SwayMin, WeaponType.SwayMax);
+
+		// lerp position toward sway target
+		Vector3 targetPosition = WeaponType.Position;
+		targetPosition.X -= mouseMovement.X * WeaponType.SwayAmountPosition;
+		targetPosition.Y += mouseMovement.Y * WeaponType.SwayAmountPosition;
+		WeaponMesh.Position = WeaponMesh.Position.Lerp(targetPosition, WeaponType.SwayAmountPosition * delta);
+
+		// lerp rotation toward sway target
+		Vector3 targetRotation = WeaponType.Rotation;
+		targetRotation.Y += mouseMovement.X * WeaponType.SwayAmountRotation;
+		targetRotation.X -= mouseMovement.Y * WeaponType.SwayAmountRotation;
+		WeaponMesh.RotationDegrees = WeaponMesh.RotationDegrees.Lerp(targetRotation, WeaponType.SwayAmountRotation * delta);
+
+		mouseMovement = Vector2.Zero;
 	}
 }
