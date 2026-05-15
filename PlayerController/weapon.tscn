@@ -1,8 +1,12 @@
 [gd_scene format=3 uid="uid://bohn5s05rtb5m"]
 
+[ext_resource type="Script" uid="uid://bvcr83y0ods62" path="res://PlayerController/scripts/WeaponInit.cs" id="1_3lu8a"]
 [ext_resource type="ArrayMesh" uid="uid://bnch5wr4p40p4" path="res://Weapons/geopick/geopick_mesh.res" id="1_nb3ay"]
+[ext_resource type="Resource" uid="uid://ctyponc4rjid7" path="res://Weapons/geopick/geopick.tres" id="2_jaank"]
 
 [node name="Weapon" type="Node3D" unique_id=1745315166]
+script = ExtResource("1_3lu8a")
+WeaponType = ExtResource("2_jaank")
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1145477321]
 mesh = ExtResource("1_nb3ay")

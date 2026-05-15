@@ -14,7 +14,7 @@ public partial class PlayerFallingState : State
 		base.Update(delta);
 		if (playerController.IsOnFloor())
 		{
-			PlayerAnimation.Play("JumpEnd");
+			PlayerAnimation.Play("jumpend");
 			OnStateTransition("PlayerIdleState");
 		}
 	}

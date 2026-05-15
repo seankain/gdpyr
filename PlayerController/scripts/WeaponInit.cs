@@ -16,6 +16,7 @@ public partial class WeaponInit : Node3D
 	// Called when the node enters the scene tree for the first time.
 	public override void _Ready()
 	{
+		LoadWeapon();
 	}
 
 	// Called every frame. 'delta' is the elapsed time since the previous frame.
@@ -41,6 +42,7 @@ public partial class WeaponInit : Node3D
 
 	private void LoadWeapon()
 	{
+		WeaponMesh = new MeshInstance3D();
 		WeaponMesh.Mesh = WeaponType.Mesh;
 		WeaponMesh.Position = WeaponType.Position;
 		WeaponMesh.RotationDegrees = WeaponType.Rotation;
@@ -51,7 +53,7 @@ public partial class WeaponInit : Node3D
 		mouseMovement = mouseMovement.Clamp(WeaponType.SwayMin, WeaponType.SwayMax);
 
 		// lerp position toward sway target
-		Vector3 targetPosition = WeaponType.Position;
+		Vector3 targetPosition = WeaponType.Position + Vector3.Up * delta;
 		targetPosition.X -= mouseMovement.X * WeaponType.SwayAmountPosition;
 		targetPosition.Y += mouseMovement.Y * WeaponType.SwayAmountPosition;
 		WeaponMesh.Position = WeaponMesh.Position.Lerp(targetPosition, WeaponType.SwayAmountPosition * delta);

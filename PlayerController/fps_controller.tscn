@@ -3,9 +3,7 @@
 [ext_resource type="Script" uid="uid://qrbasnvs81qx" path="res://PlayerController/scripts/fps_controller.cs" id="1_orfjw"]
 [ext_resource type="PackedScene" uid="uid://bohn5s05rtb5m" path="res://PlayerController/weapon.tscn" id="2_dsfu4"]
 [ext_resource type="Script" uid="uid://4o2rrimy4vth" path="res://PlayerController/scripts/Reticle.cs" id="2_ivo4b"]
-[ext_resource type="Script" uid="uid://bvcr83y0ods62" path="res://PlayerController/scripts/WeaponInit.cs" id="3_20sfu"]
 [ext_resource type="Theme" uid="uid://ccnc37lac8tk4" path="res://Ui/theme.tres" id="3_genrv"]
-[ext_resource type="Resource" uid="uid://ctyponc4rjid7" path="res://Weapons/geopick/geopick.tres" id="4_drsd5"]
 [ext_resource type="Script" uid="uid://c8whemavd6j78" path="res://PlayerController/scripts/Debug.cs" id="4_vbn33"]
 [ext_resource type="Script" uid="uid://hsc28saqio3v" path="res://PlayerController/scripts/StateMachine.cs" id="5_iasdg"]
 [ext_resource type="Script" uid="uid://b5deq3t2wps5b" path="res://PlayerController/scripts/PlayerWalkingState.cs" id="6_iuqfr"]
@@ -62,6 +60,17 @@ tracks/2/keys = {
 "transitions": PackedFloat32Array(1),
 "update": 0,
 "values": [Vector3(0, 0.596318, -0.218104)]
+}
+tracks/3/type = "bezier"
+tracks/3/imported = false
+tracks/3/enabled = true
+tracks/3/path = NodePath("CameraController/Camera3D:position:z")
+tracks/3/interp = 1
+tracks/3/loop_wrap = true
+tracks/3/keys = {
+"handle_modes": PackedInt32Array(0),
+"points": PackedFloat32Array(0, -0.25, 0, 0.25, 0),
+"times": PackedFloat32Array(0)
 }
 
 [sub_resource type="Animation" id="Animation_nbwiq"]
@@ -292,9 +301,9 @@ tracks/2/path = NodePath("CameraController/Camera3D:position:z")
 tracks/2/interp = 1
 tracks/2/loop_wrap = true
 tracks/2/keys = {
-"handle_modes": PackedInt32Array(),
-"points": PackedFloat32Array(),
-"times": PackedFloat32Array()
+"handle_modes": PackedInt32Array(0),
+"points": PackedFloat32Array(0, -0.25, 0, 0.25, 0),
+"times": PackedFloat32Array(-0.033333335)
 }
 
 [sub_resource type="Animation" id="Animation_ue5ri"]
@@ -373,8 +382,6 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.596318, -0.218104)
 
 [node name="Weapon" parent="CameraController/Camera3D/WeaponRig" unique_id=378112012 instance=ExtResource("2_dsfu4")]
 transform = Transform3D(-4.37114e-08, 0, -1, 0, 1, 0, 1, 0, -4.37114e-08, 0.66, -0.78, -0.688)
-script = ExtResource("3_20sfu")
-WeaponType = ExtResource("4_drsd5")
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="." unique_id=117529427]
 libraries/ = SubResource("AnimationLibrary_14aif")
