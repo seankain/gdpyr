@@ -42,7 +42,7 @@ public partial class WeaponInit : Node3D
 
 	private void LoadWeapon()
 	{
-		WeaponMesh = new MeshInstance3D();
+		WeaponMesh = GetNode<MeshInstance3D>("MeshInstance3D");
 		WeaponMesh.Mesh = WeaponType.Mesh;
 		WeaponMesh.Position = WeaponType.Position;
 		WeaponMesh.RotationDegrees = WeaponType.Rotation;
@@ -53,7 +53,7 @@ public partial class WeaponInit : Node3D
 		mouseMovement = mouseMovement.Clamp(WeaponType.SwayMin, WeaponType.SwayMax);
 
 		// lerp position toward sway target
-		Vector3 targetPosition = WeaponType.Position + Vector3.Up * delta;
+		Vector3 targetPosition = WeaponType.Position;
 		targetPosition.X -= mouseMovement.X * WeaponType.SwayAmountPosition;
 		targetPosition.Y += mouseMovement.Y * WeaponType.SwayAmountPosition;
 		WeaponMesh.Position = WeaponMesh.Position.Lerp(targetPosition, WeaponType.SwayAmountPosition * delta);
