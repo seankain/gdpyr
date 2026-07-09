@@ -70,14 +70,7 @@ public partial class fps_controller : CharacterBody3D
 			_rotation_input = -((InputEventMouseMotion)@event).Relative.X * MouseSensitivity;
 			_tilt_input = -((InputEventMouseMotion)@event).Relative.Y * MouseSensitivity;
 		}
-		//TODO open menu
-		if (@event is InputEventKey eventKey)
-		{
-			if (eventKey.Pressed && eventKey.Keycode == Key.Escape)
-			{
-				GetTree().Quit();
-			}
-		}
+		// Escape is handled by the PauseMenu (UserInterface/PauseMenu).
 	}
 
 	public void UpdateCamera(double delta)
