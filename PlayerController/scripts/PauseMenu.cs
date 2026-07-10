@@ -1,7 +1,7 @@
 using Godot;
 
-// A simple pause menu shown when the player presses Escape.
-// Pauses the game, frees the mouse and offers Resume / Quit.
+// Behavior for PauseMenu.tscn. Shown when the player presses Escape:
+// pauses the game, frees the mouse and offers Resume / Quit.
 public partial class PauseMenu : Control
 {
 	private Button _resumeButton;
@@ -13,50 +13,13 @@ public partial class PauseMenu : Control
 		// menu buttons and the Escape toggle keep working.
 		ProcessMode = ProcessModeEnum.Always;
 
-		AnchorRight = 1;
-		AnchorBottom = 1;
-		OffsetRight = 0;
-		OffsetBottom = 0;
+		_resumeButton = GetNode<Button>("Center/Buttons/ResumeButton");
+		_quitButton = GetNode<Button>("Center/Buttons/QuitButton");
 
-		BuildUi();
+		_resumeButton.Pressed += Resume;
+		_quitButton.Pressed += Quit;
 
 		Hide();
-	}
-
-	private void BuildUi()
-	{
-		// Dim the game behind the menu.
-		var background = new ColorRect
-		{
-			Color = new Color(0, 0, 0, 0.5f),
-			MouseFilter = MouseFilterEnum.Stop,
-		};
-		background.SetAnchorsPreset(LayoutPreset.FullRect);
-		AddChild(background);
-
-		var center = new CenterContainer();
-		center.SetAnchorsPreset(LayoutPreset.FullRect);
-		AddChild(center);
-
-		var buttons = new VBoxContainer();
-		buttons.AddThemeConstantOverride("separation", 12);
-		center.AddChild(buttons);
-
-		_resumeButton = new Button
-		{
-			Text = "Resume",
-			CustomMinimumSize = new Vector2(160, 40),
-		};
-		_resumeButton.Pressed += Resume;
-		buttons.AddChild(_resumeButton);
-
-		_quitButton = new Button
-		{
-			Text = "Quit",
-			CustomMinimumSize = new Vector2(160, 40),
-		};
-		_quitButton.Pressed += Quit;
-		buttons.AddChild(_quitButton);
 	}
 
 	public override void _UnhandledInput(InputEvent @event)
