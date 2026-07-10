@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="Weapons" format=3 uid="uid://d1jyigomk4m7u"]
+
+[ext_resource type="ArrayMesh" uid="uid://ctec6mqqfehpy" path="res://Weapons/pistol/pistol_Trigger.res" id="1_f7se0"]
+[ext_resource type="Script" uid="uid://ciex5x8gn466d" path="res://Weapons/Scripts/Weapons.cs" id="1_m1rr1"]
+
+[resource]
+script = ExtResource("1_m1rr1")
+Name = &"pistol"
+Mesh = ExtResource("1_f7se0")
+metadata/_custom_type_script = "uid://ciex5x8gn466d"
