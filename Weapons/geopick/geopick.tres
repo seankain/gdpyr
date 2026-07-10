@@ -9,5 +9,3 @@ Name = &"geopick"
 Position = Vector3(0.66, -0.78, -0.688)
 Rotation = Vector3(0, -1.5708, 0)
 Mesh = ExtResource("1_rfhf3")
-Shadow = false
-DamageAmount = 0.0
