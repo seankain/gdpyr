@@ -6,6 +6,7 @@
 [ext_resource type="Script" uid="uid://bvcr83y0ods62" path="res://PlayerController/scripts/WeaponInit.cs" id="3_20sfu"]
 [ext_resource type="Theme" uid="uid://ccnc37lac8tk4" path="res://Ui/theme.tres" id="3_genrv"]
 [ext_resource type="Resource" uid="uid://ctyponc4rjid7" path="res://Weapons/geopick/geopick.tres" id="4_drsd5"]
+[ext_resource type="Resource" uid="uid://d1jyigomk4m7u" path="res://Weapons/pistol/pistol.tres" id="4_pstl5"]
 [ext_resource type="Script" uid="uid://c8whemavd6j78" path="res://PlayerController/scripts/Debug.cs" id="4_vbn33"]
 [ext_resource type="Script" uid="uid://hsc28saqio3v" path="res://PlayerController/scripts/StateMachine.cs" id="5_iasdg"]
 [ext_resource type="Script" uid="uid://b5deq3t2wps5b" path="res://PlayerController/scripts/PlayerWalkingState.cs" id="6_iuqfr"]
@@ -375,7 +376,8 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.596318, -0.218104)
 [node name="Weapon" parent="CameraController/Camera3D/WeaponRig" unique_id=378112012 instance=ExtResource("2_dsfu4")]
 transform = Transform3D(-4.37114e-08, 0, -1, 0, 1, 0, 1, 0, -4.37114e-08, 0.66, -0.78, -0.688)
 script = ExtResource("3_20sfu")
-WeaponType = ExtResource("4_drsd5")
+MeleeWeapon = ExtResource("4_drsd5")
+SidearmWeapon = ExtResource("4_pstl5")
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="." unique_id=117529427]
 libraries/ = SubResource("AnimationLibrary_14aif")

@@ -6,6 +6,7 @@
 [resource]
 script = ExtResource("2_o8x2d")
 Name = &"geopick"
+Slot = 0
 Position = Vector3(0.66, -0.78, -0.688)
 Rotation = Vector3(0, -1.5708, 0)
 Mesh = ExtResource("1_rfhf3")
