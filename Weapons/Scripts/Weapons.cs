@@ -4,8 +4,17 @@ using System;
 [GlobalClass]
 public partial class Weapons : Resource
 {
+    public enum WeaponSlot
+    {
+        Melee,
+        Sidearm,
+        Large
+    }
+
     [Export]
     public StringName Name;
+    [Export]
+    public WeaponSlot Slot;
     [Export]
     [ExportCategory("Weapon Orientation")]
     public Vector3 Position;
