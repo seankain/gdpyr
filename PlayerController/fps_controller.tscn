@@ -18,7 +18,7 @@
 [ext_resource type="Script" uid="uid://cravseauj2rwi" path="res://PlayerController/scripts/PlayerFallingState.cs" id="12_x0vuy"]
 [ext_resource type="Script" uid="uid://chguu6pbiy5xy" path="res://PlayerController/scripts/WeaponSubViewport.cs" id="14_imije"]
 [ext_resource type="Script" uid="uid://dxrw2xale501k" path="res://PlayerController/scripts/WeaponCamera.cs" id="14_l52yo"]
-[ext_resource type="PackedScene" uid="uid://cpausemenuscene1" path="res://PlayerController/PauseMenu.tscn" id="15_pausem"]
+[ext_resource type="PackedScene" uid="uid://cc0ba3ry2gple" path="res://PlayerController/PauseMenu.tscn" id="15_pausem"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_87822"]
 
@@ -26,6 +26,13 @@
 albedo_color = Color(0.196078, 1, 1, 1)
 
 [sub_resource type="CapsuleMesh" id="CapsuleMesh_ox3v2"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_4oumj"]
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_4oumj"]
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_4oumj"]
+noise = SubResource("FastNoiseLite_4oumj")
 
 [sub_resource type="Animation" id="Animation_cy763"]
 length = 0.01
@@ -366,6 +373,10 @@ material_overlay = SubResource("StandardMaterial3D_rf7sx")
 mesh = SubResource("CapsuleMesh_ox3v2")
 skeleton = NodePath("../..")
 
+[node name="MeshInstance3D" type="MeshInstance3D" parent="CollisionShape3D" unique_id=2006109640]
+transform = Transform3D(0.805, 0, 0, 0, 0.2, 0, 0, 0, 0.2, 0, 0.625, -0.43)
+mesh = SubResource("BoxMesh_4oumj")
+
 [node name="CameraController" type="Node3D" parent="." unique_id=1316654868]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.596318, -0.218104)
 
@@ -378,6 +389,7 @@ transform = Transform3D(-4.37114e-08, 0, -1, 0, 1, 0, 1, 0, -4.37114e-08, 0.66, 
 script = ExtResource("3_20sfu")
 MeleeWeapon = ExtResource("4_drsd5")
 SidearmWeapon = ExtResource("4_pstl5")
+swayNoise = SubResource("NoiseTexture2D_4oumj")
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="." unique_id=117529427]
 libraries/ = SubResource("AnimationLibrary_14aif")
@@ -446,7 +458,8 @@ layout_mode = 2
 [node name="VBoxContainer" type="VBoxContainer" parent="UserInterface/DebugPanel/MarginContainer" unique_id=2097305421]
 layout_mode = 2
 
-[node name="PauseMenu" parent="UserInterface" instance=ExtResource("15_pausem")]
+[node name="PauseMenu" parent="UserInterface" unique_id=124325873 instance=ExtResource("15_pausem")]
+layout_mode = 1
 
 [node name="PlayerStateMachine" type="Node" parent="." unique_id=1690002649 node_paths=PackedStringArray("CurrentState")]
 script = ExtResource("5_iasdg")

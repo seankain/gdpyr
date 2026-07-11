@@ -1,13 +1,12 @@
 [gd_resource type="Resource" script_class="Weapons" format=3 uid="uid://d1jyigomk4m7u"]
 
-[ext_resource type="ArrayMesh" uid="uid://ctec6mqqfehpy" path="res://Weapons/pistol/pistol_Trigger.res" id="1_f7se0"]
+[ext_resource type="ArrayMesh" uid="uid://cdhhvry5n6u6u" path="res://Weapons/pistol/pistol_Trigger.res" id="1_f7se0"]
 [ext_resource type="Script" uid="uid://ciex5x8gn466d" path="res://Weapons/Scripts/Weapons.cs" id="1_m1rr1"]
 
 [resource]
 script = ExtResource("1_m1rr1")
 Name = &"pistol"
 Slot = 1
-Position = Vector3(0.5, -0.55, -0.6)
-Rotation = Vector3(0, -1.5708, 0)
+Position = Vector3(-2, 0, -0.2)
 Mesh = ExtResource("1_f7se0")
 metadata/_custom_type_script = "uid://ciex5x8gn466d"

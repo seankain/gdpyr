@@ -20,6 +20,10 @@ public partial class Weapons : Resource
     public Vector3 Position;
     [Export]
     public Vector3 Rotation;
+
+    [Export]
+    public Vector3 Scale;
+
     [Export]
     [ExportCategory("Visual Settings")]
     public Mesh Mesh;
@@ -39,6 +43,17 @@ public partial class Weapons : Resource
     [ExportCategory("WeaponSway")]
     [Export]
     public float SwayAmountRotation = 30.0f;
-    
+
+    [ExportCategory("WeaponSway")]
+    [Export]
+    public float IdleSwayAdjustment = 10.0f;
+
+    [ExportCategory("WeaponSway")]
+    [Export]
+    public float IdleSwayRotationStrength = 300.0f;
+
+    [ExportCategory("WeaponSway")]
+    [Export]
+    public float RandomSwayAmount = 5.0f;
 
 }
