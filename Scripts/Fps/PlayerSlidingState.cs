@@ -1,5 +1,5 @@
+using Gdpyr.Sim;
 using Godot;
-using System;
 
 namespace Gdpyr.Fps;
 
@@ -16,7 +16,6 @@ public partial class PlayerSlidingState : State
 	private int playerSlidingStateAnimTrackIndex = -1;
 	private int cameraRotationAnimTrackIndex = -1;
 
-	// Called when the node enters the scene tree for the first time.
 	public override void _Ready()
 	{
 		var slideAnim = PlayerAnimation.GetAnimation("sliding");
@@ -24,33 +23,28 @@ public partial class PlayerSlidingState : State
 		cameraRotationAnimTrackIndex = slideAnim.FindTrack("CameraController:rotation", Animation.TrackType.Value);
 	}
 
-	// Called every frame. 'delta' is the elapsed time since the previous frame.
-	public override void _Process(double delta)
-	{
-	}
 	public override void Enter(State previousState)
 	{
-		SetTilt((float)playerController.CurrentRotation);
+		SetTilt(playerController.YawRate);
 		var slideAnim = PlayerAnimation.GetAnimation("sliding");
-		GD.Print($"track ids slide: {playerSlidingStateAnimTrackIndex} camera rot : {cameraRotationAnimTrackIndex}");
 		slideAnim.TrackSetKeyValue(playerSlidingStateAnimTrackIndex, 0, playerController.Velocity.Length());
 		PlayerAnimation.SpeedScale = 1.0f;
 		PlayerAnimation.Play("sliding", -1.0, SlideAnimSpeed);
-
-
 	}
-	public override void Update(double delta)
+
+	public override void Tick(in InputContext input, float dt)
 	{
-		//base.Update(delta);
-		//Not doing base to avoid updating input so player cant change direction while sliding
-		playerController.UpdateGravity(delta);
-		playerController.UpdateVelocity();
+		// Not base.Tick: no steering while sliding, so the player cannot change
+		// direction mid-slide.
+		playerController.ApplyGravity(dt);
+		playerController.Move();
 	}
 
-	public void SetTilt(float playerRotation)
+	/// <summary>Leans the camera into the turn. <paramref name="yawRate"/> is radians per second.</summary>
+	public void SetTilt(float yawRate)
 	{
 		var tilt = Vector3.Zero;
-		tilt.Z = (float)Mathf.Clamp(TiltAmount * playerRotation, -0.1f, 0.1f);
+		tilt.Z = (float)Mathf.Clamp(TiltAmount * yawRate, -0.1f, 0.1f);
 		if (tilt.Z == 0.0)
 		{
 			tilt.Z = 0.05f;
@@ -59,9 +53,9 @@ public partial class PlayerSlidingState : State
 		PlayerAnimation.GetAnimation("sliding").TrackSetKeyValue(cameraRotationAnimTrackIndex, 2, tilt);
 	}
 
+	/// <summary>Called from the "sliding" animation's method track when the slide ends.</summary>
 	private void Finish()
 	{
 		OnStateTransition("PlayerCrouchingState");
 	}
-
 }

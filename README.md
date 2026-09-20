@@ -11,13 +11,18 @@ dedicated-server authoritative.
 
 ```
 Scripts/Core/   Bootstrap (CLI args, engine settings), LaunchOptions
-Scripts/Net/    TransportFactory, NetworkManager
+Scripts/Net/    TransportFactory, NetworkManager (transport + clocks), PlayerManager (tick loop, roster)
 Scripts/Sim/    Engine-free simulation code; unit-tested without Godot
-Scripts/Fps/    Character controller, movement FSM, weapons, viewmodel
-Scripts/Ui/     Pause menu, reticle, debug panel
+Scripts/Fps/    Character controller, movement FSM, input sampler, weapons, viewmodel
+Scripts/Ui/     Pause menu, reticle, net debug HUD
 Scenes/         Greybox map, player, weapon, pause menu
 Tests/          xUnit over the engine-free sources — `dotnet test`, no Godot needed
 ```
+
+The simulation runs in `_PhysicsProcess` at a fixed 60 Hz and reads nothing but the recorded
+`InputFrame` for the tick. `Scripts/Fps/LocalInputSampler.cs` is the only place the `Input`
+singleton is read, and rendering-only work (viewmodel sway, the correction offset the camera is
+drawn with) is the only thing left on the render frame.
 
 ## Running
 
@@ -33,16 +38,19 @@ Godot consumes its own arguments first, so the game's arguments go after a bare 
 Default port is 7777/UDP. A dedicated-server export with no mode flag defaults to
 `--server` rather than to offline.
 
-Both ends print a tick counter once a second, which is the cheapest way to see
-whether they agree on time:
+The server spawns a character per connected peer at the map's `player_spawn` markers; each client
+predicts its own and interpolates everyone else.
+
+Press `` ` `` on a client for the net debug HUD — RTT, clock lead, input buffer depth, mispredictions
+per second, prediction error, bytes in/out, server frame time. A headless server has no HUD and logs
+a line every five seconds instead:
 
 ```
-[net] server tick 600 | peers 1
-[net] client tick 603 | server tick 600 | drift 3
+[net] tick 1800 | peers 3 | in 9.2 KB/s | out 22.1 KB/s
 ```
 
-Drift is expected to be non-zero and unmanaged until M1 replaces the beacon with
-`SimClock` (see [`docs/NETCODE.md`](docs/NETCODE.md) §2).
+How to read those numbers, and how to inject latency with `tc netem` to test against something other
+than a perfect link, is in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) §4.
 
 ## Building
 

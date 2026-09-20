@@ -1,10 +1,15 @@
-using Godot;
-using System;
 using System.Collections.Generic;
-using Gdpyr.Ui;
+using Gdpyr.Sim;
+using Godot;
 
 namespace Gdpyr.Fps;
 
+/// <summary>
+/// The movement FSM. Ticked by <see cref="fps_controller.Simulate"/> on the fixed
+/// simulation tick — it no longer runs itself on <c>_Process</c>, which is the
+/// framerate-dependent movement defect M1 exists to fix
+/// (docs/IMPLEMENTATION_PLAN.md §1).
+/// </summary>
 public partial class StateMachine : Node
 {
 	[Export]
@@ -12,32 +17,32 @@ public partial class StateMachine : Node
 
 	public Dictionary<string, State> States = new();
 
-	// Called when the node enters the scene tree for the first time.
+	/// <summary>
+	/// The current state's index among the child states. This is what the snapshot
+	/// replicates and what a reconciliation rewind restores, so it must be derived
+	/// from scene order — identical in every process running the same build.
+	/// </summary>
+	public byte CurrentStateId { get; private set; }
+
+	private readonly List<State> _ordered = new();
+
 	public override void _Ready()
 	{
-		foreach (var child in this.GetChildren())
+		foreach (var child in GetChildren())
 		{
-			if (child is State)
+			if (child is State state)
 			{
-				GD.Print($"Adding state {child.Name}");
-				States.Add(child.Name, (State)child);
-				((State)child).StateTransitioned += (o, s) => { OnChildTransition(s); };
-				//child.transition.connect(on_child_transition);
+				States.Add(state.Name, state);
+				_ordered.Add(state);
+				state.StateTransitioned += (o, s) => { OnChildTransition(s); };
 			}
 		}
+
+		CurrentStateId = (byte)Mathf.Max(_ordered.IndexOf(CurrentState), 0);
 		CurrentState.Enter(CurrentState);
 	}
 
-	// Called every frame. 'delta' is the elapsed time since the previous frame.
-	public override void _Process(double delta)
-	{
-		CurrentState.Update(delta);
-	}
-
-	public override void _PhysicsProcess(double delta)
-	{
-		CurrentState.PhysicsUpdate(delta);
-	}
+	public void Tick(in InputContext input, float dt) => CurrentState.Tick(input, dt);
 
 	public void OnChildTransition(string nextStateName)
 	{
@@ -46,12 +51,23 @@ public partial class StateMachine : Node
 		CurrentState.Exit();
 		nextState.Enter(CurrentState);
 		CurrentState = nextState;
-		GD.Print(CurrentState.Name);
+		CurrentStateId = (byte)Mathf.Max(_ordered.IndexOf(nextState), 0);
 	}
 
-	private void LogToDebugPanel(string name, string value)
+	/// <summary>
+	/// Rewinds to the server's state before a replay, without running
+	/// <c>Exit</c>/<c>Enter</c>. Those have side effects — a jump sets velocity, a
+	/// crouch starts an animation that resizes the capsule — and applying them here
+	/// would add a second jump on top of the one being replayed.
+	/// </summary>
+	public void ForceState(byte stateId)
 	{
-		GetNode<Debug>("%DebugPanel").AddDebugProperty(name, value);
-	}
+		if (stateId >= _ordered.Count || stateId == CurrentStateId)
+		{
+			return;
+		}
 
+		CurrentState = _ordered[stateId];
+		CurrentStateId = stateId;
+	}
 }

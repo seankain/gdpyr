@@ -1,32 +1,24 @@
-using Godot;
-using System;
+using Gdpyr.Sim;
 
 namespace Gdpyr.Fps;
 
 public partial class PlayerFallingState : State
 {
-
 	public override void Enter(State previousState)
 	{
 		PlayerAnimation.Pause();
 	}
 
-	public override void Update(double delta)
+	public override void Tick(in InputContext input, float dt)
 	{
-		base.Update(delta);
+		base.Tick(input, dt);
+
 		if (playerController.IsOnFloor())
 		{
-			PlayerAnimation.Play("JumpEnd");
+			// The animation is named "jumpend"; the mismatched case here used to log an
+			// error and skip the landing animation on every landing.
+			PlayerAnimation.Play("jumpend");
 			OnStateTransition("PlayerIdleState");
 		}
-	}
-	// Called when the node enters the scene tree for the first time.
-	public override void _Ready()
-	{
-	}
-
-	// Called every frame. 'delta' is the elapsed time since the previous frame.
-	public override void _Process(double delta)
-	{
 	}
 }
