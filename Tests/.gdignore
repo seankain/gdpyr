@@ -1,0 +1,1 @@
+# Godot must not scan the test project: it is plain .NET, built by `dotnet test`.

@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Gdpyr.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <!-- The sources under test are compiled in from ../Scripts rather than project-
+         referenced: Gdpyr.csproj is a Godot.NET.Sdk project and building it needs the
+         engine's generators and an editor-side build. These tests must run on a plain
+         `dotnet test`, with no Godot install. -->
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="**/*.cs" Exclude="bin/**/*.cs;obj/**/*.cs" />
+    <!-- Engine-free game code. Scripts/Sim must never gain a Godot *node*
+         dependency; Godot math types are fine and come from the GodotSharp package
+         below (docs/IMPLEMENTATION_PLAN.md §3). -->
+    <Compile Include="../Scripts/Sim/**/*.cs" />
+    <Compile Include="../Scripts/Core/LaunchOptions.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="GodotSharp" Version="4.6.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+</Project>

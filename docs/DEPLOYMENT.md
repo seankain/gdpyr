@@ -67,7 +67,9 @@ If the server binary refuses to start, `ldd /opt/gdpyr/gdpyr-server` names the m
 
 ## 2. Export
 
-Godot 4 needs **no separate server binary**. Create an export preset named `Linux Server`:
+Godot 4 needs **no separate server binary**. The `Linux Server` preset is versioned in
+`export_presets.cfg`; open the project in the editor once so Godot validates and normalises it
+(Project → Export). Its settings:
 
 - Platform **Linux**, architecture **x86_64**.
 - Tick **Export as dedicated server**. This adds the `dedicated_server` feature tag, forces headless
@@ -164,9 +166,9 @@ roughly 140 hours of full-lobby play.
 ≈ $3.65/mo for the public IPv4, plus a little EBS. Stop the instance between playtests and compute
 drops to near zero; the IPv4 and EBS charges continue.
 
-**`export_presets.cfg` is currently in `.gitignore`.** Consider un-ignoring it so the server preset
-is versioned and reproducible — it holds no secrets for this project (the credential risk in that
-file is Android keystore passwords, which do not apply here).
+**`export_presets.cfg` is tracked** (M0 removed it from `.gitignore`) so the server preset is
+versioned and reproducible. It holds no secrets for this project — the credential risk in that file
+is Android keystore passwords, which do not apply here.
 
 **Parallel test servers**: run a second unit on port 7778 with its own `ExecStart` and security-group
 rule when you want to A/B two builds in one session.

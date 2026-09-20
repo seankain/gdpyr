@@ -1,7 +1,7 @@
 [gd_resource type="Resource" script_class="Weapons" format=3 uid="uid://ctyponc4rjid7"]
 
 [ext_resource type="ArrayMesh" uid="uid://bnch5wr4p40p4" path="res://Weapons/geopick/geopick_mesh.res" id="1_rfhf3"]
-[ext_resource type="Script" uid="uid://ciex5x8gn466d" path="res://Weapons/Scripts/Weapons.cs" id="2_o8x2d"]
+[ext_resource type="Script" uid="uid://ciex5x8gn466d" path="res://Scripts/Fps/Weapons.cs" id="2_o8x2d"]
 
 [resource]
 script = ExtResource("2_o8x2d")

@@ -1,7 +1,7 @@
 [gd_resource type="Resource" script_class="Weapons" format=3 uid="uid://d1jyigomk4m7u"]
 
 [ext_resource type="ArrayMesh" uid="uid://cdhhvry5n6u6u" path="res://Weapons/pistol/pistol_Trigger.res" id="1_f7se0"]
-[ext_resource type="Script" uid="uid://ciex5x8gn466d" path="res://Weapons/Scripts/Weapons.cs" id="1_m1rr1"]
+[ext_resource type="Script" uid="uid://ciex5x8gn466d" path="res://Scripts/Fps/Weapons.cs" id="1_m1rr1"]
 
 [resource]
 script = ExtResource("1_m1rr1")

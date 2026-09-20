@@ -46,7 +46,7 @@ client render clock  ──►  T_s − ~100 ms            (interpolation window
 ### 3.1 Required refactor
 
 `fps_controller` currently reads `Input.GetVector(...)` inside `UpdateInput`
-(`PlayerController/scripts/fps_controller.cs:101`) and each `*State.Update` polls
+(`Scripts/Fps/fps_controller.cs:108`) and each `*State.Update` polls
 `Input.IsActionJustPressed`. Replace with:
 
 ```csharp
@@ -277,7 +277,7 @@ Comfortable. Drop the player snapshot rate to 30 Hz first if you need headroom.
 
 ## 8. Debug HUD (build in M1, not later)
 
-In the existing `Debug` panel (`PlayerController/scripts/Debug.cs`, toggled with `` ` ``):
+In the existing `Debug` panel (`Scripts/Ui/Debug.cs`, toggled with `` ` ``):
 
 RTT · client/server tick delta · server-side input buffer depth · mispredictions per second ·
 mean/max prediction error · bytes in/out per second · live projectile count · replicated unit count ·
