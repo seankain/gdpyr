@@ -1,0 +1,34 @@
+[Unit]
+Description=gdpyr dedicated server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=gdpyr
+Group=gdpyr
+WorkingDirectory=/opt/gdpyr
+
+# Everything after `--` reaches OS.GetCmdlineUserArgs(). The dedicated-server
+# export already forces headless; --headless is kept so a plain (non-dedicated)
+# export also runs correctly here.
+ExecStart=/opt/gdpyr/gdpyr-server --headless -- --server 7777
+
+# Godot resolves its user data directory from HOME. /opt is read-only under
+# ProtectSystem=strict, so logs and state go here instead.
+Environment=HOME=/var/lib/gdpyr
+
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/gdpyr
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

@@ -7,7 +7,9 @@ art, no audio pass, no progression, no matchmaking.
 Target: a playable 6v2 (6 Ground Force, 2 Strategist) 20-minute round on one map, over the internet,
 with friends, in roughly 4–6 solo engineering-weeks.
 
-Companion document: [`NETCODE.md`](NETCODE.md) — tick model, message set, ballistics, fog of war.
+Companion documents:
+[`NETCODE.md`](NETCODE.md) — tick model, message set, ballistics, fog of war ·
+[`DEPLOYMENT.md`](DEPLOYMENT.md) — AWS EC2 dedicated server runbook.
 
 ---
 
@@ -94,12 +96,18 @@ Strategist commands are plain RPCs with immediate local UI acknowledgement.
 
 ### The actual "rapid prototyping with friends" answer
 
-Connectivity, not netcode, is what blocks playtests. Cheapest path that works this week:
+Connectivity, not netcode, is what blocks playtests. **The playtest strategy is a headless dedicated
+server on an AWS EC2 instance with an Elastic IP**; clients connect straight to `<ip>:7777` over UDP.
+Full runbook in [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
-1. Export a Linux headless server, run it on a $5–10/mo VPS (or one friend's desktop).
-2. Put everyone on **Tailscale** (or ZeroTier). Zero NAT/port-forward work, ~2 minutes per person,
-   direct IP connection, and it costs nothing at this player count.
-3. Ship a dev console command / launch arg: `gdpyr --client 100.x.y.z:7777`.
+1. Godot dedicated-server export (Linux x86_64, Strip Visuals, embedded PCK) → `scripts/deploy.sh`
+   uploads and restarts a systemd unit on the box.
+2. Security group: one inbound rule, Custom UDP 7777. ENet is UDP-only.
+3. Clients launch with `gdpyr --client <elastic-ip>:7777`.
+
+The server has a public address and clients dial out, so no player needs port forwarding, NAT
+punch-through, or a relay. An overlay network (Tailscale/ZeroTier) is only the fallback if you ever
+host on a home desktop instead.
 
 Steam integration (lobbies + Steam Datagram Relay so friends click "Join") becomes worthwhile only
 when "my friends can't connect" is the real bottleneck. Because the transport sits behind the
@@ -149,10 +157,15 @@ Each milestone ends in something you can play or measure. Estimates are solo-dev
 - Directory layout above; move existing scripts into it.
 - `Bootstrap.cs` autoload parsing `OS.GetCmdlineUserArgs()`: `--server [port]`,
   `--client <host:port>`, `--listen` (host+play, for solo testing).
-- Linux headless export preset; `Engine.PhysicsTicksPerSecond = 60`, cap `Engine.MaxFps` on server.
+- `Linux Server` dedicated-server export preset; `Engine.PhysicsTicksPerSecond = 60`,
+  `Engine.MaxFps = 60` on the server (headless Godot otherwise pegs a core).
 - `Tests/Gdpyr.Tests.csproj` (xUnit, references `GodotSharp`), `dotnet test` green.
-- **Done when:** `godot --headless -- --server` runs a tickless-idle server and a client connects and
-  both log matching tick counters.
+- **Stand up the AWS box and the deploy path now** — `scripts/export-server.sh`,
+  `scripts/deploy.sh`, `deploy/gdpyr-server.service`, per [`DEPLOYMENT.md`](DEPLOYMENT.md). Every
+  later milestone is verified against the real server, not localhost; latency bugs do not reproduce
+  on loopback.
+- **Done when:** `./scripts/deploy.sh` puts a build on EC2 and a client on your desktop connects to
+  `<elastic-ip>:7777`, both logging matching tick counters.
 
 ### M1 — Netcode spine (4–5 days) ← *the hard part; do not rush it*
 
