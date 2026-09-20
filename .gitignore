@@ -9,6 +9,9 @@ export_presets.cfg
 # Imported translations (automatically generated from CSV files)
 *.translation
 
+# Server/client export output (see scripts/export-server.sh)
+build/
+
 # Mono-specific ignores
 .mono/
 data_*/
