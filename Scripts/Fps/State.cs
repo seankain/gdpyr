@@ -1,10 +1,15 @@
-using Godot;
 using System;
-using System.Collections;
-using System.Runtime.Serialization;
+using Gdpyr.Sim;
+using Godot;
 
 namespace Gdpyr.Fps;
 
+/// <summary>
+/// One movement state. States read intent from the <see cref="InputContext"/> they
+/// are handed — never from the <c>Input</c> singleton — because a replayed tick
+/// has to see the input that was recorded for it, not whatever the device says
+/// now (docs/NETCODE.md §3.1).
+/// </summary>
 public partial class State : Node
 {
 
@@ -23,43 +28,26 @@ public partial class State : Node
 	[Export]
 	public AnimationPlayer PlayerAnimation;
 
-
-	// Called when the node enters the scene tree for the first time.
-	public override void _Ready()
-	{
-	}
-
-	// Called every frame. 'delta' is the elapsed time since the previous frame.
-	public override void _Process(double delta)
-	{
-	}
-
 	protected virtual void OnStateTransition(string nextStateName)
 	{
 		StateTransitioned?.Invoke(this, nextStateName);
 	}
 
 	public virtual void Enter(State previousState) { }
-	public virtual void Update(double delta)
-	{
-		playerController.UpdateGravity(delta);
-		playerController.UpdateInput(StatePlayerMoveSpeed, StatePlayerDeceleration, StatePlayerAcceleration);
-		playerController.UpdateVelocity();
-	}
 
-	public virtual void PhysicsUpdate(double delta) { }
+	/// <summary>
+	/// One simulation tick in this state. The base behaviour is gravity, steering
+	/// and a collide-and-slide move; states add their own transitions around it.
+	/// </summary>
+	public virtual void Tick(in InputContext input, float dt)
+	{
+		playerController.ApplyGravity(dt);
+		playerController.ApplyMove(input.MoveAxes, StatePlayerMoveSpeed, StatePlayerDeceleration, StatePlayerAcceleration);
+		playerController.Move();
+	}
 
 	public virtual void Exit()
 	{
 		PlayerAnimation.SpeedScale = 1.0f;
 	}
-
-	public IEnumerable WaitForAnimation(string animationName)
-	{
-		if (PlayerAnimation.IsPlaying() && PlayerAnimation.CurrentAnimation == animationName)
-		{
-			yield return null;
-		}
-	}
-
 }

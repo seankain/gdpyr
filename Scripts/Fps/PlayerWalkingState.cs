@@ -1,6 +1,5 @@
+using Gdpyr.Sim;
 using Godot;
-using System;
-using Gdpyr.Core;
 
 namespace Gdpyr.Fps;
 
@@ -8,42 +7,44 @@ public partial class PlayerWalkingState : State
 {
 	[Export]
 	public float TopAnimationSpeed = 2.2f;
+
 	public override void Enter(State previousState)
 	{
-		if (PlayerAnimation.IsPlaying() && PlayerAnimation.CurrentAnimation == "jumpend")
-		{
-			Coroutines.StartCoroutine(WaitForAnimation("jumpend"));
-		}
 		PlayerAnimation.Play("walking", -1.0, 1.0f);
-		//playerController.CurrentMoveSpeed = StatePlayerMoveSpeed;
 	}
-	public override void Update(double delta)
+
+	public override void Tick(in InputContext input, float dt)
 	{
-		base.Update(delta);
-		if (Input.IsActionJustPressed("sprint"))
+		base.Tick(input, dt);
+
+		if (input.JustPressed(InputButtons.Sprint))
 		{
 			OnStateTransition("PlayerSprintingState");
 			return;
-		}
-		if (playerController.Velocity.Length() == 0.0)
-		{
-			OnStateTransition("PlayerIdleState");
-		}
-		if (Input.IsActionJustPressed("crouch"))
-		{
-			OnStateTransition("PlayerCrouchingState");
-		}
-
-		if (Input.IsActionJustPressed("jump") && playerController.IsOnFloor())
-		{
-			OnStateTransition("PlayerJumpingState");
 		}
 
 		if (playerController.Velocity.Y < -3.0 && !playerController.IsOnFloor())
 		{
 			OnStateTransition("PlayerFallingState");
+			return;
 		}
 
+		if (input.JustPressed(InputButtons.Jump) && playerController.IsOnFloor())
+		{
+			OnStateTransition("PlayerJumpingState");
+			return;
+		}
+
+		if (input.JustPressed(InputButtons.Crouch))
+		{
+			OnStateTransition("PlayerCrouchingState");
+			return;
+		}
+
+		if (playerController.Velocity.Length() == 0.0)
+		{
+			OnStateTransition("PlayerIdleState");
+		}
 	}
 
 	public void SetAnimatonSpeed(float speed)
@@ -51,13 +52,4 @@ public partial class PlayerWalkingState : State
 		var alpha = Mathf.Remap(speed, 0.0, StatePlayerMoveSpeed, 0.0, 1.0);
 		PlayerAnimation.SpeedScale = (float)Mathf.Lerp(0.0, TopAnimationSpeed, alpha);
 	}
-
-
-	// public override void _Input(InputEvent @event)
-	// {
-	// 	if (@event.IsActionReleased("sprint"))
-	// 	{
-	// 		OnStateTransition("PlayerSprintingState");
-	// 	}
-	// }
 }

@@ -23,6 +23,7 @@ config/icon="res://icon.svg"
 
 Bootstrap="*res://Scripts/Core/Bootstrap.cs"
 NetworkManager="*res://Scripts/Net/NetworkManager.cs"
+PlayerManager="*res://Scripts/Net/PlayerManager.cs"
 
 [dotnet]
 

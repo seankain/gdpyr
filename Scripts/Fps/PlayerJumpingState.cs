@@ -1,6 +1,5 @@
+using Gdpyr.Sim;
 using Godot;
-using System;
-using Gdpyr.Core;
 
 namespace Gdpyr.Fps;
 
@@ -11,32 +10,19 @@ public partial class PlayerJumpingState : State
 	[Export]
 	public float InputMultiplier = 0.85f;
 
-	// Called when the node enters the scene tree for the first time.
-	public override void _Ready()
-	{
-	}
-
-	// Called every frame. 'delta' is the elapsed time since the previous frame.
-	public override void _Process(double delta)
-	{
-	}
-
 	public override void Enter(State previousState)
 	{
-		if (PlayerAnimation.IsPlaying() && PlayerAnimation.CurrentAnimation == "jumpend")
-		{
-			Coroutines.StartCoroutine(WaitForAnimation("jumpend"));
-		}
-		playerController.Velocity += new Vector3(0, JumpVelocity, 0);
+		playerController.ApplyJump(JumpVelocity);
 		PlayerAnimation.Play("jumpstart");
 	}
 
-	public override void Update(double delta)
+	public override void Tick(in InputContext input, float dt)
 	{
-		//base.Update(delta);
-		playerController.UpdateGravity(delta);
-		playerController.UpdateInput(StatePlayerMoveSpeed * InputMultiplier, StatePlayerDeceleration, StatePlayerAcceleration);
-		playerController.UpdateVelocity();
+		// Not base.Tick: air control runs at a fraction of the state's move speed.
+		playerController.ApplyGravity(dt);
+		playerController.ApplyMove(input.MoveAxes, StatePlayerMoveSpeed * InputMultiplier,
+			StatePlayerDeceleration, StatePlayerAcceleration);
+		playerController.Move();
 
 		if (playerController.IsOnFloor())
 		{

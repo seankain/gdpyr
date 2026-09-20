@@ -38,14 +38,12 @@ public partial class WeaponInit : Node3D
 	{
 		if (Bootstrap.IsDedicatedServer)
 		{
+			// Belt and braces: since M1 the character frees its whole weapon rig on
+			// anything but the local player, so a dedicated server never reaches this.
 			// The viewmodel is cosmetic and must never feed the simulation
-			// (docs/NETCODE.md §3.1). A dedicated-server export also strips its
-			// textures to placeholders, so `swayNoise` is null here and SwayWeapon
-			// would throw once per physics tick. Godot still logs one
-			// InvalidCastException when it assigns the stripped texture to the
-			// exported field above; that goes away in M1, when the server stops
-			// instantiating viewmodels at all.
-			SetPhysicsProcess(false);
+			// (docs/NETCODE.md §3.1), and a dedicated-server export strips its textures
+			// to placeholders, so `swayNoise` is null here and SwayWeapon would throw.
+			SetProcess(false);
 			SetProcessInput(false);
 			return;
 		}
@@ -54,16 +52,13 @@ public partial class WeaponInit : Node3D
 		EquipWeapon(MeleeWeapon);
 	}
 
-	// Called every frame. 'delta' is the elapsed time since the previous frame.
+	// Sway is cosmetic and stays on the render frame: it must never feed the
+	// simulation, and it should be as smooth as the display allows rather than
+	// stepping at the 60 Hz simulation tick (docs/NETCODE.md §3.1).
 	public override void _Process(double delta)
 	{
-
+		SwayWeapon((float)delta);
 	}
-
-    public override void _PhysicsProcess(double delta)
-    {
-        SwayWeapon((float)delta);
-    }
 
 
     public override void _Input(InputEvent @event)

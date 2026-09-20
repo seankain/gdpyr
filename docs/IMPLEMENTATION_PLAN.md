@@ -31,7 +31,8 @@ FPS-controller tutorial project, ~1100 lines of C#:
 | Greybox assets | `Textures/kenney_prototype/`, `Scenes/Test.tscn` | Yes |
 
 Paths are as of M0, which moved the tutorial project into the layout in §3. The two defects below
-were *not* fixed in M0 — they are the first work in M1.
+were *not* fixed in M0; both were fixed in M1, which moved the simulation onto the fixed tick and
+made it read recorded `InputFrame`s rather than the device.
 
 1. **Movement runs on the render frame.** `StateMachine._Process` → `State.Update(delta)` →
    `fps_controller.UpdateVelocity()` → `MoveAndSlide()`

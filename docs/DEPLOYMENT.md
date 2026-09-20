@@ -149,6 +149,37 @@ gdpyr --client <elastic-ip>:7777
 For friends on Windows, ship a desktop shortcut with the argument already appended; do not make them
 type an IP.
 
+### Reading the net HUD
+
+Press `` ` `` on a client to open the debug panel. It carries the numbers from
+[`NETCODE.md`](NETCODE.md) §8: RTT and jitter, the input clock's lead over the server-tick estimate,
+the server-side input buffer depth, clock nudges and resyncs, mispredictions per second, mean and
+max prediction error, bytes in and out, and the server's physics frame time.
+
+A healthy connection reads: buffer depth 2–4, nudges climbing slowly and resyncs not at all, mean
+prediction error under 2 cm, mispredictions per second near zero while walking in a straight line.
+
+The server has no HUD and logs a line every five seconds instead:
+
+```
+[net] tick 1800 | peers 3 | in 9.2 KB/s | out 22.1 KB/s
+```
+
+### Injecting latency
+
+Real links are the point — but reproducing a *specific* one is how you tell a netcode bug from a bad
+afternoon. On a Linux client, against the interface that carries the game traffic:
+
+```bash
+sudo tc qdisc add dev eth0 root netem delay 40ms 10ms distribution normal   # 80 ms RTT, 20 ms jitter
+sudo tc qdisc change dev eth0 root netem delay 40ms 10ms loss 2%            # add packet loss
+sudo tc qdisc del dev eth0 root                                             # back to normal
+```
+
+`netem` shapes egress only, so 40 ms here is ~80 ms round trip. On Windows, Clumsy does the same
+job. Watch the HUD while it is on: the input buffer should settle back into 2–4 within a second or
+two of a change, and prediction error should stay flat.
+
 ---
 
 ## 5. Operating notes
