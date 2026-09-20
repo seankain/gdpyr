@@ -4,7 +4,11 @@
 # Godot-specific ignores
 .import/
 export.cfg
-export_presets.cfg
+
+# export_presets.cfg is deliberately tracked: the "Linux Server" preset is part
+# of the deploy path and has to be reproducible (docs/DEPLOYMENT.md §5). It holds
+# no secrets for this project — the credential risk in that file is Android
+# keystore passwords, and there is no Android target here.
 
 # Imported translations (automatically generated from CSV files)
 *.translation
@@ -16,3 +20,8 @@ build/
 .mono/
 data_*/
 mono_crash.*.json
+
+# .NET build output. The game assembly builds into .godot/mono/, already ignored
+# above; this covers Tests/ and any plain .NET project added later.
+[Bb]in/
+[Oo]bj/

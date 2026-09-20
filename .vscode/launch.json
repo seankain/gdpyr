@@ -47,6 +47,57 @@
             ]
         },
         {
+            "name": "Launch (Listen Server)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${env:GODOT4}",
+            "cwd": "${workspaceFolder}",
+            "console": "internalConsole",
+            "stopAtEntry": false,
+            "args": [
+                "--path",
+                "${workspaceRoot}",
+                "--",
+                "--listen"
+            ]
+        },
+        {
+            "name": "Launch (Client -> localhost)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${env:GODOT4}",
+            "cwd": "${workspaceFolder}",
+            "console": "internalConsole",
+            "stopAtEntry": false,
+            "args": [
+                "--path",
+                "${workspaceRoot}",
+                "--",
+                "--client",
+                "127.0.0.1:7777"
+            ]
+        },
+        {
+            "name": "Launch (Headless Server)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${env:GODOT4}",
+            "cwd": "${workspaceFolder}",
+            "console": "internalConsole",
+            "stopAtEntry": false,
+            "args": [
+                "--path",
+                "${workspaceRoot}",
+                "--headless",
+                "--",
+                "--server",
+                "7777"
+            ]
+        },
+        {
             "name": "Attach to Process",
             "type": "coreclr",
             "request": "attach"

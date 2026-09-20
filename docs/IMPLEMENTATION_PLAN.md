@@ -22,23 +22,24 @@ FPS-controller tutorial project, ~1100 lines of C#:
 
 | Area | Files | Reusable? |
 |---|---|---|
-| Character controller | `PlayerController/scripts/fps_controller.cs` | Yes, after refactor (§3.1) |
-| Movement FSM | `PlayerController/scripts/StateMachine.cs`, `State.cs`, `Player*State.cs` | Yes, after refactor |
-| Weapon data | `Weapons/Scripts/Weapons.cs` (`[GlobalClass] Resource`) | Yes — extend it |
-| Viewmodel + sway | `PlayerController/scripts/WeaponInit.cs`, `WeaponCamera.cs`, `WeaponSubViewport.cs` | Yes, cosmetic only |
-| Debug panel | `PlayerController/scripts/Debug.cs` | Yes — host the net HUD here |
-| Pause menu, reticle | `PauseMenu.cs`, `Reticle.cs` | Yes |
-| Greybox assets | `Textures/kenney_prototype/`, `Levels/Test.tscn` | Yes |
+| Character controller | `Scripts/Fps/fps_controller.cs` | Yes, after refactor (§3.1) |
+| Movement FSM | `Scripts/Fps/StateMachine.cs`, `State.cs`, `Player*State.cs` | Yes, after refactor |
+| Weapon data | `Scripts/Fps/Weapons.cs` (`[GlobalClass] Resource`) | Yes — extend it |
+| Viewmodel + sway | `Scripts/Fps/WeaponInit.cs`, `WeaponCamera.cs`, `WeaponSubViewport.cs` | Yes, cosmetic only |
+| Debug panel | `Scripts/Ui/Debug.cs` | Yes — host the net HUD here |
+| Pause menu, reticle | `Scripts/Ui/PauseMenu.cs`, `Reticle.cs` | Yes |
+| Greybox assets | `Textures/kenney_prototype/`, `Scenes/Test.tscn` | Yes |
 
-No networking exists. Two defects that block networking and must be fixed first:
+Paths are as of M0, which moved the tutorial project into the layout in §3. The two defects below
+were *not* fixed in M0 — they are the first work in M1.
 
 1. **Movement runs on the render frame.** `StateMachine._Process` → `State.Update(delta)` →
    `fps_controller.UpdateVelocity()` → `MoveAndSlide()`
-   (`PlayerController/scripts/StateMachine.cs:31`, `State.cs:45`, `fps_controller.cs:119`).
+   (`Scripts/Fps/StateMachine.cs:34`, `State.cs:47`, `fps_controller.cs:126`).
    `MoveAndSlide()` internally uses the *physics* delta, so movement distance per second scales with
    framerate. It must run in `_PhysicsProcess` at a fixed tick.
-2. **Movement reads the global `Input` singleton directly** (`fps_controller.cs:101`,
-   `PlayerWalkingState.cs:20`). Prediction requires re-running past ticks from stored input, which is
+2. **Movement reads the global `Input` singleton directly** (`Scripts/Fps/fps_controller.cs:108`,
+   `PlayerWalkingState.cs:23`). Prediction requires re-running past ticks from stored input, which is
    impossible while the simulation reads live device state.
 
 ### `pyrrhic` (Unity reference, read-only)

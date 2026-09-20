@@ -14,14 +14,19 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 
 [application]
 
-config/name="Fps 2"
-run/main_scene="res://Levels/Test.tscn"
+config/name="gdpyr"
+run/main_scene="res://Scenes/Test.tscn"
 config/features=PackedStringArray("4.6", "C#", "GL Compatibility")
 config/icon="res://icon.svg"
 
+[autoload]
+
+Bootstrap="*res://Scripts/Core/Bootstrap.cs"
+NetworkManager="*res://Scripts/Net/NetworkManager.cs"
+
 [dotnet]
 
-project/assembly_name="Fps 2"
+project/assembly_name="Gdpyr"
 
 [input]
 
@@ -85,6 +90,16 @@ weapon_large={
 
 3d_render/layer_1="Default"
 3d_render/layer_2="Weapon"
+
+[physics]
+
+; Pinned rather than left at the engine default: server and clients must run the
+; same solver for prediction to reconcile (docs/IMPLEMENTATION_PLAN.md §3). This
+; project's movement was tuned under GodotPhysics3D; moving to Jolt is a one-line
+; change here, to be made deliberately and re-tuned, not inherited from an engine
+; default changing underneath us.
+3d/physics_engine="GodotPhysics3D"
+common/physics_ticks_per_second=60
 
 [rendering]
 
