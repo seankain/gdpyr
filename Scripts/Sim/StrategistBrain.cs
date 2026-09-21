@@ -20,13 +20,26 @@ public readonly struct StrategistTraits
 	/// <summary>How far an objective may move before standing orders are reissued [m].</summary>
 	public readonly float ReorderRadiusMeters;
 
+	/// <summary>
+	/// Riflemen it wants on the field for each heavy thing it owns before it buys
+	/// another one (docs/IMPLEMENTATION_PLAN.md §M5).
+	///
+	/// Without it the rule "buy the best you can afford" spends a whole round's
+	/// income on two tanks that walk into six players and die, which is a worse
+	/// opponent and, worse than that, a worse *instrument*: the question a bot round
+	/// is asked is whether twenty riflemen are a threat, and a bot that never builds
+	/// twenty riflemen cannot answer it.
+	/// </summary>
+	public readonly int InfantryPerHeavy;
+
 	public StrategistTraits(int decisionIntervalTicks, int queueDepth, int garrisonUnits,
-		float reorderRadiusMeters)
+		float reorderRadiusMeters, int infantryPerHeavy = 3)
 	{
 		DecisionIntervalTicks = Math.Max(decisionIntervalTicks, 1);
 		QueueDepth = Math.Max(queueDepth, 0);
 		GarrisonUnits = Math.Max(garrisonUnits, 0);
 		ReorderRadiusMeters = MathF.Max(reorderRadiusMeters, 0.1f);
+		InfantryPerHeavy = Math.Max(infantryPerHeavy, 0);
 	}
 
 	/// <summary>
@@ -126,4 +139,49 @@ public static class StrategistBrain
 	/// plan.
 	/// </summary>
 	public static OrderKind OrderFor(bool garrison) => garrison ? OrderKind.Defend : OrderKind.Attack;
+
+	/// <summary>
+	/// Which of the three tiers to put on a queue (docs/IMPLEMENTATION_PLAN.md §M5).
+	///
+	/// The best thing it can afford, provided the army it already has is enough
+	/// infantry to screen it: <paramref name="liveByTier"/> is the census, tier 0 is
+	/// the rifleman, and everything above it counts as a heavy. Falling back to tier
+	/// 0 rather than waiting is deliberate — a strategist saving for a tank while
+	/// nothing is being built is a strategist not playing, and the queue depth in
+	/// <see cref="StrategistTraits.QueueDepth"/> is already what stops it committing
+	/// the whole balance to one wave.
+	///
+	/// <paramref name="costs"/> and <paramref name="liveByTier"/> are parallel to the
+	/// unit catalog, which is where the caller gets them; nothing here knows what a
+	/// tank is beyond "expensive and outnumbered".
+	/// </summary>
+	public static bool TryChooseTier(int balance, ReadOnlySpan<int> costs, ReadOnlySpan<int> liveByTier,
+		in StrategistTraits traits, out byte tier)
+	{
+		tier = 0;
+		if (costs.Length == 0)
+		{
+			return false;
+		}
+
+		int infantry = liveByTier.Length > 0 ? liveByTier[0] : 0;
+		int heavies = 0;
+		for (int i = 1; i < liveByTier.Length; i++)
+		{
+			heavies += liveByTier[i];
+		}
+
+		bool screened = infantry >= (heavies + 1) * traits.InfantryPerHeavy;
+
+		for (int i = costs.Length - 1; i >= 1; i--)
+		{
+			if (screened && costs[i] > 0 && balance >= costs[i])
+			{
+				tier = (byte)i;
+				return true;
+			}
+		}
+
+		return costs[0] > 0 && balance >= costs[0];
+	}
 }

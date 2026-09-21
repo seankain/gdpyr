@@ -39,6 +39,10 @@ public sealed class BotStrategist
 	private readonly int[] _assault = new int[SimConfig.MaxUnits];
 	private readonly int[] _garrison = new int[SimConfig.MaxUnits];
 
+	/// <summary>The army it already has, by tier, and what each tier costs. Rebuilt per decision.</summary>
+	private readonly int[] _census = new int[SimConfig.MaxUnitDefinitions];
+	private readonly int[] _costs = new int[SimConfig.MaxUnitDefinitions];
+
 	private uint _nextDecisionTick;
 
 	public BotStrategist(int peerId, in StrategistTraits traits)
@@ -96,13 +100,32 @@ public sealed class BotStrategist
 	/// (docs/IMPLEMENTATION_PLAN.md §7) but the RPC has always taken an index, and a
 	/// bot that only ever used one door would make a two-door map read as a broken
 	/// map.
+	///
+	/// Since M5 it also has three tiers to choose between. The choice is
+	/// <see cref="StrategistBrain.TryChooseTier"/> and the census it needs is taken
+	/// here, once per decision rather than once per barracks.
 	/// </summary>
 	private void Build(CombatManager combat, UnitManager units)
 	{
-		UnitDefinition infantry = UnitCatalog.Definition(UnitCatalog.Infantry);
-		if (infantry == null)
+		int tiers = Math.Min(UnitCatalog.Count, SimConfig.MaxUnitDefinitions);
+		if (tiers == 0)
 		{
 			return;
+		}
+
+		Array.Clear(_census, 0, tiers);
+		for (int i = 0; i < tiers; i++)
+		{
+			_costs[i] = UnitCatalog.CostOf((byte)i);
+		}
+
+		for (int i = 0; i < units.SlotCount; i++)
+		{
+			Unit unit = units.UnitAt(i);
+			if (unit != null && unit.IsAlive && unit.Team == Team.Strategist && unit.DefinitionId < tiers)
+			{
+				_census[unit.DefinitionId]++;
+			}
 		}
 
 		int live = units.LiveUnitCount;
@@ -115,13 +138,27 @@ public sealed class BotStrategist
 				continue;
 			}
 
-			if (!StrategistBrain.ShouldQueue(combat.Match.StrategistPoints, infantry.Cost,
-				barracks.Queue.Count, live, _traits, SimConfig.MaxUnits))
+			// The balance is re-read per barracks because the previous one may just
+			// have spent it.
+			int points = combat.Match.StrategistPoints;
+			if (!StrategistBrain.TryChooseTier(points, _costs.AsSpan(0, tiers), _census.AsSpan(0, tiers),
+				_traits, out byte tier))
 			{
 				continue;
 			}
 
-			units.ServerQueueUnit(_peerId, i, UnitCatalog.Infantry);
+			if (!StrategistBrain.ShouldQueue(points, _costs[tier], barracks.Queue.Count, live, _traits,
+				SimConfig.MaxUnits))
+			{
+				continue;
+			}
+
+			if (units.ServerQueueUnit(_peerId, i, tier))
+			{
+				// Counted as though it were already on the field, so that two barracks
+				// do not each decide the army is short of the same tank.
+				_census[tier]++;
+			}
 		}
 	}
 

@@ -214,6 +214,12 @@ public partial class PlayerManager : Node
 		// the air before the projectiles are stepped and resolved, or every unit's
 		// shot would be a tick late (docs/IMPLEMENTATION_PLAN.md §M3).
 		UnitManager.Instance?.ServerTick(net.Tick);
+
+		// After the roster loop, which is where a use press is read, and before
+		// combat: a gun somebody let go of this tick is a gun that is on the ground
+		// by the time anything asks where it is (docs/IMPLEMENTATION_PLAN.md §M5).
+		EmplacementManager.Instance?.ServerTick(net.Tick);
+
 		CombatManager.Instance?.ServerPostTick(net.Tick);
 
 		if (net.Tick % SimConfig.SnapshotIntervalTicks == 0)
@@ -283,6 +289,13 @@ public partial class PlayerManager : Node
 		}
 
 		var context = new InputContext(frame, player.Character.PreviousButtons, SimConfig.TickDelta);
+
+		// What they are carrying decides how fast they walk, and it has to be in
+		// place before the step rather than after it — on the server and on the
+		// owning client alike, which is what keeps the two predicting the same walk
+		// (docs/IMPLEMENTATION_PLAN.md §M5).
+		player.Character.MoveSpeedScale = EmplacementManager.Instance?.MoveScaleOf(player.PeerId) ?? 1f;
+
 		player.Character.Simulate(frame);
 
 		if (authoritative)
@@ -481,6 +494,7 @@ public partial class PlayerManager : Node
 
 		UpdateRemotes(net.Clock.RenderTick);
 		UnitManager.Instance?.ClientTick(net.Clock.RenderTick);
+		EmplacementManager.Instance?.ClientTick();
 		CombatManager.Instance?.ClientPostTick(net.Tick);
 	}
 
@@ -689,6 +703,7 @@ public partial class PlayerManager : Node
 		_bots?.ServerTick(net.Tick);
 		SimulatePlayers(net);
 		UnitManager.Instance?.ServerTick(net.Tick);
+		EmplacementManager.Instance?.ServerTick(net.Tick);
 		CombatManager.Instance?.ServerPostTick(net.Tick);
 		ApplyLocalFog();
 	}

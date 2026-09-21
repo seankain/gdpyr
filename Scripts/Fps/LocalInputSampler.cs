@@ -11,7 +11,9 @@ namespace Gdpyr.Fps;
 /// server — works from the recorded frames alone.
 ///
 /// The combat buttons M1 reserved on the wire (fire, aim, reload, melee) are
-/// sampled from M2 on; nothing else about the boundary changed.
+/// sampled from M2 on, and the use bit from M5, when heavy guns gave it something
+/// to mean (docs/IMPLEMENTATION_PLAN.md §M5); nothing else about the boundary
+/// changed.
 ///
 /// Look angles are accumulated here and sent as absolute, already-quantized
 /// values. Absolute, because replaying a delta would apply it again; quantized,
@@ -90,6 +92,7 @@ public partial class LocalInputSampler : Node
 		if (Input.IsActionPressed("aim")) { buttons |= InputButtons.Ads; }
 		if (Input.IsActionPressed("reload")) { buttons |= InputButtons.Reload; }
 		if (Input.IsActionPressed("melee")) { buttons |= InputButtons.Melee; }
+		if (Input.IsActionPressed("use")) { buttons |= InputButtons.Use; }
 		if (Input.IsActionPressed("weapon_melee")) { buttons |= InputButtons.Weapon1; }
 		if (Input.IsActionPressed("weapon_sidearm")) { buttons |= InputButtons.Weapon2; }
 		if (Input.IsActionPressed("weapon_large")) { buttons |= InputButtons.Weapon3; }

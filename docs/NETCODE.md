@@ -376,6 +376,9 @@ route, so there is no second behaviour to write.
 | `ClientIssueOrder` | C→S | Reliable | per click | ~16 B + 4 B/unit |
 | `ServerBarracksState` | S→C | Reliable | 5 Hz per barracks | ~8 B |
 | `MatchState` (tickets, points) | S→C | Reliable | on change | ~22 B |
+| `ServerNodeState` | S→C | Reliable | 5 Hz per *changed* node | ~8 B |
+| `ServerGunState` / `ServerCanState` | S→C | Reliable | per transition | ~32 B / ~24 B |
+| `ServerRoundSummary` (scoreboard) | S→C | Reliable | once per round | 16 B + 9 B/player |
 | `ClockProbe` / `ClockReply` | both | Unreliable | 2 Hz | ~12 B |
 
 Both snapshots say *visible*, and since M4 the player one means it: a strategist peer is sent its
@@ -395,6 +398,11 @@ Quantize positions to three `int16` at 1 cm resolution (±327 m covers the map) 
 Comfortable. The unit snapshot is now the larger half, so it is the one to thin first — drop it to
 10 Hz, or stop sending records for units that have not moved since the last one.
 
+M5's four messages change none of that. Three of them are state rather than samples — who holds a
+node, where a gun is, what the round ended as — and cost bytes only when something happens; the
+node one is additionally filtered to the nodes whose state actually changed since the last report,
+so eight nodes at a standstill cost nothing at all (§10.1).
+
 ---
 
 ## 8. Debug HUD (build in M1, not later)
@@ -410,6 +418,12 @@ mesh baked, the strategist's points, how many strategists are seated, and — on
 refused. "Live units against the cap" is the number that says whether §6 of the implementation
 plan's 50-unit budget is real; "no navmesh" next to it is why twenty riflemen are walking into a
 wall.
+
+M5 added the economy and the guns: how many nodes each side holds and how many are contested, what
+the nodes have paid the strategist against what is left of it, and how many guns are manned,
+carried and fed. "0 contested" next to a live round says nobody is walking out to a node; "0 cans
+spent" says nobody is feeding a gun. Both are findings rather than bugs, and both are invisible
+without a number.
 
 M4 added the fog. On the authority: how many of the ground force its sensors have out of how many
 are on the field, how many sensors that is, how many records and messages the filter has kept off
@@ -458,3 +472,106 @@ the human strategist's packet is filtered through, so the two are behind one fog
 and a change to what the fog shows changes both. It reads the live contact and not the last known
 position on purpose: a bot that chased ghosts would be a different opponent from the one this
 exists to be.
+
+---
+
+## 10. Economy, emplacements and the scoreboard
+
+M5 added three things that are neither a per-tick sample nor a projectile, and all three are on the
+wire as **state**: sent when it changes, reliable, and absent the rest of the time.
+
+### 10.1 Resource nodes
+
+A node is a map node in the `resource_node` group, named on the wire by its index in that group
+sorted by name — the same arrangement barracks and spawn points use, and for the same reason: the
+index has to be something every peer derives from the same scene rather than something a message
+has to carry a path for.
+
+The capture itself is engine-free (`Scripts/Sim/Capture.cs`) and counted in *ticks*, not seconds:
+
+```
+every SimConfig.CaptureScanIntervalTicks (4 ticks, 15 Hz), per node:
+    ground      = living ground-force players inside the radius
+    strategist  = living strategist units inside the radius
+    contested   = both
+    progress   += one scan, towards whichever side is there alone
+    income      = owner is the strategist AND no ground-force body is standing on it
+```
+
+Four consequences worth stating, because each is a design decision rather than an implementation
+detail:
+
+- **Presence captures, not builders.** §5 of the implementation plan cuts builder units from the
+  first pass; a proximity test exercises the same economy loop with far less code, and what is
+  being measured is whether the loop is worth playing at all.
+- **One rifleman stops the money.** Denial does not need a capture: standing on a strategist's node
+  stops it paying from the first scan, and the eight seconds of capture on top of that are what
+  it takes to make the node yours. This is the whole of the ground force's reason to leave the
+  fight and walk somewhere.
+- **Contested freezes rather than resets.** A firefight on a pad that one side walks away from
+  leaves the other where it got to.
+- **Income is paid on a tick index**, never accumulated into a float. Two peers have to agree what
+  the strategist has; sixty additions a second of `0.41666` would not.
+
+Replication is one ~8-byte reliable message per node whose state changed, at 5 Hz, plus the whole
+set to a joining peer. There is **no fog over it**: both sides can see who is standing on a pad in
+any RTS anyone has played, and a node nobody can find is not an objective.
+
+### 10.2 Heavy guns: what is predicted, and what is not
+
+A gun and an ammunition can are map nodes in the `emplacement` and `ammo_can` groups, named by
+index the same way. The use bit has been on the wire since M1 (`InputButtons.Use`); M5 is where the
+device end of it is finally sampled and where it means something.
+
+One key does everything, which needs two intents, and both come out of the recorded frames rather
+than out of a timer (`UseTracker`): a **tap** is every interaction that leaves things where they
+are — mount, dismount, deploy, load a can — and a **hold** of half a second is the one that picks
+something up and walks off with it. The table is `EmplacementSim.Resolve`, engine-free and tested.
+
+**Transitions are not predicted. Firing is.**
+
+That split is the interesting part:
+
+- A transition happens perhaps four times in a round. Predicting one buys a round trip and costs a
+  client that has mounted a gun the server never gave it — with *no message to correct it*, because
+  a rejection is not a transition and only transitions are on the wire. The same round trip is what
+  the plan already accepts for every RTS order (§2).
+- Firing happens sixty times a second, and the cost of not predicting it is the thing §4.3 exists
+  to avoid. So a mounted gun goes through the identical `WeaponSim.Step` a rifle does, over the
+  identical input frames, on the server and on the gunner's client — tracer and belt count on the
+  tick the trigger was pulled, confirmed a round trip later.
+- Two things differ from a rifle: the round leaves the **muzzle** rather than the gunner's eye, and
+  the direction is clamped to the gun's **traverse arc** about the yaw it was deployed at
+  (`EmplacementSim.Traverse`). Both ends compute that from the same replicated `DeployYaw`, so the
+  predicted tracer is still on the authoritative line.
+- The gunner's client keeps its own belt count and ignores the server's, exactly as it ignores the
+  server's magazine for its own rifle (§3.2's argument, in `PlayerCombat.ApplyAuthoritative`): the
+  server's number is a round trip old and applying it would make the HUD count backwards.
+
+What *is* mispredicted, deliberately: **how fast a carrier walks**. `MoveSpeedScale` is applied
+before each simulated tick from what this process believes the player is carrying, so for one round
+trip after a pickup the client thinks it is walking at full speed and the server disagrees. That is
+a correction of a few centimetres arriving through the ordinary reconciliation path (§3.2), which
+is what that path is for. A replay also uses the *current* scale rather than the one in force on the
+tick being replayed, for the same reason and with the same size of error.
+
+A deployed gun is deliberately **not a collider**. One that could be sheltered behind would have to
+be a static body that moves, which the navigation bake and the projectile queries would both have
+to be taught about; here it is something to stand behind and shoot with, and rounds pass through it.
+
+Ammunition is a belt and not a magazine: the heavy gun is the one weapon in the catalog with
+`ReloadSeconds = 0`, so `WeaponSim` cannot refill it and an empty one dry-fires until somebody
+carries a can out to it. A can fills the belt and wastes whatever does not fit, which is what makes
+walking one out to a nearly-full gun a wasted walk rather than a free top-up.
+
+### 10.3 The scoreboard
+
+Kills and deaths are server-side counters all round — nothing puts them on the wire, because a
+snapshot carrying them thirty times a second would be paying continuously for a table that is
+looked at once. At the end of a round one reliable `ServerRoundSummary` carries the whole thing:
+16 bytes of round summary and 9 bytes per player (`ScoreboardCodec`), which is 160 bytes for a full
+server, once.
+
+The server fills the same table locally before sending it, because a listen host sends itself
+nothing and its scoreboard has to come from somewhere; a peer that connects during the intermission
+is sent the table everyone else is looking at.

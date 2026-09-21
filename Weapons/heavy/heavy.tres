@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="WeaponDefinition" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Fps/WeaponDefinition.cs" id="1_weapondef"]
+[ext_resource type="Resource" path="res://Weapons/projectiles/hmg_127.tres" id="2_projectile"]
+
+[resource]
+script = ExtResource("1_weapondef")
+Name = &"heavy gun"
+Slot = 2
+Position = Vector3(0, 0, 0)
+Rotation = Vector3(0, 0, 0)
+Scale = Vector3(1, 1, 1)
+DamageAmount = 0.0
+FireMode = 1
+RoundsPerMinute = 420.0
+MagazineSize = 80
+ReloadSeconds = 0.0
+IsMelee = false
+SpreadDegrees = 1.0
+Projectile = ExtResource("2_projectile")

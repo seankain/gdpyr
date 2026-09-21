@@ -61,6 +61,21 @@ public partial class fps_controller : CharacterBody3D
 	public float YawRate { get; private set; }
 
 	/// <summary>
+	/// How much of each movement state's authored speed this character keeps
+	/// (docs/IMPLEMENTATION_PLAN.md §M5). 1 normally; less while carrying a heavy
+	/// gun or an ammunition can; 0 while mounted behind a gun.
+	///
+	/// Set by <see cref="Net.PlayerManager"/> from
+	/// <see cref="EmplacementManager.MoveScaleOf"/> immediately before each
+	/// simulated tick, on the server and on the owning client alike — which is what
+	/// keeps the two predicting the same walk. A replay uses the *current* scale
+	/// rather than the one in force on the tick being replayed; a carry changes
+	/// state a handful of times a round and a correction of a few centimetres is
+	/// what reconciliation is for (docs/NETCODE.md §3.2).
+	/// </summary>
+	public float MoveSpeedScale { get; set; } = 1f;
+
+	/// <summary>
 	/// The authoritative (or predicted) position. Not the same as
 	/// <c>GlobalPosition</c>, which carries the decaying visual correction offset.
 	/// </summary>
@@ -316,7 +331,8 @@ public partial class fps_controller : CharacterBody3D
 	public void ApplyGravity(float dt) => Velocity = Movement.ApplyGravity(Velocity, gravity, dt);
 
 	public void ApplyMove(Vector2 moveAxes, float speed, float deceleration, float acceleration) =>
-		Velocity = Movement.ApplyMove(Velocity, moveAxes, Yaw, new MoveParams(speed, acceleration, deceleration));
+		Velocity = Movement.ApplyMove(Velocity, moveAxes, Yaw,
+			new MoveParams(speed * MoveSpeedScale, acceleration, deceleration));
 
 	/// <summary>
 	/// Sets upward velocity rather than adding to it: a replayed tick must produce

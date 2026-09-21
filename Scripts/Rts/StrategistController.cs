@@ -109,7 +109,7 @@ public partial class StrategistController : Node3D
 		if (CombatManager.Instance is { } combat)
 		{
 			RefreshContacts(combat, tick);
-			_hud.Refresh(combat.Match, UnitManager.Instance, tick, _selected.Count, _pendingOrder);
+			_hud.Refresh(combat.Match, UnitManager.Instance, tick, _selected.Count, _pendingOrder, combat.Economy);
 		}
 	}
 
@@ -127,6 +127,8 @@ public partial class StrategistController : Node3D
 		else if (@event.IsActionPressed("rts_order_stop")) { IssueOrder(OrderKind.Stop, Vector3.Zero, OwnerId.None); }
 		else if (@event.IsActionPressed("rts_select_all")) { SelectAll(); }
 		else if (@event.IsActionPressed("rts_build_infantry")) { UnitManager.Instance?.RequestBuild(0, UnitCatalog.Infantry); }
+		else if (@event.IsActionPressed("rts_build_technical")) { UnitManager.Instance?.RequestBuild(0, UnitCatalog.Technical); }
+		else if (@event.IsActionPressed("rts_build_tank")) { UnitManager.Instance?.RequestBuild(0, UnitCatalog.Tank); }
 		else if (@event.IsActionPressed("rts_cancel_build")) { UnitManager.Instance?.RequestCancelBuild(0); }
 		else
 		{
