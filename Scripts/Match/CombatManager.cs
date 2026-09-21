@@ -703,7 +703,7 @@ public partial class CombatManager : Node
 	/// <paramref name="attackerOwnerId"/> is carried alongside
 	/// <paramref name="attacker"/> because a unit has no <see cref="PlayerCombat"/>:
 	/// it is null for every round a unit fires, and a kill log that called all of
-	/// those "the world" would make the one record M6 derives its per-round CSV from
+	/// those "the world" would make the one record M8 derives its per-round CSV from
 	/// useless the moment the strategist starts winning.
 	/// </summary>
 	private HitFlags Damage(PlayerCombat victim, float amount, PlayerCombat attacker, int attackerOwnerId,

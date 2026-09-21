@@ -123,7 +123,7 @@ public partial class UnitManager : Node
 		}
 	}
 
-	/// <summary>Units the server has produced this round. For the HUD and M6's CSV.</summary>
+	/// <summary>Units the server has produced this round. For the HUD and M8's CSV.</summary>
 	public int UnitsProduced { get; private set; }
 
 	/// <summary>Units killed. Server-side.</summary>

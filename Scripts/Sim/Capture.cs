@@ -78,7 +78,7 @@ public sealed class CaptureState
 	/// <summary>True while both sides are inside the radius. Nothing moves and nothing is paid.</summary>
 	public bool Contested { get; private set; }
 
-	/// <summary>Points this node has paid the strategist this round. For the HUD and M6's CSV.</summary>
+	/// <summary>Points this node has paid the strategist this round. For the HUD and M8's CSV.</summary>
 	public int Paid { get; private set; }
 
 	/// <summary>Bumped on every change worth replicating, so a client can ignore a stale message.</summary>

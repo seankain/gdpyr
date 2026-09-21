@@ -5,6 +5,8 @@ dedicated-server authoritative.
 
 - [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) — scope, architecture, milestones
 - [`docs/NETCODE.md`](docs/NETCODE.md) — tick model, message set, ballistics, fog of war
+- [`docs/AGENT_API.md`](docs/AGENT_API.md) — headless play for external policies: RL agents on
+  either side, and scripted playtests for coding agents (designed, not yet built — M6/M7)
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — AWS EC2 dedicated-server runbook
 
 ## Layout

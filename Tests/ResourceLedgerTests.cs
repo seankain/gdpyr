@@ -88,7 +88,7 @@ public class ResourceLedgerTests
 	[Fact]
 	public void ARefundTakesTheCostBackOffTheOutlayToo()
 	{
-		// Otherwise "spent" counts a cancelled build, and M6's per-round CSV reports
+		// Otherwise "spent" counts a cancelled build, and M8's per-round CSV reports
 		// points the strategist never lost.
 		ResourceLedger ledger = Funded();
 		ledger.TrySpend(200);

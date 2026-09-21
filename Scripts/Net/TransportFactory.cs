@@ -4,7 +4,7 @@ namespace Gdpyr.Net;
 
 /// <summary>
 /// The one place the transport is chosen. Everything above this file talks to
-/// <c>MultiplayerPeer</c>, so swapping ENet for a Steam peer in M7 is a change
+/// <c>MultiplayerPeer</c>, so swapping ENet for a Steam peer in M9 is a change
 /// here and nowhere else (docs/IMPLEMENTATION_PLAN.md §2).
 /// </summary>
 public static class TransportFactory

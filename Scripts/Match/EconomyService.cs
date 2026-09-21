@@ -39,7 +39,7 @@ public sealed class EconomyService
 	/// <summary>Nodes with somebody from both sides standing on them.</summary>
 	public int ContestedNodes { get; private set; }
 
-	/// <summary>Points the nodes have paid the strategist this round. For the HUD and M6's CSV.</summary>
+	/// <summary>Points the nodes have paid the strategist this round. For the HUD and M8's CSV.</summary>
 	public int IncomePaid { get; private set; }
 
 	/// <summary>The tick the occupancy was last scanned on.</summary>

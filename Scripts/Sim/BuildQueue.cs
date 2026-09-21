@@ -35,7 +35,7 @@ public sealed class BuildQueue
 
 	public bool IsFull => _count >= Capacity;
 
-	/// <summary>Units this queue has completed. For the debug HUD and M6's CSV.</summary>
+	/// <summary>Units this queue has completed. For the debug HUD and M8's CSV.</summary>
 	public int Produced { get; private set; }
 
 	/// <summary>Bumped on every change worth replicating to the strategist's HUD.</summary>
