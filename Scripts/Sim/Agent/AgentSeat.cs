@@ -56,6 +56,11 @@ public sealed class AgentSeat
 		StepMul = Math.Clamp(stepMul, 1, MaxStepMul);
 		AttachedTick = tick;
 		LastActionTick = tick;
+
+		if (kind == AgentPolicyKind.Strategist)
+		{
+			Commands = new AgentCommandList();
+		}
 	}
 
 	/// <summary>Ceiling on action repeat: ten seconds of holding one frame is already absurd.</summary>
@@ -90,6 +95,22 @@ public sealed class AgentSeat
 	/// <summary>Commands this seat has spent, for a strategist policy (docs/AGENT_API.md §7.3).</summary>
 	public AgentCommandBudget Budget;
 
+	/// <summary>
+	/// The command list a strategist seat submitted and has not yet had applied
+	/// (docs/AGENT_API.md §7.4).
+	///
+	/// Allocated only for a strategist seat: a ground seat's action is twelve bytes
+	/// and never a list, and six of them on a training server should not each carry
+	/// a kilobyte of unit ids nobody will write to.
+	/// </summary>
+	public readonly AgentCommandList Commands;
+
+	/// <summary>True while <see cref="Commands"/> holds a decision nothing has run yet.</summary>
+	public bool HasPendingCommands { get; private set; }
+
+	/// <summary>Commands this seat has had applied. For the debug HUD and the trace.</summary>
+	public int CommandsApplied { get; private set; }
+
 	/// <summary>Actions submitted, and actions the grace window had to cover. For the trace.</summary>
 	public int ActionsApplied { get; private set; }
 
@@ -103,6 +124,44 @@ public sealed class AgentSeat
 		HasAction = true;
 		ActionsApplied++;
 	}
+
+	/// <summary>
+	/// Records that a strategist seat's command list is ready to run.
+	///
+	/// A ground action is <em>held</em> for the seat's <c>step_mul</c>; a command
+	/// list is <em>consumed</em>, because holding one would put the same unit on
+	/// the same queue thirty times. The lease is what the two share: the seat
+	/// stays quiet-but-attached between decisions, and goes back to its bot when it
+	/// stops deciding.
+	/// </summary>
+	public void SubmitCommands(uint tick)
+	{
+		LastActionTick = tick;
+		HasAction = true;
+		ActionsApplied++;
+		HasPendingCommands = true;
+	}
+
+	/// <summary>Marks the pending list as run, and counts what it cost.</summary>
+	public void CommandsRun(int applied)
+	{
+		HasPendingCommands = false;
+		CommandsApplied += applied;
+		Commands?.Clear();
+	}
+
+	/// <summary>
+	/// The grace window this seat plays under: the larger of half a second and two
+	/// of its own decisions.
+	///
+	/// A flat half second is right for a ground policy at 15 Hz and wrong for a
+	/// strategist at 2 Hz, whose decisions are exactly half a second apart — it
+	/// would be declared quiet between two decisions it made on time, and the round
+	/// would flicker between the policy and <c>BotStrategist</c> every tick. The
+	/// window is therefore relative to how often the seat said it would decide
+	/// (docs/AGENT_API.md §2.1).
+	/// </summary>
+	public int GraceTicks(int floorTicks) => Math.Max(floorTicks, StepMul * 2);
 
 	/// <summary>
 	/// Ticks on which this seat is asked for a fresh action. Aligned to the tick the

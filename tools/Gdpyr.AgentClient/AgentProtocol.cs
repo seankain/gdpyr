@@ -30,7 +30,7 @@ public static class AgentProtocol
 	/// carrying anything else is refused rather than misread — the whole point of
 	/// fetching the schema instead of compiling it.
 	/// </summary>
-	public const string SchemaVersion = "gdpyr-agent-obs-1";
+	public const string SchemaVersion = "gdpyr-agent-obs-2";
 
 	public const int LengthBytes = 4;
 	public const int HeaderBytes = 5;

@@ -1,0 +1,23 @@
+{
+  "name": "a ground seat acquires at 60 m",
+  "seeds": [7, 11, 13],
+  "duration_ticks": 300,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 0 },
+
+  "seats": [
+    { "id": "agent0", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json" }
+  ],
+
+  "spawns": [
+    { "peer": "agent0", "at": [-60, 1, 60], "look": [0, 0] },
+    { "unit": "infantry", "team": "strategist", "at": [-60, 1, 0], "order": "none" }
+  ],
+
+  "assert": [
+    { "metric": "observation.contacts.1.max", "op": "over_seeds", "cmp": ">=", "value": 1, "fraction": 1.0 },
+    { "metric": "observation.contacts.2.max", "op": "over_seeds", "cmp": ">=", "value": 1, "fraction": 1.0 },
+    { "metric": "observation.contacts.6.max", "op": "percentile", "p": 50, "cmp": "<=", "value": 0.55 },
+    { "metric": "observation.self.alive", "op": "==", "value": 1 }
+  ]
+}

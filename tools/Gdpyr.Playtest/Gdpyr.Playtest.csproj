@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Gdpyr.Playtest</RootNamespace>
+    <AssemblyName>gdpyr-playtest</AssemblyName>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The protocol client and nothing else: a regression harness that a coding
+         agent runs in CI must not pull libtorch down to find out whether the
+         economy still works (docs/AGENT_API.md §9.3). The scenario parser and the
+         assertion vocabulary are also compiled into Tests/Gdpyr.Tests.csproj, so
+         what the harness claims about a scenario file is answered by
+         `dotnet test` with no server and no engine. -->
+    <ProjectReference Include="../Gdpyr.AgentClient/Gdpyr.AgentClient.csproj" />
+  </ItemGroup>
+
+</Project>

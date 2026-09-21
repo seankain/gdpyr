@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Gdpyr.Bots;
+using Gdpyr.Core;
 using Gdpyr.Fps;
 using Gdpyr.Match;
 using Gdpyr.Net;
@@ -83,6 +84,7 @@ public sealed partial class AgentServer
 				case "observe": Observe(session, correlation, root, tick); break;
 				case "step": Step(session, correlation, root, tick); break;
 				case "reset": Reset(session, correlation, root, tick); break;
+				case "spawn": Spawn(session, correlation, root, tick); break;
 				case "events": Events(session, correlation, root); break;
 				case "state_hash": StateHash(session, correlation, tick); break;
 				case "quit": session.Close(); break;
@@ -189,12 +191,19 @@ public sealed partial class AgentServer
 			session.BinaryObservations = observations != "json";
 		}
 
+		if (root.TryGetProperty("feature_planes", out JsonElement planes)
+			&& planes.ValueKind is JsonValueKind.True or JsonValueKind.False)
+		{
+			session.FeaturePlanes = planes.GetBoolean();
+		}
+
 		session.SendJson(AgentFrameKind.Response, correlation, writer =>
 		{
 			writer.WriteString("op", "config");
 			writer.WriteString("mode", session.Stepped ? "stepped" : "realtime");
 			writer.WriteNumber("step_timeout_ms", session.StepTimeoutMilliseconds);
 			writer.WriteString("observations", session.BinaryObservations ? "binary" : "json");
+			writer.WriteBoolean("feature_planes", session.FeaturePlanes);
 		});
 	}
 
@@ -263,17 +272,12 @@ public sealed partial class AgentServer
 			? AgentPolicyKind.Strategist
 			: AgentPolicyKind.Ground;
 
-		if (policy == AgentPolicyKind.Strategist)
-		{
-			// The strategist observation and the command list are M7
-			// (docs/IMPLEMENTATION_PLAN.md §M7). Refused rather than half-answered: a
-			// seat that attached and then saw nothing would be a worse bug.
-			session.SendError(correlation, "not_implemented",
-				"strategist seats arrive with M7; attach with policy 'ground'");
-			return;
-		}
-
-		Team team = Text(root, "team", "ground") == "strategist" ? Team.Strategist : Team.GroundForce;
+		// A strategist policy sits in a strategist's chair. The team is implied by
+		// the policy kind rather than asked for twice, because the two cannot
+		// disagree: there is no strategist seat on the ground force.
+		Team team = policy == AgentPolicyKind.Strategist || Text(root, "team", "ground") == "strategist"
+			? Team.Strategist
+			: Team.GroundForce;
 		int requested = Int(root, "peer_id", 0);
 		int stepMul = Int(root, "step_mul", AgentSeatBook.DefaultStepMul(policy));
 
@@ -397,10 +401,9 @@ public sealed partial class AgentServer
 			return;
 		}
 
-		if (action.TryGetProperty("commands", out _))
+		if (action.TryGetProperty("commands", out JsonElement commands))
 		{
-			session.SendError(correlation, "not_implemented",
-				"strategist commands arrive with M7 (docs/IMPLEMENTATION_PLAN.md §M7)");
+			ActCommands(session, correlation, peerId, actionTick, commands);
 			return;
 		}
 
@@ -448,6 +451,167 @@ public sealed partial class AgentServer
 		Submit(session, correlation, peerId, actionTick, parsed);
 	}
 
+	/// <summary>
+	/// A strategist seat's decision: a list of commands applied in order, rate
+	/// limited by the APM cap when the tick runs them (docs/AGENT_API.md §7.4).
+	///
+	/// Parsing is total. A command the schema does not name, a barracks index that
+	/// does not exist, a unit the seat does not own — none of them is an error here:
+	/// the first is skipped, and the other two are refused by the same
+	/// <c>ApplyOrder</c> / <c>ApplyBuild</c> a client's RPC lands in, and counted in
+	/// <c>UnitManager.RejectedOrders</c>. A policy emitting garbage shows up on the
+	/// debug HUD rather than disconnecting itself.
+	/// </summary>
+	private void ActCommands(AgentSession session, uint correlation, int peerId, uint actionTick,
+		JsonElement commands)
+	{
+		if (!_book.TryGet(peerId, out AgentSeat seat) || seat.SessionId != session.Id)
+		{
+			session.SendError(correlation, "not_attached", $"this session does not hold seat {peerId}");
+			return;
+		}
+
+		if (seat.Kind != AgentPolicyKind.Strategist || seat.Commands == null)
+		{
+			session.SendError(correlation, "wrong_policy",
+				$"seat {peerId} is a ground seat; send an InputFrame action rather than commands");
+			return;
+		}
+
+		if (commands.ValueKind != JsonValueKind.Array)
+		{
+			session.SendError(correlation, "bad_request", "'commands' is an array");
+			return;
+		}
+
+		AgentCommandList list = seat.Commands;
+		list.Clear();
+
+		foreach (JsonElement element in commands.EnumerateArray())
+		{
+			if (element.ValueKind != JsonValueKind.Object)
+			{
+				continue;
+			}
+
+			ParseCommand(list, element);
+		}
+
+		seat.SubmitCommands(actionTick);
+	}
+
+	private void ParseCommand(AgentCommandList list, JsonElement element)
+	{
+		string kind = Text(element, "cmd", "noop");
+		Point(element, "target", out float x, out float z);
+
+		var command = new AgentCommand
+		{
+			Barracks = Int(element, "barracks", 0),
+			Tier = (byte)Math.Clamp(Int(element, "tier", 0), 0, byte.MaxValue),
+			TargetOwnerId = Int(element, "target_owner", OwnerId.None),
+			X = x,
+			Z = z,
+		};
+
+		switch (kind)
+		{
+			case "order":
+				command.Order = (byte)OrderFromName(Text(element, "kind", "move"));
+				list.AddOrder(command, UnitIds(element));
+				break;
+
+			case "build":
+				command.Kind = AgentCommandKind.Build;
+				list.Add(command);
+				break;
+
+			case "cancel":
+				command.Kind = AgentCommandKind.Cancel;
+				list.Add(command);
+				break;
+
+			case "rally":
+				command.Kind = AgentCommandKind.Rally;
+				list.Add(command);
+				break;
+
+			case "noop":
+				command.Kind = AgentCommandKind.Noop;
+				list.Add(command);
+				break;
+
+			default:
+				// Unknown names are ignored rather than rejected, the same way an
+				// unknown button name is: a policy built against a newer schema must
+				// degrade, not disconnect (AgentActionCodec.ButtonFromName).
+				break;
+		}
+	}
+
+	/// <summary>The unit ids an order names, read into the scratch buffer the seat's list copies from.</summary>
+	private ReadOnlySpan<int> UnitIds(JsonElement element)
+	{
+		if (!element.TryGetProperty("units", out JsonElement units) || units.ValueKind != JsonValueKind.Array)
+		{
+			return ReadOnlySpan<int>.Empty;
+		}
+
+		int count = 0;
+		foreach (JsonElement id in units.EnumerateArray())
+		{
+			if (count >= _unitIdScratch.Length)
+			{
+				break;
+			}
+
+			if (id.TryGetInt32(out int value))
+			{
+				_unitIdScratch[count++] = value;
+			}
+		}
+
+		return _unitIdScratch.AsSpan(0, count);
+	}
+
+	/// <summary>
+	/// Order names as the control plane spells them. <c>stop</c> is a command and
+	/// never a stored state, which <see cref="UnitOrder"/> already knows.
+	/// </summary>
+	private static OrderKind OrderFromName(string name) => name switch
+	{
+		"move" => OrderKind.Move,
+		"attack" => OrderKind.Attack,
+		"patrol" => OrderKind.Patrol,
+		"defend" => OrderKind.Defend,
+		"stop" => OrderKind.Stop,
+		_ => OrderKind.Move,
+	};
+
+	/// <summary>An <c>[x, z]</c> or <c>[x, y, z]</c> array: the ground plane, however the caller wrote it.</summary>
+	private static void Point(JsonElement root, string name, out float x, out float z)
+	{
+		x = 0f;
+		z = 0f;
+
+		if (!root.TryGetProperty(name, out JsonElement value) || value.ValueKind != JsonValueKind.Array)
+		{
+			return;
+		}
+
+		int length = value.GetArrayLength();
+		if (length >= 3)
+		{
+			x = (float)value[0].GetDouble();
+			z = (float)value[2].GetDouble();
+		}
+		else if (length == 2)
+		{
+			x = (float)value[0].GetDouble();
+			z = (float)value[1].GetDouble();
+		}
+	}
+
 	private void Submit(AgentSession session, uint correlation, int peerId, uint actionTick,
 		in AgentGroundAction action)
 	{
@@ -480,20 +644,48 @@ public sealed partial class AgentServer
 		SendObservation(session, correlation, seat, tick, AgentFrameKind.Response);
 	}
 
+	/// <summary>
+	/// The buffer this seat's observation is written into: one per observation
+	/// space, and the space is the seat's policy kind (docs/AGENT_API.md §6).
+	/// </summary>
+	private float[] BufferFor(AgentSeat seat) =>
+		seat.Kind == AgentPolicyKind.Strategist ? _strategistObservation : _groundObservation;
+
 	private bool Encode(AgentSeat seat, uint tick) =>
-		_view.Encode(seat.PeerId, tick, seat.StepMul, Limits, _observation);
+		seat.Kind == AgentPolicyKind.Strategist
+			? _strategistView.Encode(seat.PeerId, tick, seat.StepMul, Limits, _strategistObservation)
+			: _groundView.Encode(seat.PeerId, tick, seat.StepMul, Limits, _groundObservation);
+
+	/// <summary>
+	/// Whether this frame carries the feature planes: the session asked for them and
+	/// the seat is one they mean anything for (docs/AGENT_API.md §6.3).
+	/// </summary>
+	private bool PlanesFor(AgentSession session, AgentSeat seat) =>
+		session.FeaturePlanes && seat.Kind == AgentPolicyKind.Strategist;
 
 	private void SendObservation(AgentSession session, uint correlation, AgentSeat seat, uint tick,
 		AgentFrameKind kind)
 	{
+		float[] values = BufferFor(seat);
+		int floats = seat.Kind == AgentPolicyKind.Strategist
+			? AgentStrategistObservation.Floats
+			: AgentObservation.Floats;
+
+		bool planes = PlanesFor(session, seat) && _planes.Fill(seat.PeerId, tick, Limits);
+
 		if (session.BinaryObservations)
 		{
 			// seat (i32) · flags (u16) · reserved (u16) · tick (u32) · floats, so a
 			// decoder never has to pair an observation with a separate envelope to know
 			// whose it is. The seat is a peer id and peer ids are ints, so the field is
 			// as wide as one (see AgentActionCodec.GroundSizeBytes).
+			//
+			// Bit 2 of the flags says the planes follow the vector in the same frame,
+			// so a decoder that asked for them and a server that could not build them
+			// cannot disagree about where the floats end.
 			int header = 12;
-			int size = header + AgentObservation.Bytes;
+			int total = floats + (planes ? AgentFeaturePlanes.Floats : 0);
+			int size = header + (total * sizeof(float));
 			if (_observationBytes.Length < size)
 			{
 				_observationBytes = new byte[size];
@@ -502,12 +694,23 @@ public sealed partial class AgentServer
 			Span<byte> frame = _observationBytes.AsSpan(0, size);
 			BinaryPrimitives.WriteInt32LittleEndian(frame, seat.PeerId);
 			BinaryPrimitives.WriteUInt16LittleEndian(frame[4..], (ushort)((Limits.Omniscient ? 1 : 0)
-				| (Limits.Unbounded ? 2 : 0)));
+				| (Limits.Unbounded ? 2 : 0) | (planes ? 4 : 0)));
 			BinaryPrimitives.WriteUInt16LittleEndian(frame[6..], 0);
 			BinaryPrimitives.WriteUInt32LittleEndian(frame[8..], tick);
-			for (int i = 0; i < AgentObservation.Floats; i++)
+
+			for (int i = 0; i < floats; i++)
 			{
-				BinaryPrimitives.WriteSingleLittleEndian(frame[(header + (i * 4))..], _observation[i]);
+				BinaryPrimitives.WriteSingleLittleEndian(frame[(header + (i * 4))..], values[i]);
+			}
+
+			if (planes)
+			{
+				ReadOnlySpan<float> grid = _planes.Grid;
+				for (int i = 0; i < AgentFeaturePlanes.Floats; i++)
+				{
+					BinaryPrimitives.WriteSingleLittleEndian(
+						frame[(header + ((floats + i) * 4))..], grid[i]);
+				}
 			}
 
 			session.Send(kind == AgentFrameKind.Response ? AgentFrameKind.Observation : kind, correlation, frame);
@@ -518,10 +721,24 @@ public sealed partial class AgentServer
 		{
 			writer.WriteString("op", "observation");
 			writer.WriteNumber("seat", seat.PeerId);
+			writer.WriteString("policy", seat.Kind == AgentPolicyKind.Strategist ? "strategist" : "ground");
 			writer.WriteNumber("tick", tick);
 			writer.WriteBoolean("omniscient", Limits.Omniscient);
 			writer.WriteBoolean("unbounded", Limits.Unbounded);
-			AgentJson.WriteObservation(writer, _observation);
+
+			if (seat.Kind == AgentPolicyKind.Strategist)
+			{
+				AgentJson.WriteObservation(writer, AgentStrategistObservation.Fields, values);
+			}
+			else
+			{
+				AgentJson.WriteObservation(writer, AgentObservation.Fields, values);
+			}
+
+			if (planes)
+			{
+				AgentJson.WritePlanes(writer, _planes.Grid);
+			}
 		});
 	}
 
@@ -614,6 +831,10 @@ public sealed partial class AgentServer
 		combat.RoundSeed = Int(root, "seed", combat.RoundSeed);
 		combat.ServerResetRound(tick);
 
+		// The passability plane is the map's and is probed once; a reset is the one
+		// moment the map could have changed under it (docs/AGENT_API.md §6.3).
+		_planes.Invalidate();
+
 		session.SendJson(AgentFrameKind.Response, correlation, writer =>
 		{
 			writer.WriteString("op", "reset");
@@ -621,6 +842,100 @@ public sealed partial class AgentServer
 			writer.WriteNumber("seed", combat.RoundSeed);
 		});
 	}
+
+	/// <summary>
+	/// Puts a character or a unit where a scenario asked for one
+	/// (docs/AGENT_API.md §9.1).
+	///
+	/// This exists for the playtest harness and for nothing else: "a rifleman at
+	/// 100 m hits a stationary target ≥ 60% of 50 shots" is not a claim anybody can
+	/// make by waiting for a round to produce that situation. It is refused unless
+	/// the caller holds the seat it is moving, and a unit spawn is charged to
+	/// nobody — a scenario is a laboratory, not a round.
+	/// </summary>
+	private void Spawn(AgentSession session, uint correlation, JsonElement root, uint tick)
+	{
+		Point(root, "at", out float x, out float z);
+		float y = root.TryGetProperty("at", out JsonElement at) && at.ValueKind == JsonValueKind.Array
+			&& at.GetArrayLength() >= 3
+			? (float)at[1].GetDouble()
+			: 0f;
+
+		var where = new Vector3(x, y, z);
+
+		if (root.TryGetProperty("unit", out JsonElement _))
+		{
+			UnitManager units = UnitManager.Instance;
+			if (units == null)
+			{
+				session.SendError(correlation, "no_round", "this process has no unit manager");
+				return;
+			}
+
+			byte tier = UnitTier(Text(root, "unit", "infantry"));
+			Team team = Text(root, "team", "strategist") == "ground" ? Team.GroundForce : Team.Strategist;
+
+			// "none" is a scenario's way of saying "stand there", which is the whole
+			// point of a scripted spawn; OrderFromName's fallback is move, which is not.
+			string ordered = Text(root, "order", "none");
+			OrderKind order = ordered == "none" ? OrderKind.None : OrderFromName(ordered);
+
+			ushort unitId = units.ServerPlaceUnit(tier, where, team, order);
+			if (unitId == 0)
+			{
+				session.SendError(correlation, "unit_pool_full",
+					$"no room on the field for another unit ({SimConfig.MaxUnits})");
+				return;
+			}
+
+			session.SendJson(AgentFrameKind.Response, correlation, writer =>
+			{
+				writer.WriteString("op", "spawned");
+				writer.WriteNumber("unit", unitId);
+				writer.WriteNumber("tier", tier);
+				writer.WriteString("team", team == Team.Strategist ? "strategist" : "ground");
+			});
+			return;
+		}
+
+		int peerId = Int(root, "seat", 0);
+		if (!_book.TryGet(peerId, out AgentSeat seat) || seat.SessionId != session.Id)
+		{
+			session.SendError(correlation, "not_attached", $"this session does not hold seat {peerId}");
+			return;
+		}
+
+		fps_controller character = PlayerManager.Instance?.CharacterOf(seat.PeerId);
+		if (character == null)
+		{
+			session.SendError(correlation, "no_character", $"seat {peerId} has no character this tick");
+			return;
+		}
+
+		Point(root, "look", out float yaw, out float pitch);
+
+		// Teleport clears the velocity and the visual offset, which is what a
+		// placement is; the second call is only there because the look angles are set
+		// through the same public entry point a remote character's are.
+		character.Teleport(new Transform3D(Basis.Identity, where));
+		character.ApplyRemoteTransform(where, yaw, pitch);
+
+		session.SendJson(AgentFrameKind.Response, correlation, writer =>
+		{
+			writer.WriteString("op", "spawned");
+			writer.WriteNumber("seat", seat.PeerId);
+			writer.WriteNumber("tick", tick);
+		});
+	}
+
+	/// <summary>A unit tier by name, or by catalog index when a scenario wrote a number.</summary>
+	private static byte UnitTier(string name) => name switch
+	{
+		"infantry" or "rifleman" or "0" => UnitCatalog.Infantry,
+		"technical" or "1" => UnitCatalog.Technical,
+		"tank" or "2" => UnitCatalog.Tank,
+		_ => UnitCatalog.Infantry,
+	};
 
 	private void Events(AgentSession session, uint correlation, JsonElement root)
 	{

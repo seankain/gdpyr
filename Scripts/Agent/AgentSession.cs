@@ -68,6 +68,13 @@ public sealed class AgentSession : IDisposable
 	/// <summary>Observations as packed float32 rather than as named JSON fields.</summary>
 	public bool BinaryObservations { get; set; } = true;
 
+	/// <summary>
+	/// The optional feature planes ride along with a strategist observation
+	/// (docs/AGENT_API.md §6.3). Off unless asked for: they are 16 KB a decision and
+	/// a scatter over live units, and most policies do not want them.
+	/// </summary>
+	public bool FeaturePlanes { get; set; }
+
 	/// <summary>How far this session has read the event stream.</summary>
 	public ulong EventCursor { get; set; }
 

@@ -134,12 +134,14 @@ Scripts/
   Rts/         StrategistController, Selection, Unit, UnitDefinition, Barracks, ResourceNode
   Match/       MatchState (tickets/points), TeamService, VisibilityService (fog), win conditions
   Bots/        BotDirector (backfill), BotPilot (ground), BotStrategist (RTS) — decisions in Sim/
-  Agents/      M6: the agent listener and the seat leases; codecs and observations in Sim/
+  Agent/       M6: the agent listener and the seat leases; M7: the strategist view and the planes.
+               Codecs, observations and the command model live in Sim/Agent/
   Ui/          Team select, loadout select, RTS HUD, net debug HUD
 Scenes/        Greybox map, player, units, props
 Tests/         xUnit project over Scripts/Sim (no engine required)
 Tests/Scenarios/  M7: playtest scenario files — data, no engine needed to author one
-tools/         M7: gdpyr_env, the Python client
+tools/         Gdpyr.AgentClient (protocol), Gdpyr.Trainer (RLMatrix), Gdpyr.Probe (divergence),
+               Gdpyr.Playtest (M7: the scenario harness), gdpyr_env/ (M7: the Python client)
 ```
 
 Rules that keep this from rotting:
@@ -379,9 +381,11 @@ the same shot (`Scripts/Sim/Spread.cs`).
   written ([`AGENT_API.md`](AGENT_API.md) §3). **Measured, and the answer is "the first tick"**: not
   because the engine drifts that fast but because every stochastic decision in the game is a hash of
   the *absolute* server tick, which never rewinds, so `reset` starts a fresh round rather than a
-  repeatable one (§3.1). M7 gets to decide whether to key those hashes on ticks since the round
-  started instead; until it does, the distributional assertion vocabulary is the contract for the
-  strongest of reasons rather than as a precaution.
+  repeatable one (§3.1). **M7 decided not to re-key them** on ticks since the round started: it would
+  not make an episode reproducible while the engine is the other half of the problem, and it would
+  hand every episode the same bot noise at the same moment (`AGENT_API.md` §12.1). So the
+  distributional assertion vocabulary is the contract for the strongest of reasons rather than as a
+  precaution.
 - **Done when:** an external process attaches to a ground seat on a headless server, plays a full
   round against the computer strategist, and its episode ends with the same `RoundSummary` a human's
   would — and when detaching mid-round hands the seat back to a bot without a hitch in the snapshot.
@@ -393,7 +397,7 @@ the same shot (`Scripts/Sim/Spread.cs`).
   offset by a dead round's death count), and the bot backfill did not count an attached policy as
   somebody playing (so a training server filled neither side and handed the policy an empty map).
 
-### M7 — Strategist policies and the playtest harness (2–3 days)
+### M7 — Strategist policies and the playtest harness (2–3 days) ✅ *shipped*
 
 The half of M6 that makes it useful to somebody who is not training a network.
 
@@ -401,21 +405,49 @@ The half of M6 that makes it useful to somebody who is not training a network.
   fogged contacts `VisibilityService` already decays into ghosts for the human — and a command list
   back through `ServerIssueOrder` / `ServerQueueUnit`. Two three-line additions for parity:
   `ServerCancelBuild` and `ServerSetRally`, because today's `Request*` pair assumes the local peer
-  (`Scripts/Rts/UnitManager.cs:745`).
+  (`Scripts/Rts/UnitManager.cs:745`). **Shipped at exactly 1,092**, and it needed one protocol
+  constant the design had not noticed: `SimConfig.MaxBarracks = 4`, because a barracks is named by
+  its index on the wire and four observation slots against an unbounded map would have been an
+  observation that lies. `UnitManager` warns and truncates past it, exactly as the resource nodes
+  already did.
 - **Optional feature planes:** a 32×32×4 grid — own units, contacts, node ownership, passability.
-  Off by default; it is what makes a convolutional strategist policy possible at all.
+  Off by default; it is what makes a convolutional strategist policy possible at all. **Shipped as
+  a strategist affordance only** — a ground policy's spatial signal is its ray fan — and with
+  passability probed once per map rather than once per observation, because the map does not move.
 - **Scenario files and assertions:** JSON, checked in beside the tests — seed, roster, scripted
   spawns, and a list of claims. `./scripts/playtest.sh Tests/Scenarios/<file>.json` exits 0 or 1 and
-  prints a machine-readable summary on `--json`.
+  prints a machine-readable summary on `--json`. **Shipped**, with the harness starting the server
+  itself (the roster a scenario wants is in the scenario file, and a wrapper that read the JSON to
+  build a command line would be a JSON parser written in bash), plus a `spawn` op so a scenario can
+  put a rifleman and a target 100 m apart rather than waiting for a round to produce that situation.
 - **The assertion vocabulary is distributional on purpose** — `between`, `percentile`, `over_seeds`,
   and deliberately no `assert_position_equals`. §3 of the design says why: this is a stochastic
   environment with a seeded core, and a suite that asserts trajectories is a suite that flakes.
+  **Shipped, with the rule that decides what a sweep means written down once:** a comparison and
+  `between` are per-episode invariants that have to hold in every seed; `percentile` and
+  `over_seeds` are the two operators that talk about the distribution.
 - **`tools/gdpyr_env/`:** a Gymnasium-shaped Python client in one module, `numpy` and nothing else.
+  **Shipped**, and it is not a second implementation of the observation layout: it fetches the
+  schema at the handshake, decodes by name, and refuses a `schema_version` it does not recognise.
 - **The divergence probe:** two seeded 600-tick episodes in one process, `state_hash` compared per
-  tick, first disagreement reported. Run it before writing assertions, not after.
+  tick, first disagreement reported. Run it before writing assertions, not after. **It was, in M6,
+  and the answer decided M7's open question** ([`AGENT_API.md`](AGENT_API.md) §12.1): the seeded
+  hashes stay keyed on the absolute server tick and `reset` starts a fresh round rather than a
+  repeatable one. Re-keying them on ticks since the round started would not make an episode
+  reproducible — `MoveAndSlide()` and `NavigationAgent3D` are the other half of §3 — and it would
+  hand every episode the same bot aim error and the same strafe at the same moment, which turns a
+  twenty-seed sweep into twenty runs of one script.
 - **Done when:** a coding agent with no Godot knowledge can add a scenario file, run
   `./scripts/playtest.sh`, and have a regression in ballistics, the economy or the win conditions
   come back as a failed assertion with the tick it failed on and a trace that replays.
+  **Done:** three scenarios are checked in — rifle lethality at 100 m, contact acquisition over a
+  three-seed sweep, and the strategist's economy — and the vocabulary they are written in is
+  answered by `dotnet test` with no server and no engine (`Tests/ScenarioTests.cs`,
+  `Tests/AgentObservationTests.cs`). The schema `welcome` publishes moved to
+  `gdpyr-agent-obs-2` with them. **Not verified by running:** this branch was written in an
+  environment with no Godot and no .NET SDK, so the three scenario files' numeric bounds are
+  authored from the weapon and unit definitions rather than measured, and are the first thing to
+  re-tighten on a machine that can run them.
 
 ### M8 — Playtest instrumentation (1–2 days, then ongoing) *(was M6)*
 
@@ -496,7 +528,16 @@ ceiling and the same ownership checks. The learner is .NET rather than Python
 ([`TRAINING.md`](TRAINING.md)): `tools/Gdpyr.AgentClient` is the protocol and the
 `IEnvironmentAsync<float[]>` adapter, `tools/Gdpyr.Trainer` runs RLMatrix's PPO or DQN over one or
 more headless servers, and `tools/Gdpyr.Probe` is the divergence probe whose answer
-([`AGENT_API.md`](AGENT_API.md) §3.1) M7's assertions have to be written against.
+([`AGENT_API.md`](AGENT_API.md) §3.1) M7's assertions were written against.
+
+M7 finished the other half: a policy can now take the strategist's chair behind the same fog a
+person is behind (1,092 floats out of `VisibilityService`, a command list back through the same
+`ServerIssueOrder` a person's RPC lands in), and a coding agent with no Godot knowledge can add a
+JSON scenario, run `./scripts/playtest.sh`, and get back a failed assertion with the tick it failed
+on and a trace that replays. It also answered the one question M6 left for it
+([`AGENT_API.md`](AGENT_API.md) §12.1): the seeded hashes stay keyed on the absolute server tick,
+so `reset` labels an episode rather than reproducing one, and the assertion vocabulary is
+distributional because that is what this environment is.
 
 M5 gave both sides something to do with the map. The strategist's points are a rate rather than a
 pool: three nodes pay for being held and stop paying the moment a rifleman stands on one, which is
@@ -531,11 +572,12 @@ points, no units, nothing building and no ground, and it ends on a scoreboard an
 5. **Still open from M2: a full hitbox rewind for projectiles** (§4.3's "upgrade" — the ring is
    built and melee uses it, projectiles still use the cheap spawn-time advance). Nothing since has
    needed it, and units deliberately keep no history at all (`NETCODE.md` §5).
-6. **M6 — the agent API.** Design in [`AGENT_API.md`](AGENT_API.md). The first thing to do inside
-   it is not the socket: it is the **divergence probe** (§3, §10), because how far two seeded
-   episodes drift decides how M7's assertions may be written, and everything downstream is built on
-   an assumption until that number exists. The second is to measure how many headless instances fit
-   on one box, from the debug HUD's server-frame-time row, before anyone plans a training run
+6. **Run the three scenarios on a machine with Godot, and re-tighten their bounds.** M6 and M7 are
+   in, but this branch was written without a Godot binary or a .NET SDK, so
+   `Tests/Scenarios/*.json` carry numbers authored from `Weapons/rifle/rifle.tres` and
+   `Units/infantry.tres` rather than measured ones. `./scripts/playtest.sh Tests/Scenarios/*.json`
+   is the whole check. Still outstanding from M6's own list: measure how many headless instances
+   fit on one box, from the debug HUD's server-frame-time row, before anyone plans a training run
    around a number nobody has taken.
 7. **M8 — playtest instrumentation.** It is the actual deliverable of the whole project, and M5
    just made most of its columns exist: round length, outcome, ticket curve, the strategist's

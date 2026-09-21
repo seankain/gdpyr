@@ -1,0 +1,24 @@
+{
+  "name": "rifle lethality at 100 m",
+  "seed": 7,
+  "duration_ticks": 900,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 0 },
+
+  "seats": [
+    { "id": "agent0", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_and_fire.json" }
+  ],
+
+  "spawns": [
+    { "peer": "agent0", "at": [-60, 1, 50], "look": [0, 0] },
+    { "unit": "infantry", "team": "strategist", "at": [-60, 1, -50], "order": "none" }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "observation.weapon.magazine.min", "op": "<", "value": 1 },
+    { "metric": "events.damage.count", "op": ">=", "value": 1 },
+    { "metric": "events.damage.sum", "op": "between", "value": [20, 400] },
+    { "metric": "events.unit_lost.count", "op": ">=", "value": 1 }
+  ]
+}

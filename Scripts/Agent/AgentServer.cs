@@ -43,12 +43,21 @@ public sealed partial class AgentServer : IDisposable
 	private readonly Dictionary<int, AgentSession> _byId = new();
 	private readonly AgentSeatBook _book = new();
 	private readonly AgentEventLog _events = new();
-	private readonly AgentGroundView _view = new();
+	private readonly AgentGroundView _groundView = new();
+	private readonly AgentStrategistView _strategistView = new();
+	private readonly AgentPlaneView _planes = new();
 	private readonly byte[] _token;
 	private readonly List<int> _scratchSeats = new();
 	private readonly AgentEvent[] _drain = new AgentEvent[64];
 
-	private float[] _observation;
+	/// <summary>Unit ids read out of one order before they are copied into a seat's command list.</summary>
+	private readonly int[] _unitIdScratch = new int[SimConfig.MaxUnits];
+
+	/// <summary>One buffer per observation space, reused: an observation a tick is not an allocation a tick.</summary>
+	private readonly float[] _groundObservation = new float[AgentObservation.Floats];
+
+	private readonly float[] _strategistObservation = new float[AgentStrategistObservation.Floats];
+
 	private byte[] _observationBytes;
 	private int _nextSessionId = 1;
 	private long _holdSinceMilliseconds;
@@ -68,8 +77,7 @@ public sealed partial class AgentServer : IDisposable
 		Limits = AgentLimits.From(BotTraits.Default, options.AgentUnbounded, options.AgentOmniscient);
 		_token = options.AgentToken != null ? Encoding.UTF8.GetBytes(options.AgentToken) : null;
 
-		_observation = new float[AgentObservation.Floats];
-		_observationBytes = new byte[AgentObservation.Bytes];
+		_observationBytes = new byte[AgentStrategistObservation.Bytes + AgentFeaturePlanes.Bytes + 16];
 
 		AgentEventBus.Active = _events;
 	}
@@ -291,7 +299,7 @@ public sealed partial class AgentServer : IDisposable
 
 		// Stepped mode has no grace: the gate already guarantees the action is for
 		// this tick, and a fallback would quietly make an episode non-reproducible.
-		int grace = stepped ? int.MaxValue : AgentSeatBook.DefaultGraceTicks;
+		int grace = stepped ? int.MaxValue : seat.GraceTicks(AgentSeatBook.DefaultGraceTicks);
 		if (seat.ShouldPilot(tick, grace))
 		{
 			seat.CountFallback();
@@ -310,6 +318,105 @@ public sealed partial class AgentServer : IDisposable
 	}
 
 	public bool IsAttached(int peerId) => _book.IsAttached(peerId);
+
+	/// <summary>
+	/// Whether an external policy is driving this strategist seat this tick, and if
+	/// so, the commands it asked for (docs/AGENT_API.md §7.4).
+	///
+	/// The strategist half of <see cref="TrySample"/>, and it lives in the same
+	/// place for the same reason: one branch in <see cref="BotDirector"/>, the one
+	/// class that already knows computer players exist as a category. False means
+	/// "not attached, or the lease is in its grace window", and the caller falls
+	/// back to <see cref="BotStrategist"/>.
+	///
+	/// A command list is consumed rather than held: holding one for the seat's
+	/// <c>step_mul</c> would put the same unit on the same queue thirty times.
+	/// </summary>
+	public bool TryCommand(int peerId, uint tick)
+	{
+		if (!_book.TryGet(peerId, out AgentSeat seat) || seat.Kind != AgentPolicyKind.Strategist)
+		{
+			return false;
+		}
+
+		bool stepped = _byId.TryGetValue(seat.SessionId, out AgentSession session) && session.Stepped;
+		int grace = stepped ? int.MaxValue : seat.GraceTicks(AgentSeatBook.DefaultGraceTicks);
+		if (seat.ShouldPilot(tick, grace))
+		{
+			seat.CountFallback();
+			return false;
+		}
+
+		if (seat.HasPendingCommands)
+		{
+			seat.CommandsRun(ApplyCommands(seat, tick));
+		}
+
+		// The seat is the policy's whether or not this decision asked for anything:
+		// an attached strategist that means to build nothing this second is not a
+		// strategist that wants its bot back.
+		return true;
+	}
+
+	/// <summary>
+	/// Runs one decision's commands, in order, through the same server-side entry
+	/// points a person's RPCs land in — so an agent's order goes through the
+	/// identical ownership checks, and a unit id the seat does not own is counted in
+	/// <c>UnitManager.RejectedOrders</c> rather than silently doing nothing
+	/// (docs/AGENT_API.md §7.4).
+	///
+	/// The APM cap is spent here rather than at submission, because it is a cap on
+	/// what the game does and not on what the socket carries.
+	/// </summary>
+	private int ApplyCommands(AgentSeat seat, uint tick)
+	{
+		UnitManager units = UnitManager.Instance;
+		AgentCommandList list = seat.Commands;
+		if (units == null || list == null || list.Count == 0)
+		{
+			return 0;
+		}
+
+		int allowed = seat.Budget.Take(tick, list.Count, Limits);
+		int ran = 0;
+
+		foreach (AgentCommand command in list.Commands)
+		{
+			if (ran >= allowed)
+			{
+				break;
+			}
+
+			ran++;
+			var at = new Vector3(command.X, 0f, command.Z);
+
+			switch (command.Kind)
+			{
+				case AgentCommandKind.Order:
+					units.ServerIssueOrder(seat.PeerId, list.UnitsOf(command), (OrderKind)command.Order, at,
+						command.TargetOwnerId);
+					break;
+
+				case AgentCommandKind.Build:
+					units.ServerQueueUnit(seat.PeerId, command.Barracks, command.Tier);
+					break;
+
+				case AgentCommandKind.Cancel:
+					units.ServerCancelBuild(seat.PeerId, command.Barracks);
+					break;
+
+				case AgentCommandKind.Rally:
+					units.ServerSetRally(seat.PeerId, command.Barracks, at);
+					break;
+
+				case AgentCommandKind.Noop:
+				default:
+					break;
+			}
+		}
+
+		return ran;
+	}
 
 	/// <summary>
 	/// Gives a seat back to its bot. Called when a session closes, when a policy

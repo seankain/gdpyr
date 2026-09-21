@@ -6,8 +6,7 @@ dedicated-server authoritative.
 - [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) — scope, architecture, milestones
 - [`docs/NETCODE.md`](docs/NETCODE.md) — tick model, message set, ballistics, fog of war
 - [`docs/AGENT_API.md`](docs/AGENT_API.md) — headless play for external policies: RL agents on
-  either side, and scripted playtests for coding agents (the ground seat is built; the strategist
-  seat and the playtest harness are M7)
+  either side, and scripted playtests for coding agents
 - [`docs/TRAINING.md`](docs/TRAINING.md) — training an agent against a headless server, in C#, with
   [RLMatrix](https://github.com/asieradzk/RL_Matrix)
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — AWS EC2 dedicated-server runbook
@@ -22,14 +21,15 @@ Scripts/Fps/    Character controller, movement FSM, input sampler, weapons, view
 Scripts/Rts/    Units, barracks, orders, the strategist camera and selection
 Scripts/Match/  CombatManager (the round), MatchState, TeamService
 Scripts/Bots/   Computer players: the roster director, the ground pilot, the strategist, the sensor
-Scripts/Agent/  The agent control channel: listener, sessions, seats, observations
+Scripts/Agent/  The agent control channel: listener, sessions, seats, observations, feature planes
 Scripts/Ui/     Pause menu, reticle, combat HUD, RTS HUD, net debug HUD
 Scenes/         Greybox map, player, weapon, pause menu
 Units/          UnitDefinition resources
 Tests/          xUnit over the engine-free sources — `dotnet test`, no Godot needed
-tools/          External .NET processes that talk to a server over a socket: the agent
-                client, the RLMatrix trainer, the divergence probe. Never part of the game
-                assembly (docs/TRAINING.md)
+Tests/Scenarios/ Playtest scenario files: data, and authoring one needs no Godot install
+tools/          External processes that talk to a server over a socket: the agent client, the
+                RLMatrix trainer, the divergence probe, the playtest harness, and a Python
+                client. Never part of the game assembly (docs/TRAINING.md)
 ```
 
 The simulation runs in `_PhysicsProcess` at a fixed 60 Hz and reads nothing but the recorded
@@ -154,4 +154,23 @@ lives outside the game assembly:
 
 [`docs/TRAINING.md`](docs/TRAINING.md) has the whole story: what the policy sees, what it may do,
 what it is being asked to want, why you should train in stepped mode, and the large libtorch
-download RLMatrix's packaging makes unavoidable.
+download RLMatrix's packaging makes unavoidable. A strategist policy takes the other chair through
+the same socket, and there is a Gymnasium-shaped Python client in
+[`tools/gdpyr_env/`](tools/gdpyr_env/) for the rest of the RL ecosystem — `numpy` and nothing else.
+
+## Playtests without people
+
+The same socket answers "did my change break the game" with no display and nobody in a voice call.
+A scenario is a JSON file — a seed, a roster, what to put on the map, what to script, and what to
+claim about the result — and running one is an exit code:
+
+```bash
+./scripts/playtest.sh Tests/Scenarios/rifle_lethality.json
+./scripts/playtest.sh Tests/Scenarios/*.json --json   # machine-readable, for CI
+```
+
+Exit 0 when every claim held, 1 when one failed, 2 when the harness could not run it. A failure
+names the tick it failed on and a `trace-<seed>.jsonl` that replays. The assertion vocabulary is
+distributional on purpose — `between`, `percentile`, `over_seeds`, and deliberately nothing that
+names a tick — because this is a stochastic environment with a seeded core and a suite that asserts
+trajectories is a suite that flakes ([`docs/AGENT_API.md`](docs/AGENT_API.md) §3, §9).
