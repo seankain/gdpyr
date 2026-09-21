@@ -22,7 +22,7 @@ public partial class NetworkManager : Node
 	private const int ProbeSlots = 8;
 
 	/// <summary>Payload sizes for the clock probe, for the bandwidth counters.</summary>
-	private const int ProbeBytes = 4;
+	private const int ProbeBytes = 6;
 	private const int ReplyBytes = 10;
 
 	private const int HeartbeatIntervalTicks = SimConfig.TickRate * 5;
@@ -62,6 +62,20 @@ public partial class NetworkManager : Node
 
 	public event Action<int> PeerJoined;
 	public event Action<int> PeerLeft;
+
+	/// <summary>
+	/// Server only: ticks of lag compensation owed to a peer's shots. Zero for the
+	/// listen host's own character, which has none.
+	/// </summary>
+	public int LagCompensationTicks(int peerId) =>
+		_peerLagTicks.TryGetValue(peerId, out int ticks) ? ticks : 0;
+
+	/// <summary>
+	/// Server only: how far back each peer's shots are compensated, in ticks
+	/// (docs/NETCODE.md §4.3). Kept here because the clock probe is the only regular
+	/// message that already knows about latency.
+	/// </summary>
+	private readonly System.Collections.Generic.Dictionary<int, int> _peerLagTicks = new();
 
 	private readonly uint[] _probeIds = new uint[ProbeSlots];
 	private readonly ulong[] _probeSentUsec = new ulong[ProbeSlots];
@@ -193,7 +207,12 @@ public partial class NetworkManager : Node
 		_probeIds[slot] = id;
 		_probeSentUsec[slot] = Time.GetTicksUsec();
 
-		RpcId(1, MethodName.ClockProbe, id);
+		// The client's own RTT rides along: the server needs it to lag-compensate this
+		// peer's shots, and this is the one message that already costs a round trip.
+		// It is a claim rather than a measurement, so the server clamps it.
+		var rttMilliseconds = (ushort)Mathf.Clamp(Clock.RttSeconds * 1000f, 0f, ushort.MaxValue);
+
+		RpcId(1, MethodName.ClockProbe, id, rttMilliseconds);
 		Stats.RecordSent(ProbeBytes);
 	}
 
@@ -203,7 +222,7 @@ public partial class NetworkManager : Node
 	/// </summary>
 	[Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false,
 		TransferMode = MultiplayerPeer.TransferModeEnum.Unreliable)]
-	private void ClockProbe(uint probeId)
+	private void ClockProbe(uint probeId, ushort clientRttMilliseconds)
 	{
 		if (!IsServer)
 		{
@@ -212,6 +231,13 @@ public partial class NetworkManager : Node
 
 		Stats.RecordReceived(ProbeBytes);
 		int sender = Multiplayer.GetRemoteSenderId();
+
+		// Half the round trip, in ticks, capped: a peer claiming a second of latency
+		// would otherwise be handed a second of rewind to shoot into.
+		int lagTicks = Mathf.Clamp(
+			Mathf.RoundToInt(clientRttMilliseconds * 0.5f / 1000f * SimConfig.TickRate),
+			0, SimConfig.MaxLagCompensationTicks);
+		_peerLagTicks[sender] = lagTicks;
 
 		// Server frame time rides along: the HUD that matters is the client's, and
 		// this is the only regular server->client message that is not per-tick.
@@ -253,6 +279,7 @@ public partial class NetworkManager : Node
 
 	private void OnPeerDisconnected(long id)
 	{
+		_peerLagTicks.Remove((int)id);
 		GD.Print($"[net] peer {id} disconnected ({Multiplayer.GetPeers().Length} remaining)");
 		PeerLeft?.Invoke((int)id);
 	}

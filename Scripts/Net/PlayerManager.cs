@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Gdpyr.Core;
 using Gdpyr.Fps;
+using Gdpyr.Match;
 using Gdpyr.Sim;
 using Godot;
 
@@ -181,12 +182,46 @@ public partial class PlayerManager : Node
 				frame = _sampler != null ? _sampler.Sample(net.Tick) : InputFrame.Neutral(net.Tick, player.Character.Yaw, player.Character.Pitch);
 			}
 
-			player.Character.Simulate(frame);
+			Simulate(player, frame, net.Tick, authoritative: true);
 		}
+
+		CombatManager.Instance?.ServerPostTick(net.Tick);
 
 		if (net.Tick % SimConfig.SnapshotIntervalTicks == 0)
 		{
 			BroadcastSnapshot(net);
+		}
+	}
+
+	/// <summary>
+	/// One character's tick: movement, then its weapons, from one input frame.
+	///
+	/// The two are driven from here rather than from each other so that they see the
+	/// same frame and the same button edges — a weapon that decided "was fire
+	/// pressed" from a different record than the movement FSM used would fire on a
+	/// tick the replay does not (docs/NETCODE.md §3.1).
+	/// </summary>
+	private void Simulate(Player player, InputFrame frame, uint tick, bool authoritative)
+	{
+		CombatManager combat = CombatManager.Instance;
+
+		// A dead player keeps their look and loses everything else, on the server and
+		// on their own client alike.
+		if (combat != null && !combat.IsAlive(player.PeerId))
+		{
+			frame = InputFrame.LookOnly(frame);
+		}
+
+		var context = new InputContext(frame, player.Character.PreviousButtons, SimConfig.TickDelta);
+		player.Character.Simulate(frame);
+
+		if (authoritative)
+		{
+			combat?.ServerSimulate(player.PeerId, context, tick);
+		}
+		else
+		{
+			combat?.ClientSimulateLocal(context, tick);
 		}
 	}
 
@@ -203,6 +238,7 @@ public partial class PlayerManager : Node
 		{
 			Player player = _ordered[i];
 			fps_controller character = player.Character;
+			PlayerCombat combat = CombatManager.Instance?.Find(player.PeerId);
 			_snapshotScratch[count++] = new PlayerSnapshot
 			{
 				PeerId = player.PeerId,
@@ -213,6 +249,9 @@ public partial class PlayerManager : Node
 				LastInputTick = player.Queue?.AckTick ?? net.Tick,
 				StateId = character.StateId,
 				InputBufferDepth = (byte)Mathf.Clamp(player.Queue?.Depth ?? 0, 0, byte.MaxValue),
+				Health = combat?.SnapshotHealth ?? (byte)SimConfig.MaxHealth,
+				Ammo = combat?.SnapshotAmmo ?? (byte)0,
+				WeaponFlags = combat?.SnapshotFlags ?? (byte)0,
 			};
 		}
 
@@ -271,7 +310,14 @@ public partial class PlayerManager : Node
 
 			if (_local != null)
 			{
-				_local.Character.Simulate(frame);
+				if (CombatManager.Instance is { } combat && !combat.IsAlive(_local.PeerId))
+				{
+					// Recorded as it will be simulated: the ledger must hold the frame the
+					// replay will re-run, not the one the device produced.
+					frame = InputFrame.LookOnly(frame);
+				}
+
+				Simulate(_local, frame, tick, authoritative: false);
 				_ledger.Record(tick, frame, _local.Character.CaptureState(tick));
 			}
 			else
@@ -288,6 +334,7 @@ public partial class PlayerManager : Node
 		}
 
 		UpdateRemotes(net.Clock.RenderTick);
+		CombatManager.Instance?.ClientPostTick(net.Tick);
 	}
 
 	private void SendInput(NetworkManager net)
@@ -358,6 +405,8 @@ public partial class PlayerManager : Node
 					// The spawn message has not arrived yet; the next snapshot will do.
 					continue;
 				}
+
+				CombatManager.Instance?.ApplySnapshot(_snapshotScratch[i]);
 
 				if (player == _local)
 				{
@@ -451,7 +500,10 @@ public partial class PlayerManager : Node
 			return;
 		}
 
-		_local.Character.Simulate(_sampler.Sample(net.Tick));
+		// Offline is a server with nobody to tell: the same authoritative path, with
+		// every broadcast a no-op for want of a peer.
+		Simulate(_local, _sampler.Sample(net.Tick), net.Tick, authoritative: true);
+		CombatManager.Instance?.ServerPostTick(net.Tick);
 	}
 
 	// ---- roster ------------------------------------------------------------
@@ -554,6 +606,7 @@ public partial class PlayerManager : Node
 
 		_players[peerId] = player;
 		_ordered.Add(player);
+		CombatManager.Instance?.Register(peerId, character, local);
 		GD.Print($"[players] spawned peer {peerId} at spawn {spawnIndex}"
 			+ $" (simulated: {simulated}, local: {local})");
 		return player;
@@ -567,12 +620,33 @@ public partial class PlayerManager : Node
 		}
 
 		_ordered.Remove(player);
+		CombatManager.Instance?.Unregister(peerId);
 		if (_local == player)
 		{
 			_local = null;
 		}
 		player.Character.QueueFree();
 		GD.Print($"[players] despawned peer {peerId}");
+	}
+
+	/// <summary>
+	/// Puts a character back on a spawn point. Server-side, called by the combat
+	/// manager on respawn: spawn points belong to the map and the roster, which are
+	/// this class's business, not combat's.
+	///
+	/// <paramref name="variation"/> walks the player off its original spawn on each
+	/// death, so repeatedly dying does not mean repeatedly reappearing in the same
+	/// place for whoever is watching it.
+	/// </summary>
+	public bool TeleportToSpawn(int peerId, int variation)
+	{
+		if (!_players.TryGetValue(peerId, out Player player) || player.Character == null)
+		{
+			return false;
+		}
+
+		player.Character.Teleport(SpawnTransform(player.SpawnIndex + variation));
+		return true;
 	}
 
 	/// <summary>The lowest spawn point nobody is using, so a rejoin does not stack players.</summary>

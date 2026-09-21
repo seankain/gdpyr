@@ -24,13 +24,14 @@ FPS-controller tutorial project, ~1100 lines of C#:
 |---|---|---|
 | Character controller | `Scripts/Fps/fps_controller.cs` | Yes, after refactor (§3.1) |
 | Movement FSM | `Scripts/Fps/StateMachine.cs`, `State.cs`, `Player*State.cs` | Yes, after refactor |
-| Weapon data | `Scripts/Fps/Weapons.cs` (`[GlobalClass] Resource`) | Yes — extend it |
+| Weapon data | `Scripts/Fps/WeaponDefinition.cs` (`[GlobalClass] Resource`) | Yes — extended in M2 |
 | Viewmodel + sway | `Scripts/Fps/WeaponInit.cs`, `WeaponCamera.cs`, `WeaponSubViewport.cs` | Yes, cosmetic only |
 | Debug panel | `Scripts/Ui/Debug.cs` | Yes — host the net HUD here |
 | Pause menu, reticle | `Scripts/Ui/PauseMenu.cs`, `Reticle.cs` | Yes |
 | Greybox assets | `Textures/kenney_prototype/`, `Scenes/Test.tscn` | Yes |
 
-Paths are as of M0, which moved the tutorial project into the layout in §3. The two defects below
+Paths are as of M0, which moved the tutorial project into the layout in §3, and M2, which renamed
+`Weapons.cs` to `WeaponDefinition.cs` when it grew a combat half. The two defects below
 were *not* fixed in M0; both were fixed in M1, which moved the simulation onto the fixed tick and
 made it read recorded `InputFrame`s rather than the device.
 
@@ -276,9 +277,17 @@ in §2 at that time — that corner of the ecosystem moves.
 
 ## 7. Immediate next actions
 
-1. M0 in full (1 day) — it is mechanical and unblocks everything.
-2. The 1-day Netick spike, if you want it. Decide before writing the prediction layer, not after.
-3. M1, starting with the `InputFrame` refactor of `fps_controller` + the movement FSM.
+M0, M1 and M2 are done. M2 shipped the ballistics port, analytic server-authoritative projectiles,
+the deterministic weapon simulation, health/death/respawn and the ground-force ticket counter; it
+also added the hitbox history ring §5 of `NETCODE.md` asks for, which melee rewind already uses.
+
+1. Play M2 on the EC2 box and tune it. Muzzle velocity, damage and RPM are all resource fields and
+   all guesses until someone has tried to lead a moving target with them (`NETCODE.md` §4.4).
+2. M3 — the strategist. Front-loaded on purpose: it and M4 are what decide whether the asymmetry is
+   a game (§6).
+3. Two things M2 left for the milestone that needs them: a full hitbox rewind for projectiles
+   (§4.4's "upgrade" — the ring is built and melee uses it, projectiles still use the cheap
+   spawn-time advance), and per-weapon accuracy cones, which M3 needs anyway for units.
 
 ---
 

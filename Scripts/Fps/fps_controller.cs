@@ -70,7 +70,46 @@ public partial class fps_controller : CharacterBody3D
 
 	public string StateName => _stateMachine?.CurrentState?.Name ?? string.Empty;
 
+	/// <summary>
+	/// The buttons the *previous* simulated tick saw. Read before
+	/// <see cref="Simulate"/> to build the <see cref="InputContext"/> that combat
+	/// needs, so that movement and weapons agree about which presses were edges
+	/// (docs/NETCODE.md §3.1).
+	/// </summary>
+	public ushort PreviousButtons => _previousButtons;
+
+	/// <summary>Where a shot leaves from, and where this character's view starts.</summary>
+	public Vector3 EyePosition => camera != null ? camera.GlobalPosition : GlobalPosition + Vector3.Up;
+
+	/// <summary>The direction this character is looking, from the angles the simulation holds.</summary>
+	public Vector3 AimDirection => Aim.Direction(Yaw, Pitch);
+
+	/// <summary>
+	/// This character's damageable volume right now, read from the collision shape
+	/// rather than from constants: crouching and sliding animate the capsule, and a
+	/// hitbox that ignored that would let a sliding player be shot in the head they
+	/// no longer have there.
+	/// </summary>
+	public HitCapsule Hitbox
+	{
+		get
+		{
+			if (_collisionShape?.Shape is not CapsuleShape3D capsule)
+			{
+				return HitCapsule.FromFeet(SimPosition, 2f, 0.5f);
+			}
+
+			// The shape's own origin is animated along with its height, so the capsule
+			// is built from where the shape actually is, not from the character's feet.
+			Vector3 center = SimPosition + _collisionShape.Position;
+			float axis = Mathf.Max(capsule.Height - (2f * capsule.Radius), 0f) * 0.5f;
+			return new HitCapsule(center - new Vector3(0f, axis, 0f), center + new Vector3(0f, axis, 0f),
+				capsule.Radius);
+		}
+	}
+
 	private StateMachine _stateMachine;
+	private CollisionShape3D _collisionShape;
 	private Vector3 _simPosition;
 	private Vector3 _visualOffset;
 	private ushort _previousButtons;
@@ -78,6 +117,7 @@ public partial class fps_controller : CharacterBody3D
 	public override void _Ready()
 	{
 		_stateMachine = GetNode<StateMachine>("PlayerStateMachine");
+		_collisionShape = GetNodeOrNull<CollisionShape3D>("CollisionShape3D");
 		headShapeCast.AddException(selfCollider);
 
 		// Crouching and sliding animate the collision capsule, so the animation has
@@ -139,6 +179,35 @@ public partial class fps_controller : CharacterBody3D
 		_previousButtons = frame.Buttons;
 		_simPosition = GlobalPosition;
 		GlobalPosition = _simPosition + _visualOffset;
+	}
+
+	/// <summary>
+	/// Moves the character bodily, as a respawn does. Velocity is cleared and the
+	/// visual offset dropped: this is a teleport, and smoothing it would drag the
+	/// camera across the map (docs/NETCODE.md §3.2).
+	/// </summary>
+	public void Teleport(Transform3D transform)
+	{
+		_visualOffset = Vector3.Zero;
+		_simPosition = transform.Origin;
+		GlobalPosition = transform.Origin;
+		Velocity = Vector3.Zero;
+		ApplyLook(transform.Basis.GetEuler().Y, 0f);
+	}
+
+	/// <summary>
+	/// Puts a character into or out of its dead presentation: hidden, and off the
+	/// player collision layer so a corpse is not an invisible wall for the living to
+	/// walk into.
+	///
+	/// The server and the owning client both call this — the client on the health
+	/// byte in a snapshot — so the collision they each simulate agrees, a round trip
+	/// apart, and reconciliation closes the gap.
+	/// </summary>
+	public void SetDeadPresentation(bool dead)
+	{
+		Visible = !dead;
+		CollisionLayer = dead ? 0u : CollisionLayers.Players;
 	}
 
 	/// <summary>Places a remote character from an interpolated snapshot (docs/NETCODE.md §3.3).</summary>

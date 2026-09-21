@@ -1,7 +1,8 @@
-[gd_resource type="Resource" script_class="Weapons" format=3 uid="uid://d1jyigomk4m7u"]
+[gd_resource type="Resource" script_class="WeaponDefinition" format=3 uid="uid://d1jyigomk4m7u"]
 
 [ext_resource type="ArrayMesh" uid="uid://cdhhvry5n6u6u" path="res://Weapons/pistol/pistol_Trigger.res" id="1_f7se0"]
-[ext_resource type="Script" uid="uid://ciex5x8gn466d" path="res://Scripts/Fps/Weapons.cs" id="1_m1rr1"]
+[ext_resource type="Script" uid="uid://ciex5x8gn466d" path="res://Scripts/Fps/WeaponDefinition.cs" id="1_m1rr1"]
+[ext_resource type="Resource" path="res://Weapons/projectiles/pistol_9mm.tres" id="2_pistolproj"]
 
 [resource]
 script = ExtResource("1_m1rr1")
@@ -9,4 +10,11 @@ Name = &"pistol"
 Slot = 1
 Position = Vector3(-2, 0, -0.2)
 Mesh = ExtResource("1_f7se0")
+DamageAmount = 0.0
+FireMode = 0
+RoundsPerMinute = 400.0
+MagazineSize = 12
+ReloadSeconds = 1.4
+IsMelee = false
+Projectile = ExtResource("2_pistolproj")
 metadata/_custom_type_script = "uid://ciex5x8gn466d"

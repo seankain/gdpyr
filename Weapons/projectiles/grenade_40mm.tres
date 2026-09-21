@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="ProjectileDefinition" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Fps/ProjectileDefinition.cs" id="1_projdef"]
+
+[resource]
+script = ExtResource("1_projdef")
+Name = &"grenade_40mm"
+MassGrams = 230.0
+RadiusMillimeters = 20.0
+DragCoefficient = 0.60
+MuzzleVelocity = 90.0
+LifetimeSeconds = 8.0
+Damage = 40.0
+ExplosionRadiusMeters = 5.0
+ExplosionDamage = 90.0
+SweepRadiusMeters = 0.12
+TracerColor = Color(0.4, 1, 0.5, 1)
+TracerLengthMeters = 0.35
+TracerRadiusMeters = 0.06

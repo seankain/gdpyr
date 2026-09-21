@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Gdpyr.Match;
 using Gdpyr.Net;
 using Gdpyr.Sim;
 using Godot;
@@ -37,6 +38,7 @@ public partial class Debug : PanelContainer
 
 		FillNetwork();
 		FillPlayers();
+		FillCombat();
 	}
 
 	public override void _Input(InputEvent @event)
@@ -90,6 +92,37 @@ public partial class Debug : PanelContainer
 		SetProperty("server frame ms", $"{net.ServerFrameMilliseconds:0.00}");
 		SetProperty("mispredict/s", $"{net.Stats.MispredictionsPerSecond:0.0}");
 		SetProperty("pred error", $"mean {net.Stats.MeanErrorMeters * 100f:0.00} cm  max {net.Stats.MaxErrorMeters * 100f:0.00} cm");
+	}
+
+	/// <summary>
+	/// The combat counters docs/NETCODE.md §8 asks for. Live projectile count is the
+	/// one that answers "is the pool leaking"; overflows answer "is it too small".
+	/// </summary>
+	private void FillCombat()
+	{
+		CombatManager combat = CombatManager.Instance;
+		if (combat == null)
+		{
+			return;
+		}
+
+		SetProperty("projectiles", $"{combat.LiveProjectiles} live  {combat.ShotsFired} fired"
+			+ (combat.ProjectileOverflows > 0 ? $"  {combat.ProjectileOverflows} dropped" : string.Empty));
+
+		MatchState match = combat.Match;
+		SetProperty("round", $"{match.Phase}  tickets {match.GroundTickets}/{match.StartingGroundTickets}"
+			+ $"  deaths {match.GroundDeaths}");
+
+		if (combat.Local is { } local)
+		{
+			SetProperty("combat", $"hp {local.Health}  slot {local.Slot}"
+				+ $"  ammo {local.Equipped.Ammo}  k/d {local.Kills}/{local.Deaths}");
+		}
+
+		if (NetworkManager.Instance is { IsServer: true })
+		{
+			SetProperty("hits", $"{combat.HitsResolved}");
+		}
 	}
 
 	private void FillPlayers()

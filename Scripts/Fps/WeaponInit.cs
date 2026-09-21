@@ -1,19 +1,23 @@
 using Gdpyr.Core;
+using Gdpyr.Match;
 using Godot;
 using System;
 
 namespace Gdpyr.Fps;
 
+/// <summary>
+/// The first-person viewmodel: which weapon is in shot, and its sway.
+///
+/// Since M2 the weapon it shows is read from the simulation rather than from the
+/// keyboard. The equipped slot is simulated state — the server has an opinion
+/// about it, a replayed tick reproduces it — so a viewmodel that switched itself
+/// on a keypress would be showing a weapon the player is not holding whenever the
+/// two disagreed (docs/NETCODE.md §3.1). Sway stays on the render frame and stays
+/// cosmetic.
+/// </summary>
 public partial class WeaponInit : Node3D
 {
-	[Export]
-	public Weapons MeleeWeapon;
-	[Export]
-	public Weapons SidearmWeapon;
-	[Export]
-	public Weapons LargeWeapon;
-
-	public Weapons WeaponType;
+	public WeaponDefinition WeaponType;
 
 	public MeshInstance3D WeaponMesh;
 	public MeshInstance3D WeaponShadow;
@@ -49,7 +53,6 @@ public partial class WeaponInit : Node3D
 		}
 
 		WeaponMesh = GetNode<MeshInstance3D>("MeshInstance3D");
-		EquipWeapon(MeleeWeapon);
 	}
 
 	// Sway is cosmetic and stays on the render frame: it must never feed the
@@ -57,6 +60,7 @@ public partial class WeaponInit : Node3D
 	// stepping at the 60 Hz simulation tick (docs/NETCODE.md §3.1).
 	public override void _Process(double delta)
 	{
+		FollowSimulation();
 		SwayWeapon((float)delta);
 	}
 
@@ -67,22 +71,23 @@ public partial class WeaponInit : Node3D
 		{
 			this.mouseMovement = m.Relative;
 		}
-		if (@event.IsActionPressed("weapon_melee"))
-		{
-			EquipWeapon(MeleeWeapon);
-		}
-		else if (@event.IsActionPressed("weapon_sidearm"))
-		{
-			EquipWeapon(SidearmWeapon);
-		}
-		else if (@event.IsActionPressed("weapon_large"))
-		{
-			EquipWeapon(LargeWeapon);
-		}
     }
 
+	/// <summary>
+	/// Shows whatever the local player's simulated weapon state says is equipped.
+	/// Polled rather than pushed: the viewmodel is allowed to lag the simulation by
+	/// a frame, and nothing here may call back into it.
+	/// </summary>
+	private void FollowSimulation()
+	{
+		byte? equipped = CombatManager.Instance?.Local?.EquippedDefinitionId;
+		if (equipped.HasValue)
+		{
+			EquipWeapon(WeaponCatalog.Definition(equipped.Value));
+		}
+	}
 
-	private void EquipWeapon(Weapons weapon)
+	private void EquipWeapon(WeaponDefinition weapon)
 	{
 		if (weapon == null || weapon == WeaponType)
 		{
