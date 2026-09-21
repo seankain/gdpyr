@@ -78,6 +78,7 @@ public sealed partial class AgentServer
 				case "hello": Hello(session, correlation, root, tick); break;
 				case "config": Config(session, correlation, root); break;
 				case "list_seats": ListSeats(session, correlation); break;
+				case "list_units": ListUnits(session, correlation, root); break;
 				case "attach": Attach(session, correlation, root, tick); break;
 				case "detach": Detach(session, correlation, root); break;
 				case "act": Act(session, correlation, root, tick); break;
@@ -239,6 +240,80 @@ public sealed partial class AgentServer
 				}
 				writer.WriteEndObject();
 			}
+			writer.WriteEndArray();
+		});
+	}
+
+	/// <summary>
+	/// The units a strategist seat commands, in the order its observation carries
+	/// them (docs/AGENT_API.md §7.5).
+	///
+	/// The strategist vector carries a unit's tier, position, health and order and
+	/// no id (§6.2) — an id is not a number a policy has any use for as an input —
+	/// while an <c>order</c> command names ids (§7.4). This is the one call that
+	/// joins the two: slot <em>i</em> here is slot <em>i</em> of the observation's
+	/// unit block, because both walk <c>UnitManager</c> in registry order and
+	/// filter on the same team.
+	///
+	/// It is bounded by ownership rather than by sight, which costs the fog
+	/// nothing: every unit on the field belongs to the strategist, so this is a
+	/// seat reading its own army — the thing a human strategist's client draws
+	/// without asking. A ground seat is refused.
+	/// </summary>
+	private void ListUnits(AgentSession session, uint correlation, JsonElement root)
+	{
+		int peerId = Int(root, "seat", 0);
+		if (!_book.TryGet(peerId, out AgentSeat seat) || seat.SessionId != session.Id)
+		{
+			session.SendError(correlation, "not_attached", $"this session does not hold seat {peerId}");
+			return;
+		}
+
+		if (seat.Kind != AgentPolicyKind.Strategist)
+		{
+			session.SendError(correlation, "wrong_policy",
+				$"seat {peerId} is a ground seat; it commands no units");
+			return;
+		}
+
+		CombatManager combat = CombatManager.Instance;
+		PlayerCombat player = combat?.Find(peerId);
+		UnitManager units = UnitManager.Instance;
+		if (player == null || units == null)
+		{
+			session.SendError(correlation, "no_round", "this process is not running a round");
+			return;
+		}
+
+		Team team = player.Team;
+		session.SendJson(AgentFrameKind.Response, correlation, writer =>
+		{
+			writer.WriteString("op", "units");
+			writer.WriteNumber("seat", peerId);
+			writer.WriteStartArray("units");
+			for (int i = 0; i < units.SlotCount; i++)
+			{
+				Unit unit = units.UnitAt(i);
+				if (unit == null || unit.Team != team)
+				{
+					continue;
+				}
+
+				// A corpse is carried until the reaper takes it, flagged dead, for the
+				// reason the observation carries one: a policy that saw a unit vanish a
+				// tick before its unit_lost would have to infer the loss from a hole.
+				float maxHealth = unit.Definition?.MaxHealth ?? 100f;
+				writer.WriteStartObject();
+				writer.WriteNumber("id", (int)unit.UnitId);
+				writer.WriteNumber("tier", (int)unit.DefinitionId);
+				writer.WriteBoolean("alive", unit.IsAlive);
+				writer.WriteNumber("x", unit.GlobalPosition.X);
+				writer.WriteNumber("z", unit.GlobalPosition.Z);
+				writer.WriteNumber("health", maxHealth > 0f ? unit.Health / maxHealth : 0f);
+				writer.WriteNumber("order", (int)unit.Order.Kind);
+				writer.WriteEndObject();
+			}
+
 			writer.WriteEndArray();
 		});
 	}

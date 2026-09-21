@@ -23,12 +23,15 @@ namespace Gdpyr.AgentClient;
 /// the trainer records is not the transition the game played. That is fine for
 /// watching a policy; it is not fine for learning from one.
 /// </summary>
-public sealed class GdpyrGroundEnv : IEnvironmentAsync<float[]>, IDisposable
+public sealed class GdpyrGroundEnv : IEnvironmentAsync<float[]>, IGdpyrSeat
 {
 	private readonly GdpyrConnection _connection;
 	private readonly GroundActionSpace _actions;
 	private readonly GroundReward _reward;
+	private readonly ObservationStack _history;
+	private readonly List<GdpyrEvent> _events = new();
 	private readonly bool _stepped;
+	private readonly bool _resetsRound;
 	private readonly bool _ownsConnection;
 
 	private float[] _state;
@@ -38,11 +41,12 @@ public sealed class GdpyrGroundEnv : IEnvironmentAsync<float[]>, IDisposable
 	private bool _done;
 
 	private GdpyrGroundEnv(GdpyrConnection connection, int seat, int stepMul, GroundReward reward,
-		bool stepped, int maxEpisodeSteps, int seed, bool ownsConnection)
+		bool stepped, int maxEpisodeSteps, int seed, int history, bool resetsRound, bool ownsConnection)
 	{
 		_connection = connection;
 		_ownsConnection = ownsConnection;
 		_stepped = stepped;
+		_resetsRound = resetsRound;
 		_reward = reward ?? new GroundReward();
 		_seed = seed;
 
@@ -51,9 +55,10 @@ public sealed class GdpyrGroundEnv : IEnvironmentAsync<float[]>, IDisposable
 		MaxEpisodeSteps = maxEpisodeSteps;
 
 		_actions = new GroundActionSpace(connection.TurnRateRadians, stepMul, connection.Schema.TickRate);
-		_state = new float[connection.Schema.Floats];
+		_history = new ObservationStack(connection.Schema.Floats, history);
+		_state = new float[_history.Floats];
 
-		stateSize = connection.Schema.Floats;
+		stateSize = _history.Floats;
 		actionSize = GroundActionSpace.Heads;
 	}
 
@@ -62,6 +67,12 @@ public sealed class GdpyrGroundEnv : IEnvironmentAsync<float[]>, IDisposable
 
 	/// <summary>Ticks one decision is held for (docs/AGENT_API.md §5.3).</summary>
 	public int StepMul { get; }
+
+	/// <summary>Floats in one decision's state: the observation, times the frames stacked.</summary>
+	public int StateFloats => _history.Floats;
+
+	/// <summary>Observations concatenated into one state (docs/RL_ARCHITECTURE.md §4).</summary>
+	public int History => _history.Frames;
 
 	/// <summary>
 	/// Decisions before the episode is truncated and the round restarted. A gdpyr
@@ -73,8 +84,20 @@ public sealed class GdpyrGroundEnv : IEnvironmentAsync<float[]>, IDisposable
 	/// <summary>Reward accumulated since the last reset. For the log.</summary>
 	public float EpisodeReward { get; private set; }
 
+	/// <summary>What the last finished episode scored.</summary>
+	public float LastEpisodeReward { get; private set; }
+
 	/// <summary>Episodes finished. For the log.</summary>
 	public int Episodes { get; private set; }
+
+	/// <summary>Rounds the ground force won: the clock ran out, or the strategist was eliminated.</summary>
+	public int Wins { get; private set; }
+
+	/// <summary>Rounds the ground force lost: it ran out of tickets.</summary>
+	public int Losses { get; private set; }
+
+	/// <summary>Ticks this seat's bot covered for, as the last step reported it.</summary>
+	public int PilotFallbacks { get; private set; }
 
 	// RLMatrix's interface spells these in camelCase; they are set once, in the
 	// constructor, from the schema the server published.
@@ -87,7 +110,8 @@ public sealed class GdpyrGroundEnv : IEnvironmentAsync<float[]>, IDisposable
 	/// </summary>
 	public static async Task<GdpyrGroundEnv> CreateAsync(string host = "127.0.0.1", int port = 7900,
 		string token = null, int stepMul = 4, bool stepped = true, int maxEpisodeSteps = 1800,
-		int seed = 0, GroundReward reward = null, CancellationToken cancel = default)
+		int seed = 0, int history = 1, int stepTimeoutMilliseconds = 10_000, bool resetsRound = true,
+		GroundReward reward = null, CancellationToken cancel = default)
 	{
 		GdpyrConnection connection = await GdpyrConnection
 			.ConnectAsync(host, port, token, cancel)
@@ -97,12 +121,15 @@ public sealed class GdpyrGroundEnv : IEnvironmentAsync<float[]>, IDisposable
 		{
 			if (stepped)
 			{
-				await connection.ConfigureAsync(stepped: true, cancel: cancel).ConfigureAwait(false);
+				await connection
+					.ConfigureAsync(stepped: true, stepTimeoutMilliseconds: stepTimeoutMilliseconds,
+						cancel: cancel)
+					.ConfigureAwait(false);
 			}
 
 			int seat = await connection.AttachGroundAsync(stepMul, cancel: cancel).ConfigureAwait(false);
 			var env = new GdpyrGroundEnv(connection, seat, stepMul, reward, stepped, maxEpisodeSteps, seed,
-				ownsConnection: true);
+				history, resetsRound, ownsConnection: true);
 
 			await env.Reset().ConfigureAwait(false);
 			return env;
@@ -120,17 +147,27 @@ public sealed class GdpyrGroundEnv : IEnvironmentAsync<float[]>, IDisposable
 	{
 		// A fresh round rather than a fresh connection: the seat, the loadout and the
 		// roster slot survive, which is what makes an episode boundary cheap.
-		await _connection.ResetAsync(_seed).ConfigureAwait(false);
+		//
+		// `reset` ends the round for *everybody* on the server, so when two learners
+		// share one (docs/TRAINING.md §8) exactly one of them may own the boundary.
+		// A follower skips the call and picks the new round up off its own
+		// observation, a decision or two later than the leader did.
+		if (_resetsRound)
+		{
+			await _connection.ResetAsync(_seed).ConfigureAwait(false);
+		}
 
 		if (_stepped)
 		{
 			// One tick so the round is live and the character has landed before the
-			// first observation is taken.
+			// first observation is taken — a seat whose character does not exist yet
+			// has no observation to give. A follower takes this tick too: the round it
+			// is picking up was reset by somebody else just as recently.
 			await _connection.StepAsync(1).ConfigureAwait(false);
 		}
 
 		GdpyrObservation observation = await ObserveAsync().ConfigureAwait(false);
-		Adopt(observation);
+		Adopt(observation, fresh: true);
 
 		// The round_end the reset itself caused, and the round_start that followed
 		// it, arrive on the stream a tick later — after ResetAsync has already
@@ -166,17 +203,19 @@ public sealed class GdpyrGroundEnv : IEnvironmentAsync<float[]>, IDisposable
 			await _connection.PollAsync().ConfigureAwait(false);
 		}
 
+		Fallbacks();
+
 		GdpyrObservation observation = await ObserveAsync().ConfigureAwait(false);
 		float previousDistance = _objectiveDistance;
-		Adopt(observation);
+		Adopt(observation, fresh: false);
 
-		var events = new List<GdpyrEvent>();
+		_events.Clear();
 		foreach (GdpyrEvent record in _connection.DrainEvents())
 		{
-			events.Add(record);
+			_events.Add(record);
 		}
 
-		float reward = _reward.Score(Seat, events, previousDistance, _objectiveDistance,
+		float reward = _reward.Score(Seat, _events, previousDistance, _objectiveDistance,
 			out bool roundEnded, out bool _);
 
 		_stepsThisEpisode++;
@@ -186,6 +225,17 @@ public sealed class GdpyrGroundEnv : IEnvironmentAsync<float[]>, IDisposable
 		if (_done)
 		{
 			Episodes++;
+			LastEpisodeReward = EpisodeReward;
+
+			// RoundOutcome: 1 ground eliminated · 2 time expired · 3 strategist
+			// eliminated. The last two are ground-force wins; a truncated episode has
+			// no outcome at all and is counted as neither.
+			switch (Outcome())
+			{
+				case 1: Losses++; break;
+				case 2:
+				case 3: Wins++; break;
+			}
 		}
 
 		return (reward, _done);
@@ -206,6 +256,31 @@ public sealed class GdpyrGroundEnv : IEnvironmentAsync<float[]>, IDisposable
 		}
 	}
 
+	private int Outcome()
+	{
+		for (int i = 0; i < _events.Count; i++)
+		{
+			if (_events[i].Kind == "round_end")
+			{
+				return (int)_events[i].Get("outcome");
+			}
+		}
+
+		return 0;
+	}
+
+	private void Fallbacks()
+	{
+		for (int i = 0; i < _connection.LastStep.Count; i++)
+		{
+			if (_connection.LastStep[i].Seat == Seat)
+			{
+				PilotFallbacks = _connection.LastStep[i].PilotFallbacks;
+				return;
+			}
+		}
+	}
+
 	private async Task<GdpyrObservation> ObserveAsync()
 	{
 		// Asked for rather than waited for: the server also pushes an observation on
@@ -216,9 +291,12 @@ public sealed class GdpyrGroundEnv : IEnvironmentAsync<float[]>, IDisposable
 			: await _connection.NextObservationAsync().ConfigureAwait(false);
 	}
 
-	private void Adopt(GdpyrObservation observation)
+	private void Adopt(GdpyrObservation observation, bool fresh)
 	{
-		_state = observation.Values;
+		// An episode's first decision has no history. Filling the window with the
+		// frame rather than zeroing it keeps "nothing has moved" from being what
+		// every round looks like at tick one.
+		_state = fresh ? _history.Fill(observation.Values) : _history.Push(observation.Values);
 		_objectiveDistance = observation.Scalar(_connection.Schema, "objective.distance");
 	}
 }

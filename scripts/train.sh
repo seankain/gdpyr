@@ -1,18 +1,21 @@
 #!/usr/bin/env bash
 #
-# Train a ground-force policy against headless gdpyr servers (docs/TRAINING.md).
+# Train a policy for either gdpyr seat against headless servers (docs/TRAINING.md).
 #
 # Starts one server per agent-api port, runs tools/Gdpyr.Trainer against them,
 # and takes the servers down again on the way out. Everything binds loopback and
 # nothing is exposed: the agent channel can spawn players and reset rounds, and
 # deploy/gdpyr-server.service never passes --agent-api (docs/AGENT_API.md §4.1).
 #
-#   ./scripts/train.sh                          # one server, PPO, 100k steps
-#   ./scripts/train.sh --ports 7900,7901,7902   # three servers, one learner
+#   ./scripts/train.sh                                  # one server, PPO, a ground seat
+#   ./scripts/train.sh --policy strategist              # ...the other chair
+#   ./scripts/train.sh --ports 7900,7901,7902           # three servers, one learner
 #   ./scripts/train.sh --algo dqn --steps 20000 --save runs/dqn
+#   ./scripts/train.sh --history 4 --save runs/ppo-h4   # stack four observations
 #
-# Anything this script does not recognise is passed through to the trainer, so
-# `./scripts/train.sh --lr 3e-4 --width 1024` works.
+# Which algorithm to reach for, and why PPO is the default, is argued in
+# docs/RL_ARCHITECTURE.md. Anything this script does not recognise is passed
+# through to the trainer, so `./scripts/train.sh --lr 3e-4 --width 1024` works.
 #
 # Requires a Godot .NET binary on PATH (or $GODOT) and the .NET SDK.
 set -euo pipefail
@@ -21,6 +24,7 @@ GODOT="${GODOT:-godot}"
 PORTS="${PORTS:-7900}"
 GAME_PORT="${GAME_PORT:-7777}"
 BOTS="${BOTS:-6:1}"
+POLICY="${POLICY:-ground}"
 LOG_DIR="${LOG_DIR:-build/train}"
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -32,9 +36,17 @@ while [ $# -gt 0 ]; do
 		--ports) PORTS="$2"; shift 2 ;;
 		--bots) BOTS="$2"; shift 2 ;;
 		--game-port) GAME_PORT="$2"; shift 2 ;;
+		# Consumed *and* forwarded: the script names the log file after the seat and
+		# the trainer needs to know which chair to sit in.
+		--policy) POLICY="$2"; shift 2 ;;
 		*) PASSTHROUGH+=("$1"); shift ;;
 	esac
 done
+
+if [ "$POLICY" != "ground" ] && [ "$POLICY" != "strategist" ]; then
+	echo "error: --policy is 'ground' or 'strategist', not '$POLICY'" >&2
+	exit 2
+fi
 
 if ! command -v "$GODOT" >/dev/null 2>&1 && [ ! -x "$GODOT" ]; then
 	echo "error: Godot not found. Set GODOT to your Godot .NET binary." >&2
@@ -79,6 +91,7 @@ for port in "${PORT_LIST[@]}"; do
 	done
 done
 
-echo ">> training"
+echo ">> training a $POLICY policy"
 # An empty array must expand to nothing, not to one empty argument.
-dotnet run --project tools/Gdpyr.Trainer -c Release -- --port "$PORTS" ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}
+dotnet run --project tools/Gdpyr.Trainer -c Release -- \
+	--port "$PORTS" --policy "$POLICY" ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}

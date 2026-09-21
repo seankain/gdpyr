@@ -7,8 +7,10 @@ dedicated-server authoritative.
 - [`docs/NETCODE.md`](docs/NETCODE.md) — tick model, message set, ballistics, fog of war
 - [`docs/AGENT_API.md`](docs/AGENT_API.md) — headless play for external policies: RL agents on
   either side, and scripted playtests for coding agents
-- [`docs/TRAINING.md`](docs/TRAINING.md) — training an agent against a headless server, in C#, with
-  [RLMatrix](https://github.com/asieradzk/RL_Matrix)
+- [`docs/TRAINING.md`](docs/TRAINING.md) — training a policy for either seat against a headless
+  server, in C#, with [RLMatrix](https://github.com/asieradzk/RL_Matrix)
+- [`docs/RL_ARCHITECTURE.md`](docs/RL_ARCHITECTURE.md) — which algorithm to reach for in 2026, what
+  changed since PPO, and the order to run things in here
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — AWS EC2 dedicated-server runbook
 
 ## Layout
@@ -27,9 +29,10 @@ Scenes/         Greybox map, player, weapon, pause menu
 Units/          UnitDefinition resources
 Tests/          xUnit over the engine-free sources — `dotnet test`, no Godot needed
 Tests/Scenarios/ Playtest scenario files: data, and authoring one needs no Godot install
-tools/          External processes that talk to a server over a socket: the agent client, the
-                RLMatrix trainer, the divergence probe, the playtest harness, and a Python
-                client. Never part of the game assembly (docs/TRAINING.md)
+tools/          External processes that talk to a server over a socket: the agent client (both
+                seats' action spaces, rewards and environments), the RLMatrix trainer, the
+                divergence probe, the playtest harness, and a Python client. Never part of the
+                game assembly (docs/TRAINING.md)
 ```
 
 The simulation runs in `_PhysicsProcess` at a fixed 60 Hz and reads nothing but the recorded
@@ -142,21 +145,31 @@ dotnet test                   # Tests/Gdpyr.Tests.csproj
 
 ## Training agents
 
-A headless server plus an out-of-band socket is enough to put a reinforcement-learning policy in a
-seat. The learner is C# — [RLMatrix](https://github.com/asieradzk/RL_Matrix) on TorchSharp — and
-lives outside the game assembly:
+A headless server plus an out-of-band socket is enough to put a reinforcement-learning policy in
+either seat — the ground force or the strategist's chair. The learner is C# —
+[RLMatrix](https://github.com/asieradzk/RL_Matrix) on TorchSharp — and lives outside the game
+assembly:
 
 ```bash
-./scripts/train.sh                        # one server, PPO, a ground seat
-./scripts/train.sh --ports 7900,7901      # two servers, one learner
-./scripts/divergence.sh --ticks 600       # how reproducible is a seeded episode? (§3.1)
+./scripts/train.sh                                 # one server, PPO, a ground seat
+./scripts/train.sh --policy strategist             # the other chair
+./scripts/train.sh --ports 7900,7901 --history 4   # two servers, one learner, stacked frames
+./scripts/evaluate.sh runs/ppo-ground --episodes 20    # win rate against the scripted bots
+./scripts/train-selfplay.sh --freeze ground --load-ground runs/ppo-ground
+./scripts/divergence.sh --ticks 600                # how reproducible is a seeded episode? (§3.1)
 ```
 
-[`docs/TRAINING.md`](docs/TRAINING.md) has the whole story: what the policy sees, what it may do,
-what it is being asked to want, why you should train in stepped mode, and the large libtorch
-download RLMatrix's packaging makes unavoidable. A strategist policy takes the other chair through
-the same socket, and there is a Gymnasium-shaped Python client in
-[`tools/gdpyr_env/`](tools/gdpyr_env/) for the rest of the RL ecosystem — `numpy` and nothing else.
+Each seat is three files you are meant to disagree with: an action space (what the policy may do), a
+reward (what it is being asked to want) and an environment. The game itself emits events and no
+rewards, on purpose. [`docs/TRAINING.md`](docs/TRAINING.md) has the whole story — including why you
+should train in stepped mode, how two learners share one server, and the large libtorch download
+RLMatrix's packaging makes unavoidable — and
+[`docs/RL_ARCHITECTURE.md`](docs/RL_ARCHITECTURE.md) answers the question that comes first: PPO is
+still the default, a modern DQN is Rainbow and is the sample-efficient alternative worth measuring
+against it here, and what actually changed in the last decade is everything around the algorithm.
+
+There is a Gymnasium-shaped Python client in [`tools/gdpyr_env/`](tools/gdpyr_env/) for the rest of
+the RL ecosystem — `numpy` and nothing else.
 
 ## Playtests without people
 

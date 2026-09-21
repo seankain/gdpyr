@@ -74,6 +74,36 @@ public sealed class GdpyrCommand
 		new() { Cmd = "order", Kind = kind, Units = units, Target = new[] { x, z }, TargetOwner = targetOwner };
 }
 
+/// <summary>
+/// One unit a strategist seat commands (docs/AGENT_API.md §7.5).
+///
+/// The observation carries a unit's tier, position, health and order and no id,
+/// and an <c>order</c> command names ids — so a policy that wants to move a
+/// particular unit needs this call to join the two. Slot <em>i</em> of a
+/// <c>list_units</c> reply is slot <em>i</em> of the observation's unit block.
+/// </summary>
+public sealed class GdpyrUnit
+{
+	/// <summary>The id an order names.</summary>
+	public int Id;
+
+	/// <summary>Catalog tier: 0 infantry, 1 technical, 2 tank.</summary>
+	public int Tier;
+
+	/// <summary>False for a corpse the reaper has not taken yet. It still holds its slot.</summary>
+	public bool Alive;
+
+	public float X;
+
+	public float Z;
+
+	/// <summary>Health as a fraction of this tier's maximum.</summary>
+	public float Health;
+
+	/// <summary><c>OrderKind</c> as stored: 0 none, 1 move, 2 attack, 3 patrol, 4 defend.</summary>
+	public int Order;
+}
+
 /// <summary>What a <c>step</c> said about one attached seat (docs/AGENT_API.md §5.2).</summary>
 public sealed class GdpyrSeatStatus
 {
@@ -97,6 +127,65 @@ public sealed class GdpyrEvent
 }
 
 /// <summary>
+/// One repeated record block of the strategist vector — units, barracks, nodes,
+/// contacts (docs/AGENT_API.md §6.2).
+///
+/// Fetched like everything else the schema carries: where the block starts, how
+/// many records it holds, how wide one record is, and what the floats of a record
+/// are called. A client that reads <c>"x"</c> out of unit 3 therefore cannot
+/// disagree with the server about where unit 3's x is.
+/// </summary>
+public sealed class GdpyrBlock
+{
+	private readonly Dictionary<string, int> _fields = new();
+
+	public GdpyrBlock(string name, int offset, int max, int floatsEach, IEnumerable<string> fields)
+	{
+		Name = name;
+		Offset = offset;
+		Max = max;
+		FloatsEach = floatsEach;
+
+		int index = 0;
+		foreach (string field in fields)
+		{
+			if (!string.IsNullOrEmpty(field))
+			{
+				_fields[field] = index;
+			}
+
+			index++;
+		}
+	}
+
+	public string Name { get; }
+
+	/// <summary>Where the block starts in the vector.</summary>
+	public int Offset { get; }
+
+	/// <summary>Records carried, zero-padded, so the tensor shape never changes mid-episode.</summary>
+	public int Max { get; }
+
+	public int FloatsEach { get; }
+
+	/// <summary>Where a named float sits inside one record, or -1.</summary>
+	public int IndexOf(string field) => _fields.TryGetValue(field, out int at) ? at : -1;
+
+	/// <summary>One record's named float, or 0 when this schema does not carry it.</summary>
+	public float Value(float[] values, int record, string field)
+	{
+		int at = IndexOf(field);
+		if (values == null || at < 0 || record < 0 || record >= Max)
+		{
+			return 0f;
+		}
+
+		int index = Offset + (record * FloatsEach) + at;
+		return index >= 0 && index < values.Length ? values[index] : 0f;
+	}
+}
+
+/// <summary>
 /// The observation layout, as <c>welcome</c> published it.
 ///
 /// Fetched rather than compiled (docs/AGENT_API.md §4): the client is told the
@@ -107,6 +196,7 @@ public sealed class GdpyrSchema
 {
 	private readonly Dictionary<string, (int Offset, int Count)> _fields = new();
 	private readonly Dictionary<string, (int Offset, int Count)> _strategistFields = new();
+	private readonly Dictionary<string, GdpyrBlock> _blocks = new();
 
 	public string Version = string.Empty;
 
@@ -126,6 +216,14 @@ public sealed class GdpyrSchema
 	public int PlaneChannels;
 
 	public int TickRate = 60;
+
+	/// <summary>
+	/// Meters a normalized position of 1.0 is worth: the half-extent the encoder
+	/// divides by (docs/AGENT_API.md §6.2). Published with the schema rather than
+	/// compiled in, because a map that outgrew it would otherwise silently halve
+	/// every distance a policy reasons about.
+	/// </summary>
+	public float PositionScaleMeters = 256f;
 
 	public IReadOnlyCollection<string> Names => _fields.Keys;
 
@@ -149,6 +247,11 @@ public sealed class GdpyrSchema
 
 	internal void AddStrategist(string name, int offset, int count) =>
 		_strategistFields[name] = (offset, count);
+
+	/// <summary>A repeated record block of the strategist vector, or null.</summary>
+	public GdpyrBlock Block(string name) => _blocks.TryGetValue(name, out GdpyrBlock found) ? found : null;
+
+	internal void AddBlock(string name, GdpyrBlock block) => _blocks[name] = block;
 }
 
 /// <summary>
@@ -175,6 +278,9 @@ public sealed class GdpyrConnection : IDisposable
 	private const int MaxQueuedEvents = 4096;
 
 	private readonly List<GdpyrSeatStatus> _lastStep = new();
+
+	/// <summary>The strategist vector's record blocks, in the order §6.2 lists them.</summary>
+	private static readonly string[] StrategistBlocks = { "units", "barracks", "nodes", "contacts" };
 
 	private byte[] _buffer = new byte[1 << 16];
 	private int _length;
@@ -279,6 +385,37 @@ public sealed class GdpyrConnection : IDisposable
 			{
 				read.AddStrategist(field.GetProperty("name").GetString(),
 					field.GetProperty("offset").GetInt32(), field.GetProperty("count").GetInt32());
+			}
+
+			// The record blocks, so a policy can read "the x of unit 3" by name
+			// rather than by arithmetic it agreed with the server about in a comment.
+			foreach (string name in StrategistBlocks)
+			{
+				if (!strategist.TryGetProperty(name, out JsonElement described))
+				{
+					continue;
+				}
+
+				var fields = new List<string>();
+				if (described.TryGetProperty("fields", out JsonElement named)
+					&& named.ValueKind == JsonValueKind.Array)
+				{
+					foreach (JsonElement field in named.EnumerateArray())
+					{
+						fields.Add(field.GetString());
+					}
+				}
+
+				(int offset, int _) = read.Field(name, GdpyrPolicy.Strategist);
+				read.AddBlock(name, new GdpyrBlock(name, offset,
+					described.GetProperty("max").GetInt32(),
+					described.GetProperty("floats_each").GetInt32(), fields));
+			}
+
+			if (strategist.TryGetProperty("scales", out JsonElement scales)
+				&& scales.TryGetProperty("position_meters", out JsonElement position))
+			{
+				read.PositionScaleMeters = position.GetSingle();
 			}
 		}
 
@@ -406,6 +543,57 @@ public sealed class GdpyrConnection : IDisposable
 		writer.WriteNumber("tier", command.Tier);
 		writer.WriteEndObject();
 	}
+
+	/// <summary>
+	/// The units a strategist seat commands, in the order its observation carries
+	/// them (docs/AGENT_API.md §7.5).
+	///
+	/// One round trip per decision, which at a strategist's 2 Hz is nothing, and it
+	/// is the only way to turn "the unit in slot 3" — which is what the observation
+	/// speaks — into the id an <c>order</c> names.
+	/// </summary>
+	public async Task<List<GdpyrUnit>> ListUnitsAsync(int seat, CancellationToken cancel = default)
+	{
+		JsonElement response = await RequestAsync(writer =>
+		{
+			writer.WriteString("op", "list_units");
+			writer.WriteNumber("seat", seat);
+		}, cancel).ConfigureAwait(false);
+
+		var units = new List<GdpyrUnit>();
+		if (!response.TryGetProperty("units", out JsonElement array)
+			|| array.ValueKind != JsonValueKind.Array)
+		{
+			return units;
+		}
+
+		foreach (JsonElement element in array.EnumerateArray())
+		{
+			units.Add(new GdpyrUnit
+			{
+				Id = Whole(element, "id"),
+				Tier = Whole(element, "tier"),
+				Alive = element.TryGetProperty("alive", out JsonElement alive)
+					&& alive.ValueKind == JsonValueKind.True,
+				X = Real(element, "x"),
+				Z = Real(element, "z"),
+				Health = Real(element, "health"),
+				Order = Whole(element, "order"),
+			});
+		}
+
+		return units;
+	}
+
+	private static int Whole(JsonElement element, string name) =>
+		element.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.Number
+			? value.GetInt32()
+			: 0;
+
+	private static float Real(JsonElement element, string name) =>
+		element.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.Number
+			? value.GetSingle()
+			: 0f;
 
 	/// <summary>
 	/// Places one of this session's seats, or a unit, where a scenario asked for it

@@ -449,6 +449,43 @@ The half of M6 that makes it useful to somebody who is not training a network.
   authored from the weapon and unit definitions rather than measured, and are the first thing to
   re-tighten on a machine that can run them.
 
+### M7.5 — Training runs for both seats (1–2 days) ✅ *shipped*
+
+M6 shipped a learner for the ground seat and M7 shipped the strategist *protocol* while explicitly
+declining to choose a discretization for it ([`TRAINING.md`](TRAINING.md) §7). That left the
+strategist trainable in principle and not in practice. This closes it, and adds the pieces a run is
+actually judged by.
+
+- **`list_units`, a new control-plane op** ([`AGENT_API.md`](AGENT_API.md) §7.5). The strategist
+  observation carries positions and no unit ids; an `order` names ids. The join was the missing
+  piece, and it is a call rather than fifteen more floats in the tensor because an id is not an
+  input a policy should be learning from. Entry *i* is slot *i* of the observation's unit block:
+  both walk `UnitManager` in registry order.
+- **A strategist action space, reward and environment**, in the same three-file shape the ground
+  seat has: `StrategistActionSpace.cs` (six discrete heads of eight, at most two commands a
+  decision, a target grid fitted to the map rather than to the encoder's half-extent),
+  `StrategistReward.cs` (the enemy ticket pool as the dense term, because it *is* the win
+  condition) and `GdpyrStrategistEnv.cs`. All three are hypotheses in one readable file each,
+  which is the posture `GroundReward` set.
+- **Frame stacking** (`ObservationStack.cs`, `--history N`). Both seats are partially observed and
+  RLMatrix does not expose a recurrent policy through this interface, so the shipped answer to a
+  non-Markov observation is the cheap one ([`RL_ARCHITECTURE.md`](RL_ARCHITECTURE.md) §4).
+- **Evaluation as a first-class thing.** `--episodes`, a win-rate summary counted over *decided*
+  rounds rather than over episodes, a `--metrics` CSV, and `scripts/evaluate.sh`. The reward is a
+  number this repository made up; the round outcome is the game's, and only one of them is a result.
+- **Co-training on one server** (`scripts/train-selfplay.sh`, `--no-reset`, `--step-timeout`).
+  Stepped mode already makes two learners a barrier rather than a race — the sim holds while any
+  stepped session has no ticks outstanding — but `reset` ends the round for everybody, so exactly
+  one process may own the episode boundary. `RL_ARCHITECTURE.md` §7 argues for doing this last,
+  against frozen checkpoints, rather than first.
+- **Done when:** `./scripts/train.sh --policy strategist` trains a policy that beats
+  `BotStrategist` more often than a fresh one does, measured by `./scripts/evaluate.sh` over a
+  seed sweep. **Not verified by running:** like M7, this branch was written in an environment with
+  no Godot and no .NET SDK, so nothing here has been compiled or trained. The engine-free half —
+  the action space, the reward, the observation stack — is covered by `dotnet test`
+  (`Tests/StrategistActionSpaceTests.cs`, `Tests/StrategistRewardTests.cs`,
+  `Tests/ObservationStackTests.cs`); the halves that need a socket and libtorch have not been run.
+
 ### M8 — Playtest instrumentation (1–2 days, then ongoing) *(was M6)*
 
 - Per-round CSV dump: round length, ticket curve over time, strategist point curve, kills/deaths and

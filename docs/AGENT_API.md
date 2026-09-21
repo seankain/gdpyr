@@ -13,7 +13,8 @@ through · [`DEPLOYMENT.md`](DEPLOYMENT.md) — the box this must never be expos
 
 > **Status: shipped.** §1–§8 and §10 shipped in M6; the strategist seat (§6.2), the feature
 > planes (§6.3), the strategist action (§7.4), the playtest harness (§9) and the Python client
-> (§9.3) shipped in M7. Deviations are recorded inline below rather than smoothed over. The
+> (§9.3) shipped in M7; `list_units` (§7.5) was added with the strategist learner in M7.5, because
+> a policy cannot name a unit it has only seen. Deviations are recorded inline below rather than smoothed over. The
 > observation schema is now `gdpyr-agent-obs-2`: M7 added a second observation, the planes and
 > the command vocabulary to what `welcome` publishes, and a client decodes by the published
 > schema rather than by this document (§4).
@@ -364,7 +365,9 @@ can see changes what the policy can see on the same commit.
 | Nodes | 8 × 8 | x, z, owner one-hot (3), contested, capture progress, income paid |
 | Contacts | 16 × 6 | x, z, visible now, ticks since seen, is-player, team — the ghosts M4 already decays, at the same decay |
 
-**1,092 floats, 4.3 KB** — 8 + 896 + 28 + 64 + 96, and shipped at exactly that. The unit block is
+**1,092 floats, 4.3 KB** — 8 + 896 + 28 + 64 + 96, and shipped at exactly that. Note what is *not*
+in the unit block: a unit id. Ordering a particular unit means joining this block to `list_units`
+(§7.5), which returns the same army in the same order. The unit block is
 the whole `SimConfig.MaxUnits` ceiling, zero-padded, so the tensor shape never changes mid-episode,
 and the contact block is `SnapshotCodec.MaxPlayers` (16) for the same reason.
 
@@ -441,6 +444,7 @@ obtained by cheating is not a result about this game.
 | `welcome` | ← | tick rate, build id, observation schema, current seed |
 | `config` | → | `mode` (realtime/stepped), `step_timeout_ms`, feature planes on/off |
 | `list_seats` | → ← | every roster slot: peer id, team, controller (human/bot/agent), alive |
+| `list_units` | → ← | a strategist seat's army, in the order its observation carries it, **with the ids an order names** (§7.5) |
 | `attach` | → ← | claim a seat by team + policy kind (+ optional `peer_id`, `step_mul`). `policy: "strategist"` implies the team |
 | `detach` | → | release a seat back to its bot |
 | `act` | → | one action for one seat, for one tick |
@@ -523,6 +527,38 @@ up on the debug HUD rather than silently doing nothing.
 
 An attached strategist seat takes `BotStrategist`'s place in `BotDirector.ServerTick`, which is the
 strategist half of the one branch this API adds to the game (§2).
+
+### 7.5 `list_units`: the join between the observation and an order
+
+The strategist vector carries a unit's tier, position, health and order and **no id** (§6.2) — an id
+is not a number a policy has any use for as an input, and putting one in the tensor would invite a
+policy to learn it. An `order` command, however, names ids (§7.4). Something has to join the two,
+and this is it:
+
+```json
+→ {"op":"list_units","seat":7}
+← {"op":"units","seat":7,"units":[
+    {"id":12,"tier":0,"alive":true,"x":-41.5,"z":8.25,"health":1.0,"order":1},
+    {"id":13,"tier":2,"alive":false,"x":12.0,"z":-3.5,"health":0.0,"order":0}]}
+```
+
+- **Entry *i* is slot *i* of the observation's unit block.** Both walk `UnitManager` in registry
+  order and filter on the same team, so "the unit in slot 3" and "unit id 13" are the same unit
+  within one decision, and a policy can select by what it sees and command by what it names.
+- **A corpse is carried until the reaper takes it**, flagged `alive: false`, for the same reason the
+  observation carries one: a policy that saw a unit vanish a tick before its `unit_lost` would have
+  to infer the loss from a hole in a tensor.
+- **It is bounded by ownership, not by sight, and that costs the fog nothing.** Every unit on the
+  field belongs to the strategist, so this is a seat reading its own army — what a human
+  strategist's client already draws. A ground seat asking is refused (`wrong_policy`): it sees units
+  through `GroundSensor` or not at all.
+- **Positions are metres**, not the normalized floats of the observation, because a command's target
+  is in metres.
+
+The alternative considered and rejected was a client-side roster built from `unit_built` and
+`unit_lost`. It drifts — the events fire at build and at death, the observation carries a corpse
+until the reaper takes it, and the two disagree for exactly as long as it takes to notice nothing
+was wrong. One round trip at a strategist's 2 Hz is not worth a class of silent bug.
 
 ---
 
@@ -752,6 +788,7 @@ touches the UDP budget in that section.
 | Feature planes (optional) | S→A | with the observation | 16 KB |
 | Event | S→A | per event | ~120 B |
 | Control (`attach`, `reset`, `step`, …) | both | per call | < 1 KB |
+| `list_units` (strategist) | both | 2 Hz per seat | ~80 B per unit (§7.5) |
 
 Six ground seats and one strategist, binary, no feature planes:
 6 × 576 B × 15 Hz + 4,368 B × 2 Hz ≈ **61 KB/s over loopback.** The bound on throughput is the

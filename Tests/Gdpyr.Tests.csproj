@@ -29,6 +29,20 @@
          agent wire format are tested against each other rather than only against
          themselves (docs/AGENT_API.md §4). -->
     <Compile Include="../tools/Gdpyr.AgentClient/AgentProtocol.cs" />
+    <!-- The client's engine-free training pieces: the wire types and schema reader
+         (GdpyrConnection.cs), the two action spaces, the two reward functions and
+         the observation stack. What a policy may *do* and what it is being asked to
+         *want* are the two files a training run is actually decided by
+         (docs/TRAINING.md §6, §7), and neither needs a server, a socket or
+         libtorch to answer a question about. The RLMatrix environments beside them
+         — GdpyrGroundEnv, GdpyrStrategistEnv — are deliberately left out: they are
+         the half that does need one. -->
+    <Compile Include="../tools/Gdpyr.AgentClient/GdpyrConnection.cs" />
+    <Compile Include="../tools/Gdpyr.AgentClient/GroundActionSpace.cs" />
+    <Compile Include="../tools/Gdpyr.AgentClient/GroundReward.cs" />
+    <Compile Include="../tools/Gdpyr.AgentClient/StrategistActionSpace.cs" />
+    <Compile Include="../tools/Gdpyr.AgentClient/StrategistReward.cs" />
+    <Compile Include="../tools/Gdpyr.AgentClient/ObservationStack.cs" />
     <!-- The playtest harness's scenario parser, metric vocabulary and assertion
          evaluator (tools/Gdpyr.Playtest). A scenario file is data and authoring one
          needs no Godot install, so what one *means* is answered by `dotnet test`
