@@ -33,6 +33,13 @@ Two inbound rules. That is the whole firewall.
 ENet is UDP-only — there is no TCP game rule to add. Security groups are stateful, so no outbound
 rule is needed for replies.
 
+**There is deliberately no rule for the agent channel.** `--agent-api` opens a TCP socket that can
+spawn players, issue orders and reset rounds — on a box with a public Elastic IP that is remote
+control of the game server. `deploy/gdpyr-server.service` never passes the flag, a non-loopback bind
+without `--agent-token` is a fatal start-up error, and training runs on a local machine
+([`AGENT_API.md`](AGENT_API.md) §4.1, [`TRAINING.md`](TRAINING.md) §8). Two inbound rules stays two
+inbound rules.
+
 **If and only if you use a custom Network ACL:** NACLs are *stateless*. You need inbound UDP 7777
 **and** outbound UDP 1024–65535. The default VPC NACL allows everything and needs no change. This is
 the single most common "the port is open but nothing connects" cause on AWS.

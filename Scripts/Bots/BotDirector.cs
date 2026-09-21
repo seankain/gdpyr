@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Gdpyr.Agent;
 using Gdpyr.Core;
 using Gdpyr.Fps;
 using Gdpyr.Match;
@@ -92,8 +93,35 @@ public sealed class BotDirector
 	/// bot, which has no body to drive — gets a neutral frame, which is what the
 	/// server would have simulated for it anyway.
 	/// </summary>
-	public InputFrame Sample(int peerId, uint tick) =>
-		_pilots.TryGetValue(peerId, out BotPilot pilot) ? pilot.Sample(tick) : InputFrame.Neutral(tick);
+	public InputFrame Sample(int peerId, uint tick)
+	{
+		// The one branch the agent API adds to the game (docs/AGENT_API.md §2). A
+		// seat whose policy has gone quiet falls back to its pilot on this line, and
+		// nothing downstream — PlayerManager, CombatManager, any client — learns a
+		// new concept.
+		if (AgentServer.Instance is { } agents && agents.TrySample(peerId, tick, out InputFrame frame))
+		{
+			return frame;
+		}
+
+		return _pilots.TryGetValue(peerId, out BotPilot pilot) ? pilot.Sample(tick) : InputFrame.Neutral(tick);
+	}
+
+	/// <summary>
+	/// Puts one more bot on <paramref name="team"/> now and hands back its peer id,
+	/// or 0 when the roster has no room. Called by the agent API when a policy asks
+	/// for a seat and the side has none free (docs/AGENT_API.md §2.2).
+	/// </summary>
+	public int SpawnSeat(Team team)
+	{
+		PlayerManager players = PlayerManager.Instance;
+		if (players == null || players.PlayerCount >= SnapshotCodec.MaxPlayers)
+		{
+			return 0;
+		}
+
+		return TryAdd(team);
+	}
 
 	public bool IsBot(int peerId) => _pilots.ContainsKey(peerId) || _commanders.ContainsKey(peerId);
 
@@ -104,7 +132,9 @@ public sealed class BotDirector
 	/// otherwise make a person ask twice.
 	/// </summary>
 	public bool YieldSeat(Team team) =>
-		team == Team.Strategist ? RemoveOne(_commanders.Keys) : RemoveOne(_pilots.Keys);
+		team == Team.Strategist
+			? RemoveOne(_commanders.Keys, evictAttached: true)
+			: RemoveOne(_pilots.Keys, evictAttached: true);
 
 	/// <summary>
 	/// Forgets a bot. Called by <see cref="PlayerManager"/> whenever a player is
@@ -112,6 +142,10 @@ public sealed class BotDirector
 	/// </summary>
 	public void Release(int peerId)
 	{
+		// A lease on a seat that no longer exists would leave a session holding a
+		// body nobody is simulating (docs/AGENT_API.md §2.1).
+		AgentServer.Instance?.ReleaseSeat(peerId, "despawned");
+
 		if (_pilots.Remove(peerId, out BotPilot pilot))
 		{
 			pilot.Dispose();
@@ -144,29 +178,59 @@ public sealed class BotDirector
 		BotFill want = BotFillPolicy.Plan(new BotDemand(GroundTarget, StrategistTarget, groundHumans,
 			strategistHumans, SnapshotCodec.MaxPlayers - reserved, TeamService.MaxStrategists));
 
-		while (_commanders.Count > want.Strategist && RemoveOne(_commanders.Keys))
+		// Seats an external policy is sitting in are counted as participants in the
+		// census, not as backfill, so they come off both sides of the comparison:
+		// the fill policy is being asked how many *bots* are wanted beside them.
+		// RemoveOne never takes an attached seat, so these two are constant across
+		// the loops below (docs/AGENT_API.md §2.1).
+		int attachedGround = CountAttached(_pilots.Keys);
+		int attachedStrategists = CountAttached(_commanders.Keys);
+
+		while (_commanders.Count - attachedStrategists > want.Strategist && RemoveOne(_commanders.Keys))
 		{
 		}
 
-		while (_pilots.Count > want.Ground && RemoveOne(_pilots.Keys))
+		while (_pilots.Count - attachedGround > want.Ground && RemoveOne(_pilots.Keys))
 		{
 		}
 
-		if (_commanders.Count < want.Strategist)
+		if (_commanders.Count - attachedStrategists < want.Strategist)
 		{
 			TryAdd(Team.Strategist);
 		}
-		else if (_pilots.Count < want.Ground)
+		else if (_pilots.Count - attachedGround < want.Ground)
 		{
 			TryAdd(Team.GroundForce);
 		}
+	}
+
+	/// <summary>How many of these seats an external policy holds.</summary>
+	private static int CountAttached(IEnumerable<int> peerIds)
+	{
+		AgentServer agents = AgentServer.Instance;
+		if (agents == null)
+		{
+			return 0;
+		}
+
+		int count = 0;
+		foreach (int peerId in peerIds)
+		{
+			if (agents.IsAttached(peerId))
+			{
+				count++;
+			}
+		}
+
+		return count;
 	}
 
 	/// <summary>
 	/// Counts the people on each side, and the roster slots that are neither theirs
 	/// nor this director's.
 	///
-	/// A peer is a person unless this director is driving it. That is a stronger
+	/// A peer is a person unless this director is driving it, and a seat an external
+	/// policy has attached to counts as a person too. That is a stronger
 	/// test than <see cref="BotRoster.IsBot"/> alone, and it is the one that makes
 	/// the bot id band safe: Godot draws client ids from the whole positive range,
 	/// so one could in principle land inside the band, and when it does it is
@@ -194,7 +258,11 @@ public sealed class BotDirector
 				continue;
 			}
 
-			if (IsBot(player.PeerId))
+			// A seat an external policy is driving is somebody playing, not backfill.
+			// Without this an agent-only server — which is exactly what a training run
+			// is — would see nobody connected, fill neither side, and hand the policy
+			// an empty map to learn on (docs/AGENT_API.md §2).
+			if (IsBot(player.PeerId) && !(AgentServer.Instance?.IsAttached(player.PeerId) ?? false))
 			{
 				continue;
 			}
@@ -219,25 +287,26 @@ public sealed class BotDirector
 		}
 	}
 
-	private bool TryAdd(Team team)
+	/// <summary>Adds one bot on <paramref name="team"/>. Returns its peer id, or 0.</summary>
+	private int TryAdd(Team team)
 	{
 		CombatManager combat = CombatManager.Instance;
 		PlayerManager players = PlayerManager.Instance;
 		if (combat == null || players == null)
 		{
-			return false;
+			return 0;
 		}
 
 		int peerId = FreePeerId(players);
 		if (peerId == 0)
 		{
-			return false;
+			return 0;
 		}
 
 		fps_controller character = players.SpawnBot(peerId);
 		if (character == null)
 		{
-			return false;
+			return 0;
 		}
 
 		Team granted = combat.ServerAssignTeam(peerId, team);
@@ -247,7 +316,7 @@ public sealed class BotDirector
 			// a disagreement worth hearing about rather than one to paper over.
 			GD.PushWarning($"[bots] {BotRoster.NameOf(peerId)} asked for {team} and got {granted}");
 			players.DespawnBot(peerId);
-			return false;
+			return 0;
 		}
 
 		if (team == Team.Strategist)
@@ -261,19 +330,40 @@ public sealed class BotDirector
 		}
 
 		GD.Print($"[bots] {BotRoster.NameOf(peerId)} joined as {team}");
-		return true;
+		return peerId;
 	}
 
-	/// <summary>Takes the highest-numbered bot off the given roster. Last in, first out.</summary>
-	private bool RemoveOne(IEnumerable<int> peerIds)
+	/// <summary>
+	/// Takes the highest-numbered bot off the given roster. Last in, first out.
+	///
+	/// A seat an external policy is sitting in is not a candidate unless
+	/// <paramref name="evictAttached"/> says so, which only <see cref="YieldSeat"/>
+	/// does. The backfill's rule is that a bot holds a slot while nobody else wants
+	/// it, and a policy is somebody who wants it — otherwise an agent-only server,
+	/// which is exactly what a training run is, would have its seat taken away
+	/// every half second because the fill policy sees no people (docs/AGENT_API.md
+	/// §2.1). A person still outranks a policy: that is what the flag is for.
+	/// </summary>
+	private bool RemoveOne(IEnumerable<int> peerIds, bool evictAttached = false)
 	{
 		int last = 0;
+		int lastAttached = 0;
+		AgentServer agents = AgentServer.Instance;
+
 		foreach (int peerId in peerIds)
 		{
-			if (peerId > last)
+			if (agents != null && agents.IsAttached(peerId))
 			{
-				last = peerId;
+				lastAttached = Math.Max(lastAttached, peerId);
+				continue;
 			}
+
+			last = Math.Max(last, peerId);
+		}
+
+		if (last == 0 && evictAttached)
+		{
+			last = lastAttached;
 		}
 
 		if (last == 0)

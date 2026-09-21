@@ -24,6 +24,11 @@
          without two machines. -->
     <Compile Include="../Scripts/Match/MatchState.cs" />
     <Compile Include="../Scripts/Match/TeamService.cs" />
+    <!-- The external client's framing and action packing (tools/Gdpyr.AgentClient),
+         compiled in so the two deliberately independent implementations of the
+         agent wire format are tested against each other rather than only against
+         themselves (docs/AGENT_API.md §4). -->
+    <Compile Include="../tools/Gdpyr.AgentClient/AgentProtocol.cs" />
   </ItemGroup>
 
   <ItemGroup>

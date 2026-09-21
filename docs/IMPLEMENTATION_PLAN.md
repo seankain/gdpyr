@@ -10,6 +10,7 @@ with friends, in roughly 4–6 solo engineering-weeks.
 Companion documents:
 [`NETCODE.md`](NETCODE.md) — tick model, message set, ballistics, fog of war ·
 [`AGENT_API.md`](AGENT_API.md) — headless play for external policies (§M6–M7) ·
+[`TRAINING.md`](TRAINING.md) — training agents against it, with RLMatrix (§M6) ·
 [`DEPLOYMENT.md`](DEPLOYMENT.md) — AWS EC2 dedicated server runbook.
 
 ---
@@ -317,12 +318,20 @@ call. This makes one person enough to see a round.
   existing intermission restarts the round, because a playtest that needs somebody to press a key
   between rounds gets fewer rounds per session.
 
-### M6 — Agent API: headless play for external policies (3–4 days)
+### M6 — Agent API: headless play for external policies (3–4 days) ✅ *shipped*
 
-Design: [`AGENT_API.md`](AGENT_API.md). An out-of-band control channel that lets a process which is
+Design: [`AGENT_API.md`](AGENT_API.md); how to train against it:
+[`TRAINING.md`](TRAINING.md). An out-of-band control channel that lets a process which is
 not a Godot client take a seat in a round — an RL policy on the ground, an RL policy in the
 strategist's chair, or a coding agent running a scripted playtest. The reference point is
 StarCraft II's `s2client-proto`.
+
+**The learner is .NET, not Python.** [RLMatrix](https://github.com/asieradzk/RL_Matrix) is deep RL
+in C# on TorchSharp and is already proven against Godot; the rest of this repository is C#, and a
+training loop in a second language would mean a second toolchain, a second set of types for
+`InputFrame`, and a second place for the observation layout to be wrong. `tools/Gdpyr.AgentClient`
+is the protocol client and the `IEnvironmentAsync<float[]>` adapter (no TorchSharp),
+`tools/Gdpyr.Trainer` is the learner, `tools/Gdpyr.Probe` is §3's divergence probe.
 
 **Why it is cheap here.** Three of the four hard parts exist for other reasons.
 `PlayerManager.SimulatePlayers` already resolves a character's intent from a source that is not a
@@ -345,8 +354,12 @@ the same shot (`Scripts/Sim/Spread.cs`).
   downstream — `PlayerManager`, `CombatManager`, any client — learns a new concept. Attachment is a
   **lease**: a silent grace window falls back to `BotPilot`, and a closed socket releases the seat
   outright, so a crashed trainer cannot leave a body standing in the open or stall a round.
-- **Ground observation and action:** 144 floats — self, weapon, the eight nearest contacts its own
-  eyes have acquired, a 16-ray fan, the objective — and the twelve bytes of `InputFrame` back.
+- **Ground observation and action:** self, weapon, the eight nearest contacts its own eyes have
+  acquired, a 16-ray fan, the objective — and the twelve bytes of `InputFrame` back. Shipped as
+  **145 floats, not 144**: the movement-state one-hot is seven wide because the FSM has seven
+  states, and a client decodes by the schema `welcome` publishes rather than by this document. The
+  radius-and-line-of-sight scan moved out of `BotPilot` into `Scripts/Bots/GroundSensor.cs` so that
+  a bot's acquisition and a policy's observation are one filter and not two.
 - **Time:** real time by default (mixed human/bot/policy rounds), plus a **stepped** mode that will
   not advance a tick until every attached seat has acted, which is what makes a regression test
   synchronous instead of sleep-and-hope. Stepped mode refuses to engage while a human peer is
@@ -363,10 +376,22 @@ the same shot (`Scripts/Sim/Spread.cs`).
 - **Determinism is measured, not claimed.** `Scripts/Sim` is reproducible; `MoveAndSlide()` and
   `NavigationAgent3D` are not. A `state_hash` probe reports the tick at which two seeded episodes
   part company, and that number — not an assumption — decides how tightly M7's assertions may be
-  written ([`AGENT_API.md`](AGENT_API.md) §3).
-- **Done when:** a Python process attaches to a ground seat on a headless server, plays a full
+  written ([`AGENT_API.md`](AGENT_API.md) §3). **Measured, and the answer is "the first tick"**: not
+  because the engine drifts that fast but because every stochastic decision in the game is a hash of
+  the *absolute* server tick, which never rewinds, so `reset` starts a fresh round rather than a
+  repeatable one (§3.1). M7 gets to decide whether to key those hashes on ticks since the round
+  started instead; until it does, the distributional assertion vocabulary is the contract for the
+  strongest of reasons rather than as a precaution.
+- **Done when:** an external process attaches to a ground seat on a headless server, plays a full
   round against the computer strategist, and its episode ends with the same `RoundSummary` a human's
   would — and when detaching mid-round hands the seat back to a bot without a hitch in the snapshot.
+  **Done:** `gdpyr-train` plays a full round through the socket; the round ends `TimeExpired` with
+  the tickets, units built and units lost a human's scoreboard would carry; detaching hands the seat
+  straight back to `BotPilot`, and so does going quiet for half a second. Two defects the episode
+  boundary surfaced were fixed with it: a round restart did not reset the per-player kill and death
+  counters (so round two's scoreboard was a running total, and everyone respawned at a spawn point
+  offset by a dead round's death count), and the bot backfill did not count an attached policy as
+  somebody playing (so a training server filled neither side and handed the policy an empty map).
 
 ### M7 — Strategist policies and the playtest harness (2–3 days)
 
@@ -463,6 +488,15 @@ M3.5 made one person enough to run a round: bots backfill both sides while anybo
 stand up again as people arrive. M4 put the fog in front of the strategist — a ground-force player
 is in a strategist's packet only while one of the strategist's units has them in sensor range with
 a clear line, and what is left behind is a decaying ghost rather than nothing.
+
+M6 opened the agent channel: a process that is not a Godot client can now take a bot's seat on the
+ground, be handed 145 floats of what that seat's own eyes have picked up, and hand back the same
+twelve bytes of `InputFrame` a person's client sends — behind the same fog, the same turn-rate
+ceiling and the same ownership checks. The learner is .NET rather than Python
+([`TRAINING.md`](TRAINING.md)): `tools/Gdpyr.AgentClient` is the protocol and the
+`IEnvironmentAsync<float[]>` adapter, `tools/Gdpyr.Trainer` runs RLMatrix's PPO or DQN over one or
+more headless servers, and `tools/Gdpyr.Probe` is the divergence probe whose answer
+([`AGENT_API.md`](AGENT_API.md) §3.1) M7's assertions have to be written against.
 
 M5 gave both sides something to do with the map. The strategist's points are a rate rather than a
 pool: three nodes pay for being held and stop paying the moment a rifleman stands on one, which is

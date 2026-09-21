@@ -1,0 +1,2 @@
+# Not Godot content: the agent client, the trainer and the divergence probe are
+# plain .NET projects that talk to a running server over a socket.

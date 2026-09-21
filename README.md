@@ -6,7 +6,10 @@ dedicated-server authoritative.
 - [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) — scope, architecture, milestones
 - [`docs/NETCODE.md`](docs/NETCODE.md) — tick model, message set, ballistics, fog of war
 - [`docs/AGENT_API.md`](docs/AGENT_API.md) — headless play for external policies: RL agents on
-  either side, and scripted playtests for coding agents (designed, not yet built — M6/M7)
+  either side, and scripted playtests for coding agents (the ground seat is built; the strategist
+  seat and the playtest harness are M7)
+- [`docs/TRAINING.md`](docs/TRAINING.md) — training an agent against a headless server, in C#, with
+  [RLMatrix](https://github.com/asieradzk/RL_Matrix)
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — AWS EC2 dedicated-server runbook
 
 ## Layout
@@ -18,11 +21,15 @@ Scripts/Sim/    Engine-free simulation code; unit-tested without Godot
 Scripts/Fps/    Character controller, movement FSM, input sampler, weapons, viewmodel
 Scripts/Rts/    Units, barracks, orders, the strategist camera and selection
 Scripts/Match/  CombatManager (the round), MatchState, TeamService
-Scripts/Bots/   Computer players: the roster director, the ground pilot, the strategist
+Scripts/Bots/   Computer players: the roster director, the ground pilot, the strategist, the sensor
+Scripts/Agent/  The agent control channel: listener, sessions, seats, observations
 Scripts/Ui/     Pause menu, reticle, combat HUD, RTS HUD, net debug HUD
 Scenes/         Greybox map, player, weapon, pause menu
 Units/          UnitDefinition resources
 Tests/          xUnit over the engine-free sources — `dotnet test`, no Godot needed
+tools/          External .NET processes that talk to a server over a socket: the agent
+                client, the RLMatrix trainer, the divergence probe. Never part of the game
+                assembly (docs/TRAINING.md)
 ```
 
 The simulation runs in `_PhysicsProcess` at a fixed 60 Hz and reads nothing but the recorded
@@ -55,6 +62,19 @@ Two more flags change how many computer players the authority keeps around:
 Neither flag is needed to get bots: the numbers default to `BotGroundForce` and `BotStrategists` in
 `Match/default_gamemode.tres` (6 and 1). `--bots 4` overrides only the ground force and leaves the
 strategists to the game mode.
+
+Four more open the agent control channel, which lets a process that is not a Godot client take a
+bot's seat ([`docs/AGENT_API.md`](docs/AGENT_API.md)):
+
+| Flag | Effect |
+|---|---|
+| `--agent-api [host:]port` | listen for external policies; a bare port binds loopback |
+| `--agent-token <token>` | required for a non-loopback bind, which is otherwise a fatal start-up error |
+| `--agent-unbounded` | lift the turn-rate and APM ceilings; research runs only |
+| `--agent-omniscient` | drop the fog for attached seats, and label every observation as cheating |
+
+The deploy unit never passes any of them: the socket can spawn players, issue orders and reset
+rounds, and the box in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) has a public address.
 
 The server spawns a character per connected peer at the map's `player_spawn` markers; each client
 predicts its own and interpolates everyone else.
@@ -119,3 +139,19 @@ dotnet test                   # Tests/Gdpyr.Tests.csproj
 ./scripts/export-server.sh    # headless Linux server -> build/server/
 ./scripts/deploy.sh           # rsync to EC2 + restart the systemd unit
 ```
+
+## Training agents
+
+A headless server plus an out-of-band socket is enough to put a reinforcement-learning policy in a
+seat. The learner is C# — [RLMatrix](https://github.com/asieradzk/RL_Matrix) on TorchSharp — and
+lives outside the game assembly:
+
+```bash
+./scripts/train.sh                        # one server, PPO, a ground seat
+./scripts/train.sh --ports 7900,7901      # two servers, one learner
+./scripts/divergence.sh --ticks 600       # how reproducible is a seeded episode? (§3.1)
+```
+
+[`docs/TRAINING.md`](docs/TRAINING.md) has the whole story: what the policy sees, what it may do,
+what it is being asked to want, why you should train in stepped mode, and the large libtorch
+download RLMatrix's packaging makes unavoidable.

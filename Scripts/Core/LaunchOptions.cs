@@ -28,17 +28,29 @@ public sealed class LaunchOptions
 	public const int DefaultPort = 7777;
 	public const string DefaultHost = "127.0.0.1";
 
+	/// <summary>Where the agent channel binds unless told otherwise (docs/AGENT_API.md §4.1).</summary>
+	public const string AgentLoopbackHost = "127.0.0.1";
+
+	/// <summary>The port the design names, and what a bare <c>--agent-api</c> would use if it took no value.</summary>
+	public const int DefaultAgentPort = 7900;
+
 	public const string Usage =
 		"usage: gdpyr [--server [port]] | [--client <host[:port]>] | [--listen [port]]\n" +
 		"             [--bots <ground>[:<strategists>]] | [--no-bots]\n" +
+		"             [--agent-api [host:]port] [--agent-token <token>]\n" +
+		"             [--agent-unbounded] [--agent-omniscient]\n" +
 		"  --server [port]         headless authority, no local player (default port 7777)\n" +
 		"  --client <host[:port]>  connect to a server\n" +
 		"  --listen [port]         authority plus a local player\n" +
 		"  --bots <n>[:<m>]        fill each side to n ground and m strategists with bots\n" +
 		"  --no-bots               no computer players, whatever the game mode says\n" +
+		"  --agent-api [host:]port listen for external policies (docs/AGENT_API.md); loopback by default\n" +
+		"  --agent-token <token>   required for a non-loopback agent bind\n" +
+		"  --agent-unbounded       lift the turn-rate and APM ceilings; research runs only\n" +
+		"  --agent-omniscient      drop the fog for attached seats; labelled as cheating\n" +
 		"  (no flags)              offline, no networking\n" +
 		"Godot consumes its own arguments first, so these go after a bare `--`:\n" +
-		"  gdpyr --headless -- --server 7777 --bots 6:1";
+		"  gdpyr --headless -- --server 7777 --bots 6:1 --agent-api 7900";
 
 	/// <summary>An offline launch: what you get with no flags, and the value used after a parse failure.</summary>
 	public static readonly LaunchOptions Offline = new();
@@ -61,6 +73,27 @@ public sealed class LaunchOptions
 	/// <summary>Strategists to keep filled. See <see cref="GroundBots"/>.</summary>
 	public int? StrategistBots { get; private init; }
 
+	/// <summary>
+	/// Port the agent control channel listens on, or null when it was not asked for
+	/// (docs/AGENT_API.md §4). The socket can spawn players, issue orders and reset
+	/// rounds, so it is off unless it is named and the deploy unit never names it.
+	/// </summary>
+	public int? AgentPort { get; private init; }
+
+	/// <summary>Address the agent channel binds. Loopback unless a bare <c>--agent-api</c> was given an address.</summary>
+	public string AgentHost { get; private init; } = AgentLoopbackHost;
+
+	/// <summary>Shared secret the first frame of an agent session must carry. Null for an unauthenticated loopback bind.</summary>
+	public string AgentToken { get; private init; }
+
+	/// <summary>Lifts the turn-rate and APM ceilings an attached seat plays under (docs/AGENT_API.md §7.3).</summary>
+	public bool AgentUnbounded { get; private init; }
+
+	/// <summary>Drops the fog for attached seats. Stamped into every observation and every trace.</summary>
+	public bool AgentOmniscient { get; private init; }
+
+	public bool HasAgentApi => AgentPort.HasValue;
+
 	/// <summary>Null when parsing succeeded; a one-line diagnostic otherwise.</summary>
 	public string Error { get; private init; }
 
@@ -77,12 +110,20 @@ public sealed class LaunchOptions
 			_ => Mode.ToString(),
 		};
 
-		if (GroundBots is null && StrategistBots is null)
+		if (GroundBots is not null || StrategistBots is not null)
 		{
-			return mode;
+			mode += $" | bots {Describe(GroundBots)} ground, {Describe(StrategistBots)} strategist";
 		}
 
-		return $"{mode} | bots {Describe(GroundBots)} ground, {Describe(StrategistBots)} strategist";
+		if (AgentPort is { } agentPort)
+		{
+			mode += $" | agent api {AgentHost}:{agentPort}"
+				+ (AgentToken != null ? " (token)" : string.Empty)
+				+ (AgentUnbounded ? " unbounded" : string.Empty)
+				+ (AgentOmniscient ? " omniscient" : string.Empty);
+		}
+
+		return mode;
 	}
 
 	private static string Describe(int? count) => count?.ToString() ?? "default";
@@ -107,6 +148,11 @@ public sealed class LaunchOptions
 		int? groundBots = null;
 		int? strategistBots = null;
 		bool botsRefused = false;
+		int? agentPort = null;
+		string agentHost = AgentLoopbackHost;
+		string agentToken = null;
+		bool agentUnbounded = false;
+		bool agentOmniscient = false;
 
 		args ??= System.Array.Empty<string>();
 
@@ -181,6 +227,44 @@ public sealed class LaunchOptions
 					break;
 				}
 
+				case "--agent-api":
+				{
+					if (agentPort.HasValue)
+					{
+						return Failure("--agent-api given twice");
+					}
+
+					if (!TryTakeValue(args, ref i, out string value))
+					{
+						return Failure($"--agent-api needs a port, e.g. --agent-api {DefaultAgentPort}");
+					}
+
+					if (!TryParseAgentEndpoint(value, out agentHost, out int parsed, out string error))
+					{
+						return Failure($"--agent-api: {error}");
+					}
+					agentPort = parsed;
+					break;
+				}
+
+				case "--agent-token":
+				{
+					if (!TryTakeValue(args, ref i, out string value) || string.IsNullOrWhiteSpace(value))
+					{
+						return Failure("--agent-token needs a token");
+					}
+					agentToken = value;
+					break;
+				}
+
+				case "--agent-unbounded":
+					agentUnbounded = true;
+					break;
+
+				case "--agent-omniscient":
+					agentOmniscient = true;
+					break;
+
 				case "--no-bots":
 				{
 					if (groundBots.HasValue || strategistBots.HasValue)
@@ -201,6 +285,30 @@ public sealed class LaunchOptions
 
 		mode ??= dedicatedServer ? LaunchMode.Server : LaunchMode.Offline;
 
+		if (agentPort.HasValue)
+		{
+			// The agent socket takes a seat in the round, so there has to be a round on
+			// this side of the wire to take a seat in.
+			if (mode is not (LaunchMode.Server or LaunchMode.Listen))
+			{
+				return Failure("--agent-api needs --server or --listen: it drives the authority, not a client");
+			}
+
+			// A non-loopback bind without a token is fatal, the same way a server that
+			// cannot bind its UDP port is fatal. The socket can spawn players, issue
+			// orders and reset rounds, and the box in docs/DEPLOYMENT.md has a public
+			// address (docs/AGENT_API.md §4.1).
+			if (!IsLoopback(agentHost) && string.IsNullOrWhiteSpace(agentToken))
+			{
+				return Failure($"--agent-api {agentHost}:{agentPort} is not loopback and has no --agent-token;"
+					+ " refusing to expose the agent channel");
+			}
+		}
+		else if (agentToken != null || agentUnbounded || agentOmniscient)
+		{
+			return Failure("--agent-token, --agent-unbounded and --agent-omniscient need --agent-api");
+		}
+
 		return new LaunchOptions
 		{
 			Mode = mode.Value,
@@ -208,7 +316,69 @@ public sealed class LaunchOptions
 			Port = port,
 			GroundBots = groundBots,
 			StrategistBots = strategistBots,
+			AgentPort = agentPort,
+			AgentHost = agentHost,
+			AgentToken = agentToken,
+			AgentUnbounded = agentUnbounded,
+			AgentOmniscient = agentOmniscient,
 		};
+	}
+
+	/// <summary>
+	/// Whether an address is one only this machine can reach. The test is textual
+	/// rather than a DNS lookup on purpose: a start-up refusal must not depend on a
+	/// resolver, and anything it cannot recognise is treated as public, which is the
+	/// safe direction to be wrong in.
+	/// </summary>
+	public static bool IsLoopback(string host)
+	{
+		if (string.IsNullOrWhiteSpace(host))
+		{
+			return false;
+		}
+
+		host = host.Trim();
+		return host is "localhost" or "::1" or "[::1]" or "0:0:0:0:0:0:0:1"
+			|| host.StartsWith("127.", System.StringComparison.Ordinal);
+	}
+
+	/// <summary>
+	/// Parses the agent channel's <c>port</c> or <c>host:port</c>. A bare number is
+	/// a port on loopback, which is what makes <c>--agent-api 7900</c> the safe
+	/// spelling and the one every example uses.
+	/// </summary>
+	private static bool TryParseAgentEndpoint(string text, out string host, out int port, out string error)
+	{
+		host = AgentLoopbackHost;
+		port = DefaultAgentPort;
+		error = null;
+
+		text = text?.Trim();
+		if (string.IsNullOrEmpty(text))
+		{
+			error = "empty address";
+			return false;
+		}
+
+		if (TryParsePort(text, out port))
+		{
+			return true;
+		}
+
+		if (!TryParseEndpoint(text, out host, out port, out error))
+		{
+			return false;
+		}
+
+		// TryParseEndpoint defaults a missing port to the *game's* port, which would
+		// put the agent channel on top of the UDP listener's number by accident.
+		if (text.IndexOf(':') < 0 || text.EndsWith("]", System.StringComparison.Ordinal))
+		{
+			error = $"'{text}' has no port, e.g. --agent-api {host}:{DefaultAgentPort}";
+			return false;
+		}
+
+		return true;
 	}
 
 	private static LaunchOptions Failure(string error) => new() { Error = error };

@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Gdpyr.Fps;
 using Gdpyr.Rts;
 using Gdpyr.Sim;
+using Gdpyr.Sim.Agent;
 using Godot;
 
 namespace Gdpyr.Match;
@@ -96,7 +97,15 @@ public sealed class EconomyService
 			ResourceNode node = _nodes[i];
 			Count(node, combat, units, out int ground, out int strategist);
 
+			NodeHolder before = node.Capture.Owner;
 			int income = node.Capture.Tick(tick, ground, strategist, node.Rules);
+
+			if (node.Capture.Owner != before)
+			{
+				AgentEventBus.Emit(AgentEventKind.NodeCaptured, tick, i, (int)node.Capture.Owner, (int)before,
+					node.GlobalPosition.X, node.GlobalPosition.Z);
+			}
+
 			if (income <= 0)
 			{
 				continue;

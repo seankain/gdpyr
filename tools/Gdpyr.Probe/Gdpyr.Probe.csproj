@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Gdpyr.Probe</RootNamespace>
+    <AssemblyName>gdpyr-probe</AssemblyName>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- No RLMatrix, and therefore no libtorch: measuring how far apart two seeded
+         episodes drift must not require a two-gigabyte download, because the
+         answer decides how tightly every later assertion may be written. -->
+    <ProjectReference Include="../Gdpyr.AgentClient/Gdpyr.AgentClient.csproj" />
+  </ItemGroup>
+
+</Project>
