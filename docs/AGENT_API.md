@@ -11,11 +11,12 @@ Companion documents:
 [`NETCODE.md`](NETCODE.md) — the tick model, the message set and the fog this API is filtered
 through · [`DEPLOYMENT.md`](DEPLOYMENT.md) — the box this must never be exposed on.
 
-> **Status.** §1–§8 and §10 shipped in M6, with the deviations recorded inline below. The
-> strategist seat (§6.2), the feature planes (§6.3), the strategist action (§7.4) and the
-> playtest harness (§9) are M7: `attach` refuses `policy: "strategist"` with
-> `not_implemented` rather than half-answering it. The .NET client in §9.3 shipped with M6
-> because it is what the "done when" is demonstrated with.
+> **Status: shipped.** §1–§8 and §10 shipped in M6; the strategist seat (§6.2), the feature
+> planes (§6.3), the strategist action (§7.4), the playtest harness (§9) and the Python client
+> (§9.3) shipped in M7. Deviations are recorded inline below rather than smoothed over. The
+> observation schema is now `gdpyr-agent-obs-2`: M7 added a second observation, the planes and
+> the command vocabulary to what `welcome` publishes, and a client decodes by the published
+> schema rather than by this document (§4).
 
 ---
 
@@ -97,6 +98,11 @@ Python process is worse than no API at all.
   30 — half a second) falls back to `BotPilot` for that tick and every tick until a frame arrives.
   The seat is not released; the policy can resume mid-round. This is silent by design: a policy
   running slower than 60 Hz is the normal case, not an error.
+  **Deviation, shipped with M7:** the window is the larger of that half second and *two of the
+  seat's own decisions* (`AgentSeat.GraceTicks`). A flat 30 ticks is right at `step_mul` 4 and
+  wrong at `step_mul` 30, where a strategist's decisions are exactly half a second apart: it would
+  be declared quiet between two decisions it made on time, and the round would flicker between the
+  policy and `BotStrategist` every tick.
 - **On socket close:** the seat is released outright and reverts to a bot. `BotDirector` then owns
   it again, including giving it up to a person who wants it (`BotFillPolicy`).
 - **While attached, the backfill leaves the seat alone.** Two small changes in `BotDirector` make
@@ -174,9 +180,12 @@ So the `seed` on `reset` **labels** an episode and is echoed on `round_start`; i
 one. The table above is the contract, and it is the contract for the strongest of reasons rather
 than as a precaution.
 
-Making episodes repeatable is a real option and a deliberate one: key those hashes on ticks *since
-the round started* rather than on the absolute tick. That changes `BotBrain`, the tests around it,
-and how bots play, so it is an M7 decision and was not slipped into M6. M6 shipped two things that
+Making episodes repeatable was a real option: key those hashes on ticks *since the round started*
+rather than on the absolute tick. **M7 decided against it** — it would not make an episode
+reproducible while `MoveAndSlide()` and `NavigationAgent3D` are the other half of the problem, and
+it would hand every episode the same bot noise at the same moment, which is worse for both training
+and a seed sweep. §12.1 has the argument in full. The seed labels an episode; the vocabulary is
+distributional; that is the contract. M6 shipped two things that
 pull in the same direction and were cheap: a round restart now zeroes each player's kills and deaths
 — so a second round's scoreboard is not a running total, and everyone starts on their own spawn
 point rather than one offset by a dead round's death count — and the probe warms the roster up
@@ -211,8 +220,10 @@ writing a playtest.
 **Kind 3 is the packed-binary lane in both directions**: an observation from the server, and one or
 more packed ground actions from the agent (§7.2). Everything else a client sends is kind 1 with a
 JSON body. A packed observation carries its own twelve-byte header — seat (`i32`), flags (`u16`, bit
-0 omniscient, bit 1 unbounded), two reserved, tick (`u32`) — so a decoder never has to pair it with a
-separate envelope to know whose it is.
+0 omniscient, bit 1 unbounded, **bit 2 feature planes attached**), two reserved, tick (`u32`) — so a
+decoder never has to pair it with a separate envelope to know whose it is, or how long it is: which
+of the two vectors arrived is read off the frame, because what is left after the planes matches
+exactly one of the two float counts the schema published.
 
 **The schema is fetched, not compiled.** `welcome` returns the observation layout — ordered field
 names, shapes, dtypes, normalization bounds and a `schema_version` — so the binary path is
@@ -353,16 +364,62 @@ can see changes what the policy can see on the same commit.
 | Nodes | 8 × 8 | x, z, owner one-hot (3), contested, capture progress, income paid |
 | Contacts | 16 × 6 | x, z, visible now, ticks since seen, is-player, team — the ghosts M4 already decays, at the same decay |
 
-**1,092 floats, 4.3 KB** — 8 + 896 + 28 + 64 + 96. The unit block is the whole `SimConfig.MaxUnits`
-ceiling, zero-padded, so the tensor shape never changes mid-episode, and the contact block is
-`SnapshotCodec.MaxPlayers` (16) for the same reason.
+**1,092 floats, 4.3 KB** — 8 + 896 + 28 + 64 + 96, and shipped at exactly that. The unit block is
+the whole `SimConfig.MaxUnits` ceiling, zero-padded, so the tensor shape never changes mid-episode,
+and the contact block is `SnapshotCodec.MaxPlayers` (16) for the same reason.
+
+Four things the shipped encoder settled that the table above does not say
+(`Scripts/Sim/Agent/AgentStrategistObservation.cs`):
+
+- **The barracks block needed a protocol constant, so M7 added one.** `SimConfig.MaxBarracks = 4`,
+  and `UnitManager.CollectBarracks` now warns and truncates past it exactly as the resource nodes
+  already did. A barracks is named by its index on the wire; four slots in an observation and an
+  unbounded number on the map would have been an observation that silently lies about a map. The
+  slots are the *map's* indices, not a compaction of the ones the seat owns, so reading slot 1 and
+  writing `barracks: 1` addresses one building. A barracks the seat does not own keeps its slot and
+  is left zeroed — a queue it may not spend from is not a queue it may read.
+- **Contacts are ordered: live ahead of ghosts, ghosts by age.** Nothing about the fog decides this;
+  it is so that the nearest thing to live information is always in the low slots, which is
+  otherwise something a policy has to learn before it learns anything else.
+- **The seat's own side is carried, flagged.** That is exactly what a human strategist's packet has
+  in it: `VisibilityService.IsVisibleTo` admits the viewer's own record, every strategist's, and
+  every visible ground-force player. The `team` float is what tells them apart.
+- **A peer nobody has ever seen is not in the vector at all**, rather than being a zeroed record.
+  An unseen enemy and a dead one look the same, and they should: a policy that could tell the
+  difference would be reading the absence of a record as intelligence the fog exists to withhold.
+
+**Fog parity is one call, not a re-implementation.** The live records come from
+`VisibilityService.IsVisible`, the ghosts from `VisibilityService.TryContact` — the same two
+answers a human strategist's snapshot and HUD are built from (`NETCODE.md` §6.2). The rule that
+turns them into the vector is engine-free and tested (`AgentStrategistObservation.SelectContacts`,
+`Tests/AgentObservationTests.cs`); the lookup is not, because a wall is the engine's business.
 
 ### 6.3 Optional feature planes
 
-Off by default, requested per session: an `N × N × C` grid over the map — own-unit density,
-contact density, node ownership, passability — at `N = 32`, `C = 4`. This is SC2's feature-layer
-idea and it is what makes a convolutional strategist policy possible at all. It costs a scatter
-over live units per observation, which is why it is opt-in rather than always paid for.
+Off by default, requested per session with `config {feature_planes: true}`: an `N × N × C` grid
+over the map — own-unit density, contact density, node ownership, passability — at `N = 32`,
+`C = 4`. This is SC2's feature-layer idea and it is what makes a convolutional strategist policy
+possible at all. It costs a scatter over live units per observation, which is why it is opt-in
+rather than always paid for.
+
+**Shipped, with three things the sketch did not say:**
+
+- **They are a strategist affordance and nothing else.** A ground seat that asks for planes does not
+  get them. Its spatial signal is the ray fan (§6.1): egocentric, sixteen floats rather than four
+  thousand, and a top-down grid of the whole map is not what a body in a corridor needs.
+- **They ride in the same frame as the vector**, after it, with bit 2 of the observation header set
+  so a decoder cannot disagree with the server about where the floats end. Channel-last
+  (`[row][column][channel]`), because that is the layout every convolution library wants and
+  reshaping 4,096 floats a decision buys nothing.
+- **Passability is probed once per map, not per observation.** One downward ray per cell asks the
+  cheap question — is there ground here — and the answer does not move. A thousand rays is far too
+  many to spend at 2 Hz and nothing at all to spend once. `reset` invalidates the probe, in case
+  the map changed under it.
+
+Contact density is behind the same fog the vector's contacts are, and node ownership is one ordered
+channel (0 neutral, 0.5 ground force, 1 strategist) rather than three sparse ones: whose ground this
+is, is a single ordered question for a convolution, and three planes would spend three quarters of
+the grid saying it.
 
 ### 6.4 The omniscient flag is for debugging and is labelled as cheating
 
@@ -384,12 +441,13 @@ obtained by cheating is not a result about this game.
 | `welcome` | ← | tick rate, build id, observation schema, current seed |
 | `config` | → | `mode` (realtime/stepped), `step_timeout_ms`, feature planes on/off |
 | `list_seats` | → ← | every roster slot: peer id, team, controller (human/bot/agent), alive |
-| `attach` | → ← | claim a seat by team + policy kind (+ optional `peer_id`, `step_mul`). `policy: "strategist"` is refused with `not_implemented` until M7 |
+| `attach` | → ← | claim a seat by team + policy kind (+ optional `peer_id`, `step_mul`). `policy: "strategist"` implies the team |
 | `detach` | → | release a seat back to its bot |
 | `act` | → | one action for one seat, for one tick |
 | `observe` | → ← | the current observation for one seat |
 | `step` | → ← | stepped mode: advance N ticks, return each attached seat's observation |
 | `reset` | → ← | end the round now and start a fresh one. The `seed` labels the episode and is echoed on `round_start`; it does not determine it (§3.1). Scenarios are M7 |
+| `spawn` | → ← | place one of this session's seats, or a unit, where a scenario asked for it (§9.1). M7 |
 | `events` | → ← | every event since a tick (§8) |
 | `state_hash` | → ← | a hash of the tick's simulation state, for §3's divergence measurement |
 | `quit` | → | close the session; every seat it holds reverts to a bot |
@@ -447,6 +505,25 @@ Unit ids that the seat does not own are rejected by `ApplyOrder` exactly as a cl
 and the rejection is counted in `UnitManager.RejectedOrders` — so a policy emitting garbage shows
 up on the debug HUD rather than silently doing nothing.
 
+**Shipped**, with the two parity wrappers the sketch named — `ServerCancelBuild(peerId, index)` and
+`ServerSetRally(peerId, index, point)` — plus three things worth writing down:
+
+- **A command list is consumed, not held.** §5.3 says a held action is held *exactly*, and that is
+  right for an `InputFrame`: a fire button held for four ticks produces the button edges a person
+  holding it would. Holding a command list for `step_mul` 30 would instead put the same unit on the
+  same queue thirty times. So a ground action repeats and a command list runs once; the *lease* is
+  what the two share, and a strategist that stops deciding falls back to `BotStrategist` on the same
+  line a ground seat falls back to `BotPilot` (§2.1).
+- **The APM cap is spent when the tick runs the list, not when the socket carries it**, because it
+  is a bound on what the game does rather than on what the wire delivers. Commands past the budget
+  are dropped for that decision and counted in `AgentCommandBudget.Refused`.
+- **Parsing is total and forgiving in one direction only.** A `cmd` the schema does not name is
+  skipped, the way an unknown button name is — a policy built against a newer schema must degrade,
+  not disconnect. Everything that *is* named goes through the ownership checks a person's RPC gets.
+
+An attached strategist seat takes `BotStrategist`'s place in `BotDirector.ServerTick`, which is the
+strategist half of the one branch this API adds to the game (§2).
+
 ---
 
 ## 8. Events
@@ -494,48 +571,100 @@ of assertions. It is checked into the repo beside the tests.
 {
   "name": "rifle lethality at 100 m",
   "seed": 7,
-  "duration_ticks": 1200,
+  "duration_ticks": 900,
   "roster": {"ground": 1, "strategists": 0},
-  "seats": [{"team":"ground","policy":"ground","script":"scripts/hold_and_fire.json"}],
-  "spawns": [{"peer":"agent0","at":[0,1,0],"look":[0,0]},
-             {"unit":"infantry","team":"strategist","at":[0,1,-100],"order":"none"}],
+  "seats": [{"id":"agent0","team":"ground","policy":"ground","step_mul":4,
+             "script":"scripts/hold_and_fire.json"}],
+  "spawns": [{"peer":"agent0","at":[-60,1,50],"look":[0,0]},
+             {"unit":"infantry","team":"strategist","at":[-60,1,-50],"order":"none"}],
   "assert": [
-    {"metric":"events.kill.count","op":">=","value":1},
-    {"metric":"observation.self.health","op":"==","value":100},
-    {"metric":"events.damage.sum","op":"between","value":[100,400]}
+    {"metric":"counters.pilot_fallbacks","op":"==","value":0},
+    {"metric":"observation.weapon.magazine.min","op":"<","value":1},
+    {"metric":"events.damage.count","op":">=","value":1},
+    {"metric":"events.damage.sum","op":"between","value":[20,400]},
+    {"metric":"events.unit_lost.count","op":">=","value":1}
   ]
 }
 ```
+
+That is `Tests/Scenarios/rifle_lethality.json` as checked in. Two differences from the sketch above
+it are worth naming, because both are the published schema winning an argument with a document:
+**`observation.self.health` is a fraction, not 100** — the JSON lane carries the same normalized
+float the binary lane does, and an assertion reads what a policy reads — and the seats and the unit
+stand at `x = -60` rather than on the origin, because the origin of the greybox map has crates on
+it and a lethality test wants a clear lane.
 
 Run it:
 
 ```bash
 ./scripts/playtest.sh Tests/Scenarios/rifle_lethality.json
-# rifle lethality at 100 m .......... PASS  (1,200 ticks, 20.0 s sim, 3.1 s wall)
-#   events.kill.count            1 >= 1          ok
-#   observation.self.health      100 == 100      ok
-#   events.damage.sum            212 in [100,400] ok
+# rifle lethality at 100 m .......... PASS  (900 ticks, 15.0 s sim, 4.2 s wall, 1 seed)
+#   counters.pilot_fallbacks == 0               0   ok
+#   observation.weapon.magazine.min < 1         0.2 ok
+#   events.damage.count >= 1                    6   ok
+#   events.damage.sum in [20,400]               120 ok
+#   events.unit_lost.count >= 1                 1   ok
 ```
 
 Exit code 0 on pass, 1 on any failed assertion, 2 on a harness error. That is the whole CI contract,
 and it is the thing that makes this usable from an agent loop: a deterministic exit code, a
 machine-readable summary on `--json`, and a trace file to re-run.
 
+**The harness starts the server itself**, one per scenario file, because the roster a scenario wants
+is in the scenario file: `--bots 6:1` is a launch option, and a wrapper that had to read the JSON to
+build a command line would be a JSON parser written in bash. `--attach` uses a server somebody
+already started instead. Everything binds loopback, and `deploy/gdpyr-server.service` still never
+passes `--agent-api` (§4.1).
+
+**The metric vocabulary**, which is what an assertion's `metric` names:
+
+| Metric | Is |
+|---|---|
+| `events.<kind>.count` | how many of that event fired. A kind that never fired reads **zero**; a kind that does not exist **fails** |
+| `events.<kind>.<field>.<agg>` | an aggregate over one event field — `sum`, `mean`, `min`, `max`, `last`, `count` |
+| `events.<kind>.<agg>` | shorthand for that kind's own field (`damage` → `amount`, `kill` → `distance`) |
+| `observation.<field>` | an observation field by its published name, for the scenario's first seat |
+| `observation.<field>.<n>` | element *n* of a field that is a run — `observation.contacts.6` is the nearest contact's distance |
+| `observation.<seat id>.<field>` | the same, for a named seat, when a scenario holds more than one |
+| `observation.<field>.<agg>` | an aggregate over the episode, with the tick the extremum happened on |
+| `round.ticks`, `round.seconds` | how long the measured window ran |
+| `counters.pilot_fallbacks` | ticks a bot had to cover for, because the script had not acted (§2.1) |
+
+An observation field that answers to nothing **fails** rather than reading zero: the harness samples
+every field the schema publishes, so a name it does not know is a typo, and a typo that read as zero
+would be an assertion that passes for the wrong reason.
+
+**What a scalar claim means across a seed sweep** is stated once, in
+`tools/Gdpyr.Playtest/Assertions.cs`: a comparison and `between` are **per-episode invariants** and
+have to hold in every episode, while `percentile` and `over_seeds` are the two operators that talk
+about the distribution. That split is what makes "the round ends within 8–20 minutes over 20 seeds"
+the natural thing to write.
+
 ### 9.2 What makes it usable rather than merely possible
 
 - **It is synchronous.** `reset → step(n) → observe → assert` with no sleeps and no polling. Stepped
-  mode (§5.2) is what buys this; wall-clock waits in a test are how a suite becomes flaky.
+  mode (§5.2) is what buys this; wall-clock waits in a test are how a suite becomes flaky. The one
+  clock the harness waits on is the server's *port* opening, before any of the game has run.
 - **It reads back.** `observe` in JSON mode returns named fields, so an assertion is
   `observation.self.health`, not offset 37 of a float array.
-- **It fails with a trace.** Every run writes `trace-<seed>.jsonl`: every action, every event, the
-  `state_hash` per second. A failed assertion prints the tick it failed on and the path to the
-  trace, and the trace replays.
+- **It fails with a trace.** Every episode writes `trace-<scenario>-<seed>.jsonl`: the scenario
+  header (including whether the run was omniscient or unbounded), every scripted spawn, every
+  action, every event, and the `state_hash` once a second. A failed assertion prints the tick it
+  failed on, the seed it failed under, and the directory the traces are in.
+
+  **What "the trace replays" means, precisely.** It records everything needed to drive the run
+  again — the seed, the placements, and every action with the tick it was submitted on — and
+  re-running is re-running the scenario. What it is *not* is a promise of a byte-identical second
+  run, and it never could be: §3.1 is why. The `state_hash` line per second is in the trace to
+  measure that, not to hide it. There is deliberately no `--replay` flag pretending otherwise.
 - **It is honest about §3.** The assertion vocabulary has `between`, `percentile` and `over_seeds`
   precisely so that the natural thing to write is a distributional claim. There is deliberately no
   `assert_position_equals`.
 - **It needs no Godot install to author.** Scenario files are data; the schema is published at
   `welcome`. Only running one needs the exported headless server, which `scripts/export-server.sh`
-  already builds.
+  already builds. What a scenario file *means* — the parser, the metric vocabulary, the assertion
+  operators — is answered by `dotnet test` with no server and no engine, because those three files
+  are compiled into `Tests/Gdpyr.Tests.csproj` as well (`Tests/ScenarioTests.cs`).
 
 ### 9.3 The client, and the trainer
 
@@ -550,6 +679,8 @@ layout to be wrong. [`TRAINING.md`](TRAINING.md) is the whole story; the shape i
 | `Gdpyr.AgentClient` | `RLMatrix.Common` only | The protocol client, the schema-driven observation decoder, and `GdpyrGroundEnv : IEnvironmentAsync<float[]>`. No TorchSharp. |
 | `Gdpyr.Trainer` | the client + `RLMatrix` | `gdpyr-train`: PPO or DQN over one or more servers. Where libtorch is paid for. |
 | `Gdpyr.Probe` | the client only | `gdpyr-probe`: §3's divergence probe. Needs no libtorch, because the number it measures decides how every later assertion may be written. |
+| `Gdpyr.Playtest` | the client only | `gdpyr-playtest`: §9's scenario harness. No libtorch either — a regression run in CI must not pull two gigabytes down to find out whether the economy still works. |
+| `gdpyr_env/` | `numpy` only | A Gymnasium-shaped Python client in one module, for the Python RL ecosystem. Not a second implementation of the layout: it fetches the schema and decodes by name, and refuses a `schema_version` it does not know. |
 
 ```csharp
 var env = await GdpyrGroundEnv.CreateAsync(port: 7900, stepMul: 4, stepped: true);
@@ -591,8 +722,13 @@ The same rule the rest of the codebase follows: the interesting part is engine-f
 | Event ring: a reader that fell behind is told how much it lost; no record writes a duplicate JSON key | `Tests/AgentEventTests.cs` | M6 |
 | The external .NET client and the server agree on the framing, the buttons and the packed action, byte for byte | `Tests/AgentInteropTests.cs` | M6 |
 | `--agent-api` on a public address without a token is a start-up failure, not a warning | `Tests/LaunchOptionsTests.cs` | M6 |
-| Fog parity: the strategist observation contains exactly the peers `VisibilityService.IsVisibleTo` admits | `Tests/AgentObservationTests.cs` | M7 |
-| Scenario parser and the assertion vocabulary, including `between` and `over_seeds` | `Tests/ScenarioTests.cs` | M7 |
+| The strategist vector: 1,092 floats, tier and order one-hots, padding, truncation, bounds | `Tests/AgentObservationTests.cs` | M7 |
+| The strategist schema `welcome` publishes matches that encoder, block by block | `Tests/AgentObservationTests.cs` | M7 |
+| Fog parity: a peer nobody has seen is absent, a lost one is a ghost with its age, live sorts first | `Tests/AgentObservationTests.cs` | M7 |
+| Feature planes: the map-to-cell mapping, saturation, and that a clear keeps the passability probe | `Tests/AgentObservationTests.cs` | M7 |
+| Scenario parser: seeds, roster, seats, spawns, scripts, and every malformed field as a sentence | `Tests/ScenarioTests.cs` | M7 |
+| The metric vocabulary: counts, aggregates, the event shorthand, and a typo that fails rather than reading zero | `Tests/ScenarioTests.cs` | M7 |
+| The assertion vocabulary: `between`, `percentile`, `over_seeds`, and that nothing names a tick | `Tests/ScenarioTests.cs` | M7 |
 
 One test is not engine-free and is worth the exception: the **divergence probe** of §3 — two seeded
 600-tick episodes against one headless server, comparing `state_hash` per tick and reporting the
@@ -626,10 +762,24 @@ Six ground seats and one strategist, binary, no feature planes:
 ## 12. Open questions
 
 1. ~~**How far apart do two seeded episodes actually drift?**~~ **Answered, and the answer is
-   "immediately"** — §3.1. The follow-up question is the live one: *should* `reset` reproduce an
-   episode? Keying the seeded hashes on ticks since the round started rather than on the absolute
-   tick would make it so, at the cost of a change to `BotBrain` and to how bots play. It is worth
-   deciding before M7 writes assertions against either answer.
+   "immediately"** — §3.1. ~~*Should* `reset` reproduce an episode?~~ **Decided in M7: no, and the
+   seeded hashes stay keyed on the absolute tick.** Three reasons, in the order they matter.
+
+   - **It would not buy reproducibility.** `MoveAndSlide()` and `NavigationAgent3D` are the other
+     half of §3 and neither becomes deterministic because a hash was re-keyed. The assertion
+     vocabulary would still have to be distributional, so the change buys a property nothing is
+     allowed to depend on.
+   - **It would make every episode's noise identical, which is worse for the thing this is for.**
+     `Spread.Seed(peerId, salt, bucket)` with a round-relative bucket gives every episode the same
+     bot aim error, the same strafe and the same loiter point at the same moment. A policy trained
+     across episodes would see one fixed noise sequence instead of a distribution to generalize
+     over — and a playtest sweep over twenty seeds would be twenty runs of one script.
+   - **It costs a change to `BotBrain`, to `BotPilot` and to the tests around both**, for a
+     property that (per the first two) is not wanted.
+
+   So the `seed` on `reset` **labels** an episode and does not determine it, and M7's assertions
+   are written against that: `Tests/Scenarios/contact_acquisition.json` sweeps three seeds with
+   `over_seeds` and `percentile`, and there is deliberately no operator that names a tick.
 2. **How many headless instances fit on one box?** The debug HUD reports server frame time
    (`NETCODE.md` §8); take the number before planning a training run.
 3. **Is the ray fan the right local observation, or should it be a small occupancy patch?** 16 rays

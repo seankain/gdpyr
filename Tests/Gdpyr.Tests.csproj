@@ -29,6 +29,14 @@
          agent wire format are tested against each other rather than only against
          themselves (docs/AGENT_API.md §4). -->
     <Compile Include="../tools/Gdpyr.AgentClient/AgentProtocol.cs" />
+    <!-- The playtest harness's scenario parser, metric vocabulary and assertion
+         evaluator (tools/Gdpyr.Playtest). A scenario file is data and authoring one
+         needs no Godot install, so what one *means* is answered by `dotnet test`
+         with no server and no engine (docs/AGENT_API.md §9.1). The half that talks
+         to a socket — Runner, ServerProcess, Program — is deliberately left out. -->
+    <Compile Include="../tools/Gdpyr.Playtest/Scenario.cs" />
+    <Compile Include="../tools/Gdpyr.Playtest/Assertions.cs" />
+    <Compile Include="../tools/Gdpyr.Playtest/EpisodeMetrics.cs" />
   </ItemGroup>
 
   <ItemGroup>

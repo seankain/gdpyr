@@ -38,8 +38,15 @@ public static class AgentProtocol
 	/// Identifies the observation layout <c>welcome</c> publishes. A client that
 	/// does not recognise it must refuse to decode rather than misread a float
 	/// (docs/AGENT_API.md §4).
+	///
+	/// Bumped to <c>-2</c> by M7, which added the strategist vector, the feature
+	/// planes and the command vocabulary to what <c>welcome</c> publishes. The
+	/// ground layout is byte-for-byte what <c>-1</c> published, and a client that
+	/// only ever reads it would have been fine — but the version names the whole
+	/// published schema, and a client that could not tell whether the server it is
+	/// talking to has a strategist seat would have to find out by being refused.
 	/// </summary>
-	public const string SchemaVersion = "gdpyr-agent-obs-1";
+	public const string SchemaVersion = "gdpyr-agent-obs-2";
 
 	/// <summary>The u32 length prefix itself.</summary>
 	public const int LengthBytes = 4;

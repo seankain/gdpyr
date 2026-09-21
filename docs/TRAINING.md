@@ -260,10 +260,15 @@ That is a real finding and it has two consequences:
    20 seeds", not "the round ends on tick 51,204". §3 of the design has the full
    table. The `seed` on `reset` labels an episode and is echoed on `round_start`;
    it does not determine one.
-2. **If you want repeatable episodes, the change is to key those hashes on ticks
-   since the round started rather than on the absolute tick.** That touches
-   `BotBrain` and the tests around it and it changes how bots play, so it is a
-   deliberate decision for M7 and not a thing to slip into M6.
+2. **M7 considered keying those hashes on ticks since the round started, and
+   decided against it** (`AGENT_API.md` §12.1). It would not make an episode
+   reproducible — `MoveAndSlide()` and `NavigationAgent3D` are the other half of
+   the problem — and it would hand every episode the same bot aim error and the
+   same strafe at the same moment, so a policy would see one fixed noise sequence
+   instead of a distribution to generalize over. If you want repeatability badly
+   enough to pay for it anyway, the change is in `BotBrain`, `BotPilot` and the
+   tests around both, and you should expect your seed sweep to stop meaning what
+   it meant.
 
 ## 8. Security
 
@@ -320,10 +325,41 @@ implementations agree, byte for byte.
 
 ## 10. Strategist policies
 
-Not yet. `attach` with `policy: "strategist"` is refused with `not_implemented`
-rather than half-answered, and so is an `act` carrying a command list. The
-strategist observation (1,092 floats), the command list through
-`ServerIssueOrder` / `ServerQueueUnit`, the optional 32×32×4 feature planes and
-the scenario-file playtest harness are M7
-([`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) §M7,
-[`AGENT_API.md`](AGENT_API.md) §6.2, §9).
+Shipped in M7. `attach` with `policy: "strategist"` claims a strategist's chair,
+the observation is 1,092 floats behind the same `VisibilityService` a human
+strategist is behind, and an `act` carries a list of commands that run through
+the same `ServerIssueOrder` / `ServerQueueUnit` a person's RPC lands in
+([`AGENT_API.md`](AGENT_API.md) §6.2, §7.4).
+
+Three differences from a ground seat are worth knowing before you point a learner
+at one:
+
+- **The action is a command list, and it is consumed rather than held.** A ground
+  action repeats for the seat's `step_mul`, because that is what a held fire
+  button is; a command list run thirty times would queue thirty riflemen. A
+  strategist seat that submits nothing on a decision is a strategist that decided
+  to do nothing, and only falls back to `BotStrategist` once it goes quiet for
+  its grace window (§2.1).
+- **The APM cap is the ceiling that bites**, not the socket: eight commands a
+  second, spent when the tick runs the list. A policy emitting more is not
+  disconnected — the surplus is dropped and counted.
+- **The feature planes are the strategist's**, off by default: `config`
+  `{"feature_planes": true}` attaches a 32×32×4 grid to the observation frame
+  (§6.3). A ground policy asking for them does not get them; its spatial signal
+  is the ray fan in its own vector.
+
+`GdpyrGroundEnv` has no strategist twin in `tools/Gdpyr.AgentClient` yet: the
+discretization of a command list is a research decision rather than a plumbing
+one — how many barracks, how many unit groups, how coarse a target grid — and
+baking one in would be the same mistake as baking in a reward. What is there is
+`GdpyrConnection.AttachStrategistAsync` and `ActCommands`, which is the protocol
+without the opinion. `tools/gdpyr_env/` speaks both seats from Python.
+
+## 11. Playtests, which are not training
+
+A scenario file plays a scripted round against a headless server and asserts
+something about the result, with no display and nobody watching:
+`./scripts/playtest.sh Tests/Scenarios/rifle_lethality.json`. It shares this
+socket and nothing else — no libtorch, no learner, and a deterministic exit code
+([`AGENT_API.md`](AGENT_API.md) §9). If a training run stops learning, that is
+the first place to check whether the *game* changed under it.

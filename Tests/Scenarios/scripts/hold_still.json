@@ -1,0 +1,6 @@
+{
+  "repeat": true,
+  "steps": [
+    { "ticks": 60, "move": [0, 0], "look": { "dyaw": 0, "dpitch": 0 }, "buttons": [] }
+  ]
+}

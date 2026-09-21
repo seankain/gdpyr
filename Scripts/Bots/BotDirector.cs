@@ -82,8 +82,18 @@ public sealed class BotDirector
 			Reconcile();
 		}
 
+		AgentServer agents = AgentServer.Instance;
 		foreach (BotStrategist commander in _commanders.Values)
 		{
+			// The strategist half of the one branch the agent API adds to the game
+			// (docs/AGENT_API.md §2, §7.4): an attached seat's commands run instead of
+			// this bot's decision, and a seat whose policy has gone quiet falls back to
+			// the bot on this line.
+			if (agents != null && agents.TryCommand(commander.PeerId, tick))
+			{
+				continue;
+			}
+
 			commander.ServerTick(tick);
 		}
 	}

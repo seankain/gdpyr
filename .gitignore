@@ -25,3 +25,7 @@ mono_crash.*.json
 # above; this covers Tests/ and any plain .NET project added later.
 [Bb]in/
 [Oo]bj/
+
+# tools/gdpyr_env is a plain Python module; nothing about it is built.
+__pycache__/
+*.py[cod]

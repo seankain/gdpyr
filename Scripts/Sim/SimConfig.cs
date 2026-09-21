@@ -214,6 +214,15 @@ public static class SimConfig
 	/// <summary>Units one barracks may have on order at once.</summary>
 	public const int MaxBuildQueue = 24;
 
+	/// <summary>
+	/// Barracks one map may carry. A barracks is named by its index in the map's
+	/// <c>barracks</c> group on the wire, exactly as a resource node is, so this is
+	/// the width of that name rather than a level-design opinion — and it is the
+	/// width of the barracks block in a strategist's observation
+	/// (docs/AGENT_API.md §6.2).
+	/// </summary>
+	public const int MaxBarracks = 4;
+
 	// ---- fog of war (docs/NETCODE.md §6.2) ---------------------------------
 
 	/// <summary>

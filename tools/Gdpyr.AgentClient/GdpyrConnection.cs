@@ -8,6 +8,13 @@ using System.Threading.Tasks;
 
 namespace Gdpyr.AgentClient;
 
+/// <summary>Which observation space a frame is in (docs/AGENT_API.md §6).</summary>
+public enum GdpyrPolicy
+{
+	Ground = 0,
+	Strategist = 1,
+}
+
 /// <summary>What a seat's observation carries, decoded by the schema the server published.</summary>
 public sealed class GdpyrObservation
 {
@@ -15,13 +22,22 @@ public sealed class GdpyrObservation
 	public uint Tick;
 	public bool Omniscient;
 	public bool Unbounded;
+
+	/// <summary>Which layout <see cref="Values"/> is in, derived from how many floats arrived.</summary>
+	public GdpyrPolicy Policy;
+
 	public float[] Values = Array.Empty<float>();
+
+	/// <summary>The optional feature planes, or empty when the session did not ask for them.</summary>
+	public float[] Planes = Array.Empty<float>();
 
 	/// <summary>A named run of the vector, by the schema's field name.</summary>
 	public ReadOnlySpan<float> Field(GdpyrSchema schema, string name)
 	{
-		(int offset, int count) = schema.Field(name);
-		return offset < 0 ? ReadOnlySpan<float>.Empty : Values.AsSpan(offset, count);
+		(int offset, int count) = schema.Field(name, Policy);
+		return offset < 0 || offset + count > Values.Length
+			? ReadOnlySpan<float>.Empty
+			: Values.AsSpan(offset, count);
 	}
 
 	public float Scalar(GdpyrSchema schema, string name)
@@ -29,6 +45,43 @@ public sealed class GdpyrObservation
 		ReadOnlySpan<float> run = Field(schema, name);
 		return run.Length > 0 ? run[0] : 0f;
 	}
+}
+
+/// <summary>One command for a strategist seat (docs/AGENT_API.md §7.4).</summary>
+public sealed class GdpyrCommand
+{
+	/// <summary>One of order, build, cancel, rally, noop.</summary>
+	public string Cmd = "noop";
+
+	/// <summary>For an order: move, attack, patrol, defend, stop.</summary>
+	public string Kind;
+
+	public int[] Units;
+	public float[] Target;
+	public int TargetOwner;
+	public int Barracks;
+	public int Tier;
+
+	public static GdpyrCommand Build(int barracks, int tier) =>
+		new() { Cmd = "build", Barracks = barracks, Tier = tier };
+
+	public static GdpyrCommand Cancel(int barracks) => new() { Cmd = "cancel", Barracks = barracks };
+
+	public static GdpyrCommand Rally(int barracks, float x, float z) =>
+		new() { Cmd = "rally", Barracks = barracks, Target = new[] { x, z } };
+
+	public static GdpyrCommand Order(string kind, int[] units, float x, float z, int targetOwner = 0) =>
+		new() { Cmd = "order", Kind = kind, Units = units, Target = new[] { x, z }, TargetOwner = targetOwner };
+}
+
+/// <summary>What a <c>step</c> said about one attached seat (docs/AGENT_API.md §5.2).</summary>
+public sealed class GdpyrSeatStatus
+{
+	public int Seat;
+	public bool Alive;
+
+	/// <summary>Ticks this seat's bot had to cover for, because the policy had not acted.</summary>
+	public int PilotFallbacks;
 }
 
 /// <summary>One record off the event stream (docs/AGENT_API.md §8).</summary>
@@ -53,18 +106,49 @@ public sealed class GdpyrEvent
 public sealed class GdpyrSchema
 {
 	private readonly Dictionary<string, (int Offset, int Count)> _fields = new();
+	private readonly Dictionary<string, (int Offset, int Count)> _strategistFields = new();
 
 	public string Version = string.Empty;
+
+	/// <summary>Floats in a ground observation.</summary>
 	public int Floats;
+
 	public int Bytes;
+
+	/// <summary>Floats in a strategist observation, or 0 on a server that publishes none.</summary>
+	public int StrategistFloats;
+
+	/// <summary>Floats in one feature-plane grid, or 0 when the server publishes no planes.</summary>
+	public int PlaneFloats;
+
+	public int PlaneSize;
+
+	public int PlaneChannels;
+
 	public int TickRate = 60;
 
 	public IReadOnlyCollection<string> Names => _fields.Keys;
 
-	public (int Offset, int Count) Field(string name) =>
-		_fields.TryGetValue(name, out (int, int) found) ? found : (-1, 0);
+	public IReadOnlyCollection<string> StrategistNames => _strategistFields.Keys;
+
+	public (int Offset, int Count) Field(string name) => Field(name, GdpyrPolicy.Ground);
+
+	public (int Offset, int Count) Field(string name, GdpyrPolicy policy)
+	{
+		Dictionary<string, (int Offset, int Count)> table =
+			policy == GdpyrPolicy.Strategist ? _strategistFields : _fields;
+
+		return table.TryGetValue(name, out (int, int) found) ? found : (-1, 0);
+	}
+
+	/// <summary>How many floats a vector in this space carries.</summary>
+	public int FloatsFor(GdpyrPolicy policy) =>
+		policy == GdpyrPolicy.Strategist ? StrategistFloats : Floats;
 
 	internal void Add(string name, int offset, int count) => _fields[name] = (offset, count);
+
+	internal void AddStrategist(string name, int offset, int count) =>
+		_strategistFields[name] = (offset, count);
 }
 
 /// <summary>
@@ -89,6 +173,8 @@ public sealed class GdpyrConnection : IDisposable
 
 	/// <summary>Events held before the oldest is dropped. Two full rings of the server's own log.</summary>
 	private const int MaxQueuedEvents = 4096;
+
+	private readonly List<GdpyrSeatStatus> _lastStep = new();
 
 	private byte[] _buffer = new byte[1 << 16];
 	private int _length;
@@ -116,6 +202,9 @@ public sealed class GdpyrConnection : IDisposable
 	public int GraceTicks { get; private set; }
 
 	public uint Tick { get; private set; }
+
+	/// <summary>What the last <c>step</c> reported about the seats this session holds.</summary>
+	public IReadOnlyList<GdpyrSeatStatus> LastStep => _lastStep;
 
 	/// <summary>Connects and completes the handshake.</summary>
 	public static async Task<GdpyrConnection> ConnectAsync(string host = "127.0.0.1", int port = 7900,
@@ -183,6 +272,23 @@ public sealed class GdpyrConnection : IDisposable
 				field.GetProperty("count").GetInt32());
 		}
 
+		if (schema.TryGetProperty("strategist_observation", out JsonElement strategist))
+		{
+			read.StrategistFloats = strategist.GetProperty("floats").GetInt32();
+			foreach (JsonElement field in strategist.GetProperty("fields").EnumerateArray())
+			{
+				read.AddStrategist(field.GetProperty("name").GetString(),
+					field.GetProperty("offset").GetInt32(), field.GetProperty("count").GetInt32());
+			}
+		}
+
+		if (schema.TryGetProperty("feature_planes", out JsonElement planes))
+		{
+			read.PlaneFloats = planes.GetProperty("floats").GetInt32();
+			read.PlaneSize = planes.GetProperty("size").GetInt32();
+			read.PlaneChannels = planes.GetProperty("channels").GetInt32();
+		}
+
 		return read;
 	}
 
@@ -210,6 +316,141 @@ public sealed class GdpyrConnection : IDisposable
 		return response.GetProperty("seat").GetInt32();
 	}
 
+	/// <summary>
+	/// Claims a strategist seat (docs/AGENT_API.md §2.2, §7.4). Returns its peer id.
+	///
+	/// The team is implied: there is no strategist seat on the ground force.
+	/// </summary>
+	public async Task<int> AttachStrategistAsync(int stepMul = 30, int peerId = 0,
+		CancellationToken cancel = default)
+	{
+		JsonElement response = await RequestAsync(writer =>
+		{
+			writer.WriteString("op", "attach");
+			writer.WriteString("team", "strategist");
+			writer.WriteString("policy", "strategist");
+			writer.WriteNumber("step_mul", stepMul);
+			if (peerId != 0)
+			{
+				writer.WriteNumber("peer_id", peerId);
+			}
+		}, cancel).ConfigureAwait(false);
+
+		return response.GetProperty("seat").GetInt32();
+	}
+
+	/// <summary>
+	/// Submits one strategist decision: a list of commands applied in order, rate
+	/// limited server-side by the APM cap (docs/AGENT_API.md §7.3, §7.4).
+	///
+	/// Fire-and-forget, like a ground action. A command that names units the seat
+	/// does not own is refused by the same check a person's order gets and counted
+	/// in <c>UnitManager.RejectedOrders</c>, so a policy emitting garbage shows up
+	/// rather than silently doing nothing.
+	/// </summary>
+	public void ActCommands(int seat, IEnumerable<GdpyrCommand> commands, uint tick = 0) =>
+		Write(AgentFrameKind.Request, 0, Body(writer =>
+		{
+			writer.WriteString("op", "act");
+			writer.WriteNumber("seat", seat);
+			writer.WriteNumber("tick", tick);
+			writer.WriteStartObject("action");
+			writer.WriteStartArray("commands");
+			foreach (GdpyrCommand command in commands)
+			{
+				WriteCommand(writer, command);
+			}
+
+			writer.WriteEndArray();
+			writer.WriteEndObject();
+		}));
+
+	private static void WriteCommand(Utf8JsonWriter writer, GdpyrCommand command)
+	{
+		writer.WriteStartObject();
+		writer.WriteString("cmd", command.Cmd ?? "noop");
+
+		if (command.Kind != null)
+		{
+			writer.WriteString("kind", command.Kind);
+		}
+
+		if (command.Units != null)
+		{
+			writer.WriteStartArray("units");
+			foreach (int unit in command.Units)
+			{
+				writer.WriteNumberValue(unit);
+			}
+
+			writer.WriteEndArray();
+		}
+
+		if (command.Target != null)
+		{
+			writer.WriteStartArray("target");
+			foreach (float value in command.Target)
+			{
+				writer.WriteNumberValue(value);
+			}
+
+			writer.WriteEndArray();
+		}
+
+		if (command.TargetOwner != 0)
+		{
+			writer.WriteNumber("target_owner", command.TargetOwner);
+		}
+
+		writer.WriteNumber("barracks", command.Barracks);
+		writer.WriteNumber("tier", command.Tier);
+		writer.WriteEndObject();
+	}
+
+	/// <summary>
+	/// Places one of this session's seats, or a unit, where a scenario asked for it
+	/// (docs/AGENT_API.md §9.1). Scenario plumbing, not something a policy uses.
+	/// </summary>
+	public Task SpawnSeatAsync(int seat, float[] at, float yaw = 0f, float pitch = 0f,
+		CancellationToken cancel = default) =>
+		RequestAsync(writer =>
+		{
+			writer.WriteString("op", "spawn");
+			writer.WriteNumber("seat", seat);
+			WriteVector(writer, "at", at);
+			writer.WriteStartArray("look");
+			writer.WriteNumberValue(yaw);
+			writer.WriteNumberValue(pitch);
+			writer.WriteEndArray();
+		}, cancel);
+
+	/// <summary>Puts a unit on the field for a scenario. Returns its unit id.</summary>
+	public async Task<int> SpawnUnitAsync(string unit, string team, float[] at, string order = "none",
+		CancellationToken cancel = default)
+	{
+		JsonElement response = await RequestAsync(writer =>
+		{
+			writer.WriteString("op", "spawn");
+			writer.WriteString("unit", unit ?? "infantry");
+			writer.WriteString("team", team ?? "strategist");
+			writer.WriteString("order", order ?? "none");
+			WriteVector(writer, "at", at);
+		}, cancel).ConfigureAwait(false);
+
+		return response.GetProperty("unit").GetInt32();
+	}
+
+	private static void WriteVector(Utf8JsonWriter writer, string name, float[] values)
+	{
+		writer.WriteStartArray(name);
+		for (int i = 0; values != null && i < values.Length; i++)
+		{
+			writer.WriteNumberValue(values[i]);
+		}
+
+		writer.WriteEndArray();
+	}
+
 	public Task DetachAsync(int seat, CancellationToken cancel = default) =>
 		RequestAsync(writer =>
 		{
@@ -219,12 +460,13 @@ public sealed class GdpyrConnection : IDisposable
 
 	/// <summary>Switches this session between real time and stepped (docs/AGENT_API.md §5).</summary>
 	public Task ConfigureAsync(bool stepped, int stepTimeoutMilliseconds = 10_000,
-		CancellationToken cancel = default) =>
+		bool featurePlanes = false, CancellationToken cancel = default) =>
 		RequestAsync(writer =>
 		{
 			writer.WriteString("op", "config");
 			writer.WriteString("mode", stepped ? "stepped" : "realtime");
 			writer.WriteNumber("step_timeout_ms", stepTimeoutMilliseconds);
+			writer.WriteBoolean("feature_planes", featurePlanes);
 		}, cancel);
 
 	/// <summary>
@@ -244,6 +486,23 @@ public sealed class GdpyrConnection : IDisposable
 		}, cancel).ConfigureAwait(false);
 
 		Tick = response.GetProperty("tick").GetUInt32();
+
+		_lastStep.Clear();
+		if (response.TryGetProperty("seats", out JsonElement seats) && seats.ValueKind == JsonValueKind.Array)
+		{
+			foreach (JsonElement seat in seats.EnumerateArray())
+			{
+				_lastStep.Add(new GdpyrSeatStatus
+				{
+					Seat = seat.TryGetProperty("seat", out JsonElement id) ? id.GetInt32() : 0,
+					Alive = seat.TryGetProperty("alive", out JsonElement alive) && alive.GetBoolean(),
+					PilotFallbacks = seat.TryGetProperty("pilot_fallbacks", out JsonElement fallbacks)
+						? fallbacks.GetInt32()
+						: 0,
+				});
+			}
+		}
+
 		return response.TryGetProperty("truncated", out JsonElement truncated) && truncated.GetBoolean();
 	}
 
@@ -308,6 +567,23 @@ public sealed class GdpyrConnection : IDisposable
 		return _observations.Dequeue();
 	}
 
+	/// <summary>
+	/// The next pushed observation, or false when none has arrived. The non-blocking
+	/// half of <see cref="NextObservationAsync"/>, for a loop that steps the
+	/// simulation itself and reads back whatever that produced.
+	/// </summary>
+	public bool TryDequeueObservation(out GdpyrObservation observation)
+	{
+		if (_observations.Count == 0)
+		{
+			observation = null;
+			return false;
+		}
+
+		observation = _observations.Dequeue();
+		return true;
+	}
+
 	/// <summary>Everything on the event stream that has arrived and not yet been read.</summary>
 	public IEnumerable<GdpyrEvent> DrainEvents()
 	{
@@ -317,13 +593,33 @@ public sealed class GdpyrConnection : IDisposable
 		}
 	}
 
-	/// <summary>Reads whatever has arrived without blocking, so events and observations queue up.</summary>
+	/// <summary>
+	/// Reads whatever has arrived without blocking, so events and observations queue
+	/// up.
+	///
+	/// It files every frame already in the read buffer first and only then asks the
+	/// socket, and it never asks the socket for a frame that has not arrived. The
+	/// obvious spelling — <c>while (DataAvailable || TryDecodeBuffered(out _, …))</c>
+	/// — is wrong, and quietly: <see cref="TryDecodeBuffered"/> *consumes* the frame
+	/// it decodes, so testing it in a condition and discarding the result drops a
+	/// frame and then blocks for the next one.
+	/// </summary>
 	public async Task PollAsync(CancellationToken cancel = default)
 	{
-		while (_stream.DataAvailable || TryDecodeBuffered(out _, out _, out _))
+		while (true)
 		{
-			(AgentFrameKind kind, uint _, byte[] body) = await ReadFrameAsync(cancel).ConfigureAwait(false);
-			Park(kind, body);
+			if (TryDecodeBuffered(out AgentFrameKind kind, out uint _, out byte[] body))
+			{
+				Park(kind, body);
+				continue;
+			}
+
+			if (!_stream.DataAvailable)
+			{
+				return;
+			}
+
+			await FillAsync(cancel).ConfigureAwait(false);
 		}
 	}
 
@@ -434,24 +730,61 @@ public sealed class GdpyrConnection : IDisposable
 		}
 	}
 
+	/// <summary>
+	/// Decodes one packed observation.
+	///
+	/// Which of the two vectors arrived is read off the frame rather than tracked
+	/// per seat: the header says whether the planes are attached (bit 2), and what
+	/// is left over matches exactly one of the two float counts the schema
+	/// published. A frame that matches neither is a frame this client refuses to
+	/// guess at, which is the same posture the schema version takes
+	/// (docs/AGENT_API.md §4).
+	/// </summary>
 	private GdpyrObservation DecodeObservation(byte[] body)
 	{
 		const int header = 12;
-		if (body.Length < header + (Schema.Floats * 4))
+		if (body.Length < header + 4)
 		{
-			throw new InvalidOperationException(
-				$"observation is {body.Length} bytes; the schema says {header + Schema.Bytes}");
+			throw new InvalidOperationException($"observation is {body.Length} bytes; it carries no vector");
 		}
 
 		int seat = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(body);
 		ushort flags = System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(body.AsSpan(4));
 		uint tick = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(body.AsSpan(8));
 
-		var values = new float[Schema.Floats];
+		bool planes = (flags & 4) != 0;
+		int total = (body.Length - header) / 4;
+		int planeFloats = planes ? Schema.PlaneFloats : 0;
+		int vector = total - planeFloats;
+
+		GdpyrPolicy policy;
+		if (vector == Schema.Floats)
+		{
+			policy = GdpyrPolicy.Ground;
+		}
+		else if (Schema.StrategistFloats > 0 && vector == Schema.StrategistFloats)
+		{
+			policy = GdpyrPolicy.Strategist;
+		}
+		else
+		{
+			throw new InvalidOperationException(
+				$"observation carries {vector} floats; the schema publishes {Schema.Floats} for a ground"
+				+ $" seat and {Schema.StrategistFloats} for a strategist");
+		}
+
+		var values = new float[vector];
 		for (int i = 0; i < values.Length; i++)
 		{
 			values[i] = System.Buffers.Binary.BinaryPrimitives.ReadSingleLittleEndian(
 				body.AsSpan(header + (i * 4)));
+		}
+
+		var grid = new float[planeFloats];
+		for (int i = 0; i < grid.Length; i++)
+		{
+			grid[i] = System.Buffers.Binary.BinaryPrimitives.ReadSingleLittleEndian(
+				body.AsSpan(header + ((vector + i) * 4)));
 		}
 
 		Tick = tick;
@@ -461,7 +794,9 @@ public sealed class GdpyrConnection : IDisposable
 			Tick = tick,
 			Omniscient = (flags & 1) != 0,
 			Unbounded = (flags & 2) != 0,
+			Policy = policy,
 			Values = values,
+			Planes = grid,
 		};
 	}
 
@@ -503,22 +838,28 @@ public sealed class GdpyrConnection : IDisposable
 				return (kind, correlation, body);
 			}
 
-			if (_length == _buffer.Length)
-			{
-				Array.Resize(ref _buffer, Math.Min(_buffer.Length * 2, AgentProtocol.MaxFrameBytes));
-			}
-
-			int read = await _stream
-				.ReadAsync(_buffer.AsMemory(_length, _buffer.Length - _length), cancel)
-				.ConfigureAwait(false);
-
-			if (read <= 0)
-			{
-				throw new InvalidOperationException("the gdpyr agent channel closed");
-			}
-
-			_length += read;
+			await FillAsync(cancel).ConfigureAwait(false);
 		}
+	}
+
+	/// <summary>One read into the buffer, growing it first when it is full.</summary>
+	private async Task FillAsync(CancellationToken cancel)
+	{
+		if (_length == _buffer.Length)
+		{
+			Array.Resize(ref _buffer, Math.Min(_buffer.Length * 2, AgentProtocol.MaxFrameBytes));
+		}
+
+		int read = await _stream
+			.ReadAsync(_buffer.AsMemory(_length, _buffer.Length - _length), cancel)
+			.ConfigureAwait(false);
+
+		if (read <= 0)
+		{
+			throw new InvalidOperationException("the gdpyr agent channel closed");
+		}
+
+		_length += read;
 	}
 
 	private bool TryDecodeBuffered(out AgentFrameKind kind, out uint correlation, out byte[] body)

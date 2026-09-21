@@ -680,6 +680,69 @@ public partial class UnitManager : Node
 	}
 
 	/// <summary>
+	/// Server-side: takes the last unit off a queue on behalf of a peer with no
+	/// client. The parity half of <see cref="RequestCancelBuild"/>, which assumes
+	/// the local peer and therefore cannot serve a strategist policy
+	/// (docs/AGENT_API.md §2, §7.4).
+	/// </summary>
+	public void ServerCancelBuild(int peerId, int barracksIndex)
+	{
+		if (NetworkManager.Instance is { IsClient: true })
+		{
+			return;
+		}
+
+		ApplyCancelBuild(peerId, barracksIndex);
+	}
+
+	/// <summary>Server-side: moves a barracks' rally point. See <see cref="ServerCancelBuild"/>.</summary>
+	public void ServerSetRally(int peerId, int barracksIndex, Vector3 point)
+	{
+		if (NetworkManager.Instance is { IsClient: true })
+		{
+			return;
+		}
+
+		ApplyRally(peerId, barracksIndex, point);
+	}
+
+	/// <summary>
+	/// Puts a unit on the field where a scenario asked for one, outside the build
+	/// queue and without charging anybody (docs/AGENT_API.md §9.1).
+	///
+	/// This is the one entry point in the game that exists only for the playtest
+	/// harness, and it is deliberately narrow: no ownership check, because there is
+	/// no owner to check — the caller is the agent socket, which is a trust
+	/// boundary of its own and is refused on a public bind without a token
+	/// (§4.1). Returns the unit id, or 0 when the field is full.
+	/// </summary>
+	public ushort ServerPlaceUnit(byte definitionId, Vector3 position, Team team, OrderKind order)
+	{
+		if (NetworkManager.Instance is { IsClient: true } || !UnitCatalog.TrySanitize(definitionId, out byte id))
+		{
+			return 0;
+		}
+
+		Unit unit = SpawnUnit(id, position, team);
+		if (unit == null)
+		{
+			return 0;
+		}
+
+		unit.Order = order == OrderKind.None || order == OrderKind.Stop
+			? UnitOrder.Hold(position)
+			: new UnitOrder
+			{
+				Kind = order,
+				Target = position,
+				Anchor = position,
+				TargetOwnerId = OwnerId.None,
+			};
+
+		return unit.UnitId;
+	}
+
+	/// <summary>
 	/// Validates and applies an order. Every one of these checks is answering a
 	/// byte a client chose (docs/NETCODE.md §1, §6.3): is the sender a strategist,
 	/// does the order type exist, does the sender's side own each unit.
@@ -1116,6 +1179,17 @@ public partial class UnitManager : Node
 		}
 
 		_barracks.Sort((a, b) => string.CompareOrdinal(a.Name, b.Name));
+
+		// Capped exactly as the resource nodes are: the index is what an order names
+		// on the wire, and it is the width of the barracks block in a strategist's
+		// observation (docs/AGENT_API.md §6.2).
+		if (_barracks.Count > SimConfig.MaxBarracks)
+		{
+			GD.PushWarning($"[rts] {_barracks.Count} barracks; only the first {SimConfig.MaxBarracks}"
+				+ " are addressable on the wire");
+			_barracks.RemoveRange(SimConfig.MaxBarracks, _barracks.Count - SimConfig.MaxBarracks);
+		}
+
 		_barracksStatus = new BarracksStatus[_barracks.Count];
 
 		if (_barracks.Count == 0)
