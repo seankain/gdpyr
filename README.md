@@ -11,6 +11,7 @@ dedicated-server authoritative.
   server, in C#, with [RLMatrix](https://github.com/asieradzk/RL_Matrix)
 - [`docs/RL_ARCHITECTURE.md`](docs/RL_ARCHITECTURE.md) — which algorithm to reach for in 2026, what
   changed since PPO, and the order to run things in here
+- [`docs/LAN.md`](docs/LAN.md) — hosting a room of machines from a checkout, with a dev build
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — AWS EC2 dedicated-server runbook
 
 ## Layout
@@ -53,6 +54,9 @@ Godot consumes its own arguments first, so the game's arguments go after a bare 
 
 Default port is 7777/UDP. A dedicated-server export with no mode flag defaults to
 `--server` rather than to offline.
+
+Hosting for other people on the same network — addresses, the one firewall rule, seats and bots,
+and what a LAN hides — is [`docs/LAN.md`](docs/LAN.md); no export needed.
 
 Two more flags change how many computer players the authority keeps around:
 
