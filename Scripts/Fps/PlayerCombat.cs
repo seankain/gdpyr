@@ -30,7 +30,27 @@ public sealed class PlayerCombat
 
 	public int Health { get; private set; } = SimConfig.MaxHealth;
 
-	public bool IsAlive => Health > 0;
+	/// <summary>
+	/// Which side this player is on (docs/IMPLEMENTATION_PLAN.md §M3).
+	///
+	/// The server's copy is <see cref="Match.TeamService"/>'s and is mirrored here;
+	/// a client's is driven by the team bit in the player snapshot, which is why it
+	/// is a plain setter rather than something only the server may write
+	/// (docs/NETCODE.md §7).
+	/// </summary>
+	public Team Team { get; set; } = Team.GroundForce;
+
+	/// <summary>
+	/// A strategist has no body on the field. Rather than a second lifecycle for a
+	/// character that is present but not playing, they are simply never alive: the
+	/// simulation already feeds a character that is not alive nothing but its look
+	/// angles, hides it, takes it off the player collision layer and refuses to
+	/// damage it. Switching sides is then one assignment in each direction.
+	/// </summary>
+	public bool IsAlive => Team == Team.GroundForce && Health > 0;
+
+	/// <summary>True for a player who is on the ground and has been killed.</summary>
+	public bool IsDowned => Team == Team.GroundForce && Health <= 0;
 
 	/// <summary>The tick a dead player comes back on. Only meaningful while dead.</summary>
 	public uint RespawnTick { get; set; }
@@ -116,10 +136,11 @@ public sealed class PlayerCombat
 		Equip(PendingLoadout);
 	}
 
-	/// <summary>Client-side: takes the server's word for health and ammunition.</summary>
+	/// <summary>Client-side: takes the server's word for health, ammunition and side.</summary>
 	public void ApplyAuthoritative(byte health, byte ammo, byte flags, uint ackTick, bool isLocal)
 	{
 		Health = health;
+		Team = WeaponFlags.TeamOf(flags);
 
 		int slot = WeaponFlags.Slot(flags);
 		if (!isLocal)
@@ -141,7 +162,7 @@ public sealed class PlayerCombat
 		}
 	}
 
-	public byte SnapshotFlags => WeaponFlags.Pack(Slot, Weapons[Slot].IsReloading);
+	public byte SnapshotFlags => WeaponFlags.Pack(Slot, Weapons[Slot].IsReloading, Team);
 
 	public byte SnapshotAmmo => (byte)Mathf.Clamp(Weapons[Slot].Ammo, 0, byte.MaxValue);
 

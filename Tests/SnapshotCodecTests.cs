@@ -19,7 +19,7 @@ public class SnapshotCodecTests
 		InputBufferDepth = 4,
 		Health = 73,
 		Ammo = 17,
-		WeaponFlags = Sim.WeaponFlags.Pack(2, reloading: true),
+		WeaponFlags = Sim.WeaponFlags.Pack(2, reloading: true, Team.GroundForce),
 	};
 
 	[Fact]

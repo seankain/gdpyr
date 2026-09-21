@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Gdpyr.Core;
 using Gdpyr.Fps;
 using Gdpyr.Net;
+using Gdpyr.Rts;
 using Gdpyr.Sim;
 using Gdpyr.Ui;
 using Godot;
@@ -53,7 +54,7 @@ public partial class CombatManager : Node
 	private const int MaxPendingMessages = 64;
 
 	/// <summary>Bytes counted for the match-state RPC, for the bandwidth HUD.</summary>
-	private const int MatchStateBytes = 18;
+	private const int MatchStateBytes = 22;
 
 	private readonly Dictionary<int, PlayerCombat> _players = new();
 	private readonly List<PlayerCombat> _ordered = new();
@@ -67,14 +68,24 @@ public partial class CombatManager : Node
 	private GameModeDefinition _gameMode;
 	private ProjectileView _view;
 	private CombatHud _hud;
+	private TeamSelect _teamSelect;
+	private StrategistController _strategist;
 
 	private uint _nextPredictedId = 1;
 	private uint _replicatedMatchVersion;
+	private uint _replicatedPointsVersion;
 	private uint _intermissionEndTick;
 	private bool _intermissionArmed;
 
 	/// <summary>The round. Server-authoritative; clients hold a replicated copy.</summary>
 	public MatchState Match { get; } = new();
+
+	/// <summary>
+	/// Who is on which side. Server-side: a client learns its own team from the
+	/// snapshot's flag byte and everyone else's the same way
+	/// (docs/NETCODE.md §7), so this dictionary is only ever consulted here.
+	/// </summary>
+	public TeamService Teams { get; } = new();
 
 	/// <summary>Projectiles in flight in this process. For the net HUD (docs/NETCODE.md §8).</summary>
 	public int LiveProjectiles => _projectiles?.LiveCount ?? 0;
@@ -130,6 +141,12 @@ public partial class CombatManager : Node
 		_players[peerId] = combat;
 		_ordered.Add(combat);
 
+		if (NetworkManager.Instance is { IsServer: true })
+		{
+			// Everyone arrives on the ground; the strategist slot is opted into.
+			combat.Team = Teams.Assign(peerId, Team.GroundForce);
+		}
+
 		if (isLocal)
 		{
 			Local = combat;
@@ -141,6 +158,8 @@ public partial class CombatManager : Node
 
 	public void Unregister(int peerId)
 	{
+		Teams.Remove(peerId);
+
 		if (!_players.Remove(peerId, out PlayerCombat combat))
 		{
 			return;
@@ -150,17 +169,31 @@ public partial class CombatManager : Node
 		if (Local == combat)
 		{
 			Local = null;
+			SyncLocalRole();
 		}
 	}
 
 	public PlayerCombat Find(int peerId) => _players.GetValueOrDefault(peerId);
 
 	/// <summary>
+	/// The roster, as an index rather than an enumerator: <see cref="Rts.UnitManager"/>
+	/// walks it once per unit scan, and the plan is explicit that no per-entity query
+	/// may allocate or scan the scene (docs/IMPLEMENTATION_PLAN.md §1, §6).
+	/// </summary>
+	public int PlayerCount => _ordered.Count;
+
+	public PlayerCombat PlayerAt(int index) => index >= 0 && index < _ordered.Count ? _ordered[index] : null;
+
+	/// <summary>
 	/// Whether this peer's character should be simulating its own movement. A dead
 	/// player is fed a neutral frame instead of their input, on the server and on
-	/// their own client alike, so the two agree about a corpse standing still.
+	/// their own client alike, so the two agree about a corpse standing still. A
+	/// strategist is never alive, which is how their body comes to stand still too.
 	/// </summary>
 	public bool IsAlive(int peerId) => Find(peerId)?.IsAlive ?? true;
+
+	/// <summary>Which side a peer is on. Unknown peers are on the ground, like everyone else by default.</summary>
+	public Team TeamOf(int peerId) => Find(peerId)?.Team ?? Team.GroundForce;
 
 	// ---- server ------------------------------------------------------------
 
@@ -185,14 +218,17 @@ public partial class CombatManager : Node
 		}
 
 		combat.ShotsFired++;
-		ShotsFired++;
 
 		if (stats.IsMelee)
 		{
+			ShotsFired++;
 			ResolveMelee(combat, stats, tick);
 			return;
 		}
 
+		// The process-wide counter is bumped by SpawnProjectile, which is also what
+		// a unit's shot goes through, so the HUD's "shots fired" is every round this
+		// process put in the air and not only the players'.
 		Fire(combat, tick);
 	}
 
@@ -234,30 +270,52 @@ public partial class CombatManager : Node
 	private void Fire(PlayerCombat combat, uint tick)
 	{
 		byte definitionId = combat.EquippedDefinitionId;
-		Vector3 origin = combat.Character.EyePosition;
-		Vector3 direction = combat.Character.AimDirection;
+
+		// The cone is applied from the weapon state the step just advanced, so the
+		// owning client's predicted tracer computes the identical direction from the
+		// identical shot index (docs/IMPLEMENTATION_PLAN.md §7).
+		Vector3 direction = WeaponSim.FireDirection(combat.Equipped, combat.EquippedStats, combat.PeerId,
+			combat.Character.AimDirection);
 
 		// Lag compensation, the cheap way (docs/NETCODE.md §4.3): the round starts its
 		// life the shooter's one-way latency further along, so it arrives where they
 		// aimed rather than where they would have had to lead to allow for the link.
-		uint id = _projectiles.Spawn(tick, combat.PeerId, definitionId, origin, direction,
-			combat.LagCompensationTicks);
+		SpawnProjectile(tick, OwnerId.ForPeer(combat.PeerId), definitionId, combat.Character.EyePosition,
+			direction, combat.LagCompensationTicks);
+	}
+
+	/// <summary>
+	/// Puts one authoritative round in the air and tells every client about it.
+	///
+	/// Shared by players and by units, because units fire the *same* projectiles
+	/// (docs/IMPLEMENTATION_PLAN.md §M3): one pool, one integrator, one spawn
+	/// message, and one place where "what does a shot cost on the wire" is answered.
+	/// <paramref name="ownerId"/> is an <see cref="OwnerId"/>, so it names either.
+	/// </summary>
+	public uint SpawnProjectile(uint tick, int ownerId, byte definitionId, Vector3 origin, Vector3 direction,
+		int catchUpTicks)
+	{
+		uint id = _projectiles.Spawn(tick, ownerId, definitionId, origin, direction, catchUpTicks);
 
 		if (id == 0)
 		{
-			GD.PushWarning($"[combat] projectile pool full; dropped a shot from peer {combat.PeerId}");
-			return;
+			GD.PushWarning($"[combat] projectile pool full; dropped a shot from owner {ownerId}");
+			return 0;
 		}
+
+		ShotsFired++;
 
 		Broadcast(MethodName.ServerProjectileSpawn, ProjectileCodec.EncodeSpawn(new ProjectileSpawn
 		{
 			Id = id,
 			SpawnTick = tick,
-			OwnerPeerId = combat.PeerId,
+			OwnerPeerId = ownerId,
 			DefinitionId = definitionId,
 			Origin = origin,
 			Direction = direction,
 		}));
+
+		return id;
 	}
 
 	/// <summary>
@@ -291,10 +349,32 @@ public partial class CombatManager : Node
 			}
 		}
 
+		// Units are not rewound: they have no client whose view of them a swing has to
+		// be validated against, and at 4.5 m/s half a second of rewind is worth two
+		// metres of a capsule that is 0.8 m wide.
+		Unit unitVictim = null;
+		if (UnitManager.Instance is { } units)
+		{
+			unitVictim = units.QuerySegment(origin, to, stats.SweepRadiusMeters,
+				OwnerId.ForPeer(attacker.PeerId), attacker.Team, ref nearest, out Vector3 unitPoint);
+
+			if (unitVictim != null)
+			{
+				// Nearer than whatever the player loop found, or QuerySegment would not
+				// have returned it.
+				victim = null;
+				point = unitPoint;
+			}
+		}
+
 		HitFlags flags = HitFlags.Melee;
 		if (victim != null)
 		{
-			flags |= Damage(victim, stats.Damage, attacker, tick);
+			flags |= Damage(victim, stats.Damage, attacker, OwnerId.ForPeer(attacker.PeerId), tick);
+		}
+		else if (unitVictim != null)
+		{
+			flags |= DamageUnit(unitVictim, stats.Damage, attacker, tick);
 		}
 		else if (!blocked)
 		{
@@ -307,7 +387,7 @@ public partial class CombatManager : Node
 		{
 			Id = 0,
 			Point = point,
-			VictimPeerId = victim?.PeerId ?? 0,
+			VictimPeerId = victim?.PeerId ?? (unitVictim != null ? OwnerId.ForUnit(unitVictim.UnitId) : 0),
 			Flags = flags,
 		}));
 	}
@@ -339,6 +419,8 @@ public partial class CombatManager : Node
 	private void ResolveSegment(in ProjectileSegment segment, uint tick)
 	{
 		ProjectileStats stats = _projectiles.StatsFor(segment.DefinitionId);
+		int ownerId = segment.OwnerPeerId;
+		Team ownerTeam = TeamOfOwner(ownerId);
 
 		float nearest = WorldHitFraction(segment.From, segment.To, out Vector3 point, out bool blocked);
 		PlayerCombat victim = null;
@@ -349,7 +431,7 @@ public partial class CombatManager : Node
 
 			// The shooter's own capsule contains the muzzle, so a round would kill its
 			// owner on the tick it was fired.
-			if (target.PeerId == segment.OwnerPeerId || !target.IsAlive)
+			if (OwnerId.ForPeer(target.PeerId) == ownerId || !target.IsAlive)
 			{
 				continue;
 			}
@@ -369,6 +451,22 @@ public partial class CombatManager : Node
 			}
 		}
 
+		// Units are resolved after players and against the same fraction, so whichever
+		// the round reaches first wins however they are ordered in memory.
+		Unit unitVictim = null;
+		if (UnitManager.Instance is { } units)
+		{
+			unitVictim = units.QuerySegment(segment.From, segment.To, segment.SweepRadius, ownerId, ownerTeam,
+				ref nearest, out Vector3 unitPoint);
+
+			if (unitVictim != null)
+			{
+				victim = null;
+				blocked = true;
+				point = unitPoint;
+			}
+		}
+
 		if (!blocked)
 		{
 			return;
@@ -377,35 +475,54 @@ public partial class CombatManager : Node
 		_projectiles.Kill(segment.Id);
 		HitsResolved++;
 
-		PlayerCombat attacker = Find(segment.OwnerPeerId);
+		PlayerCombat attacker = Find(OwnerId.PeerOf(ownerId));
 		HitFlags flags = HitFlags.None;
 
 		if (victim != null)
 		{
-			flags |= Damage(victim, stats.Damage, attacker, tick);
+			flags |= Damage(victim, stats.Damage, attacker, ownerId, tick);
+		}
+		else if (unitVictim != null)
+		{
+			flags |= DamageUnit(unitVictim, stats.Damage, attacker, tick);
 		}
 
 		if (stats.IsExplosive)
 		{
 			flags |= HitFlags.Exploded;
-			flags |= Explode(point, stats, attacker, victim, tick);
+			flags |= Explode(point, stats, attacker, ownerId, ownerTeam, victim, unitVictim, tick);
 		}
 
 		Broadcast(MethodName.ServerProjectileHit, ProjectileCodec.EncodeHit(new ProjectileHit
 		{
 			Id = segment.Id,
 			Point = point,
-			VictimPeerId = victim?.PeerId ?? 0,
+			VictimPeerId = victim?.PeerId ?? (unitVictim != null ? OwnerId.ForUnit(unitVictim.UnitId) : 0),
 			Flags = flags,
 		}));
+	}
+
+	/// <summary>
+	/// Whose round this is. A projectile carries one owner id across both id spaces
+	/// (<see cref="OwnerId"/>), and every friendly-fire question downstream is
+	/// really a question about this.
+	/// </summary>
+	private Team TeamOfOwner(int ownerId)
+	{
+		if (OwnerId.IsUnit(ownerId))
+		{
+			return UnitManager.Instance?.Find(OwnerId.UnitOf(ownerId))?.Team ?? Team.Strategist;
+		}
+
+		return TeamOf(OwnerId.PeerOf(ownerId));
 	}
 
 	/// <summary>
 	/// Blast damage, to everyone in reach including whoever fired it. Self-damage is
 	/// deliberate: a launcher that is safe at point blank is a shotgun.
 	/// </summary>
-	private HitFlags Explode(Vector3 point, in ProjectileStats stats, PlayerCombat attacker, PlayerCombat direct,
-		uint tick)
+	private HitFlags Explode(Vector3 point, in ProjectileStats stats, PlayerCombat attacker, int attackerOwnerId,
+		Team attackerTeam, PlayerCombat direct, Unit directUnit, uint tick)
 	{
 		HitFlags flags = HitFlags.None;
 
@@ -421,15 +538,68 @@ public partial class CombatManager : Node
 			float damage = stats.SplashDamageAt(distance);
 			if (damage > 0f)
 			{
-				flags |= Damage(target, damage, attacker, tick);
+				flags |= Damage(target, damage, attacker, attackerOwnerId, tick);
+			}
+		}
+
+		UnitManager units = UnitManager.Instance;
+		for (int i = 0; units != null && i < units.SlotCount; i++)
+		{
+			Unit unit = units.UnitAt(i);
+
+			// A blast spares its own side, unlike the self-damage above: a launcher
+			// that clears a room is the point, and one that also clears the room's
+			// owner's infantry is a different weapon.
+			if (unit == null || unit == directUnit || !unit.IsAlive || unit.Team == attackerTeam)
+			{
+				continue;
+			}
+
+			float damage = stats.SplashDamageAt(UnitManager.DistanceToBlast(unit, point));
+			if (damage > 0f)
+			{
+				flags |= DamageUnit(unit, damage, attacker, tick);
 			}
 		}
 
 		return flags;
 	}
 
-	/// <summary>Applies damage and, if that killed the victim, spends a ticket for it.</summary>
-	private HitFlags Damage(PlayerCombat victim, float amount, PlayerCombat attacker, uint tick)
+	/// <summary>
+	/// Applies damage to a unit. Unlike a player's death this costs no ticket — the
+	/// ground force's pool is theirs, and a unit is already paid for out of the
+	/// strategist's points.
+	/// </summary>
+	private HitFlags DamageUnit(Unit unit, float amount, PlayerCombat attacker, uint tick)
+	{
+		UnitManager units = UnitManager.Instance;
+		if (units == null || unit == null || !unit.IsAlive || amount <= 0f)
+		{
+			return HitFlags.None;
+		}
+
+		bool killed = units.Damage(unit, amount, tick);
+		ConfirmHit(attacker, null, killed);
+
+		if (killed && attacker != null)
+		{
+			attacker.Kills++;
+		}
+
+		return killed ? HitFlags.Killed : HitFlags.None;
+	}
+
+	/// <summary>
+	/// Applies damage and, if that killed the victim, spends a ticket for it.
+	///
+	/// <paramref name="attackerOwnerId"/> is carried alongside
+	/// <paramref name="attacker"/> because a unit has no <see cref="PlayerCombat"/>:
+	/// it is null for every round a unit fires, and a kill log that called all of
+	/// those "the world" would make the one record M6 derives its per-round CSV from
+	/// useless the moment the strategist starts winning.
+	/// </summary>
+	private HitFlags Damage(PlayerCombat victim, float amount, PlayerCombat attacker, int attackerOwnerId,
+		uint tick)
 	{
 		if (victim == null || !victim.IsAlive || amount <= 0f)
 		{
@@ -454,13 +624,25 @@ public partial class CombatManager : Node
 			attacker.Kills++;
 		}
 
-		// Everyone is ground force until the strategist exists (M3), so every death
-		// is a ground-force death.
+		// A strategist has no body on the field, so every player death is a
+		// ground-force death and costs the pool a ticket.
 		Match.RegisterGroundDeath(tick);
 
-		GD.Print($"[combat] peer {victim.PeerId} killed by {(attacker == null ? "the world" : attacker.PeerId.ToString())}"
+		GD.Print($"[combat] peer {victim.PeerId} killed by {DescribeOwner(attackerOwnerId)}"
 			+ $" | tickets {Match.GroundTickets}");
 		return HitFlags.Killed;
+	}
+
+	/// <summary>Names whatever fired a round, for the server log.</summary>
+	private string DescribeOwner(int ownerId)
+	{
+		if (OwnerId.IsUnit(ownerId))
+		{
+			ushort unitId = OwnerId.UnitOf(ownerId);
+			return $"{UnitCatalog.NameOf(UnitManager.Instance?.Find(unitId)?.DefinitionId ?? 0)} {unitId}";
+		}
+
+		return OwnerId.IsPeer(ownerId) ? $"peer {OwnerId.PeerOf(ownerId)}" : "the world";
 	}
 
 	private void ServerRespawns(uint tick)
@@ -468,7 +650,10 @@ public partial class CombatManager : Node
 		for (int i = 0; i < _ordered.Count; i++)
 		{
 			PlayerCombat combat = _ordered[i];
-			if (combat.IsAlive || tick < combat.RespawnTick)
+
+			// A strategist is never alive and never comes back: they have no body on
+			// the field to put anywhere (see PlayerCombat.IsAlive).
+			if (combat.Team == Team.Strategist || combat.IsAlive || tick < combat.RespawnTick)
 			{
 				continue;
 			}
@@ -486,6 +671,11 @@ public partial class CombatManager : Node
 
 	private void Respawn(PlayerCombat combat, uint tick)
 	{
+		if (combat.Team == Team.Strategist)
+		{
+			return;
+		}
+
 		combat.Respawn();
 		combat.History.Clear();
 		combat.Character?.SetDeadPresentation(false);
@@ -500,9 +690,10 @@ public partial class CombatManager : Node
 			// Nothing counts until somebody is on the field, so the round starts on the
 			// first player rather than on the server's first tick.
 			case RoundPhase.Warmup when _ordered.Count > 0:
-				Match.Start(tick, _gameMode.GroundForceTickets,
+				Match.Start(tick, _gameMode.GroundForceTickets, _gameMode.StrategistTickets,
 					_gameMode.RoundDurationMinutes * 60 * SimConfig.TickRate);
 				GD.Print($"[match] round live | tickets {Match.GroundTickets}"
+					+ $" | points {Match.StrategistPoints}"
 					+ $" | {_gameMode.RoundDurationMinutes} minutes");
 				break;
 
@@ -535,10 +726,87 @@ public partial class CombatManager : Node
 		_intermissionArmed = false;
 		Match.Reset();
 		_projectiles.Clear();
+		UnitManager.Instance?.ClearUnits();
 		for (int i = 0; i < _ordered.Count; i++)
 		{
 			Respawn(_ordered[i], tick);
 		}
+	}
+
+	// ---- teams (docs/IMPLEMENTATION_PLAN.md §M3) ----------------------------
+
+	/// <summary>
+	/// Asks the server for a side. Applied immediately when this process is the
+	/// authority; a client finds out what it got from the next snapshot's team bit,
+	/// which is a frame or two and no new message.
+	/// </summary>
+	public void RequestTeam(Team team)
+	{
+		if (Local == null)
+		{
+			return;
+		}
+
+		NetworkManager net = NetworkManager.Instance;
+		if (net != null && net.IsClient)
+		{
+			RpcId(1, MethodName.ClientSelectTeam, (byte)team);
+			return;
+		}
+
+		AssignTeam(Local.PeerId, team);
+	}
+
+	[Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false,
+		TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+	private void ClientSelectTeam(byte team)
+	{
+		if (NetworkManager.Instance is { IsServer: true })
+		{
+			// Anything but a known team reads as the ground force, which is where a
+			// client that sends nonsense belongs (docs/NETCODE.md §1).
+			AssignTeam(Multiplayer.GetRemoteSenderId(),
+				team == (byte)Team.Strategist ? Team.Strategist : Team.GroundForce);
+		}
+	}
+
+	/// <summary>
+	/// Server-side: puts a peer on a side, subject to the strategist cap, and makes
+	/// their body match. Going up takes the body off the field; coming back down
+	/// puts a fresh one on it.
+	/// </summary>
+	private void AssignTeam(int peerId, Team requested)
+	{
+		PlayerCombat combat = Find(peerId);
+		if (combat == null)
+		{
+			return;
+		}
+
+		Team granted = Teams.Assign(peerId, requested);
+		if (granted == combat.Team)
+		{
+			return;
+		}
+
+		combat.Team = granted;
+		combat.History.Clear();
+
+		if (granted == Team.Strategist)
+		{
+			combat.Character?.SetDeadPresentation(true);
+		}
+		else
+		{
+			// Back on the ground with a full magazine and whatever they last chose,
+			// at a spawn point rather than wherever the body was parked.
+			combat.Respawn();
+			combat.Character?.SetDeadPresentation(false);
+			PlayerManager.Instance?.TeleportToSpawn(peerId, combat.Deaths);
+		}
+
+		GD.Print($"[match] peer {peerId} is now {granted}"
+			+ $" ({Teams.StrategistCount}/{TeamService.MaxStrategists} strategists)");
 	}
 
 	// ---- client ------------------------------------------------------------
@@ -581,9 +849,16 @@ public partial class CombatManager : Node
 			return;
 		}
 
+		// The same cone the server will apply, from the same shot index: the weapon
+		// step above advanced both ends identically, so the tracer this puts up is
+		// the line the authoritative round will fly down
+		// (docs/IMPLEMENTATION_PLAN.md §7).
+		Vector3 direction = WeaponSim.FireDirection(combat.Equipped, stats, combat.PeerId,
+			combat.Character.AimDirection);
+
 		uint id = PredictedIdBit | _nextPredictedId++;
-		if (_projectiles.TrySpawn(id, tick, combat.PeerId, combat.EquippedDefinitionId,
-			combat.Character.EyePosition, combat.Character.AimDirection, 0, out _))
+		if (_projectiles.TrySpawn(id, tick, OwnerId.ForPeer(combat.PeerId), combat.EquippedDefinitionId,
+			combat.Character.EyePosition, direction, 0, out _))
 		{
 			_predicted.Add((id, tick));
 		}
@@ -809,8 +1084,8 @@ public partial class CombatManager : Node
 
 	[Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
 		TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-	private void ServerMatchState(byte phase, byte outcome, int tickets, int startingTickets, uint endTick,
-		uint version)
+	private void ServerMatchState(byte phase, byte outcome, int tickets, int startingTickets, int points,
+		uint endTick, uint version)
 	{
 		if (NetworkManager.Instance is not { IsClient: true })
 		{
@@ -818,22 +1093,28 @@ public partial class CombatManager : Node
 		}
 
 		NetworkManager.Instance.Stats.RecordReceived(MatchStateBytes);
-		Match.Apply((RoundPhase)phase, (RoundOutcome)outcome, tickets, startingTickets, endTick, version);
+		Match.Apply((RoundPhase)phase, (RoundOutcome)outcome, tickets, startingTickets, points, endTick, version);
 	}
 
+	/// <summary>
+	/// Sends the round's state when any part of it has changed. The strategist's
+	/// balance keeps its own version because it changes on a different schedule from
+	/// the phase — every unit queued moves it, and none of those is a round event —
+	/// but the two ride the same message, which is small and reliable and rare.
+	/// </summary>
 	private void ReplicateMatchState()
 	{
-		if (Match.Version == _replicatedMatchVersion)
+		if (Match.Version == _replicatedMatchVersion && Match.Strategist.Version == _replicatedPointsVersion)
 		{
 			return;
 		}
 
 		_replicatedMatchVersion = Match.Version;
+		_replicatedPointsVersion = Match.Strategist.Version;
 
 		if (Multiplayer.HasMultiplayerPeer() && Multiplayer.GetPeers().Length > 0)
 		{
-			Rpc(MethodName.ServerMatchState, (byte)Match.Phase, (byte)Match.Outcome, Match.GroundTickets,
-				Match.StartingGroundTickets, Match.EndTick, Match.Version);
+			SendMatchState(0);
 			NetworkManager.Instance?.Stats.RecordSent(MatchStateBytes * Multiplayer.GetPeers().Length);
 		}
 	}
@@ -847,8 +1128,21 @@ public partial class CombatManager : Node
 
 		// The round is already running; a newcomer needs its state, not the next
 		// change to it.
+		SendMatchState(peerId);
+	}
+
+	/// <summary>Broadcasts when <paramref name="peerId"/> is 0, otherwise sends to that one peer.</summary>
+	private void SendMatchState(int peerId)
+	{
+		if (peerId == 0)
+		{
+			Rpc(MethodName.ServerMatchState, (byte)Match.Phase, (byte)Match.Outcome, Match.GroundTickets,
+				Match.StartingGroundTickets, Match.StrategistPoints, Match.EndTick, Match.Version);
+			return;
+		}
+
 		RpcId(peerId, MethodName.ServerMatchState, (byte)Match.Phase, (byte)Match.Outcome, Match.GroundTickets,
-			Match.StartingGroundTickets, Match.EndTick, Match.Version);
+			Match.StartingGroundTickets, Match.StrategistPoints, Match.EndTick, Match.Version);
 	}
 
 	private void Broadcast(StringName method, byte[] payload)
@@ -924,11 +1218,47 @@ public partial class CombatManager : Node
 
 		_hud = new CombatHud { Name = "CombatHud" };
 		AddChild(_hud);
+
+		_teamSelect = new TeamSelect { Name = "TeamSelect" };
+		AddChild(_teamSelect);
 	}
 
 	private void UpdateHud(uint tick)
 	{
+		SyncLocalRole();
 		_view?.Render(_projectiles);
 		_hud?.Refresh(Local, Match, tick);
+		_strategist?.Refresh(tick);
+	}
+
+	/// <summary>
+	/// Puts the right game in front of the local player.
+	///
+	/// A strategist's character stays in the world — the roster, the snapshot and
+	/// the prediction loop are all built around every peer having one — but it is
+	/// hidden, uncollidable and fed nothing but its look angles, and the process
+	/// draws the map from above instead. Switching back frees the camera and hands
+	/// the mouse back to the first-person rig.
+	/// </summary>
+	private void SyncLocalRole()
+	{
+		if (Bootstrap.IsDedicatedServer)
+		{
+			return;
+		}
+
+		bool wantsStrategist = Local is { Team: Team.Strategist };
+
+		if (wantsStrategist && _strategist == null)
+		{
+			_strategist = new StrategistController { Name = "StrategistController" };
+			AddChild(_strategist);
+		}
+		else if (!wantsStrategist && _strategist != null)
+		{
+			_strategist.QueueFree();
+			_strategist = null;
+			Local?.Character?.EnterFirstPerson();
+		}
 	}
 }

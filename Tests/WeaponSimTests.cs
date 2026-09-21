@@ -266,18 +266,111 @@ public class WeaponSimTests
 	[Fact]
 	public void WeaponFlagsRoundTrip()
 	{
-		for (int slot = 0; slot < SimConfig.WeaponSlots; slot++)
+		foreach (Team team in new[] { Team.GroundForce, Team.Strategist })
 		{
-			byte packed = WeaponFlags.Pack(slot, reloading: true);
-			Assert.Equal(slot, WeaponFlags.Slot(packed));
-			Assert.True(WeaponFlags.IsReloading(packed));
+			for (int slot = 0; slot < SimConfig.WeaponSlots; slot++)
+			{
+				byte packed = WeaponFlags.Pack(slot, reloading: true, team);
+				Assert.Equal(slot, WeaponFlags.Slot(packed));
+				Assert.True(WeaponFlags.IsReloading(packed));
+				Assert.Equal(team, WeaponFlags.TeamOf(packed));
 
-			packed = WeaponFlags.Pack(slot, reloading: false);
-			Assert.Equal(slot, WeaponFlags.Slot(packed));
-			Assert.False(WeaponFlags.IsReloading(packed));
+				packed = WeaponFlags.Pack(slot, reloading: false, team);
+				Assert.Equal(slot, WeaponFlags.Slot(packed));
+				Assert.False(WeaponFlags.IsReloading(packed));
+				Assert.Equal(team, WeaponFlags.TeamOf(packed));
+			}
 		}
 
 		// A byte off the wire carries whatever a hostile client put in it.
 		Assert.InRange(WeaponFlags.Slot(0xFF), 0, SimConfig.WeaponSlots - 1);
+	}
+
+	// ---- the accuracy cone's seed (docs/IMPLEMENTATION_PLAN.md §7) ---------
+
+	[Fact]
+	public void EveryRoundFiredAdvancesTheShotIndex()
+	{
+		// The shot index is half the seed of the accuracy cone, so it has to count
+		// rounds and not ticks.
+		WeaponStats stats = Rifle();
+		WeaponState state = WeaponState.Ready(3, stats);
+
+		int shots = FireFor(ref state, stats, 0, 60);
+
+		Assert.Equal(shots, (int)state.ShotIndex);
+	}
+
+	[Fact]
+	public void ADryTriggerDoesNotAdvanceTheShotIndex()
+	{
+		WeaponStats stats = Rifle();
+		WeaponState state = WeaponState.Ready(3, stats);
+
+		WeaponSim.Step(ref state, stats, Input(InputButtons.None), 0);
+
+		Assert.Equal(0u, state.ShotIndex);
+	}
+
+	[Fact]
+	public void AFreshWeaponStartsItsShotIndexAtZero()
+	{
+		// A respawn re-arms every slot, so each life's first round is seeded the same
+		// way — which is fine, because the seed also carries who fired it.
+		WeaponState state = WeaponState.Ready(3, Rifle());
+
+		Assert.Equal(0u, state.ShotIndex);
+	}
+
+	[Fact]
+	public void TwoProcessesRunningTheSameInputsAgreeOnEveryShotDirection()
+	{
+		// This is the property the whole predicted-tracer arrangement rests on: the
+		// server and the owning client step the identical weapon over the identical
+		// frames, so they derive the identical cone offsets without exchanging a byte
+		// (docs/NETCODE.md §4.3).
+		var stats = new WeaponStats(FireMode.Auto, WeaponStats.TicksPerShot(600f), magazineSize: 30,
+			reloadTicks: 120, damage: 20f, spreadRadians: Spread.ConeFromDegrees(3f));
+
+		WeaponState server = WeaponState.Ready(3, stats);
+		WeaponState client = WeaponState.Ready(3, stats);
+		var aim = new Godot.Vector3(0f, 0f, -1f);
+
+		InputButtons previous = InputButtons.None;
+		int compared = 0;
+
+		for (uint tick = 0; tick < 120; tick++)
+		{
+			InputContext input = Input(InputButtons.Fire, previous);
+
+			WeaponAction serverAction = WeaponSim.Step(ref server, stats, input, tick);
+			WeaponAction clientAction = WeaponSim.Step(ref client, stats, input, tick);
+			Assert.Equal(serverAction, clientAction);
+
+			if (serverAction == WeaponAction.Fire)
+			{
+				Assert.Equal(WeaponSim.FireDirection(server, stats, ownerId: 5, aim),
+					WeaponSim.FireDirection(client, stats, ownerId: 5, aim));
+				compared++;
+			}
+
+			previous = InputButtons.Fire;
+		}
+
+		Assert.True(compared > 10, "the weapon never fired, so nothing was compared");
+	}
+
+	[Fact]
+	public void AWeaponWithNoConeShootsExactlyWhereItIsPointed()
+	{
+		// All four of M2's weapons author zero degrees, so this is the path every
+		// existing shot takes.
+		WeaponStats stats = Rifle();
+		WeaponState state = WeaponState.Ready(3, stats);
+		var aim = new Godot.Vector3(0f, 0.25f, -1f).Normalized();
+
+		WeaponSim.Step(ref state, stats, Input(InputButtons.Fire), 0);
+
+		Assert.Equal(aim, WeaponSim.FireDirection(state, stats, ownerId: 5, aim));
 	}
 }

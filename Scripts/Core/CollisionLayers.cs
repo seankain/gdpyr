@@ -17,6 +17,18 @@ public static class CollisionLayers
 	/// <summary>Layer 2: character bodies. Collided with, never raycast for damage.</summary>
 	public const uint Players = 1 << 1;
 
-	/// <summary>What a character body collides with: the level, and each other.</summary>
-	public const uint CharacterMask = World | Players;
+	/// <summary>
+	/// Layer 3: RTS units, from M3. Their own layer for the same reason players
+	/// have one — a projectile's world query must not find them, because a unit's
+	/// hit is resolved against its capsule in engine-free code — and so that a
+	/// strategist's selection ray can ask for units without also selecting the
+	/// scenery.
+	/// </summary>
+	public const uint Units = 1 << 2;
+
+	/// <summary>What a character body collides with: the level, each other, and units.</summary>
+	public const uint CharacterMask = World | Players | Units;
+
+	/// <summary>What a unit body collides with. The same set: units are bodies too.</summary>
+	public const uint UnitMask = World | Players | Units;
 }

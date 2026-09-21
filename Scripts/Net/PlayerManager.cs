@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Gdpyr.Core;
 using Gdpyr.Fps;
 using Gdpyr.Match;
+using Gdpyr.Rts;
 using Gdpyr.Sim;
 using Godot;
 
@@ -185,6 +186,10 @@ public partial class PlayerManager : Node
 			Simulate(player, frame, net.Tick, authoritative: true);
 		}
 
+		// Units first, then combat: a round a unit fired on this tick has to be in
+		// the air before the projectiles are stepped and resolved, or every unit's
+		// shot would be a tick late (docs/IMPLEMENTATION_PLAN.md §M3).
+		UnitManager.Instance?.ServerTick(net.Tick);
 		CombatManager.Instance?.ServerPostTick(net.Tick);
 
 		if (net.Tick % SimConfig.SnapshotIntervalTicks == 0)
@@ -334,6 +339,7 @@ public partial class PlayerManager : Node
 		}
 
 		UpdateRemotes(net.Clock.RenderTick);
+		UnitManager.Instance?.ClientTick(net.Clock.RenderTick);
 		CombatManager.Instance?.ClientPostTick(net.Tick);
 	}
 
@@ -503,6 +509,7 @@ public partial class PlayerManager : Node
 		// Offline is a server with nobody to tell: the same authoritative path, with
 		// every broadcast a no-op for want of a peer.
 		Simulate(_local, _sampler.Sample(net.Tick), net.Tick, authoritative: true);
+		UnitManager.Instance?.ServerTick(net.Tick);
 		CombatManager.Instance?.ServerPostTick(net.Tick);
 	}
 

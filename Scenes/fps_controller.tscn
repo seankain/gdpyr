@@ -357,7 +357,7 @@ _data = {
 
 [node name="PlayerController" type="CharacterBody3D" unique_id=1728995393 node_paths=PackedStringArray("camera", "animationPlayer", "selfCollider", "headShapeCast")]
 collision_layer = 2
-collision_mask = 3
+collision_mask = 7
 script = ExtResource("1_orfjw")
 camera = NodePath("CameraController/Camera3D")
 animationPlayer = NodePath("AnimationPlayer")

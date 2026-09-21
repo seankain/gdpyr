@@ -190,7 +190,23 @@ One correction to the port: the resource field is `DragCoefficient`, the dimensi
 drag equation — *not* a G1 ballistic coefficient. `BallisticArc.cs` passed a G1 BC into that slot,
 and the two are different quantities, so doing the same would have silently mis-scaled drag.
 
-### 4.5 Tests (`Tests/`, no engine required)
+### 4.5 Accuracy cones
+
+M3 added the second tuning knob the plan's §7 asks for: a half-angle cone about where the shooter
+aimed (`Scripts/Sim/Spread.cs`). It is seeded, not random — the seed is
+`(ownerId, weaponId, shotIndex)`, and `shotIndex` is advanced inside the deterministic weapon step,
+so the server and the owning client derive the same offset for the same round without exchanging a
+byte, and the predicted tracer of §4.3 stays on the authoritative line.
+
+Directions are uniform over the spherical cap rather than over the angle: sampling the angle
+uniformly piles shots into the middle and makes a wide cone behave like a narrow one.
+
+All four of M2's weapons author **0 degrees** and are therefore unchanged. Cones are a unit
+property in M3 (`UnitDefinition.AccuracyConeDegrees`, 2.5° for infantry) because that is what the
+milestone needed them for; widening a player weapon is a playtest decision, not a side effect of
+the mechanism arriving.
+
+### 4.6 Tests (`Tests/`, no engine required)
 
 - Zero-drag integration matches the closed-form `p(t) = p₀ + v₀t + ½gt²` within 1e-3 over 2 s.
 - With drag: speed is strictly decreasing; drop is strictly increasing with range; flight time
@@ -208,7 +224,12 @@ damageable entity: the capsule plus the tick index. Fixed-size array, no allocat
 Built in M2 (`Scripts/Sim/HitboxHistory.cs`). **Melee already rewinds through it** — a swing is
 instantaneous, so testing it against where the attacker's client saw the target is exactly right.
 Projectiles do not: they use §4.3's cheap compensation instead, and moving them to a full rewind is
-the upgrade this ring exists to make cheap. Player hits are resolved against these capsules in
+the upgrade this ring exists to make cheap.
+
+RTS units keep no history and are tested against their current capsule. They have no client whose
+view of them a hit has to be validated against, and at 4.5 m/s the half second this ring holds is
+worth two metres of a capsule 0.8 m wide — which is to say, a rewind against a unit would change
+the answer more often than it corrected it. Player hits are resolved against these capsules in
 engine-free code (`Scripts/Sim/Hitbox.cs`), not by a physics query, which is why characters moved
 to their own collision layer in M2 — a projectile's world query must not find them. Also the single
 best debugging aid you will have: dump it on a disputed kill.
@@ -219,51 +240,83 @@ best debugging aid you will have: dump it on a disputed kill.
 
 ### 6.1 Units
 
-`MultiplayerSpawner` + one `MultiplayerSynchronizer` per unit, `ReplicationInterval` 0.05–0.1 s
-(10–20 Hz), replicating position, yaw and a packed state byte. Clients interpolate. Units never
-simulate on clients.
+**M3 took the custom packed replicator, not `MultiplayerSpawner` + `MultiplayerSynchronizer`.**
+One unreliable message at 20 Hz carrying an array of `{id, def, quantized pos, yaw, state+team,
+health%}` — 13 bytes each, 837 bytes for a full field of 64 — plus a reliable spawn and despawn per
+unit per life. `Scripts/Sim/UnitSnapshotCodec.cs`, decoded into a `SnapshotInterpolator` per unit,
+the same one remote characters use. Units never simulate on clients.
 
-At ~50 units this is comfortably within the built-in system's capability and it is by far the least
-code. Replace it with a single custom packed replicator (one message carrying an array of
-`{id, quantized pos, yaw, state}`) **only if profiling says so** — the trigger is server frame time
-over ~4 ms in replication or per-client bandwidth over ~30 KB/s.
+The original plan said to use the built-in nodes because they would be the least code. In this
+codebase they are not, and there were three reasons to change:
+
+1. every other message here is already a hand-packed codec with a total decoder and a unit test, so
+   a second replication mechanism alongside them is a second set of rules to remember;
+2. the fog of war in §6.2 is a filter over *which records go in which peer's packet*, which is a
+   loop bound in the broadcast and a per-node API call in the alternative;
+3. it closes the risk the plan flags against the built-in route — that per-peer visibility gates
+   synchronization but perhaps not spawning — because a unit a peer is not told about has no record
+   in its packet and therefore no node. M4 does not need the spike.
+
+Cost: ~180 lines of codec and roster plumbing, and a manual roster replay to joining peers.
+Budget check at 50 units: 50 × 13 B × 20 Hz ≈ **13 KB/s** per client, against the ~25 KB/s §7
+budgets for everything.
 
 ### 6.2 Fog of war
 
 Fog of war is an **anti-cheat property, not a shader**. If the strategist client receives the
 position, a modified client can display it. Filter on the server.
 
-```csharp
+With §6.1's packed replicator the shape changes but the property does not: the filter is applied
+while building each peer's packet, in `UnitManager.BroadcastUnitSnapshot`, and a hidden entity is a
+record that is not written. There is nothing to spike — a peer that is never sent a spawn message
+has no node to read a position off.
+
+```
 // VisibilityService, server-only, 5–10 Hz
 foreach (var peer in strategistPeers)
     foreach (var e in groundTeamEntities)
     {
         bool seen = sensors.AnyFriendlyUnitWithin(e.Position, peer.Team);  // + optional LOS ray
-        e.Synchronizer.SetVisibilityFor(peer.Id, seen);
         if (seen) lastKnown[peer.Id][e.Id] = (e.Position, currentTick);
     }
+// then: RpcId(peer.Id, ServerSnapshot, Encode(tick, visibleRecordsFor(peer)))
 ```
 
-- Sensor radius lives on `UnitDefinition`; different unit types get different radii (this is the
-  lever that makes scouting a real decision).
+- Sensor radius lives on `UnitDefinition` (M3 ships it at 45 m for infantry); different unit types
+  get different radii, and that is the lever that makes scouting a real decision.
 - Client renders `lastKnown` as a ghost marker that fades after N seconds. Stale information is what
   makes the role interesting — do not hide it, decay it.
-- **Verify in a spike**: `MultiplayerSynchronizer` per-peer visibility definitely gates state
-  replication; confirm whether it also gates `MultiplayerSpawner` spawning in 4.6. If it does not,
-  spawn hidden entities at a neutral position and only ever send true transforms once visible.
+- The player snapshot needs the same treatment and is the harder half: it is one broadcast today
+  (`PlayerManager.BroadcastSnapshot`) and becomes one packet per strategist peer.
 
 ### 6.3 Commands
 
-Plain RPCs, reliable, server-validated:
+Plain RPCs, reliable, server-validated. As shipped in M3
+(`Scripts/Rts/UnitManager.cs`):
 
 ```csharp
 [Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false,
      TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-public void CmdIssueOrder(int[] unitIds, int orderType, Vector3 target, int targetEntityId)
+private void ClientIssueOrder(int[] unitIds, byte kind, Vector3 target, int targetOwnerId)
 ```
 
-Server checks: sender is a strategist, owns every id in `unitIds`, target is on the navmesh, order
-type is valid for the unit. Client shows the order marker immediately; a rejected order clears it.
+Server checks, in order: the order type is one of Move/Attack/Patrol/Defend/Stop, the sender is a
+strategist, and each id names a live unit on the sender's side. Anything that fails is counted in
+`RejectedOrders` — visible in the debug HUD, and anything but 0 on a server with honest clients is
+a bug.
+
+`targetOwnerId` is an `OwnerId` (§4.2): positive names a peer, negative a unit, 0 nothing. The
+same folded id space that lets one `ProjectileSpawn` field name either kind of shooter lets one
+order field name either kind of target.
+
+There are three more, all with the same shape and the same strategist check: `ClientQueueUnit`,
+`ClientCancelBuild` and `ClientSetRally`, each naming a barracks by its index in the map's
+`barracks` group sorted by name — an order every peer derives from the same scene, like spawn
+points.
+
+Not checked: whether the target point is on the navmesh. A unit told to walk into a wall paths as
+close as it can and stops, which is the same thing that happens when a wall is built across its
+route, so there is no second behaviour to write.
 
 ---
 
@@ -273,20 +326,25 @@ type is valid for the unit. Client shows the order marker immediately; a rejecte
 |---|---|---|---|---|
 | `Input` (3 frames) | C→S | Unreliable | 60 Hz | ~48 B |
 | `PlayerSnapshot` (all players) | S→C | Unreliable | 30 Hz | 29 B × players |
-| `UnitSnapshot` (visible units) | S→C | Unreliable | 10–20 Hz | ~10 B × units |
+| `UnitSnapshot` (visible units) | S→C | Unreliable | 20 Hz | 5 B + 13 B × units |
+| `ServerSpawnUnit` / `ServerDespawnUnit` | S→C | Reliable | per unit per life | ~24 B / 8 B |
 | `ProjectileSpawn` | S→C | Reliable | per shot | 23 B |
 | `ProjectileHit` | S→C | Reliable | per hit | 15 B |
-| `CmdIssueOrder` | C→S | Reliable | per click | ~16 B + 4 B/unit |
-| `MatchState` (tickets, points, nodes) | S→C | Reliable | on change | ~24 B |
+| `ClientIssueOrder` | C→S | Reliable | per click | ~16 B + 4 B/unit |
+| `ServerBarracksState` | S→C | Reliable | 5 Hz per barracks | ~8 B |
+| `MatchState` (tickets, points) | S→C | Reliable | on change | ~22 B |
 | `ClockProbe` / `ClockReply` | both | Unreliable | 2 Hz | ~12 B |
 
 Quantize positions to three `int16` at 1 cm resolution (±327 m covers the map) and angles to
-`uint16`. Rough budget at 8 players + 50 visible units:
+`uint16`. Rough budget at 8 players + 50 visible units, at the rates actually shipped (players
+30 Hz, units 20 Hz):
 
-- Downstream per client: 8 × 30 B × 60 Hz ≈ 14.4 KB/s + 50 × 10 B × 20 Hz ≈ 10 KB/s ≈ **25 KB/s**.
+- Downstream per client: 8 × 29 B × 30 Hz ≈ 7 KB/s + (5 + 50 × 13) B × 20 Hz ≈ 13 KB/s ≈
+  **20 KB/s**, plus whatever is being shot.
 - Upstream per client: ≈ **3 KB/s**.
 
-Comfortable. Drop the player snapshot rate to 30 Hz first if you need headroom.
+Comfortable. The unit snapshot is now the larger half, so it is the one to thin first — drop it to
+10 Hz, or stop sending records for units that have not moved since the last one.
 
 ---
 
@@ -297,5 +355,11 @@ In the existing `Debug` panel (`Scripts/Ui/Debug.cs`, toggled with `` ` ``):
 RTT · client/server tick delta · server-side input buffer depth · mispredictions per second ·
 mean/max prediction error · bytes in/out per second · live projectile count · replicated unit count ·
 server frame time.
+
+M3 added the unit half: live units against the cap, units built and lost, whether the navigation
+mesh baked, the strategist's points, how many strategists are seated, and — on a server — orders
+refused. "Live units against the cap" is the number that says whether §6 of the implementation
+plan's 50-unit budget is real; "no navmesh" next to it is why twenty riflemen are walking into a
+wall.
 
 Every hard bug in this system is a timing bug. Without these numbers you are guessing.

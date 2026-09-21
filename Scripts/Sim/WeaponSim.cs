@@ -47,8 +47,19 @@ public readonly struct WeaponStats
 	/// <summary>Sweep radius of a melee swing [m]: a hammer is a shapecast, not a ray.</summary>
 	public readonly float SweepRadiusMeters;
 
+	/// <summary>
+	/// Half-angle of the accuracy cone [rad], or 0 for a weapon that puts every
+	/// round exactly where it was pointed (docs/IMPLEMENTATION_PLAN.md §7).
+	///
+	/// Zero for all four of M2's weapons on purpose: they were tuned without a cone
+	/// and widening them is a playtest decision, not a side effect of the mechanism
+	/// arriving. Units carry theirs on <c>UnitDefinition</c>, which is what M3
+	/// actually needed it for.
+	/// </summary>
+	public readonly float SpreadRadians;
+
 	public WeaponStats(FireMode mode, int ticksBetweenShots, int magazineSize, int reloadTicks, float damage,
-		bool isMelee = false, float rangeMeters = 0f, float sweepRadiusMeters = 0f)
+		bool isMelee = false, float rangeMeters = 0f, float sweepRadiusMeters = 0f, float spreadRadians = 0f)
 	{
 		Mode = mode;
 		TicksBetweenShots = Math.Max(ticksBetweenShots, 1);
@@ -58,6 +69,7 @@ public readonly struct WeaponStats
 		IsMelee = isMelee;
 		RangeMeters = rangeMeters;
 		SweepRadiusMeters = sweepRadiusMeters;
+		SpreadRadians = MathF.Max(spreadRadians, 0f);
 	}
 
 	/// <summary>True for a weapon with no magazine to run dry, such as the hammer.</summary>
@@ -94,6 +106,15 @@ public struct WeaponState
 	/// <summary>The tick a reload in progress completes on, or 0 when none is.</summary>
 	public uint ReloadEndTick;
 
+	/// <summary>
+	/// Rounds this weapon has fired this life. Not a statistic: it is half the seed
+	/// of the accuracy cone (<see cref="Spread.Seed"/>), which is why it is
+	/// incremented inside the deterministic weapon step rather than by whoever is
+	/// counting. The owning client and the server run the same step over the same
+	/// inputs, so they agree on it without it ever going on the wire.
+	/// </summary>
+	public uint ShotIndex;
+
 	public readonly bool IsReloading => ReloadEndTick != 0;
 
 	public static WeaponState Ready(byte definitionId, in WeaponStats stats) => new()
@@ -102,6 +123,7 @@ public struct WeaponState
 		Ammo = (short)stats.MagazineSize,
 		NextFireTick = 0,
 		ReloadEndTick = 0,
+		ShotIndex = 0,
 	};
 }
 
@@ -183,8 +205,20 @@ public static class WeaponSim
 			state.Ammo--;
 		}
 		state.NextFireTick = tick + (uint)stats.TicksBetweenShots;
+		state.ShotIndex++;
 		return WeaponAction.Fire;
 	}
+
+	/// <summary>
+	/// The direction a shot actually leaves in, given where it was aimed. Call it
+	/// with the state <see cref="Step"/> just returned <see cref="WeaponAction.Fire"/>
+	/// from, so that <see cref="WeaponState.ShotIndex"/> names this round and not the
+	/// last one — the server and the owning client both do, and that is what makes
+	/// their two tracers the same line (docs/NETCODE.md §4.3).
+	/// </summary>
+	public static Godot.Vector3 FireDirection(in WeaponState state, in WeaponStats stats, int ownerId,
+		Godot.Vector3 aim) =>
+		Spread.Apply(aim, stats.SpreadRadians, Spread.Seed(ownerId, state.DefinitionId, state.ShotIndex));
 
 	/// <summary>
 	/// The slot the character has switched to, from the weapon keys. Edge-triggered

@@ -10,12 +10,15 @@ dedicated-server authoritative.
 ## Layout
 
 ```
-Scripts/Core/   Bootstrap (CLI args, engine settings), LaunchOptions
+Scripts/Core/   Bootstrap (CLI args, engine settings), LaunchOptions, weapon and unit catalogs
 Scripts/Net/    TransportFactory, NetworkManager (transport + clocks), PlayerManager (tick loop, roster)
 Scripts/Sim/    Engine-free simulation code; unit-tested without Godot
 Scripts/Fps/    Character controller, movement FSM, input sampler, weapons, viewmodel
-Scripts/Ui/     Pause menu, reticle, net debug HUD
+Scripts/Rts/    Units, barracks, orders, the strategist camera and selection
+Scripts/Match/  CombatManager (the round), MatchState, TeamService
+Scripts/Ui/     Pause menu, reticle, combat HUD, RTS HUD, net debug HUD
 Scenes/         Greybox map, player, weapon, pause menu
+Units/          UnitDefinition resources
 Tests/          xUnit over the engine-free sources — `dotnet test`, no Godot needed
 ```
 
@@ -40,6 +43,25 @@ Default port is 7777/UDP. A dedicated-server export with no mode flag defaults t
 
 The server spawns a character per connected peer at the map's `player_spawn` markers; each client
 predicts its own and interpolates everyone else.
+
+## Playing either side
+
+`F1` puts you on the ground, `F2` in the strategist's chair. Two strategists at a time; a third
+request lands on the ground. A strategist's body leaves the field and the camera moves above the
+map:
+
+| | |
+|---|---|
+| WASD, or the screen edge | pan |
+| Q / E, mouse wheel | rotate, zoom |
+| left-drag, left-click, `F` | box select, single select, select all |
+| right-click | order the selection (or, with nothing selected, move the barracks rally point) |
+| `X` `C` `B` `Z` | attack-move · patrol · defend · stop, applied by the next right-click |
+| `1`, Backspace | queue an infantryman, cancel the last one |
+
+Right-clicking an enemy player orders an attack on that player rather than on the ground under
+them. Units are server-simulated and never predicted; the order marker appears immediately and the
+units move a round trip later, which is what an RTS feels like anyway.
 
 Press `` ` `` on a client for the net debug HUD — RTT, clock lead, input buffer depth, mispredictions
 per second, prediction error, bytes in/out, server frame time. A headless server has no HUD and logs

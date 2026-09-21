@@ -7,11 +7,12 @@ namespace Gdpyr.Tests;
 public class MatchStateTests
 {
 	private const int Duration = SimConfig.TickRate * 60 * 20;
+	private const int Points = 1000;
 
 	private static MatchState Live(int tickets = 5)
 	{
 		var state = new MatchState();
-		state.Start(0, tickets, Duration);
+		state.Start(0, tickets, Points, Duration);
 		return state;
 	}
 
@@ -33,8 +34,23 @@ public class MatchStateTests
 		Assert.True(state.IsLive);
 		Assert.Equal(50, state.GroundTickets);
 		Assert.Equal(50, state.StartingGroundTickets);
+		Assert.Equal(Points, state.StrategistPoints);
 		Assert.Equal((uint)Duration, state.EndTick);
 		Assert.Equal(20f * 60f, state.SecondsRemaining(0), 1);
+	}
+
+	[Fact]
+	public void TheStrategistsPointsAreSpentFromTheRound()
+	{
+		// M3 put the point pool on the round rather than on the unit manager: it is
+		// the thing M5's win condition reads (docs/IMPLEMENTATION_PLAN.md §M5).
+		MatchState state = Live();
+
+		Assert.True(state.Strategist.TrySpend(400));
+		Assert.Equal(Points - 400, state.StrategistPoints);
+
+		Assert.False(state.Strategist.TrySpend(Points));
+		Assert.Equal(Points - 400, state.StrategistPoints);
 	}
 
 	[Fact]
@@ -84,7 +100,7 @@ public class MatchStateTests
 		Assert.False(state.RegisterGroundDeath(5));
 		Assert.Equal(1, state.GroundDeaths);
 
-		state.Start(100, 10, Duration);
+		state.Start(100, 10, Points, Duration);
 		Assert.Equal(10, state.GroundTickets);
 	}
 
@@ -128,7 +144,7 @@ public class MatchStateTests
 		var state = new MatchState();
 		uint start = state.Version;
 
-		state.Start(0, 10, Duration);
+		state.Start(0, 10, Points, Duration);
 		Assert.True(state.Version > start);
 
 		uint afterStart = state.Version;
@@ -141,11 +157,12 @@ public class MatchStateTests
 	{
 		var client = new MatchState();
 		client.Apply(RoundPhase.Live, RoundOutcome.Undecided, groundTickets: 33, startingTickets: 50,
-			endTick: 9000, version: 7);
+			strategistPoints: 800, endTick: 9000, version: 7);
 
 		Assert.True(client.IsLive);
 		Assert.Equal(33, client.GroundTickets);
 		Assert.Equal(50, client.StartingGroundTickets);
+		Assert.Equal(800, client.StrategistPoints);
 		Assert.Equal(9000u, client.EndTick);
 	}
 
@@ -155,8 +172,8 @@ public class MatchStateTests
 		// A client joining mid-round gets the roster replay and the live state in
 		// whichever order they were queued.
 		var client = new MatchState();
-		client.Apply(RoundPhase.Live, RoundOutcome.Undecided, 33, 50, 9000, version: 7);
-		client.Apply(RoundPhase.Warmup, RoundOutcome.Undecided, 50, 50, 0, version: 2);
+		client.Apply(RoundPhase.Live, RoundOutcome.Undecided, 33, 50, 800, 9000, version: 7);
+		client.Apply(RoundPhase.Warmup, RoundOutcome.Undecided, 50, 50, 1000, 0, version: 2);
 
 		Assert.Equal(33, client.GroundTickets);
 		Assert.True(client.IsLive);
@@ -178,7 +195,7 @@ public class MatchStateTests
 	public void NegativeTicketsAreRefusedAtTheDoor()
 	{
 		var state = new MatchState();
-		state.Start(0, -5, Duration);
+		state.Start(0, -5, Points, Duration);
 
 		Assert.Equal(0, state.GroundTickets);
 	}

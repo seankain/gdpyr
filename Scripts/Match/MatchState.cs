@@ -25,13 +25,12 @@ public enum RoundOutcome : byte
 }
 
 /// <summary>
-/// The round: its phase, the ground force's ticket pool and its clock.
+/// The round: its phase, the ground force's ticket pool, the strategist's points
+/// and its clock.
 ///
-/// Engine-free and server-authoritative. It holds only what M2 needs — the
-/// strategist's points, resource nodes and the full win condition are M5
-/// (docs/IMPLEMENTATION_PLAN.md §M5) — but it is the thing those extend, so it
-/// lives under <c>Scripts/Match</c> and is unit-tested rather than being three
-/// fields on a manager.
+/// Engine-free and server-authoritative. Resource nodes and the full win condition
+/// are still M5 (docs/IMPLEMENTATION_PLAN.md §M5); M3 added the point pool,
+/// because a strategist who cannot run out of units is not making decisions.
 ///
 /// Time is counted in ticks, not seconds: a round that lasts a different length
 /// on a server having a bad minute is a measurement the playtest instrumentation
@@ -60,9 +59,18 @@ public sealed class MatchState
 	/// <summary>Bumped on every change worth replicating, so a client can ignore a stale message.</summary>
 	public uint Version { get; private set; }
 
+	/// <summary>
+	/// The strategist's points: what units cost come out of here
+	/// (docs/IMPLEMENTATION_PLAN.md §M3). Income is M5's resource nodes; until then
+	/// the pool is filled once at the start of the round and only shrinks.
+	/// </summary>
+	public ResourceLedger Strategist { get; } = new();
+
+	public int StrategistPoints => Strategist.Balance;
+
 	public bool IsLive => Phase == RoundPhase.Live;
 
-	public void Start(uint tick, int groundTickets, int durationTicks)
+	public void Start(uint tick, int groundTickets, int strategistPoints, int durationTicks)
 	{
 		Phase = RoundPhase.Live;
 		Outcome = RoundOutcome.Undecided;
@@ -71,6 +79,7 @@ public sealed class MatchState
 		GroundDeaths = 0;
 		StartTick = tick;
 		EndTick = tick + (uint)Math.Max(durationTicks, 0);
+		Strategist.Reset(strategistPoints);
 		Version++;
 	}
 
@@ -144,7 +153,7 @@ public sealed class MatchState
 
 	/// <summary>Applies a replicated summary on a client. The server never calls this.</summary>
 	public void Apply(RoundPhase phase, RoundOutcome outcome, int groundTickets, int startingTickets,
-		uint endTick, uint version)
+		int strategistPoints, uint endTick, uint version)
 	{
 		// Reliable RPCs arrive in order, but a client that joins mid-round gets the
 		// roster replay and the live state in whichever order they were queued.
@@ -159,6 +168,11 @@ public sealed class MatchState
 		StartingGroundTickets = startingTickets;
 		EndTick = endTick;
 		Version = version;
+
+		// The ledger keeps its own version so that a strategist's balance can be
+		// replicated more often than the round's phase changes; here it is simply
+		// told the number, which is all a client is ever allowed to know about it.
+		Strategist.Apply(strategistPoints, version);
 	}
 
 	public void Reset()
@@ -170,6 +184,7 @@ public sealed class MatchState
 		GroundDeaths = 0;
 		StartTick = 0;
 		EndTick = 0;
+		Strategist.Reset(0);
 		Version++;
 	}
 }

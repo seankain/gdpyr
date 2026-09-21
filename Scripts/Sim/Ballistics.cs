@@ -155,7 +155,7 @@ public static class Ballistics
 	///
 	/// A 940 m/s round covers 15.7 m in one 60 Hz tick, and a single step that long
 	/// integrates drag far too coarsely; sub-stepping is what keeps the trajectory
-	/// stable and step-size independent (docs/NETCODE.md §4.5). Hit detection still
+	/// stable and step-size independent (docs/NETCODE.md §4.6). Hit detection still
 	/// uses the tick's chord — over one tick the arc's departure from it is
 	/// sub-millimetre.
 	/// </summary>

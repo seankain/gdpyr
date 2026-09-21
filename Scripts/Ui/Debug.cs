@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Gdpyr.Match;
 using Gdpyr.Net;
+using Gdpyr.Rts;
 using Gdpyr.Sim;
 using Godot;
 
@@ -39,6 +40,7 @@ public partial class Debug : PanelContainer
 		FillNetwork();
 		FillPlayers();
 		FillCombat();
+		FillUnits();
 	}
 
 	public override void _Input(InputEvent @event)
@@ -122,6 +124,35 @@ public partial class Debug : PanelContainer
 		if (NetworkManager.Instance is { IsServer: true })
 		{
 			SetProperty("hits", $"{combat.HitsResolved}");
+		}
+	}
+
+	/// <summary>
+	/// The replicated-unit count docs/NETCODE.md §8 asks for, plus what the
+	/// strategist is spending. The unit count against the cap is the number that
+	/// answers "is the 50-unit budget in §6 of the plan real".
+	/// </summary>
+	private void FillUnits()
+	{
+		UnitManager units = UnitManager.Instance;
+		if (units == null)
+		{
+			return;
+		}
+
+		SetProperty("units", $"{units.LiveUnitCount}/{SimConfig.MaxUnits} live"
+			+ $"  {units.UnitsProduced} built  {units.UnitsLost} lost"
+			+ (units.NavigationReady ? string.Empty : "  (no navmesh)"));
+
+		if (CombatManager.Instance is { } combat)
+		{
+			SetProperty("points", $"{combat.Match.StrategistPoints}"
+				+ $"  strategists {combat.Teams.StrategistCount}/{TeamService.MaxStrategists}");
+		}
+
+		if (NetworkManager.Instance is { IsServer: true })
+		{
+			SetProperty("rejected orders", $"{units.RejectedOrders}");
 		}
 	}
 
