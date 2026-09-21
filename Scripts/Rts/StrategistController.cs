@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Gdpyr.Core;
 using Gdpyr.Fps;
 using Gdpyr.Match;
+using Gdpyr.Net;
 using Gdpyr.Sim;
 using Gdpyr.Ui;
 using Godot;
@@ -46,6 +47,9 @@ public partial class StrategistController : Node3D
 	private const float CursorRayLength = 4000f;
 
 	private readonly List<Unit> _selected = new();
+
+	/// <summary>Rebuilt every simulation tick and handed to the overlay to draw.</summary>
+	private readonly List<SelectionOverlay.Contact> _contacts = new();
 
 	private Node3D _pivot;
 	private Node3D _arm;
@@ -104,6 +108,7 @@ public partial class StrategistController : Node3D
 
 		if (CombatManager.Instance is { } combat)
 		{
+			RefreshContacts(combat, tick);
 			_hud.Refresh(combat.Match, UnitManager.Instance, tick, _selected.Count, _pendingOrder);
 		}
 	}
@@ -129,6 +134,75 @@ public partial class StrategistController : Node3D
 		}
 
 		GetViewport().SetInputAsHandled();
+	}
+
+	// ---- contacts (docs/IMPLEMENTATION_PLAN.md §M4) -------------------------
+
+	/// <summary>
+	/// What the strategist knows about the enemy (docs/IMPLEMENTATION_PLAN.md §M4).
+	///
+	/// Two sources for one list, because the fog reaches a client and the authority
+	/// by different routes. A client is simply not sent the records, so its evidence
+	/// is a record that has stopped arriving and its last known position is where
+	/// the body froze. A listen host has the true state in hand and has to be told
+	/// what to pretend not to know, so it reads the same
+	/// <see cref="VisibilityService"/> the filter is built from
+	/// (docs/NETCODE.md §6.2).
+	/// </summary>
+	private void RefreshContacts(CombatManager combat, uint tick)
+	{
+		_contacts.Clear();
+
+		Team team = combat.Local?.Team ?? Team.Strategist;
+
+		for (int i = 0; i < combat.PlayerCount; i++)
+		{
+			PlayerCombat player = combat.PlayerAt(i);
+
+			// A player the strategist last saw die is not a contact: their client was
+			// told the health byte before it lost them, so the corpse is knowledge and
+			// not a guess.
+			if (player?.Character == null || player.Team == team || !player.IsAlive)
+			{
+				continue;
+			}
+
+			if (!TryContact(combat, player, tick, out Vector3 position, out float age))
+			{
+				continue;
+			}
+
+			float fade = Fog.GhostAlpha(age);
+			if (fade <= 0f)
+			{
+				continue;
+			}
+
+			_contacts.Add(new SelectionOverlay.Contact(position, fade, !Fog.IsLost(age)));
+		}
+
+		_hud.Overlay.SetContacts(_contacts);
+	}
+
+	/// <summary>
+	/// Where this player was last seen and how long ago, from whichever of the two
+	/// routes this process has. False when it has never been seen at all.
+	/// </summary>
+	private static bool TryContact(CombatManager combat, PlayerCombat player, uint tick, out Vector3 position,
+		out float ageTicks)
+	{
+		if (NetworkManager.Instance is { IsClient: true })
+		{
+			// The records stopped: the body is frozen where the last one put it.
+			position = player.Character.SimPosition;
+			ageTicks = PlayerManager.Instance?.SnapshotAgeTicks(player.PeerId) ?? float.MaxValue;
+			return ageTicks < float.MaxValue;
+		}
+
+		position = Vector3.Zero;
+		ageTicks = float.MaxValue;
+		return combat.Visibility != null && combat.Visibility.TryContact(player.PeerId, tick, out position,
+			out ageTicks);
 	}
 
 	// ---- camera ------------------------------------------------------------
@@ -321,12 +395,16 @@ public partial class StrategistController : Node3D
 		OrderKind kind = _pendingOrder;
 		int targetOwnerId = OwnerId.None;
 
-		PlayerCombat enemy = PickEnemyPlayer(GetViewport().GetMousePosition());
+		PlayerCombat enemy = PickEnemyPlayer(GetViewport().GetMousePosition(), out Vector3 lastKnown);
 		if (enemy != null)
 		{
 			kind = OrderKind.Attack;
 			targetOwnerId = OwnerId.ForPeer(enemy.PeerId);
-			point = enemy.Character?.GlobalPosition ?? point;
+
+			// Where they were last seen, not where they are: the order carries the
+			// strategist's knowledge, and the units walk to it and look for whoever it
+			// named when they get there (UnitManager.AcquireTarget).
+			point = lastKnown;
 		}
 
 		IssueOrder(kind, point, targetOwnerId);
@@ -399,12 +477,20 @@ public partial class StrategistController : Node3D
 		return best;
 	}
 
-	private PlayerCombat PickEnemyPlayer(Vector2 screen)
+	/// <summary>
+	/// The enemy under the cursor, if the strategist still has any idea where one
+	/// is. It picks from the same contacts the markers are drawn from rather than
+	/// from the roster, so a player whose ghost has faded cannot be right-clicked
+	/// where their body happens to be (docs/IMPLEMENTATION_PLAN.md §M4).
+	/// </summary>
+	private PlayerCombat PickEnemyPlayer(Vector2 screen, out Vector3 lastKnown)
 	{
 		CombatManager combat = CombatManager.Instance;
 		Team team = combat?.Local?.Team ?? Team.Strategist;
+		uint tick = NetworkManager.Instance?.Tick ?? 0;
 		PlayerCombat best = null;
 		float bestDistance = PickRadiusPixels;
+		lastKnown = Vector3.Zero;
 
 		for (int i = 0; combat != null && i < combat.PlayerCount; i++)
 		{
@@ -414,7 +500,13 @@ public partial class StrategistController : Node3D
 				continue;
 			}
 
-			if (!TryScreen(player.Character.GlobalPosition + Vector3.Up, out Vector2 at))
+			if (!TryContact(combat, player, tick, out Vector3 position, out float age)
+				|| Fog.IsForgotten(age))
+			{
+				continue;
+			}
+
+			if (!TryScreen(position + Vector3.Up, out Vector2 at))
 			{
 				continue;
 			}
@@ -424,6 +516,7 @@ public partial class StrategistController : Node3D
 			{
 				bestDistance = distance;
 				best = player;
+				lastKnown = position;
 			}
 		}
 

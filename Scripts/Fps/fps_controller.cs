@@ -113,6 +113,8 @@ public partial class fps_controller : CharacterBody3D
 	private Vector3 _simPosition;
 	private Vector3 _visualOffset;
 	private ushort _previousButtons;
+	private bool _deadPresentation;
+	private bool _fogHidden;
 
 	public override void _Ready()
 	{
@@ -206,9 +208,40 @@ public partial class fps_controller : CharacterBody3D
 	/// </summary>
 	public void SetDeadPresentation(bool dead)
 	{
-		Visible = !dead;
+		_deadPresentation = dead;
 		CollisionLayer = dead ? 0u : CollisionLayers.Players;
+		ApplyPresentation();
 	}
+
+	/// <summary>
+	/// Takes a character off a local strategist's screen because the fog says they
+	/// cannot see it (docs/IMPLEMENTATION_PLAN.md §M4).
+	///
+	/// Presentation only, and only ever set on a process that is not simulating this
+	/// character for real: on a client the records stop arriving and this hides the
+	/// body they would have moved; on a listen host it is the whole of the fog. The
+	/// collision layer is deliberately left alone — being invisible to the commander
+	/// is not the same as not being there, and a round fired at a hidden player must
+	/// still hit them.
+	/// </summary>
+	public void SetFogHidden(bool hidden)
+	{
+		if (_fogHidden == hidden)
+		{
+			return;
+		}
+
+		_fogHidden = hidden;
+		ApplyPresentation();
+	}
+
+	/// <summary>
+	/// The one place <see cref="Node3D.Visible"/> is decided. Two reasons to hide a
+	/// character — it is dead, and it is out of sight — and either of them setting
+	/// the flag on its own would make the other one's state depend on the order they
+	/// arrived in.
+	/// </summary>
+	private void ApplyPresentation() => Visible = !_deadPresentation && !_fogHidden;
 
 	/// <summary>
 	/// Takes the camera and the mouse back for the first-person view.

@@ -252,7 +252,9 @@ codebase they are not, and there were three reasons to change:
 1. every other message here is already a hand-packed codec with a total decoder and a unit test, so
    a second replication mechanism alongside them is a second set of rules to remember;
 2. the fog of war in §6.2 is a filter over *which records go in which peer's packet*, which is a
-   loop bound in the broadcast and a per-node API call in the alternative;
+   loop bound in the broadcast and a per-node API call in the alternative — M4 put that filter on
+   the player snapshot rather than on this one (§6.2 says why), and it is the same loop in the
+   same shape;
 3. it closes the risk the plan flags against the built-in route — that per-peer visibility gates
    synchronization but perhaps not spawning — because a unit a peer is not told about has no record
    in its packet and therefore no node. M4 does not need the spike.
@@ -266,28 +268,69 @@ budgets for everything.
 Fog of war is an **anti-cheat property, not a shader**. If the strategist client receives the
 position, a modified client can display it. Filter on the server.
 
-With §6.1's packed replicator the shape changes but the property does not: the filter is applied
-while building each peer's packet, in `UnitManager.BroadcastUnitSnapshot`, and a hidden entity is a
-record that is not written. There is nothing to spike — a peer that is never sent a spawn message
-has no node to read a position off.
+**M4 shipped it as a filter over the *player* snapshot**, not the unit one. §6.1 chose the packed
+replicator partly to make this a loop bound rather than a per-node API call, and it is — but the
+loop it turned out to be bound in is `PlayerManager.BroadcastSnapshot`, which is where the asymmetry
+actually lives. Every unit on the field is the strategist's, so filtering `UnitSnapshot` per peer
+would hide nothing from the side that owns them; the only thing it could hide is the strategist's
+army from the ground force, and a unit blinking out of an FPS at forty metres because a 7.5 Hz
+sphere test said so is a worse defect than the radar it would be closing. Units stay one broadcast.
+
+What ships:
 
 ```
-// VisibilityService, server-only, 5–10 Hz
-foreach (var peer in strategistPeers)
-    foreach (var e in groundTeamEntities)
-    {
-        bool seen = sensors.AnyFriendlyUnitWithin(e.Position, peer.Team);  // + optional LOS ray
-        if (seen) lastKnown[peer.Id][e.Id] = (e.Position, currentTick);
-    }
-// then: RpcId(peer.Id, ServerSnapshot, Encode(tick, visibleRecordsFor(peer)))
+// VisibilityService, server-only, every SimConfig.FogRefreshIntervalTicks (8 ticks, 7.5 Hz)
+sensors.Clear();
+foreach (var unit in strategistUnits)      sensors.Add(unit.EyePosition, unit.SensorRadius);
+foreach (var player in groundForcePlayers) contact[player] = sensors.Sees(player.Chest)
+                                                             && anyClearLineOfSight(player.Chest);
+// then, per peer, at SnapshotRate:
+RpcId(peer, ServerSnapshot, Encode(tick, recordsVisibleTo(peer)))
 ```
 
-- Sensor radius lives on `UnitDefinition` (M3 ships it at 45 m for infantry); different unit types
-  get different radii, and that is the lever that makes scouting a real decision.
-- Client renders `lastKnown` as a ghost marker that fades after N seconds. Stale information is what
-  makes the role interesting — do not hide it, decay it.
-- The player snapshot needs the same treatment and is the harder half: it is one broadcast today
-  (`PlayerManager.BroadcastSnapshot`) and becomes one packet per strategist peer.
+- **Visibility is a property of the side, not of a peer.** Two strategists share an army and
+  therefore share its eyes, so this is one recomputation and one `IsVisible` table however many
+  strategists are seated.
+- **Three records always go in a strategist's packet**: their own (their prediction is reconciled
+  against it and their health comes from it), every other strategist's, and every visible
+  ground-force player's. Everything else is a record that is not written.
+- **Sensor radius lives on `UnitDefinition`** (45 m for infantry); different unit types get
+  different radii, and that is the lever that makes scouting a real decision.
+- **Line of sight is bounded, not free.** Fifty units may cover one player; only the
+  `FogLineOfSightCandidates` nearest are asked whether a wall is in the way
+  (`VisionField.Gather`), because each answer costs a ray against the physics world. Six players
+  against three candidates at 7.5 Hz is ~135 rays a second, against ~2 250 for testing every
+  sensor that covers.
+- **Projectile messages are filtered by where they happened**, not by who fired them. A tracer
+  leaving a muzzle says where somebody is just as loudly as a position record, and a flanker who
+  opened fire would otherwise light themselves up on the strategist's screen from across the map.
+  The test is `VisibilityService.Covers` — range only, no ray: gunfire thirty metres from a
+  rifleman is something the man on the ground notices whether or not there is a wall between them,
+  and a ray per shot would be a ray per shot. It falls out of this that a unit's own shots and hits
+  on a unit are always sent, because the unit is a sensor standing at that point.
+- **A client is never told it has lost contact.** There is no message for it, and none is needed:
+  a snapshot carries the whole of what its peer may see, so a record missing from a packet that
+  *arrived* was withheld on purpose. `Fog.IsLost` measures each peer's newest record against the
+  newest packet the client has decoded, which makes the inference exact rather than a latency
+  guess — a lost datagram takes the reference with it instead of aging anything, so loss and ping
+  cannot manufacture a ghost. The timeout is four ticks, which covers an unreliable datagram
+  arriving out of order and nothing else.
+- **Stale information is what makes the role interesting, so it decays rather than disappearing.**
+  The body is hidden the moment the contact is lost; `SelectionOverlay` keeps drawing a marker at
+  the position it froze at, fading over `GhostLifetimeTicks` (8 s) and then gone. A right-click
+  picks from those contacts rather than from the roster, so an order against a ghost is an order
+  to where they were last seen — and a player whose ghost has faded cannot be clicked at all.
+- **A listen host draws a curtain, not a filter.** The authority *is* the state and cannot be
+  filtered against itself, so `PlayerManager.ApplyLocalFog` hides the characters instead. It is
+  presentation and not protection, which is exactly why the plan verifies every milestone against
+  the dedicated server.
+
+Two things it deliberately does not do. The ground force is not fogged at all — they see each
+other and the units with their eyes, the client needs the node to draw it, and a snapshot gap on
+that side is packet loss rather than the fog. And a player who changes side while hidden keeps
+their old team bit on the strategist's client until the next time they are seen, because the bit
+rides the record that is being withheld; the cost is that an unseen player stays unseen, and it
+corrects itself within one snapshot of them reappearing.
 
 ### 6.3 Commands
 
@@ -325,7 +368,7 @@ route, so there is no second behaviour to write.
 | Message | Direction | Transfer | Rate | ~Size |
 |---|---|---|---|---|
 | `Input` (3 frames) | C→S | Unreliable | 60 Hz | ~48 B |
-| `PlayerSnapshot` (all players) | S→C | Unreliable | 30 Hz | 29 B × players |
+| `PlayerSnapshot` (visible players) | S→C | Unreliable | 30 Hz | 29 B × players |
 | `UnitSnapshot` (visible units) | S→C | Unreliable | 20 Hz | 5 B + 13 B × units |
 | `ServerSpawnUnit` / `ServerDespawnUnit` | S→C | Reliable | per unit per life | ~24 B / 8 B |
 | `ProjectileSpawn` | S→C | Reliable | per shot | 23 B |
@@ -334,6 +377,12 @@ route, so there is no second behaviour to write.
 | `ServerBarracksState` | S→C | Reliable | 5 Hz per barracks | ~8 B |
 | `MatchState` (tickets, points) | S→C | Reliable | on change | ~22 B |
 | `ClockProbe` / `ClockReply` | both | Unreliable | 2 Hz | ~12 B |
+
+Both snapshots say *visible*, and since M4 the player one means it: a strategist peer is sent its
+own record, the other strategists' and whichever of the ground force its units can see (§6.2), so
+it is one packet per strategist rather than one broadcast. The ground force still shares a single
+packet, and a round with nobody in the chair is still a single broadcast. The fog only ever
+subtracts, so the budget below is the ceiling.
 
 Quantize positions to three `int16` at 1 cm resolution (±327 m covers the map) and angles to
 `uint16`. Rough budget at 8 players + 50 visible units, at the rates actually shipped (players
@@ -361,6 +410,13 @@ mesh baked, the strategist's points, how many strategists are seated, and — on
 refused. "Live units against the cap" is the number that says whether §6 of the implementation
 plan's 50-unit budget is real; "no navmesh" next to it is why twenty riflemen are walking into a
 wall.
+
+M4 added the fog. On the authority: how many of the ground force its sensors have out of how many
+are on the field, how many sensors that is, how many records and messages the filter has kept off
+the wire, and how many line-of-sight rays it has spent. "0 withheld" next to a live round with a
+strategist in it means the fog is not being applied; "seen" climbing towards "tracked" as an attack
+goes in is what scouting looks like as a number. On a strategist's client, the other side of it:
+how many players it is still being told about, and how many it is drawing from memory.
 
 Every hard bug in this system is a timing bug. Without these numbers you are guessing.
 
@@ -393,7 +449,12 @@ everybody else: `BotFillPolicy` will not spawn one that the broadcast could not 
 
 What a bot knows is deliberately not everything the server does. A ground bot acquires only what it
 has line of sight to, at its own sensor radius. A computer strategist has no sensor of its own at
-all: its intel is the union of what its units have acquired (`Unit.TargetOwnerId`), and when it has
-seen nothing it sweeps the ground force's spawn areas, which are static map geometry a human
-strategist can see on screen anyway. So when §6.2's fog of war arrives for the human strategist,
-the bot is already behind one.
+all: its intel is what its units can see, and when it has seen nothing it sweeps the ground force's
+spawn areas, which are static map geometry a human strategist can see on screen anyway.
+
+M4 made that literal. Until then the bot read `Unit.TargetOwnerId` — what a unit had *acquired*,
+which is a little narrower than what the side can see; it now reads the same `VisibilityService`
+the human strategist's packet is filtered through, so the two are behind one fog rather than two,
+and a change to what the fog shows changes both. It reads the live contact and not the last known
+position on purpose: a bot that chased ghosts would be a different opponent from the one this
+exists to be.

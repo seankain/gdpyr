@@ -49,9 +49,9 @@ public readonly struct StrategistTraits
 /// It plays the same game a human strategist does and through the same two
 /// requests: put a unit on a queue, and give units an order (docs/NETCODE.md §6.3).
 /// It has no privileged access to anything — in particular it is told where the
-/// enemy is by its own units' target acquisition and by nothing else, so when M4
-/// puts a fog of war in front of the human strategist the bot is already behind
-/// one.
+/// enemy is by the same <c>VisibilityService</c> that decides what a human
+/// strategist's client is sent, so the two are behind one fog rather than two
+/// (docs/NETCODE.md §6.2, §9).
 ///
 /// Engine-free, so the economy ("does it ever queue itself broke") is a test
 /// rather than a twenty-minute round.

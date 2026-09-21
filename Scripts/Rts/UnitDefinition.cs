@@ -61,9 +61,9 @@ public partial class UnitDefinition : Resource
 	[ExportCategory("Senses and weapons")]
 
 	/// <summary>
-	/// How far it notices an enemy. The lever that makes scouting a real decision
-	/// once M4 filters what a strategist may see (docs/NETCODE.md §6.2), so
-	/// different tiers are meant to differ here.
+	/// How far it notices an enemy, and — since M4 — how far the side that owns it
+	/// can see at all (docs/NETCODE.md §6.2). It is the lever that makes scouting a
+	/// real decision, so different tiers are meant to differ here.
 	/// </summary>
 	[Export]
 	public float SensorRadiusMeters = 45f;

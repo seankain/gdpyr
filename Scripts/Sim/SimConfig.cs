@@ -214,6 +214,45 @@ public static class SimConfig
 	/// <summary>Units one barracks may have on order at once.</summary>
 	public const int MaxBuildQueue = 24;
 
+	// ---- fog of war (docs/NETCODE.md §6.2) ---------------------------------
+
+	/// <summary>
+	/// How often the server recomputes what each side can see: every 8 ticks is
+	/// 7.5 Hz, inside the 5–10 Hz the design asks for
+	/// (docs/IMPLEMENTATION_PLAN.md §M4). It is a cost, not a resolution — a unit
+	/// walks 0.6 m between two of these, and the snapshot that carries the result
+	/// still goes out at <see cref="SnapshotRate"/>.
+	/// </summary>
+	public const int FogRefreshIntervalTicks = 8;
+
+	/// <summary>
+	/// Line-of-sight rays a contact is worth per refresh. Fifty units may cover one
+	/// player; only the nearest few are asked whether a wall is in the way, because
+	/// each answer costs a ray against the physics world (<see cref="VisionField.Gather"/>).
+	/// </summary>
+	public const int FogLineOfSightCandidates = 3;
+
+	/// <summary>
+	/// How far behind the newest snapshot a client has decoded a peer's own record
+	/// may fall before the gap means the fog (docs/NETCODE.md §6.2).
+	///
+	/// Measured against the newest *packet* rather than against the clock, which is
+	/// what makes it exact: a snapshot carries the whole of what its peer is allowed
+	/// to see, so a record missing from one that arrived was withheld, and one that
+	/// never arrived takes the reference with it. It therefore has nothing to do with
+	/// latency or with packet loss, and only has to cover an unreliable datagram
+	/// arriving out of order — four ticks is two snapshot intervals at
+	/// <see cref="SnapshotRate"/>.
+	/// </summary>
+	public const int FogContactTimeoutTicks = 4;
+
+	/// <summary>
+	/// How long a lost contact's ghost takes to fade from where it was last seen.
+	/// Eight seconds: long enough to act on, short enough that acting on it late is
+	/// a mistake. Client-side presentation only.
+	/// </summary>
+	public const int GhostLifetimeTicks = TickRate * 8;
+
 	// ---- wire quantization (docs/NETCODE.md §7) ----------------------------
 
 	/// <summary>Position resolution on the wire, in metres.</summary>
