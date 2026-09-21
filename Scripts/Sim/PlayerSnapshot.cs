@@ -11,8 +11,8 @@ namespace Gdpyr.Sim;
 /// </summary>
 public struct PlayerSnapshot
 {
-	/// <summary>Bytes on the wire: 4 + 6 + 6 + 2 + 2 + 4 + 1 + 1.</summary>
-	public const int SizeBytes = 26;
+	/// <summary>Bytes on the wire: 4 + 6 + 6 + 2 + 2 + 4 + 1 + 1 + 1 + 1 + 1.</summary>
+	public const int SizeBytes = 29;
 
 	public int PeerId;
 	public Vector3 Position;
@@ -30,6 +30,26 @@ public struct PlayerSnapshot
 	/// steers its input clock by this (docs/NETCODE.md §2); other peers ignore it.
 	/// </summary>
 	public byte InputBufferDepth;
+
+	/// <summary>
+	/// Hit points, 0 for dead. Carried in the snapshot rather than as its own
+	/// reliable message because it is small, because it is the one fact a client
+	/// must never be wrong about for long, and because a snapshot that is always
+	/// right is self-healing where a missed event is not.
+	/// </summary>
+	public byte Health;
+
+	/// <summary>Rounds in the equipped weapon's magazine, for the owner's HUD.</summary>
+	public byte Ammo;
+
+	/// <summary>Equipped slot and reload state, packed (see <see cref="WeaponFlags"/>).</summary>
+	public byte WeaponFlags;
+
+	public readonly bool IsAlive => Health > 0;
+
+	public readonly int EquippedSlot => Sim.WeaponFlags.Slot(WeaponFlags);
+
+	public readonly bool IsReloading => Sim.WeaponFlags.IsReloading(WeaponFlags);
 
 	public readonly CharacterState ToCharacterState() => new()
 	{

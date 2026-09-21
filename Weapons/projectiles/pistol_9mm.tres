@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="ProjectileDefinition" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Fps/ProjectileDefinition.cs" id="1_projdef"]
+
+[resource]
+script = ExtResource("1_projdef")
+Name = &"pistol_9mm"
+MassGrams = 8.0
+RadiusMillimeters = 4.5
+DragCoefficient = 0.30
+MuzzleVelocity = 320.0
+LifetimeSeconds = 4.0
+Damage = 25.0
+ExplosionRadiusMeters = 0.0
+ExplosionDamage = 0.0
+SweepRadiusMeters = 0.0
+TracerColor = Color(1, 0.85, 0.4, 1)
+TracerLengthMeters = 0.9
+TracerRadiusMeters = 0.025

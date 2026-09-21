@@ -111,6 +111,72 @@ public static class SimConfig
 	/// </summary>
 	public const float VisualErrorHalfLifeSeconds = 0.05f;
 
+	// ---- combat (docs/NETCODE.md §4, §5) -----------------------------------
+
+	/// <summary>
+	/// Density of air at 20 °C and 101.325 kPa [kg/m³]. The value the ported
+	/// ballistics used; a protocol constant, because two peers integrating a
+	/// trajectory in different air would disagree about where a bullet went.
+	/// </summary>
+	public const float AirDensity = 1.204f;
+
+	/// <summary>
+	/// Heun steps per simulation tick. Eight is 2.08 ms per step at 60 Hz, which
+	/// puts the integrator well inside the step-size stability the design asks for
+	/// (docs/NETCODE.md §4.5); hit detection still uses the whole tick's chord.
+	/// </summary>
+	public const int ProjectileSubSteps = 8;
+
+	/// <summary>
+	/// Projectiles in flight at once, server-wide. Pre-sized and never grown: no
+	/// per-tick allocation in the projectile path (docs/IMPLEMENTATION_PLAN.md §3).
+	/// </summary>
+	public const int MaxLiveProjectiles = 128;
+
+	/// <summary>
+	/// Seconds a projectile lives before it expires unheard-of. At 250 m/s that is
+	/// two kilometres, well past the map.
+	/// </summary>
+	public const float MaxProjectileLifetimeSeconds = 8f;
+
+	/// <summary>Below this height a projectile has left the map and is dropped.</summary>
+	public const float ProjectileKillPlaneY = -50f;
+
+	/// <summary>
+	/// Ticks a projectile may be fast-forwarded through in one step. A client
+	/// catches a newly announced projectile up to its render clock, which is at most
+	/// the interpolation delay plus its latency; the cap is what keeps a bogus
+	/// spawn tick from costing a second of integration in one frame.
+	/// </summary>
+	public const int MaxProjectileCatchUpTicks = 60;
+
+	/// <summary>
+	/// Cap on the lag compensation a shooter can be given, in ticks: 15 ticks is
+	/// 250 ms of one-way latency (docs/NETCODE.md §4.3). It is a cap and not a
+	/// measurement because the number derives from what the *client* reports its
+	/// RTT to be, and a client can lie.
+	/// </summary>
+	public const int MaxLagCompensationTicks = 15;
+
+	/// <summary>
+	/// Hitbox history retained per damageable entity (docs/NETCODE.md §5): 32 ticks
+	/// is 533 ms at 60 Hz, and a power of two so the ring index is a mask.
+	/// </summary>
+	public const int HitboxHistoryTicks = 32;
+
+	/// <summary>Full health. One byte on the wire, so the ceiling is 255.</summary>
+	public const int MaxHealth = 100;
+
+	/// <summary>
+	/// Weapon definitions addressable by a single byte on the wire. The catalog's
+	/// order is a protocol constant: an id means nothing unless both ends resolve
+	/// it to the same weapon.
+	/// </summary>
+	public const int MaxWeaponDefinitions = 32;
+
+	/// <summary>Weapon slots a ground-force loadout carries: melee, sidearm, large.</summary>
+	public const int WeaponSlots = 3;
+
 	// ---- wire quantization (docs/NETCODE.md §7) ----------------------------
 
 	/// <summary>Position resolution on the wire, in metres.</summary>

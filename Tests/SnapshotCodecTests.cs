@@ -17,14 +17,18 @@ public class SnapshotCodecTests
 		LastInputTick = 4242,
 		StateId = 3,
 		InputBufferDepth = 4,
+		Health = 73,
+		Ammo = 17,
+		WeaponFlags = Sim.WeaponFlags.Pack(2, reloading: true),
 	};
 
 	[Fact]
-	public void Player_IsTwentySixBytesOnTheWire()
+	public void Player_IsTwentyNineBytesOnTheWire()
 	{
-		// docs/NETCODE.md §7 budgets ~30 B per player at 30-60 Hz.
-		Assert.Equal(26, PlayerSnapshot.SizeBytes);
-		Assert.Equal(5 + (8 * 26), SnapshotCodec.PayloadBytes(8));
+		// docs/NETCODE.md §7 budgets ~30 B per player at 30-60 Hz. M2 spends three
+		// of the remaining bytes on health, ammo and weapon flags.
+		Assert.Equal(29, PlayerSnapshot.SizeBytes);
+		Assert.Equal(5 + (8 * 29), SnapshotCodec.PayloadBytes(8));
 	}
 
 	[Fact]
@@ -44,6 +48,12 @@ public class SnapshotCodecTests
 			Assert.Equal(players[i].LastInputTick, into[i].LastInputTick);
 			Assert.Equal(players[i].StateId, into[i].StateId);
 			Assert.Equal(players[i].InputBufferDepth, into[i].InputBufferDepth);
+			Assert.Equal(players[i].Health, into[i].Health);
+			Assert.Equal(players[i].Ammo, into[i].Ammo);
+			Assert.Equal(players[i].WeaponFlags, into[i].WeaponFlags);
+			Assert.Equal(2, into[i].EquippedSlot);
+			Assert.True(into[i].IsReloading);
+			Assert.True(into[i].IsAlive);
 			Assert.True((players[i].Position - into[i].Position).Length() < 0.01f);
 			Assert.True((players[i].Velocity - into[i].Velocity).Length() < 0.01f);
 			Assert.InRange(into[i].Yaw - players[i].Yaw, -1e-4f, 1e-4f);

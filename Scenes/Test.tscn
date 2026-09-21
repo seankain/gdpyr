@@ -16,10 +16,10 @@ background_mode = 2
 sky = SubResource("Sky_ede6t")
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_kc03m"]
-size = Vector3(60, 1, 60)
+size = Vector3(300, 1, 300)
 
 [sub_resource type="BoxMesh" id="BoxMesh_tv24u"]
-size = Vector3(60, 1, 60)
+size = Vector3(300, 1, 300)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_6g6ik"]
 albedo_color = Color(0.11331, 0.18, 0.1098, 1)
@@ -109,27 +109,27 @@ use_collision = true
 
 [node name="Floor" type="CSGBox3D" parent="CSGCombiner3D" unique_id=1137603522]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.00894165, -2.86102e-06, -0.104286)
-size = Vector3(30, 1, 30)
+size = Vector3(240, 1, 240)
 material = ExtResource("2_4viys")
 
 [node name="Wall1" type="CSGBox3D" parent="CSGCombiner3D" unique_id=1641347921]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -14.503, 2.5, 0)
-size = Vector3(1, 4, 30)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -120, 2.5, 0)
+size = Vector3(1, 4, 240)
 material = ExtResource("2_4viys")
 
 [node name="Wall2" type="CSGBox3D" parent="CSGCombiner3D" unique_id=1543039452]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14.531, 2.5, 0)
-size = Vector3(1, 4, 30)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 120, 2.5, 0)
+size = Vector3(1, 4, 240)
 material = ExtResource("2_4viys")
 
 [node name="Wall3" type="CSGBox3D" parent="CSGCombiner3D" unique_id=1173180769]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 14.5)
-size = Vector3(30, 4, 1)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 120)
+size = Vector3(240, 4, 1)
 material = ExtResource("2_4viys")
 
 [node name="Wall4" type="CSGBox3D" parent="CSGCombiner3D" unique_id=1028980048]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, -14.5)
-size = Vector3(30, 4, 1)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, -120)
+size = Vector3(240, 4, 1)
 material = ExtResource("2_4viys")
 
 [node name="CSGBox3D" type="CSGBox3D" parent="CSGCombiner3D" unique_id=987260501]
@@ -159,3 +159,19 @@ material = SubResource("StandardMaterial3D_kgbsf")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.24246, 4.01604, -3.21066)
 size = Vector3(1, 0.265625, 1)
 material = SubResource("StandardMaterial3D_kgbsf")
+
+[node name="Range25m" type="CSGBox3D" parent="CSGCombiner3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, -18)
+size = Vector3(0.6, 2, 0.6)
+
+[node name="Range50m" type="CSGBox3D" parent="CSGCombiner3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, -43)
+size = Vector3(0.6, 2, 0.6)
+
+[node name="Range100m" type="CSGBox3D" parent="CSGCombiner3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, -93)
+size = Vector3(0.6, 2, 0.6)
+
+[node name="Range150m" type="CSGBox3D" parent="CSGCombiner3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, -143)
+size = Vector3(0.6, 2, 0.6)

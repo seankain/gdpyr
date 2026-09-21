@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="Weapons" format=3 uid="uid://ctyponc4rjid7"]
+[gd_resource type="Resource" script_class="WeaponDefinition" format=3 uid="uid://ctyponc4rjid7"]
 
 [ext_resource type="ArrayMesh" uid="uid://bnch5wr4p40p4" path="res://Weapons/geopick/geopick_mesh.res" id="1_rfhf3"]
-[ext_resource type="Script" uid="uid://ciex5x8gn466d" path="res://Scripts/Fps/Weapons.cs" id="2_o8x2d"]
+[ext_resource type="Script" uid="uid://ciex5x8gn466d" path="res://Scripts/Fps/WeaponDefinition.cs" id="2_o8x2d"]
 
 [resource]
 script = ExtResource("2_o8x2d")
@@ -9,3 +9,12 @@ Name = &"geopick"
 Position = Vector3(0.66, -0.78, -0.688)
 Rotation = Vector3(0, -1.5708, 0)
 Mesh = ExtResource("1_rfhf3")
+Slot = 0
+DamageAmount = 75.0
+FireMode = 0
+RoundsPerMinute = 70.0
+MagazineSize = 0
+ReloadSeconds = 0.0
+IsMelee = true
+MeleeRangeMeters = 2.5
+MeleeSweepRadiusMeters = 0.35

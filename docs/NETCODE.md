@@ -179,8 +179,16 @@ Vacuum lower bounds (drag only makes flight time and drop *larger*), perpendicul
 
 At realistic velocities and prototype engagement ranges, drop is centimetres and leading is under
 one body width — the ballistics work is invisible. If travel time and target leading are meant to be
-a *skill expression*, expect to run 200–400 m/s. Expose muzzle velocity, mass, radius and BC on the
+a *skill expression*, expect to run 200–400 m/s. Expose muzzle velocity, mass, radius and drag on the
 `ProjectileDefinition` resource and tune them from playtests.
+
+M2 ships in that band on purpose: 320 m/s for the pistol, 340 for the rifle, 400 for the DMR and
+90 for the launcher. All four are guesses until someone has tried to lead a sprinting player with
+them.
+
+One correction to the port: the resource field is `DragCoefficient`, the dimensionless C_d of the
+drag equation — *not* a G1 ballistic coefficient. `BallisticArc.cs` passed a G1 BC into that slot,
+and the two are different quantities, so doing the same would have silently mis-scaled drag.
 
 ### 4.5 Tests (`Tests/`, no engine required)
 
@@ -194,9 +202,16 @@ a *skill expression*, expect to run 200–400 m/s. Expose muzzle velocity, mass,
 
 ## 5. Hitbox history
 
-Server-side ring buffer, 500 ms (30 ticks at 60 Hz), per damageable entity: capsule/box transforms
-plus the tick index. Fixed-size array, no allocation. Used for projectile rewind (§4.4) and for
-melee validation. Also the single best debugging aid you will have — dump it on a disputed kill.
+Server-side ring buffer, 500 ms (32 ticks at 60 Hz, a power of two so the index is a mask), per
+damageable entity: the capsule plus the tick index. Fixed-size array, no allocation.
+
+Built in M2 (`Scripts/Sim/HitboxHistory.cs`). **Melee already rewinds through it** — a swing is
+instantaneous, so testing it against where the attacker's client saw the target is exactly right.
+Projectiles do not: they use §4.3's cheap compensation instead, and moving them to a full rewind is
+the upgrade this ring exists to make cheap. Player hits are resolved against these capsules in
+engine-free code (`Scripts/Sim/Hitbox.cs`), not by a physics query, which is why characters moved
+to their own collision layer in M2 — a projectile's world query must not find them. Also the single
+best debugging aid you will have: dump it on a disputed kill.
 
 ---
 
@@ -257,10 +272,10 @@ type is valid for the unit. Client shows the order marker immediately; a rejecte
 | Message | Direction | Transfer | Rate | ~Size |
 |---|---|---|---|---|
 | `Input` (3 frames) | C→S | Unreliable | 60 Hz | ~48 B |
-| `PlayerSnapshot` (all players) | S→C | Unreliable | 30–60 Hz | ~30 B × players |
+| `PlayerSnapshot` (all players) | S→C | Unreliable | 30 Hz | 29 B × players |
 | `UnitSnapshot` (visible units) | S→C | Unreliable | 10–20 Hz | ~10 B × units |
-| `ProjectileSpawn` | S→C | Reliable | per shot | ~20 B |
-| `ProjectileHit` | S→C | Reliable | per hit | ~16 B |
+| `ProjectileSpawn` | S→C | Reliable | per shot | 23 B |
+| `ProjectileHit` | S→C | Reliable | per hit | 15 B |
 | `CmdIssueOrder` | C→S | Reliable | per click | ~16 B + 4 B/unit |
 | `MatchState` (tickets, points, nodes) | S→C | Reliable | on change | ~24 B |
 | `ClockProbe` / `ClockReply` | both | Unreliable | 2 Hz | ~12 B |

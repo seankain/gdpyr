@@ -79,6 +79,25 @@ public struct InputFrame
 	public static InputFrame Neutral(uint tick, float yaw = 0f, float pitch = 0f) =>
 		Create(tick, 0f, 0f, yaw, pitch, InputButtons.None);
 
+	/// <summary>
+	/// The same frame with its movement and buttons stripped, keeping the tick and
+	/// the look angles.
+	///
+	/// This is what a dead player's input becomes. Both the server and the owning
+	/// client apply it to the *same* recorded frame, so a corpse stops moving and
+	/// stops shooting on both without the two disagreeing — and the player can still
+	/// look around while they wait, because the angles survive.
+	/// </summary>
+	public static InputFrame LookOnly(in InputFrame frame) => new()
+	{
+		Tick = frame.Tick,
+		MoveX = 0,
+		MoveZ = 0,
+		Yaw = frame.Yaw,
+		Pitch = frame.Pitch,
+		Buttons = 0,
+	};
+
 	public override readonly string ToString() =>
 		$"tick {Tick} move ({MoveX},{MoveZ}) yaw {YawRadians:0.00} buttons 0x{Buttons:x}";
 }

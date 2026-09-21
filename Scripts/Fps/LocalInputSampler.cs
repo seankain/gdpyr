@@ -10,6 +10,9 @@ namespace Gdpyr.Fps;
 /// (docs/NETCODE.md §3.1). Everything downstream — prediction, replay, the
 /// server — works from the recorded frames alone.
 ///
+/// The combat buttons M1 reserved on the wire (fire, aim, reload, melee) are
+/// sampled from M2 on; nothing else about the boundary changed.
+///
 /// Look angles are accumulated here and sent as absolute, already-quantized
 /// values. Absolute, because replaying a delta would apply it again; quantized,
 /// because the client must predict with exactly the angle the server will
@@ -83,6 +86,10 @@ public partial class LocalInputSampler : Node
 		if (Input.IsActionPressed("jump")) { buttons |= InputButtons.Jump; }
 		if (Input.IsActionPressed("crouch")) { buttons |= InputButtons.Crouch; }
 		if (Input.IsActionPressed("sprint")) { buttons |= InputButtons.Sprint; }
+		if (Input.IsActionPressed("fire")) { buttons |= InputButtons.Fire; }
+		if (Input.IsActionPressed("aim")) { buttons |= InputButtons.Ads; }
+		if (Input.IsActionPressed("reload")) { buttons |= InputButtons.Reload; }
+		if (Input.IsActionPressed("melee")) { buttons |= InputButtons.Melee; }
 		if (Input.IsActionPressed("weapon_melee")) { buttons |= InputButtons.Weapon1; }
 		if (Input.IsActionPressed("weapon_sidearm")) { buttons |= InputButtons.Weapon2; }
 		if (Input.IsActionPressed("weapon_large")) { buttons |= InputButtons.Weapon3; }

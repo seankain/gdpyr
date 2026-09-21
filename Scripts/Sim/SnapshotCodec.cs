@@ -55,6 +55,9 @@ public static class SnapshotCodec
 			BinaryPrimitives.WriteUInt32LittleEndian(into[(offset + 20)..], p.LastInputTick);
 			into[offset + 24] = p.StateId;
 			into[offset + 25] = p.InputBufferDepth;
+			into[offset + 26] = p.Health;
+			into[offset + 27] = p.Ammo;
+			into[offset + 28] = p.WeaponFlags;
 			offset += PlayerSnapshot.SizeBytes;
 		}
 		return size;
@@ -89,6 +92,9 @@ public static class SnapshotCodec
 				LastInputTick = BinaryPrimitives.ReadUInt32LittleEndian(payload[(offset + 20)..]),
 				StateId = payload[offset + 24],
 				InputBufferDepth = payload[offset + 25],
+				Health = payload[offset + 26],
+				Ammo = payload[offset + 27],
+				WeaponFlags = payload[offset + 28],
 			};
 			offset += PlayerSnapshot.SizeBytes;
 		}
