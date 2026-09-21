@@ -36,7 +36,7 @@ public readonly struct BotTraits
 	/// <summary>Closes to about here, then holds and strafes rather than walking into the muzzle [m].</summary>
 	public readonly float PreferredRangeMeters;
 
-	/// <summary>How far it notices an enemy [m]. The bot's half of the fog of war, pending M4.</summary>
+	/// <summary>How far it notices an enemy [m]. A ground bot's own eyes, not the side's (docs/NETCODE.md §9).</summary>
 	public readonly float SensorRadiusMeters;
 
 	/// <summary>How close its aim must be to the target before it pulls the trigger [rad].</summary>

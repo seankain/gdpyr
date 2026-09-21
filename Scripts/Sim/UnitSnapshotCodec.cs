@@ -15,9 +15,10 @@ namespace Gdpyr.Sim;
 /// <item>every other message in this project is already a hand-packed codec with a
 /// total decoder and a unit test, and a second replication mechanism alongside
 /// them is a second set of rules to remember;</item>
-/// <item>the fog of war M4 is built around is a filter over *which records go in
-/// which peer's packet*, which is a loop bound here and a per-node API call
-/// there;</item>
+/// <item>the fog of war is a filter over *which records go in which peer's
+/// packet*, which is a loop bound in a broadcast and a per-node API call in the
+/// alternative — M4 bound that loop in the player snapshot rather than in this
+/// one, for the reason docs/NETCODE.md §6.2 gives, but in the same shape;</item>
 /// <item>it closes the risk §6 flags against the built-in route — that per-peer
 /// visibility gates synchronization but perhaps not spawning — because a unit a
 /// peer is not told about has no record in its packet and therefore no node.</item>

@@ -854,8 +854,12 @@ public partial class UnitManager : Node
 			};
 		}
 
-		// M4 filters this loop per peer rather than broadcasting: a unit a strategist
-		// cannot see is a record left out of that peer's packet (docs/NETCODE.md §6.2).
+		// Still one packet for everyone. M4 put the fog in front of the *player*
+		// snapshot, which is where the asymmetry is: every unit on the field is the
+		// strategist's, so filtering this per peer would hide nothing from the side
+		// that owns them, and hiding units from the ground force at a 7.5 Hz sphere
+		// test would make them blink in and out of an FPS at forty metres
+		// (docs/NETCODE.md §6.2).
 		byte[] payload = UnitSnapshotCodec.Encode(tick, _snapshotScratch.AsSpan(0, count));
 		Rpc(MethodName.ServerUnitSnapshot, payload);
 		NetworkManager.Instance?.Stats.RecordSent(payload.Length * peers);

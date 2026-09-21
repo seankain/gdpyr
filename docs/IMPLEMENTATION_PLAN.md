@@ -254,9 +254,22 @@ call. This makes one person enough to see a round.
 ### M4 — Fog of war (2–3 days)
 
 - Server `VisibilityService`, recomputed at 5–10 Hz: a ground-team entity is visible to a strategist
-  peer iff some friendly unit is within its `SensorRadius` (optionally plus a LOS ray).
-- Drive `MultiplayerSynchronizer.SetVisibilityFor(peerId, …)` from it; render "last known position"
-  ghosts client-side that fade after N seconds.
+  peer iff some friendly unit is within its `SensorRadius` (optionally plus a LOS ray). Shipped at
+  7.5 Hz with the ray, bounded to the three nearest sensors that cover the point — fifty units may
+  cover one player and each answer costs a ray against the physics world.
+- ~~Drive `MultiplayerSynchronizer.SetVisibilityFor(peerId, …)` from it~~ — that mechanism was
+  replaced in M3 ([`NETCODE.md`](NETCODE.md) §6.1). The filter is applied while building each
+  strategist's **player** snapshot (`PlayerManager.BroadcastSnapshot`), and to the projectile
+  spawn and hit messages by where the shot happened, because a tracer leaving a muzzle says where
+  somebody is just as loudly as a position record does. The *unit* snapshot stays one broadcast:
+  every unit on the field belongs to the side the fog is being kept from, so filtering it per peer
+  would hide nothing, and hiding units from the ground force at a 7.5 Hz sphere test would make
+  them blink in and out of an FPS at forty metres. §6.2 records the deviation.
+- Render "last known position" ghosts client-side that fade after N seconds. Inferred rather than
+  announced: there is no "contact lost" message, only a record that has stopped arriving, so the
+  client turns a 300 ms gap into a lost contact and decays the marker over eight seconds. A
+  right-click picks from those contacts, so an order against a ghost goes to where they were last
+  seen and one whose ghost has faded cannot be clicked at all.
 - **Done when:** a strategist genuinely cannot track a flanking player, and scouting has value.
 
 ### M5 — Economy, tiers, win/lose (3–4 days)
@@ -305,7 +318,7 @@ in §2 at that time — that corner of the ecosystem moves.
 | **The core mechanic is asymmetrically boring** — a worse FPS attached to a worse RTS | Strategists stop volunteering for the strategist slot | Front-load M3/M4. Fog of war (M4) is what makes the strategist role a *game* rather than a spawn button — do not defer it. |
 | `MoveAndSlide()` replay drift during reconciliation | Constant small corrections in the net HUD even when idle | All replayed ticks use the same fixed delta; restore position *and* velocity before replay; if drift persists, smooth visual error instead of snapping (`NETCODE.md` §3). |
 | C# GC hitches at 50+ units | Frame spikes correlated with unit count | No per-tick allocation in unit/projectile paths; pooled projectiles; entity registry instead of scene scans. |
-| ~~`MultiplayerSynchronizer` visibility gates *sync* but perhaps not *spawn*~~ | — | **Closed in M3.** Units replicate through a packed per-peer message (`NETCODE.md` §6.1), so a unit a peer is not told about has no node at all. M4 needs no spike; it needs the same filter applied to the player snapshot, which is still one broadcast. |
+| ~~`MultiplayerSynchronizer` visibility gates *sync* but perhaps not *spawn*~~ | — | **Closed in M3.** Units replicate through a packed per-peer message (`NETCODE.md` §6.1), so a unit a peer is not told about has no node at all. M4 needed no spike: it applied the same filter to the player snapshot, which is now one packet per strategist rather than one broadcast. |
 | Netick spike (M1) burns a day and is discarded | — | Timebox to 1 day, hard stop. |
 | Realistic muzzle velocities make leading imperceptible | Players report shooting feels hitscan | See `NETCODE.md` §4.4: at 940 m/s a 6 m/s target at 100 m needs only 0.64 m of lead. Muzzle velocity is a **gameplay tuning knob**, not a realism constant — expect to run 200–400 m/s. |
 
@@ -313,7 +326,7 @@ in §2 at that time — that corner of the ecosystem moves.
 
 ## 7. Immediate next actions
 
-M0 through M3.5 are done. M3 shipped the strategist camera and box selection, the four orders, the
+M0 through M4 are done. M3 shipped the strategist camera and box selection, the four orders, the
 `Unit` FSM over `NavigationAgent3D`, unit weapons through the same `ProjectileSim` players use,
 the barracks build queue and the strategist's point pool, team selection with a two-strategist cap,
 and the packed unit replicator the deviation in §M3 describes. It also closed the two items M2 left
@@ -326,6 +339,13 @@ stand up again as people arrive. It also fixed a defect it could not live with �
 used to spawn an unmanned character for itself, which started the round before anyone had joined
 and stood at a spawn point costing the ground force a ticket every time a unit shot it.
 
+M4 put the fog in front of the strategist. A ground-force player is in a strategist's packet only
+while one of the strategist's units has them in sensor range with a clear line, and the same test
+decides which projectile messages they are told about, so a flanker who opens fire no longer lights
+themselves up from across the map. What is left behind is a decaying ghost rather than nothing,
+because stale information is what makes the role a game. The computer strategist reads the same
+service, so the two are behind one fog rather than two (`NETCODE.md` §6.2, §9).
+
 Still open from M2: **a full hitbox rewind for projectiles** (§4.3's "upgrade" — the ring is built
 and melee uses it, projectiles still use the cheap spawn-time advance). Nothing since has needed it,
 and units deliberately keep no history at all (`NETCODE.md` §5).
@@ -337,25 +357,36 @@ and units deliberately keep no history at all (`NETCODE.md` §5).
    free kills — and a bot round now answers a rough version of it in five minutes without booking
    eight people. Watch `GroundForceTickets = 50` especially: five bots dying like bots may end a
    round in a couple of minutes, and the fix is the ticket pool rather than the bots.
-2. **Tune `BotTraits.Default` against a person.** Turn rate 4.5 rad/s, a 3° held aim error, a 200 ms
+2. **Play the strategist seat now that it is dark, and watch `SensorRadiusMeters` first.** 45 m was
+   picked in M3 as a *combat* number — how far a rifleman notices someone to shoot at — and M4 has
+   quietly promoted it to the whole of the strategist's map knowledge. If twenty riflemen light the
+   map up anyway, the answer is a smaller sensor than engagement range, which is also what makes a
+   cheap scout unit worth building in M5. The debug HUD's `fog` row is the instrument: "seen"
+   against "tracked", and "withheld" climbing at all.
+3. **Verify the fog on the real server, not on a listen host.** A host is its own authority and
+   cannot be filtered against itself, so `--listen` draws a curtain over the characters instead
+   (`NETCODE.md` §6.2). It is the right shape for judging whether the fog is *fun*; it is worth
+   nothing for judging whether it is *tight*. Two machines and a dedicated server is the only test
+   that answers the second question.
+4. **Tune `BotTraits.Default` against a person.** Turn rate 4.5 rad/s, a 3° held aim error, a 200 ms
    reaction. Those three numbers are the whole difficulty dial, and they were picked to be
    *mediocre* on purpose — a bot that beats a person in a straight fight makes the ground force look
    weak, which is the opposite of what the instrument is for.
-3. **Verify the navigation bake on the real map.** It runs on the server's first tick against the
+5. **Verify the navigation bake on the real map.** It runs on the server's first tick against the
    nodes in the `navmesh` group and falls back to steering straight at the destination if it
    produces nothing — which is playable and wrong, so the debug HUD says "no navmesh" when it
    happens. Bots path through the same mesh, so a failed bake now shows up as six bots grinding
    along a wall. Check that line before drawing conclusions about pathing.
-4. **M4 — fog of war.** It is what makes the strategist a role rather than a spawn button (§6), and
-   §6.1's replicator was chosen partly to make it a filter rather than a redesign. The harder half
-   is the player snapshot, which is still broadcast to everyone. The computer strategist is already
-   behind a fog of its own (`NETCODE.md` §9), so it is a reasonable first consumer of whatever
-   `VisibilityService` ends up exposing.
-5. Two smaller things M3 left where they were: a unit hit is tested against its *current* capsule
-   rather than a rewound one (justified in `NETCODE.md` §5, but worth revisiting if players report
-   missing units they clearly hit), and the strategist HUD can only build from barracks 0 — the RPCs
-   take an index and the HUD only ever sends zero. The computer strategist already uses every
-   barracks on the map, so the gap is now only in the human's UI.
+6. **M5 — economy, tiers, win/lose.** The fog makes sensor radius a unit-design lever rather than a
+   combat constant, which is most of the argument for the three tiers: a scout that sees further
+   than it shoots is now a real unit and not a stat block.
+7. Three smaller things earlier milestones left where they were: a unit hit is tested against its
+   *current* capsule rather than a rewound one (justified in `NETCODE.md` §5, but worth revisiting
+   if players report missing units they clearly hit); the strategist HUD can only build from
+   barracks 0 — the RPCs take an index and the HUD only ever sends zero, and the computer
+   strategist already uses every barracks on the map, so the gap is only in the human's UI; and the
+   ground force is not fogged at all, which is a deliberate cut with a reason (§6.2) rather than an
+   oversight, but it does mean a modified ground-force client still has a map-wide unit radar.
 
 ---
 

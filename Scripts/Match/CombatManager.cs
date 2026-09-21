@@ -87,6 +87,15 @@ public partial class CombatManager : Node
 	/// </summary>
 	public TeamService Teams { get; } = new();
 
+	/// <summary>
+	/// What the strategist is allowed to know (docs/IMPLEMENTATION_PLAN.md §M4).
+	/// Server-side: it decides which records go in which peer's snapshot. A client
+	/// holds one too but never recomputes it — on a listen host the local
+	/// strategist reads it to draw its own fog, which is a curtain rather than a
+	/// filter (docs/NETCODE.md §6.2).
+	/// </summary>
+	public VisibilityService Visibility { get; private set; }
+
 	/// <summary>Projectiles in flight in this process. For the net HUD (docs/NETCODE.md §8).</summary>
 	public int LiveProjectiles => _projectiles?.LiveCount ?? 0;
 
@@ -110,6 +119,11 @@ public partial class CombatManager : Node
 
 		WeaponCatalog.Load();
 		_projectiles = new ProjectileSim(WeaponCatalog.Projectiles);
+
+		// The ray is handed over rather than reached for: the fog is a Match concern
+		// and which physics world answers "is there a wall in the way" is this
+		// node's.
+		Visibility = new VisibilityService(HasLineOfSight);
 
 		_gameMode = GD.Load<GameModeDefinition>(GameModePath) ?? new GameModeDefinition();
 
@@ -159,6 +173,7 @@ public partial class CombatManager : Node
 	public void Unregister(int peerId)
 	{
 		Teams.Remove(peerId);
+		Visibility.Forget(peerId);
 
 		if (!_players.Remove(peerId, out PlayerCombat combat))
 		{
@@ -242,6 +257,11 @@ public partial class CombatManager : Node
 		StepProjectiles(tick, authoritative: true);
 		ServerRespawns(tick);
 		ServerRound(tick);
+
+		// After the units have moved and before PlayerManager broadcasts the snapshot
+		// this decides the contents of (docs/IMPLEMENTATION_PLAN.md §M4).
+		Visibility.ServerTick(tick, this, UnitManager.Instance);
+
 		ReplicateMatchState();
 		UpdateHud(tick);
 	}
@@ -313,7 +333,7 @@ public partial class CombatManager : Node
 			DefinitionId = definitionId,
 			Origin = origin,
 			Direction = direction,
-		}));
+		}), origin);
 
 		return id;
 	}
@@ -389,7 +409,7 @@ public partial class CombatManager : Node
 			Point = point,
 			VictimPeerId = victim?.PeerId ?? (unitVictim != null ? OwnerId.ForUnit(unitVictim.UnitId) : 0),
 			Flags = flags,
-		}));
+		}), point);
 	}
 
 	/// <summary>
@@ -499,7 +519,7 @@ public partial class CombatManager : Node
 			Point = point,
 			VictimPeerId = victim?.PeerId ?? (unitVictim != null ? OwnerId.ForUnit(unitVictim.UnitId) : 0),
 			Flags = flags,
-		}));
+		}), point);
 	}
 
 	/// <summary>
@@ -726,6 +746,7 @@ public partial class CombatManager : Node
 		_intermissionArmed = false;
 		Match.Reset();
 		_projectiles.Clear();
+		Visibility.Clear();
 		UnitManager.Instance?.ClearUnits();
 		for (int i = 0; i < _ordered.Count; i++)
 		{
@@ -1174,21 +1195,56 @@ public partial class CombatManager : Node
 			Match.StartingGroundTickets, Match.StrategistPoints, Match.EndTick, Match.Version);
 	}
 
-	private void Broadcast(StringName method, byte[] payload)
+	/// <summary>
+	/// Sends a projectile message to everyone it is allowed to reach: a tracer
+	/// leaving a muzzle or a round striking a wall says where somebody is, so a
+	/// strategist whose fog does not reach <paramref name="point"/> does not get it
+	/// (docs/NETCODE.md §6.2). A flanker who opens fire would otherwise light
+	/// themselves up on the strategist's screen from across the map.
+	///
+	/// One test, not one per peer: the strategists share an army and therefore its
+	/// eyes. A shot inside the fog is still the common case, and stays a single
+	/// broadcast.
+	/// </summary>
+	private void Broadcast(StringName method, byte[] payload, Vector3 point)
 	{
 		if (!Multiplayer.HasMultiplayerPeer())
 		{
 			return;
 		}
 
-		int peers = Multiplayer.GetPeers().Length;
-		if (peers == 0)
+		int[] peers = Multiplayer.GetPeers();
+		if (peers.Length == 0)
 		{
 			return;
 		}
 
-		Rpc(method, payload);
-		NetworkManager.Instance?.Stats.RecordSent(payload.Length * peers);
+		if (Visibility.Covers(point))
+		{
+			Rpc(method, payload);
+			NetworkManager.Instance?.Stats.RecordSent(payload.Length * peers.Length);
+			return;
+		}
+
+		int sent = 0;
+		int withheld = 0;
+		for (int i = 0; i < peers.Length; i++)
+		{
+			if (TeamOf(peers[i]) == Team.Strategist)
+			{
+				withheld++;
+				continue;
+			}
+
+			RpcId(peers[i], method, payload);
+			sent++;
+		}
+
+		Visibility.CountWithheld(withheld);
+		if (sent > 0)
+		{
+			NetworkManager.Instance?.Stats.RecordSent(payload.Length * sent);
+		}
 	}
 
 	private static void Queue(List<byte[]> into, byte[] payload)
@@ -1231,6 +1287,17 @@ public partial class CombatManager : Node
 
 		float length = (to - from).Length();
 		return length > 0f ? Mathf.Clamp((point - from).Length() / length, 0f, 1f) : 0f;
+	}
+
+	/// <summary>
+	/// Whether the line between two points is clear of world geometry. The fog's one
+	/// engine dependency (<see cref="VisibilityService"/>), and the same query a
+	/// unit's own target acquisition makes.
+	/// </summary>
+	private bool HasLineOfSight(Vector3 from, Vector3 to)
+	{
+		WorldHitFraction(from, to, out _, out bool blocked);
+		return !blocked;
 	}
 
 	// ---- local presentation ------------------------------------------------

@@ -20,10 +20,12 @@ namespace Gdpyr.Bots;
 /// bot command somebody else's units is a bug that would let a client do it too.
 ///
 /// Its intelligence is its units' intelligence: the only way it learns where the
-/// ground force is, is that one of its own riflemen has acquired somebody
-/// (<see cref="Unit.TargetOwnerId"/>, which is line-of-sight limited already).
-/// That is deliberate — when M4 puts a fog of war in front of the human
-/// strategist, the bot is already behind one and needs no separate answer.
+/// ground force is, is that one of its own riflemen can see somebody. Until M4
+/// that was read off <see cref="Unit.TargetOwnerId"/>, which is what a unit has
+/// *acquired* and therefore a little narrower than what the side can see; it now
+/// reads the same <see cref="VisibilityService"/> the human strategist's snapshot
+/// is filtered through, so the two are behind one fog and not two
+/// (docs/NETCODE.md §6.2, §9).
 /// </summary>
 public sealed class BotStrategist
 {
@@ -205,9 +207,15 @@ public sealed class BotStrategist
 	}
 
 	/// <summary>
-	/// Where to send the assault: the nearest player any of its units has actually
-	/// acquired, or — when nothing has been seen — the ground force's spawn areas,
-	/// walked one at a time.
+	/// Where to send the assault: the nearest player its units can see, or — when
+	/// nothing has been seen — the ground force's spawn areas, walked one at a time.
+	///
+	/// "Can see" is <see cref="VisibilityService"/>, the same answer the human
+	/// strategist's packet is built from, so neither of them knows anything the
+	/// other would not (docs/IMPLEMENTATION_PLAN.md §M4). It deliberately reads the
+	/// live contact rather than the last known position: a bot that chased ghosts
+	/// would be a different opponent from the one this exists to be, and the
+	/// position it orders an attack on is the one the fog is currently offering.
 	///
 	/// Sweeping known spawns is not cheating: they are static map geometry, which a
 	/// human strategist can see on the same screen. What the bot does not get is a
@@ -222,22 +230,16 @@ public sealed class BotStrategist
 		PlayerCombat best = null;
 		float bestDistance = float.MaxValue;
 
-		for (int i = 0; i < units.SlotCount; i++)
+		for (int i = 0; i < combat.PlayerCount; i++)
 		{
-			Unit unit = units.UnitAt(i);
-			if (unit == null || !unit.IsAlive || unit.Team != Team.Strategist
-				|| !OwnerId.IsPeer(unit.TargetOwnerId))
+			PlayerCombat seen = combat.PlayerAt(i);
+			if (seen?.Character == null || !seen.IsAlive || seen.Team != Team.GroundForce
+				|| combat.Visibility?.IsVisible(seen.PeerId) != true)
 			{
 				continue;
 			}
 
-			PlayerCombat seen = combat.Find(OwnerId.PeerOf(unit.TargetOwnerId));
-			if (seen?.Character == null || !seen.IsAlive)
-			{
-				continue;
-			}
-
-			float distance = unit.GlobalPosition.DistanceTo(seen.Character.SimPosition);
+			float distance = NearestUnitDistance(units, seen.Character.SimPosition);
 			if (distance < bestDistance)
 			{
 				bestDistance = distance;
@@ -261,6 +263,33 @@ public sealed class BotStrategist
 		uint sweep = tick / (uint)SweepIntervalTicks;
 		objective = players.SpawnPositionAt((int)(sweep % (uint)players.SpawnPointCount));
 		return true;
+	}
+
+	/// <summary>
+	/// How far the nearest unit is from a contact. It decides which of several
+	/// contacts the assault is sent at, so it is measured from the army and not from
+	/// the bot, which has no position of its own.
+	/// </summary>
+	private static float NearestUnitDistance(UnitManager units, Vector3 point)
+	{
+		float nearest = float.MaxValue;
+
+		for (int i = 0; i < units.SlotCount; i++)
+		{
+			Unit unit = units.UnitAt(i);
+			if (unit == null || !unit.IsAlive || unit.Team != Team.Strategist)
+			{
+				continue;
+			}
+
+			float distance = unit.GlobalPosition.DistanceTo(point);
+			if (distance < nearest)
+			{
+				nearest = distance;
+			}
+		}
+
+		return nearest;
 	}
 
 	/// <summary>

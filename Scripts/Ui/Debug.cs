@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Gdpyr.Bots;
+using Gdpyr.Fps;
 using Gdpyr.Match;
 using Gdpyr.Net;
 using Gdpyr.Rts;
@@ -42,6 +43,7 @@ public partial class Debug : PanelContainer
 		FillPlayers();
 		FillCombat();
 		FillUnits();
+		FillFog();
 	}
 
 	public override void _Input(InputEvent @event)
@@ -155,6 +157,67 @@ public partial class Debug : PanelContainer
 		{
 			SetProperty("rejected orders", $"{units.RejectedOrders}");
 		}
+	}
+
+	/// <summary>
+	/// What the fog of war is doing (docs/IMPLEMENTATION_PLAN.md §M4).
+	///
+	/// On the authority: how many of the ground force its sensors have out of how
+	/// many are on the field, how many sensors that is, what the filter has kept off
+	/// the wire and what the line-of-sight rays have cost. "0 withheld" next to a
+	/// live round with a strategist in it is the fog not being applied.
+	///
+	/// On a strategist's client there is no field to report, only the other side of
+	/// the same story: how many players it is still being told about, and how many it
+	/// is drawing from memory (docs/NETCODE.md §6.2).
+	/// </summary>
+	private void FillFog()
+	{
+		if (CombatManager.Instance is not { Visibility: not null } combat)
+		{
+			return;
+		}
+
+		if (NetworkManager.Instance is { IsClient: true })
+		{
+			if (combat.Local is { Team: Team.Strategist })
+			{
+				FillClientContacts(combat);
+			}
+			return;
+		}
+
+		VisibilityService fog = combat.Visibility;
+		SetProperty("fog", $"{fog.VisibleContacts}/{fog.TrackedContacts} seen"
+			+ $"  {fog.SensorCount} sensors  {fog.WithheldRecords} withheld"
+			+ $"  {fog.LineOfSightRays} rays");
+	}
+
+	private void FillClientContacts(CombatManager combat)
+	{
+		int seen = 0;
+		int ghosts = 0;
+
+		for (int i = 0; i < combat.PlayerCount; i++)
+		{
+			PlayerCombat player = combat.PlayerAt(i);
+			if (player == null || player.Team != Team.GroundForce)
+			{
+				continue;
+			}
+
+			float age = PlayerManager.Instance?.SnapshotAgeTicks(player.PeerId) ?? float.MaxValue;
+			if (!Fog.IsLost(age))
+			{
+				seen++;
+			}
+			else if (!Fog.IsForgotten(age))
+			{
+				ghosts++;
+			}
+		}
+
+		SetProperty("fog", $"{seen} seen  {ghosts} ghosts");
 	}
 
 	private void FillPlayers()

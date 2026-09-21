@@ -62,6 +62,9 @@ public partial class PlayerManager : Node
 	private readonly InputFrame[] _inputScratch = new InputFrame[InputCodec.MaxFrames];
 	private readonly PlayerSnapshot[] _snapshotScratch = new PlayerSnapshot[SnapshotCodec.MaxPlayers];
 
+	/// <summary>One strategist's view of the roster, compacted out of <see cref="_snapshotScratch"/>.</summary>
+	private readonly PlayerSnapshot[] _visibleScratch = new PlayerSnapshot[SnapshotCodec.MaxPlayers];
+
 	private readonly List<Transform3D> _spawnPoints = new();
 
 	private PackedScene _playerScene;
@@ -72,6 +75,13 @@ public partial class PlayerManager : Node
 	private bool _started;
 
 	private uint _lastSampledTick;
+
+	/// <summary>
+	/// Client-side: the newest tick this process has decoded a snapshot for, whoever
+	/// it was about. It is the reference the fog is measured against — a record that
+	/// is behind it was left out of a packet that did arrive (docs/NETCODE.md §6.2).
+	/// </summary>
+	private uint _newestSnapshotTick;
 
 	/// <summary>Ticks replayed by the last reconciliation. For the net HUD.</summary>
 	public int LastReplayTicks => _ledger.LastReplayLength;
@@ -210,6 +220,8 @@ public partial class PlayerManager : Node
 		{
 			BroadcastSnapshot(net);
 		}
+
+		ApplyLocalFog();
 	}
 
 	/// <summary>
@@ -283,14 +295,74 @@ public partial class PlayerManager : Node
 		}
 	}
 
+	/// <summary>
+	/// Sends every peer the roster it is allowed to have
+	/// (docs/IMPLEMENTATION_PLAN.md §M4).
+	///
+	/// This is the harder half of the fog of war docs/NETCODE.md §6.2 warns about:
+	/// one broadcast becomes one packet per strategist, because a ground-force
+	/// player the strategist's units cannot see is a record that is not written.
+	/// Everyone else — the ground force, who see each other with their eyes — still
+	/// shares a single packet, and a round with no strategist connected is still a
+	/// single broadcast.
+	/// </summary>
 	private void BroadcastSnapshot(NetworkManager net)
 	{
-		int peers = Multiplayer.GetPeers().Length;
-		if (peers == 0)
+		int[] peers = Multiplayer.GetPeers();
+		if (peers.Length == 0)
 		{
 			return;
 		}
 
+		int count = CollectSnapshot(net);
+
+		CombatManager combat = CombatManager.Instance;
+		VisibilityService fog = combat?.Visibility;
+
+		if (fog == null || !AnyStrategist(combat, peers))
+		{
+			byte[] broadcast = SnapshotCodec.Encode(net.Tick, _snapshotScratch.AsSpan(0, count));
+			Rpc(MethodName.ServerSnapshot, broadcast);
+			net.Stats.RecordSent(broadcast.Length * peers.Length);
+			return;
+		}
+
+		// Encoded once and reused: every peer that is not a strategist gets the same
+		// bytes, and the allocation is the one this method always made.
+		byte[] unfiltered = null;
+
+		for (int i = 0; i < peers.Length; i++)
+		{
+			int peerId = peers[i];
+
+			if (combat.TeamOf(peerId) != Team.Strategist)
+			{
+				unfiltered ??= SnapshotCodec.Encode(net.Tick, _snapshotScratch.AsSpan(0, count));
+				RpcId(peerId, MethodName.ServerSnapshot, unfiltered);
+				net.Stats.RecordSent(unfiltered.Length);
+				continue;
+			}
+
+			int visible = 0;
+			for (int record = 0; record < count; record++)
+			{
+				if (fog.IsVisibleTo(peerId, _snapshotScratch[record]))
+				{
+					_visibleScratch[visible++] = _snapshotScratch[record];
+				}
+			}
+
+			fog.CountWithheld(count - visible);
+
+			byte[] payload = SnapshotCodec.Encode(net.Tick, _visibleScratch.AsSpan(0, visible));
+			RpcId(peerId, MethodName.ServerSnapshot, payload);
+			net.Stats.RecordSent(payload.Length);
+		}
+	}
+
+	/// <summary>Builds the whole roster's records into <see cref="_snapshotScratch"/>; returns how many.</summary>
+	private int CollectSnapshot(NetworkManager net)
+	{
 		int count = 0;
 		for (int i = 0; i < _ordered.Count && count < SnapshotCodec.MaxPlayers; i++)
 		{
@@ -313,9 +385,25 @@ public partial class PlayerManager : Node
 			};
 		}
 
-		byte[] payload = SnapshotCodec.Encode(net.Tick, _snapshotScratch.AsSpan(0, count));
-		Rpc(MethodName.ServerSnapshot, payload);
-		net.Stats.RecordSent(payload.Length * peers);
+		return count;
+	}
+
+	/// <summary>
+	/// Whether anybody connected is a strategist, and therefore whether this tick's
+	/// snapshot has to be built per peer at all. A bot strategist is not one: it has
+	/// no client to send a packet to (docs/NETCODE.md §9).
+	/// </summary>
+	private static bool AnyStrategist(CombatManager combat, int[] peers)
+	{
+		for (int i = 0; i < peers.Length; i++)
+		{
+			if (combat.TeamOf(peers[i]) == Team.Strategist)
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/// <summary>
@@ -456,6 +544,14 @@ public partial class PlayerManager : Node
 				continue;
 			}
 
+			// Whoever it was about: this is the reference the fog is measured against,
+			// and a packet that says nothing about a peer is exactly the evidence
+			// (docs/NETCODE.md §6.2).
+			if (tick > _newestSnapshotTick)
+			{
+				_newestSnapshotTick = tick;
+			}
+
 			for (int i = 0; i < count; i++)
 			{
 				int peerId = _snapshotScratch[i].PeerId;
@@ -534,6 +630,10 @@ public partial class PlayerManager : Node
 
 	private void UpdateRemotes(float renderTick)
 	{
+		// Only a strategist is fogged. A ground-force client is sent everybody, so
+		// there is nothing to infer and nothing to hide (docs/NETCODE.md §6.2).
+		bool fogged = CombatManager.Instance is { Local.Team: Team.Strategist };
+
 		for (int i = 0; i < _ordered.Count; i++)
 		{
 			Player player = _ordered[i];
@@ -547,7 +647,35 @@ public partial class PlayerManager : Node
 				player.Character.ApplyRemoteTransform(position, yaw, pitch);
 			}
 			player.Interpolator.Prune(renderTick);
+
+			// The server hides an entity by leaving it out of the packet, so a record
+			// that is behind the newest packet is the only notice a client gets that it
+			// has lost contact. The body goes; the ghost the strategist steers by is
+			// drawn by SelectionOverlay from the position it froze at.
+			player.Character.SetFogHidden(fogged && Fog.IsLost(SnapshotAge(player)));
 		}
+	}
+
+	/// <summary>
+	/// Client-side: how far behind the newest snapshot this process has decoded the
+	/// newest record for <paramref name="peerId"/> is, in ticks, or
+	/// <see cref="float.MaxValue"/> when nothing has ever arrived for it. This is
+	/// what a client has instead of a "you have lost contact" message
+	/// (docs/NETCODE.md §6.2).
+	/// </summary>
+	public float SnapshotAgeTicks(int peerId) =>
+		_players.TryGetValue(peerId, out Player player) ? SnapshotAge(player) : float.MaxValue;
+
+	private float SnapshotAge(Player player)
+	{
+		if (player.Interpolator is not { Count: > 0 } buffer)
+		{
+			return float.MaxValue;
+		}
+
+		// A record cannot be newer than the packet that carried it, but an
+		// out-of-order arrival can make it look that way for a frame.
+		return buffer.NewestTick >= _newestSnapshotTick ? 0f : _newestSnapshotTick - buffer.NewestTick;
 	}
 
 	// ---- offline -----------------------------------------------------------
@@ -562,6 +690,46 @@ public partial class PlayerManager : Node
 		SimulatePlayers(net);
 		UnitManager.Instance?.ServerTick(net.Tick);
 		CombatManager.Instance?.ServerPostTick(net.Tick);
+		ApplyLocalFog();
+	}
+
+	/// <summary>
+	/// Draws a local strategist's fog on the authority
+	/// (docs/IMPLEMENTATION_PLAN.md §M4).
+	///
+	/// On a client the fog is a filter — the records never arrive. The authority has
+	/// no such luxury, because it *is* the state, so a listen host hides the
+	/// characters instead. That is a curtain and not protection, which is why the
+	/// plan says every milestone is verified against the dedicated server: what a
+	/// host can see is not what a player can (docs/NETCODE.md §6.2).
+	/// </summary>
+	private void ApplyLocalFog()
+	{
+		if (Bootstrap.IsDedicatedServer)
+		{
+			return;
+		}
+
+		CombatManager combat = CombatManager.Instance;
+		if (combat?.Visibility == null)
+		{
+			return;
+		}
+
+		bool fogged = combat is { Local.Team: Team.Strategist };
+
+		for (int i = 0; i < _ordered.Count; i++)
+		{
+			Player player = _ordered[i];
+			if (player == _local || player.Character == null)
+			{
+				continue;
+			}
+
+			player.Character.SetFogHidden(fogged
+				&& combat.TeamOf(player.PeerId) == Team.GroundForce
+				&& !combat.Visibility.IsVisible(player.PeerId));
+		}
 	}
 
 	// ---- roster ------------------------------------------------------------
@@ -680,6 +848,11 @@ public partial class PlayerManager : Node
 		{
 			_local = player;
 			_ledger.Reset();
+
+			// The fog's reference is a server tick, so it means nothing across a join:
+			// a second server's clock does not continue the first one's, and a stale
+			// high-water mark would read every record as ancient.
+			_newestSnapshotTick = 0;
 			_sampler?.Align(player.Character.Yaw, 0f);
 		}
 		else
