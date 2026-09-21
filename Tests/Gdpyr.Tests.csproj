@@ -19,8 +19,11 @@
     <Compile Include="../Scripts/Sim/**/*.cs" />
     <Compile Include="../Scripts/Core/LaunchOptions.cs" />
     <!-- The round's rules are engine-free for the same reason: a ticket pool that
-         ends a round is worth testing without standing a server up. -->
+         ends a round is worth testing without standing a server up, and "what
+         happens when the third person asks to be a strategist" is worth answering
+         without two machines. -->
     <Compile Include="../Scripts/Match/MatchState.cs" />
+    <Compile Include="../Scripts/Match/TeamService.cs" />
   </ItemGroup>
 
   <ItemGroup>

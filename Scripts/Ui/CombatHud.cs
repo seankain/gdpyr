@@ -91,6 +91,23 @@ public partial class CombatHud : CanvasLayer
 			return;
 		}
 
+		// A strategist's character is still in the roster — every peer has one — but
+		// it is not on the field, and a health bar over an empty chair is noise. The
+		// strategist's own HUD is StrategistHud (docs/IMPLEMENTATION_PLAN.md §M3).
+		if (combat.Team == Team.Strategist)
+		{
+			// Only the round clock. Everything else about a strategist's game is on
+			// StrategistHud, which occupies both of the corners this one uses.
+			_status.Text = string.Empty;
+			_ammo.Text = string.Empty;
+			_round.Text = match.Phase == RoundPhase.Live
+				? $"tickets {match.GroundTickets}   {Clock(match.SecondsRemaining(tick))}"
+				: match.Phase.ToString().ToLowerInvariant();
+			_notice.Text = string.Empty;
+			_loadout.Refresh(false, combat.PendingLoadout.Large);
+			return;
+		}
+
 		WeaponStats stats = combat.EquippedStats;
 		string weapon = WeaponCatalog.NameOf(combat.EquippedDefinitionId);
 
@@ -107,7 +124,7 @@ public partial class CombatHud : CanvasLayer
 			_ => "warmup",
 		};
 
-		bool dead = !combat.IsAlive;
+		bool dead = combat.IsDowned;
 		_notice.Text = dead ? "down — respawning" : string.Empty;
 		_loadout.Refresh(dead || match.Phase == RoundPhase.Ended, combat.PendingLoadout.Large);
 	}

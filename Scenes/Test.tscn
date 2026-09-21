@@ -2,6 +2,18 @@
 
 [ext_resource type="Material" uid="uid://cgh5xjavqxrgv" path="res://Levels/materials/PrototypeMat1.tres" id="2_4viys"]
 [ext_resource type="Texture2D" uid="uid://cpd0vl6ggnxlq" path="res://Textures/kenney_prototype/PNG/Green/texture_01.png" id="3_ugpq5"]
+[ext_resource type="Script" path="res://Scripts/Rts/Barracks.cs" id="4_barracks"]
+
+[sub_resource type="NavigationMesh" id="NavigationMesh_ground"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_barracks"]
+size = Vector3(8, 6, 8)
+
+[sub_resource type="BoxMesh" id="BoxMesh_barracks"]
+size = Vector3(8, 6, 8)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_barracks"]
+albedo_color = Color(0.5, 0.18, 0.15, 1)
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_xaant"]
 sky_top_color = Color(0.335715, 0.270978, 1, 1)
@@ -59,7 +71,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9.58665, 4.067, 7.49199)
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=43366670]
 environment = SubResource("Environment_u3uwf")
 
-[node name="StaticBody3D" type="StaticBody3D" parent="." unique_id=2136398228]
+[node name="StaticBody3D" type="StaticBody3D" parent="." groups=["navmesh"] unique_id=2136398228]
 visible = false
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D" unique_id=157797565]
@@ -104,7 +116,7 @@ shape = SubResource("BoxShape3D_bxyf7")
 transform = Transform3D(10, 0, 0, 0, 0.5, 0, 0, 0, 10, 0, -1.73985, 0)
 mesh = SubResource("BoxMesh_ayfm2")
 
-[node name="CSGCombiner3D" type="CSGCombiner3D" parent="." unique_id=438970693]
+[node name="CSGCombiner3D" type="CSGCombiner3D" parent="." groups=["navmesh"] unique_id=438970693]
 use_collision = true
 
 [node name="Floor" type="CSGBox3D" parent="CSGCombiner3D" unique_id=1137603522]
@@ -175,3 +187,27 @@ size = Vector3(0.6, 2, 0.6)
 [node name="Range150m" type="CSGBox3D" parent="CSGCombiner3D"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, -143)
 size = Vector3(0.6, 2, 0.6)
+
+[node name="NavigationRegion3D" type="NavigationRegion3D" parent="." groups=["navigation_region"]]
+navigation_mesh = SubResource("NavigationMesh_ground")
+
+[node name="StrategistAnchor" type="Marker3D" parent="." groups=["strategist_anchor"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, -35)
+
+[node name="Barracks1" type="Node3D" parent="." groups=["barracks"]]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 40, 0.5, -70)
+script = ExtResource("4_barracks")
+
+[node name="SpawnPoint" type="Marker3D" parent="Barracks1"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -6)
+
+[node name="Building" type="StaticBody3D" parent="Barracks1" groups=["navmesh"]]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Barracks1/Building"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 0)
+shape = SubResource("BoxShape3D_barracks")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Barracks1/Building"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 0)
+mesh = SubResource("BoxMesh_barracks")
+surface_material_override/0 = SubResource("StandardMaterial3D_barracks")

@@ -123,7 +123,7 @@ public static class SimConfig
 	/// <summary>
 	/// Heun steps per simulation tick. Eight is 2.08 ms per step at 60 Hz, which
 	/// puts the integrator well inside the step-size stability the design asks for
-	/// (docs/NETCODE.md §4.5); hit detection still uses the whole tick's chord.
+	/// (docs/NETCODE.md §4.6); hit detection still uses the whole tick's chord.
 	/// </summary>
 	public const int ProjectileSubSteps = 8;
 
@@ -176,6 +176,43 @@ public static class SimConfig
 
 	/// <summary>Weapon slots a ground-force loadout carries: melee, sidearm, large.</summary>
 	public const int WeaponSlots = 3;
+
+	// ---- units (docs/NETCODE.md §6.1) --------------------------------------
+
+	/// <summary>
+	/// Units alive at once, server-wide. The design budgets for fifty
+	/// (docs/IMPLEMENTATION_PLAN.md §M3); the pool is sized a little over that so
+	/// the cap is a decision and not an accident, and it also bounds one unit
+	/// snapshot to 837 bytes — one datagram.
+	/// </summary>
+	public const int MaxUnits = 64;
+
+	/// <summary>
+	/// Unit definitions addressable by one byte on the wire. As with weapons, the
+	/// catalog's order is a protocol constant.
+	/// </summary>
+	public const int MaxUnitDefinitions = 8;
+
+	/// <summary>
+	/// Unit snapshot rate. Units are never predicted and interpolated on arrival,
+	/// so a third of the player rate is invisible and a third of the bandwidth
+	/// (docs/NETCODE.md §6.1).
+	/// </summary>
+	public const int UnitSnapshotRate = 20;
+
+	/// <summary>Ticks between unit broadcasts. <see cref="TickRate"/> must divide evenly by <see cref="UnitSnapshotRate"/>.</summary>
+	public const int UnitSnapshotIntervalTicks = TickRate / UnitSnapshotRate;
+
+	/// <summary>
+	/// Ticks between a unit re-scanning for a target. Acquisition is the expensive
+	/// part of a unit's tick, and a sixth of a second of staleness is invisible next
+	/// to how long it takes one to walk anywhere. Units are staggered across this
+	/// window so the cost does not land on one tick.
+	/// </summary>
+	public const int UnitTargetRefreshTicks = 10;
+
+	/// <summary>Units one barracks may have on order at once.</summary>
+	public const int MaxBuildQueue = 24;
 
 	// ---- wire quantization (docs/NETCODE.md §7) ----------------------------
 

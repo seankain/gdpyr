@@ -85,6 +85,15 @@ public partial class WeaponDefinition : Resource
 	[Export]
 	public float MeleeSweepRadiusMeters = 0.35f;
 
+	/// <summary>
+	/// Half-angle of the accuracy cone, in degrees. Zero for everything M2 shipped:
+	/// those four were tuned without one, and widening them is a playtest decision
+	/// rather than a side effect of M3 needing cones for units
+	/// (docs/IMPLEMENTATION_PLAN.md §7).
+	/// </summary>
+	[Export]
+	public float SpreadDegrees;
+
 	/// <summary>What this weapon launches. Null for melee.</summary>
 	[Export]
 	public ProjectileDefinition Projectile;
@@ -123,5 +132,6 @@ public partial class WeaponDefinition : Resource
 		DamageAmount,
 		IsMelee,
 		MeleeRangeMeters,
-		MeleeSweepRadiusMeters);
+		MeleeSweepRadiusMeters,
+		Spread.ConeFromDegrees(SpreadDegrees));
 }

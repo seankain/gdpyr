@@ -210,6 +210,28 @@ public partial class fps_controller : CharacterBody3D
 		CollisionLayer = dead ? 0u : CollisionLayers.Players;
 	}
 
+	/// <summary>
+	/// Takes the camera and the mouse back for the first-person view.
+	///
+	/// A player who goes up to the strategist's chair and comes back down again is
+	/// the same character node throughout (docs/IMPLEMENTATION_PLAN.md §M3), so
+	/// <see cref="ConfigureForRole"/>'s one-shot setup at spawn is not enough on its
+	/// own — this is the half of it that has to be repeatable.
+	/// </summary>
+	public void EnterFirstPerson()
+	{
+		if (!IsLocalPlayer || Bootstrap.IsDedicatedServer)
+		{
+			return;
+		}
+
+		Input.MouseMode = Input.MouseModeEnum.Captured;
+		if (camera != null)
+		{
+			camera.Current = true;
+		}
+	}
+
 	/// <summary>Places a remote character from an interpolated snapshot (docs/NETCODE.md §3.3).</summary>
 	public void ApplyRemoteTransform(Vector3 position, float yaw, float pitch)
 	{

@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="UnitDefinition" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Rts/UnitDefinition.cs" id="1_unitdef"]
+
+[resource]
+script = ExtResource("1_unitdef")
+Name = &"infantry"
+Cost = 50
+BuildSeconds = 4.0
+MaxHealth = 100.0
+MoveSpeed = 4.5
+HeightMeters = 1.8
+RadiusMeters = 0.4
+EyeHeightMeters = 1.5
+SensorRadiusMeters = 45.0
+EngageRangeMeters = 40.0
+LeashRadiusMeters = 20.0
+ArrivalRadiusMeters = 1.5
+WeaponId = 3
+AccuracyConeDegrees = 2.5
+Color = Color(0.85, 0.25, 0.2, 1)

@@ -30,10 +30,11 @@ FPS-controller tutorial project, ~1100 lines of C#:
 | Pause menu, reticle | `Scripts/Ui/PauseMenu.cs`, `Reticle.cs` | Yes |
 | Greybox assets | `Textures/kenney_prototype/`, `Scenes/Test.tscn` | Yes |
 
-Paths are as of M0, which moved the tutorial project into the layout in §3, and M2, which renamed
-`Weapons.cs` to `WeaponDefinition.cs` when it grew a combat half. The two defects below
-were *not* fixed in M0; both were fixed in M1, which moved the simulation onto the fixed tick and
-made it read recorded `InputFrame`s rather than the device.
+Paths are as of M0, which moved the tutorial project into the layout in §3; M2, which renamed
+`Weapons.cs` to `WeaponDefinition.cs` when it grew a combat half; and M3, which added
+`Scripts/Rts/` and a fourth autoload. The two defects below were *not* fixed in M0; both were fixed
+in M1, which moved the simulation onto the fixed tick and made it read recorded `InputFrame`s
+rather than the device.
 
 1. **Movement runs on the render frame.** `StateMachine._Process` → `State.Update(delta)` →
    `fps_controller.UpdateVelocity()` → `MoveAndSlide()`
@@ -210,8 +211,12 @@ Each milestone ends in something you can play or measure. Estimates are solo-dev
   (HP, speed, sensor radius, weapon, cost).
 - Units fire the *same* `ProjectileSim` projectiles as players, with an accuracy cone.
 - Barracks: build queue, spawn point, cost deduction.
-- Replication: `MultiplayerSpawner` + `MultiplayerSynchronizer` at 10–20 Hz, client-side
-  interpolation. Budget check at 50 units (see §6).
+- Replication: ~~`MultiplayerSpawner` + `MultiplayerSynchronizer`~~ **a packed `UnitSnapshot`
+  broadcast at 20 Hz** plus reliable spawn/despawn, client-side interpolation. The deviation and
+  its three reasons are recorded in [`NETCODE.md`](NETCODE.md) §6.1; the short version is that the
+  built-in nodes would have been a second replication mechanism in a codebase that already hand-packs
+  every message, and that filtering a packet per peer is what M4's fog of war actually needs. Budget
+  check at 50 units: ~13 KB/s down per client (see §6).
 - **Done when:** a strategist queues 20 infantry, orders an attack, and the ground team fights them
   in a real firefight on a dedicated server.
 
@@ -269,7 +274,7 @@ in §2 at that time — that corner of the ecosystem moves.
 | **The core mechanic is asymmetrically boring** — a worse FPS attached to a worse RTS | Strategists stop volunteering for the strategist slot | Front-load M3/M4. Fog of war (M4) is what makes the strategist role a *game* rather than a spawn button — do not defer it. |
 | `MoveAndSlide()` replay drift during reconciliation | Constant small corrections in the net HUD even when idle | All replayed ticks use the same fixed delta; restore position *and* velocity before replay; if drift persists, smooth visual error instead of snapping (`NETCODE.md` §3). |
 | C# GC hitches at 50+ units | Frame spikes correlated with unit count | No per-tick allocation in unit/projectile paths; pooled projectiles; entity registry instead of scene scans. |
-| `MultiplayerSynchronizer` visibility gates *sync* but perhaps not *spawn* | Strategist client has nodes for entities it should not know about | 30-minute spike in M4 to verify. Fallback: spawn hidden entities at a neutral position and only reveal true transforms on first sight, or replace with a custom per-peer replication channel. |
+| ~~`MultiplayerSynchronizer` visibility gates *sync* but perhaps not *spawn*~~ | — | **Closed in M3.** Units replicate through a packed per-peer message (`NETCODE.md` §6.1), so a unit a peer is not told about has no node at all. M4 needs no spike; it needs the same filter applied to the player snapshot, which is still one broadcast. |
 | Netick spike (M1) burns a day and is discarded | — | Timebox to 1 day, hard stop. |
 | Realistic muzzle velocities make leading imperceptible | Players report shooting feels hitscan | See `NETCODE.md` §4.4: at 940 m/s a 6 m/s target at 100 m needs only 0.64 m of lead. Muzzle velocity is a **gameplay tuning knob**, not a realism constant — expect to run 200–400 m/s. |
 
@@ -277,17 +282,34 @@ in §2 at that time — that corner of the ecosystem moves.
 
 ## 7. Immediate next actions
 
-M0, M1 and M2 are done. M2 shipped the ballistics port, analytic server-authoritative projectiles,
-the deterministic weapon simulation, health/death/respawn and the ground-force ticket counter; it
-also added the hitbox history ring §5 of `NETCODE.md` asks for, which melee rewind already uses.
+M0 through M3 are done. M3 shipped the strategist camera and box selection, the four orders, the
+`Unit` FSM over `NavigationAgent3D`, unit weapons through the same `ProjectileSim` players use,
+the barracks build queue and the strategist's point pool, team selection with a two-strategist cap,
+and the packed unit replicator the deviation in §M3 describes. It also closed the two items M2 left
+open for whichever milestone needed them: **accuracy cones** (`NETCODE.md` §4.5 — seeded, so the
+predicted tracer still matches) are in, authored at 0° for every player weapon and 2.5° for
+infantry.
 
-1. Play M2 on the EC2 box and tune it. Muzzle velocity, damage and RPM are all resource fields and
-   all guesses until someone has tried to lead a moving target with them (`NETCODE.md` §4.4).
-2. M3 — the strategist. Front-loaded on purpose: it and M4 are what decide whether the asymmetry is
-   a game (§6).
-3. Two things M2 left for the milestone that needs them: a full hitbox rewind for projectiles
-   (§4.4's "upgrade" — the ring is built and melee uses it, projectiles still use the cheap
-   spawn-time advance), and per-weapon accuracy cones, which M3 needs anyway for units.
+Still open from M2: **a full hitbox rewind for projectiles** (§4.3's "upgrade" — the ring is built
+and melee uses it, projectiles still use the cheap spawn-time advance). Nothing in M3 needed it,
+and units deliberately keep no history at all (`NETCODE.md` §5).
+
+1. **Play M3 on the EC2 box.** Every number in `Units/infantry.tres` is a guess: 50 points, 4 s to
+   build, 45 m of sensor, 40 m of engagement, 2.5° of cone. So is `StrategistTickets = 1000`, which
+   is exactly twenty riflemen. The first question a playtest answers is whether twenty riflemen are
+   a threat to six players or a queue of free kills, and the cone and the sensor radius are the two
+   knobs that move it.
+2. **Verify the navigation bake on the real map.** It runs on the server's first tick against the
+   nodes in the `navmesh` group and falls back to steering straight at the destination if it
+   produces nothing — which is playable and wrong, so the debug HUD says "no navmesh" when it
+   happens. Check that line before drawing conclusions about pathing.
+3. **M4 — fog of war.** It is what makes the strategist a role rather than a spawn button (§6), and
+   §6.1's replicator was chosen partly to make it a filter rather than a redesign. The harder half
+   is the player snapshot, which is still broadcast to everyone.
+4. Two smaller things M3 left where they were: a unit hit is tested against its *current* capsule
+   rather than a rewound one (justified in `NETCODE.md` §5, but worth revisiting if players report
+   missing units they clearly hit), and the strategist can only build from barracks 0 — the RPCs
+   take an index and the HUD only ever sends zero.
 
 ---
 
