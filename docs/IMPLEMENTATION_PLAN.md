@@ -9,6 +9,7 @@ with friends, in roughly 4–6 solo engineering-weeks.
 
 Companion documents:
 [`NETCODE.md`](NETCODE.md) — tick model, message set, ballistics, fog of war ·
+[`AGENT_API.md`](AGENT_API.md) — headless play for external policies (§M6–M7) ·
 [`DEPLOYMENT.md`](DEPLOYMENT.md) — AWS EC2 dedicated server runbook.
 
 ---
@@ -117,7 +118,7 @@ host on a home desktop instead.
 Steam integration (lobbies + Steam Datagram Relay so friends click "Join") becomes worthwhile only
 when "my friends can't connect" is the real bottleneck. Because the transport sits behind the
 `MultiplayerPeer` interface, swapping ENet for a Steam peer is a change to **one factory method**
-(`Scripts/Net/TransportFactory.cs`) and touches no gameplay code. Deferred to M7.
+(`Scripts/Net/TransportFactory.cs`) and touches no gameplay code. Deferred to M9.
 
 ---
 
@@ -132,9 +133,12 @@ Scripts/
   Rts/         StrategistController, Selection, Unit, UnitDefinition, Barracks, ResourceNode
   Match/       MatchState (tickets/points), TeamService, VisibilityService (fog), win conditions
   Bots/        BotDirector (backfill), BotPilot (ground), BotStrategist (RTS) — decisions in Sim/
+  Agents/      M6: the agent listener and the seat leases; codecs and observations in Sim/
   Ui/          Team select, loadout select, RTS HUD, net debug HUD
 Scenes/        Greybox map, player, units, props
 Tests/         xUnit project over Scripts/Sim (no engine required)
+Tests/Scenarios/  M7: playtest scenario files — data, no engine needed to author one
+tools/         M7: gdpyr_env, the Python client
 ```
 
 Rules that keep this from rotting:
@@ -313,20 +317,103 @@ call. This makes one person enough to see a round.
   existing intermission restarts the round, because a playtest that needs somebody to press a key
   between rounds gets fewer rounds per session.
 
-### M6 — Playtest instrumentation (1–2 days, then ongoing)
+### M6 — Agent API: headless play for external policies (3–4 days)
+
+Design: [`AGENT_API.md`](AGENT_API.md). An out-of-band control channel that lets a process which is
+not a Godot client take a seat in a round — an RL policy on the ground, an RL policy in the
+strategist's chair, or a coding agent running a scripted playtest. The reference point is
+StarCraft II's `s2client-proto`.
+
+**Why it is cheap here.** Three of the four hard parts exist for other reasons.
+`PlayerManager.SimulatePlayers` already resolves a character's intent from a source that is not a
+socket (`Scripts/Net/PlayerManager.cs:246`), so a ground policy's action space **is** `InputFrame`
+and not a parallel API that has to be kept honest against the human one. `ServerIssueOrder` /
+`ServerQueueUnit` (`Scripts/Rts/UnitManager.cs:649`) already accept a command from a peer with no
+client and run it through the same ownership checks a client's RPC gets. `VisibilityService`
+already decides what a strategist is allowed to know, so the policy sits behind the human's fog
+rather than behind a second one. And the simulation has **no RNG of its own** — every stochastic
+thing in the game is a seeded hash, because M2 needed the shooter's client and the server to derive
+the same shot (`Scripts/Sim/Spread.cs`).
+
+- **Transport:** a loopback TCP listener, length-prefixed frames, JSON control plane, `float32`
+  observations. `--agent-api [host:]port`, `--agent-token`. A non-loopback bind with no token is a
+  fatal start-up error, and `deploy/gdpyr-server.service` never passes the flag: the agent socket
+  can spawn players and reset rounds, and the box in [`DEPLOYMENT.md`](DEPLOYMENT.md) has a public
+  address.
+- **Seats:** an agent attaches to a bot seat rather than connecting as a peer. One branch in
+  `BotDirector.Sample`, in the one class that already knows bots exist as a category; nothing
+  downstream — `PlayerManager`, `CombatManager`, any client — learns a new concept. Attachment is a
+  **lease**: a silent grace window falls back to `BotPilot`, and a closed socket releases the seat
+  outright, so a crashed trainer cannot leave a body standing in the open or stall a round.
+- **Ground observation and action:** 144 floats — self, weapon, the eight nearest contacts its own
+  eyes have acquired, a 16-ray fan, the objective — and the twelve bytes of `InputFrame` back.
+- **Time:** real time by default (mixed human/bot/policy rounds), plus a **stepped** mode that will
+  not advance a tick until every attached seat has acted, which is what makes a regression test
+  synchronous instead of sleep-and-hope. Stepped mode refuses to engage while a human peer is
+  connected, because their clock would resync and the round would be unplayable. `step_mul` holds an
+  action for K ticks (4 on the ground, 30 for a strategist).
+- **Fairness ceilings on by default:** an attached seat is clamped server-side to `BotTraits`' turn
+  rate, and a strategist to 8 commands a second. A policy that snap-aims is not playing the game
+  people play, and a playtest against one measures nothing. `--agent-unbounded` and
+  `--agent-omniscient` lift the clamps and the fog for research runs, are stamped into every
+  observation and every trace, and make the playtest harness fail any scenario that asserts a win.
+- **Events, not rewards.** The game emits kills, damage, units built and lost, node transitions,
+  round outcomes; what to value is the trainer's business. That stream is also most of M8's CSV,
+  which is the ordering argument for building it first.
+- **Determinism is measured, not claimed.** `Scripts/Sim` is reproducible; `MoveAndSlide()` and
+  `NavigationAgent3D` are not. A `state_hash` probe reports the tick at which two seeded episodes
+  part company, and that number — not an assumption — decides how tightly M7's assertions may be
+  written ([`AGENT_API.md`](AGENT_API.md) §3).
+- **Done when:** a Python process attaches to a ground seat on a headless server, plays a full
+  round against the computer strategist, and its episode ends with the same `RoundSummary` a human's
+  would — and when detaching mid-round hands the seat back to a bot without a hitch in the snapshot.
+
+### M7 — Strategist policies and the playtest harness (2–3 days)
+
+The half of M6 that makes it useful to somebody who is not training a network.
+
+- **Strategist observation and action:** 1,092 floats — its units, its barracks, the nodes, and the
+  fogged contacts `VisibilityService` already decays into ghosts for the human — and a command list
+  back through `ServerIssueOrder` / `ServerQueueUnit`. Two three-line additions for parity:
+  `ServerCancelBuild` and `ServerSetRally`, because today's `Request*` pair assumes the local peer
+  (`Scripts/Rts/UnitManager.cs:745`).
+- **Optional feature planes:** a 32×32×4 grid — own units, contacts, node ownership, passability.
+  Off by default; it is what makes a convolutional strategist policy possible at all.
+- **Scenario files and assertions:** JSON, checked in beside the tests — seed, roster, scripted
+  spawns, and a list of claims. `./scripts/playtest.sh Tests/Scenarios/<file>.json` exits 0 or 1 and
+  prints a machine-readable summary on `--json`.
+- **The assertion vocabulary is distributional on purpose** — `between`, `percentile`, `over_seeds`,
+  and deliberately no `assert_position_equals`. §3 of the design says why: this is a stochastic
+  environment with a seeded core, and a suite that asserts trajectories is a suite that flakes.
+- **`tools/gdpyr_env/`:** a Gymnasium-shaped Python client in one module, `numpy` and nothing else.
+- **The divergence probe:** two seeded 600-tick episodes in one process, `state_hash` compared per
+  tick, first disagreement reported. Run it before writing assertions, not after.
+- **Done when:** a coding agent with no Godot knowledge can add a scenario file, run
+  `./scripts/playtest.sh`, and have a regression in ballistics, the economy or the win conditions
+  come back as a failed assertion with the tick it failed on and a trace that replays.
+
+### M8 — Playtest instrumentation (1–2 days, then ongoing) *(was M6)*
 
 - Per-round CSV dump: round length, ticket curve over time, strategist point curve, kills/deaths and
   positions, unit losses by type, time-to-first-contact.
 - Post-round 3-question in-game survey.
 - **This is the actual deliverable of the whole project.** "Is it fun" is answered by round-length
   distributions and whether people ask for another round, not by intuition.
+- M6's event stream is most of the header row already ([`AGENT_API.md`](AGENT_API.md) §8), so what
+  is left here is a writer and the survey rather than a second pass over the codebase. That is the
+  reason the agent API was sequenced ahead of it — **and the reason it must not displace it.** An
+  agent can tell you the round still ends; only people can tell you they want another one.
 
-### M7 — Steam (deferred, 2–3 days when needed)
+### M9 — Steam (deferred, 2–3 days when needed) *(was M7)*
 
 Swap `TransportFactory` to a Steam `MultiplayerPeer`, add lobby create/join. Re-evaluate the options
 in §2 at that time — that corner of the ecosystem moves.
 
-**Total: ~24–30 engineering days to end of M6.**
+**Total: ~29–37 engineering days to end of M8.**
+
+> **Renumbering, M6 onwards.** M6 and M7 were "Playtest instrumentation" and "Steam"; they are now
+> M8 and M9, and the two new milestones took their numbers. Source comments that still say "M6's
+> CSV" mean M8 and were updated on the same commit.
 
 ---
 
@@ -354,6 +441,11 @@ in §2 at that time — that corner of the ecosystem moves.
 | Netick spike (M1) burns a day and is discarded | — | Timebox to 1 day, hard stop. |
 | **Vehicles wedge on a navmesh baked for a rifleman** | Technicals and tanks stop on corners the infantry walks round | One region, one agent radius (§M5). Open ground hides it; the fix is a second region and a second bake per tier, and it is worth paying for only once somebody has watched a tank get stuck. |
 | Realistic muzzle velocities make leading imperceptible | Players report shooting feels hitscan | See `NETCODE.md` §4.4: at 940 m/s a 6 m/s target at 100 m needs only 0.64 m of lead. Muzzle velocity is a **gameplay tuning knob**, not a realism constant — expect to run 200–400 m/s. |
+| **The engine is not deterministic, so M7's playtests flake** | A scenario passes on one run and fails on the next with no code change | `Scripts/Sim` is reproducible and has no RNG at all; `MoveAndSlide()` and `NavigationAgent3D` are not. Measure the divergence with the `state_hash` probe **before** writing assertions, and keep the assertion vocabulary distributional — `between`, `percentile`, `over_seeds`, and deliberately no `assert_position_equals` (`AGENT_API.md` §3). |
+| **The agent socket is remote control of the game server** | — | Loopback bind by default; a non-loopback bind with no token is a fatal start-up error; `deploy/gdpyr-server.service` never passes `--agent-api`. The one inbound rule in `DEPLOYMENT.md` §3 stays the one inbound rule. |
+| **A policy that snap-aims is not the game people play** | Playtests against an agent stop predicting anything about playtests with people | Turn rate and command rate are clamped **server-side** to `BotTraits`' numbers for every attached seat; lifting them needs `--agent-unbounded`, which is stamped into every observation and every trace and fails any scenario asserting a win (`AGENT_API.md` §7.3). |
+| **Agent throughput is 60 Hz of wall clock per instance** | A training run wants more episodes than a box produces | Parallel headless instances first — measure with the debug HUD's server-frame-time row. Acceleration inside one instance is blocked on `MoveAndSlide()` reading the engine's physics delta (`Scripts/Fps/fps_controller.cs:343`), which is a netcode change; timebox it and only after parallelism is proven insufficient. |
+| **The agent API displaces the playtests it was meant to support** | M8 keeps slipping because the regression suite is green | An agent can tell you the round still ends; only people can tell you they want another one. M8 is still the deliverable, and M6's event stream exists to make it cheaper, not optional. |
 
 ---
 
@@ -405,11 +497,19 @@ points, no units, nothing building and no ground, and it ends on a scoreboard an
 5. **Still open from M2: a full hitbox rewind for projectiles** (§4.3's "upgrade" — the ring is
    built and melee uses it, projectiles still use the cheap spawn-time advance). Nothing since has
    needed it, and units deliberately keep no history at all (`NETCODE.md` §5).
-6. **M6 — playtest instrumentation.** It is the actual deliverable of the whole project, and M5
+6. **M6 — the agent API.** Design in [`AGENT_API.md`](AGENT_API.md). The first thing to do inside
+   it is not the socket: it is the **divergence probe** (§3, §10), because how far two seeded
+   episodes drift decides how M7's assertions may be written, and everything downstream is built on
+   an assumption until that number exists. The second is to measure how many headless instances fit
+   on one box, from the debug HUD's server-frame-time row, before anyone plans a training run
+   around a number nobody has taken.
+7. **M8 — playtest instrumentation.** It is the actual deliverable of the whole project, and M5
    just made most of its columns exist: round length, outcome, ticket curve, the strategist's
    income against their spending, units built and lost by tier, nodes held over time, cans spent.
-   `ScoreboardCodec`'s `RoundSummary` is already half the CSV's header row.
-7. Four smaller things earlier milestones left where they were: a unit hit is tested against its
+   `ScoreboardCodec`'s `RoundSummary` is already half the CSV's header row, and M6's event stream
+   (`AGENT_API.md` §8) is most of the rest. It was renumbered from M6, not deferred: it still ends
+   the project.
+8. Four smaller things earlier milestones left where they were: a unit hit is tested against its
    *current* capsule rather than a rewound one (justified in `NETCODE.md` §5); the strategist HUD
    can only build from barracks 0 — the RPCs take an index, the three build keys still send zero,
    and the computer strategist already uses every barracks on the map, so the gap is only in the

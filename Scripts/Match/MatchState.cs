@@ -44,7 +44,7 @@ public enum RoundOutcome : byte
 ///
 /// Time is counted in ticks, not seconds: a round that lasts a different length
 /// on a server having a bad minute is a measurement the playtest instrumentation
-/// (M6) cannot use.
+/// (M8) cannot use.
 /// </summary>
 public sealed class MatchState
 {

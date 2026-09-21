@@ -20,7 +20,7 @@ public struct ScoreEntry
 	/// <summary>
 	/// True for a computer player. A bot is a player everywhere else in this design
 	/// (docs/NETCODE.md §9) and is one here too — it takes a row, it has a score —
-	/// but a scoreboard that does not say which rows were people is a scoreboard M6
+	/// but a scoreboard that does not say which rows were people is a scoreboard M8
 	/// cannot read a playtest off.
 	/// </summary>
 	public bool IsBot;
@@ -48,7 +48,7 @@ public struct RoundSummary
 
 	public ushort UnitsLost;
 
-	/// <summary>How long the round lasted, in ticks. M6's first column.</summary>
+	/// <summary>How long the round lasted, in ticks. M8's first column.</summary>
 	public uint RoundTicks;
 
 	public float Minutes => RoundTicks / (float)SimConfig.TickRate / 60f;

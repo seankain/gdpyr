@@ -208,7 +208,7 @@ rule when you want to A/B two builds in one session.
 
 ## 6. When this stops being enough
 
-- **Friends find the IP-and-shortcut flow annoying** → Steam lobbies + Steam Datagram Relay (M7).
+- **Friends find the IP-and-shortcut flow annoying** → Steam lobbies + Steam Datagram Relay (M9).
   The transport sits behind `Scripts/Net/TransportFactory.cs`, so this is one factory method.
 - **Players spread across continents** → a second instance in another region. Nothing in the design
   assumes one server.

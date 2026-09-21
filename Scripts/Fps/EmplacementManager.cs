@@ -62,7 +62,7 @@ public partial class EmplacementManager : Node
 	/// <summary>Guns and cans being carried right now.</summary>
 	public int CarriedItems => _carriedGun.Count + _carriedCan.Count;
 
-	/// <summary>Cans spent on a belt this round. For the HUD and M6's CSV.</summary>
+	/// <summary>Cans spent on a belt this round. For the HUD and M8's CSV.</summary>
 	public int CansSpent { get; private set; }
 
 	/// <summary>Rounds put into belts this round.</summary>

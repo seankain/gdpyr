@@ -22,7 +22,7 @@ public sealed class ResourceLedger
 	/// <summary>Total spent this round. Refunds subtract from it, so it reads as net outlay.</summary>
 	public int Spent { get; private set; }
 
-	/// <summary>Total earned this round, income and refunds alike. For M6's per-round CSV.</summary>
+	/// <summary>Total earned this round, income and refunds alike. For M8's per-round CSV.</summary>
 	public int Earned { get; private set; }
 
 	/// <summary>Bumped on every change, so a replicated copy can ignore a stale message.</summary>
