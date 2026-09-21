@@ -253,6 +253,78 @@ public static class SimConfig
 	/// </summary>
 	public const int GhostLifetimeTicks = TickRate * 8;
 
+	// ---- economy (docs/IMPLEMENTATION_PLAN.md §M5) -------------------------
+
+	/// <summary>
+	/// Resource nodes one map may carry. A node is named by its index in the map's
+	/// <c>resource_node</c> group on the wire, exactly as a barracks is, so this is
+	/// the width of that name and not a level-design opinion.
+	/// </summary>
+	public const int MaxResourceNodes = 8;
+
+	/// <summary>
+	/// Ticks between two occupancy scans of every node: every 4 ticks is 15 Hz.
+	///
+	/// A scan is eight nodes against six players and fifty units — cheap, but not
+	/// free sixty times a second, and a capture meter that advances four ticks at a
+	/// time is a capture meter nobody can see advancing four ticks at a time.
+	/// Capture progress is counted in these, so the server and a client's bar agree
+	/// about what "half" means.
+	/// </summary>
+	public const int CaptureScanIntervalTicks = 4;
+
+	/// <summary>How often a node tells everyone who holds it. 5 Hz is a progress bar.</summary>
+	public const int NodeReportIntervalTicks = TickRate / 5;
+
+	// ---- emplacements (docs/IMPLEMENTATION_PLAN.md §M5) --------------------
+
+	/// <summary>
+	/// Heavy guns one map may carry, named by index in the <c>emplacement</c> group
+	/// exactly as a barracks and a resource node are.
+	/// </summary>
+	public const int MaxEmplacements = 8;
+
+	/// <summary>Ammunition cans one map may carry, named the same way.</summary>
+	public const int MaxAmmoCans = 12;
+
+	/// <summary>
+	/// How close a player has to be to pick a gun up, deploy onto it or mount it.
+	/// A protocol constant rather than a knob on the node: the owning client
+	/// predicts its own use press against the same radius the server will check it
+	/// against, and two answers would be a prediction that never reconciles.
+	/// </summary>
+	public const float EmplacementReachMeters = 2.5f;
+
+	/// <summary>
+	/// What carrying a heavy gun does to a player's speed. Every movement state
+	/// scales by this, so sprinting with one is slower than walking without it.
+	/// Prediction-relevant for the same reason the reach is.
+	/// </summary>
+	public const float CarryMoveScale = 0.55f;
+
+	/// <summary>What carrying an ammunition can does. Lighter than a gun, and still worth noticing.</summary>
+	public const float AmmoCanMoveScale = 0.8f;
+
+	/// <summary>
+	/// How far either side of where it was deployed a mounted gun will traverse
+	/// [rad]. A heavy gun that turns like a rifle is a rifle, and where it was put
+	/// down stops being a decision.
+	/// </summary>
+	public const float EmplacementTraverseRadians = 0.7854f;
+
+	/// <summary>How far a mounted gun may be depressed or elevated [rad].</summary>
+	public const float EmplacementElevationRadians = 0.5236f;
+
+	/// <summary>Where the barrel sits above the gun's feet [m]. Shots leave from here.</summary>
+	public const float EmplacementMuzzleHeightMeters = 1.1f;
+
+	/// <summary>
+	/// Ticks between a can being spent and another appearing where it started.
+	/// Resupply is meant to be a walk back to the spawn, not a walk back to the
+	/// spawn once.
+	/// </summary>
+	public const int AmmoCanRespawnTicks = TickRate * 20;
+
 	// ---- wire quantization (docs/NETCODE.md §7) ----------------------------
 
 	/// <summary>Position resolution on the wire, in metres.</summary>

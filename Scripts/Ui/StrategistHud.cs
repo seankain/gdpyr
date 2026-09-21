@@ -24,12 +24,13 @@ public partial class StrategistHud : CanvasLayer
 	private const string Keys =
 		"WASD/edge pan · Q/E rotate · wheel zoom · LMB select · RMB order\n"
 		+ "X attack-move · C patrol · B defend · Z stop · F select all\n"
-		+ "1 queue infantry · Backspace cancel · RMB with nothing selected sets the rally point\n"
+		+ "1/2/3 queue infantry/technical/tank · Backspace cancel · RMB with nothing selected sets the rally point\n"
 		+ "F1 ground force · F2 strategist";
 
 	private Label _points;
 	private Label _production;
 	private Label _selection;
+	private Label _economy;
 	private Label _keys;
 
 	public SelectionOverlay Overlay { get; private set; }
@@ -53,12 +54,14 @@ public partial class StrategistHud : CanvasLayer
 		_points = NewLabel(root, new Vector2(24f, 16f), new Vector2(420f, 32f));
 		_production = NewLabel(root, new Vector2(24f, 48f), new Vector2(520f, 32f));
 		_selection = NewLabel(root, new Vector2(24f, 80f), new Vector2(520f, 32f));
+		_economy = NewLabel(root, new Vector2(24f, 112f), new Vector2(640f, 32f));
 		_keys = NewLabel(root, new Vector2(24f, -108f), new Vector2(900f, 96f), anchorTop: 1f);
 		_keys.Text = Keys;
 	}
 
 	/// <summary>Called once per simulation tick by <see cref="StrategistController"/>.</summary>
-	public void Refresh(MatchState match, UnitManager units, uint tick, int selectedCount, OrderKind pendingOrder)
+	public void Refresh(MatchState match, UnitManager units, uint tick, int selectedCount, OrderKind pendingOrder,
+		EconomyService economy)
 	{
 		int live = units?.LiveUnitCount ?? 0;
 
@@ -73,6 +76,26 @@ public partial class StrategistHud : CanvasLayer
 			: "barracks: idle";
 
 		_selection.Text = $"selected {selectedCount}   next order: {Describe(pendingOrder)}";
+		_economy.Text = Economy(economy);
+	}
+
+	/// <summary>
+	/// What the nodes are doing, in one line: what is being held, what is being
+	/// fought over, and what has been earned (docs/IMPLEMENTATION_PLAN.md §M5).
+	///
+	/// A strategist with no nodes and no units is one losing condition away from
+	/// the round being over, so this is the line that says how close that is.
+	/// </summary>
+	private static string Economy(EconomyService economy)
+	{
+		if (economy == null || economy.NodeCount == 0)
+		{
+			return "nodes: none on this map";
+		}
+
+		string contested = economy.ContestedNodes > 0 ? $"   {economy.ContestedNodes} contested" : string.Empty;
+		return $"nodes {economy.StrategistNodes}/{economy.NodeCount} held"
+			+ $"   {economy.GroundNodes} lost{contested}   earned {economy.IncomePaid}";
 	}
 
 	private static string Describe(OrderKind kind) => kind switch

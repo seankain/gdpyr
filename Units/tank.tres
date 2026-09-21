@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="UnitDefinition" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Rts/UnitDefinition.cs" id="1_unitdef"]
+
+[resource]
+script = ExtResource("1_unitdef")
+Name = &"tank"
+Cost = 400
+BuildSeconds = 22.0
+MaxHealth = 700.0
+MoveSpeed = 5.0
+HeightMeters = 3.0
+RadiusMeters = 1.3
+EyeHeightMeters = 1.9
+SensorRadiusMeters = 40.0
+EngageRangeMeters = 38.0
+LeashRadiusMeters = 20.0
+ArrivalRadiusMeters = 3.0
+WeaponId = 6
+AccuracyConeDegrees = 1.2
+Color = Color(0.45, 0.16, 0.14, 1)

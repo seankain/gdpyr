@@ -139,6 +139,69 @@ public class StrategistBrainTests
 		Assert.Equal(OrderKind.Defend, StrategistBrain.OrderFor(garrison: true));
 	}
 
+	// ---- which tier to buy (docs/IMPLEMENTATION_PLAN.md §M5) ----------------
+
+	private static readonly int[] Costs = { 50, 150, 400 };
+
+	[Fact]
+	public void AnEmptyArmyBuysRiflemen()
+	{
+		int[] live = { 0, 0, 0 };
+
+		Assert.True(StrategistBrain.TryChooseTier(1000, Costs, live, Traits, out byte tier));
+		Assert.Equal(0, tier);
+	}
+
+	[Fact]
+	public void ItBuysTheBestItCanAffordOnceTheRiflemenAreOutThere()
+	{
+		// Three riflemen per heavy thing, and nothing heavy yet: one tank is screened.
+		int[] live = { 3, 0, 0 };
+
+		Assert.True(StrategistBrain.TryChooseTier(400, Costs, live, Traits, out byte tier));
+		Assert.Equal(2, tier);
+
+		Assert.True(StrategistBrain.TryChooseTier(399, Costs, live, Traits, out tier));
+		Assert.Equal(1, tier);
+
+		Assert.True(StrategistBrain.TryChooseTier(149, Costs, live, Traits, out tier));
+		Assert.Equal(0, tier);
+	}
+
+	[Fact]
+	public void AnArmyOfTanksGoesBackToBuyingRiflemen()
+	{
+		// Three riflemen and one tank: a second tank needs six.
+		int[] live = { 3, 0, 1 };
+
+		Assert.True(StrategistBrain.TryChooseTier(10_000, Costs, live, Traits, out byte tier));
+		Assert.Equal(0, tier);
+
+		int[] screened = { 6, 0, 1 };
+		Assert.True(StrategistBrain.TryChooseTier(10_000, Costs, screened, Traits, out tier));
+		Assert.Equal(2, tier);
+	}
+
+	[Fact]
+	public void NothingAffordableIsNotAChoice()
+	{
+		int[] live = { 10, 0, 0 };
+
+		Assert.False(StrategistBrain.TryChooseTier(49, Costs, live, Traits, out _));
+	}
+
+	[Fact]
+	public void ACatalogOfOneStillBuildsIt()
+	{
+		// The catalog was one unit long until M5 and may be again on a branch; the
+		// rule must not need a second tier to exist.
+		int[] costs = { 50 };
+		int[] live = { 0 };
+
+		Assert.True(StrategistBrain.TryChooseTier(50, costs, live, Traits, out byte tier));
+		Assert.Equal(0, tier);
+	}
+
 	// ---- the traits themselves ---------------------------------------------
 
 	[Fact]

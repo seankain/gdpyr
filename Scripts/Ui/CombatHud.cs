@@ -23,6 +23,7 @@ public partial class CombatHud : CanvasLayer
 	private Label _ammo;
 	private Label _round;
 	private Label _notice;
+	private Label _prompt;
 	private Panel _hitMarker;
 	private LoadoutMenu _loadout;
 
@@ -48,6 +49,12 @@ public partial class CombatHud : CanvasLayer
 		_ammo = NewLabel(root, HorizontalAlignment.Right, new Vector2(-260f, -80f), anchorLeft: 1f, anchorTop: 1f);
 		_round = NewLabel(root, HorizontalAlignment.Center, new Vector2(-160f, 16f), anchorLeft: 0.5f);
 		_notice = NewLabel(root, HorizontalAlignment.Center, new Vector2(-260f, 120f), anchorLeft: 0.5f);
+
+		// Just under the reticle: what the key under the player's finger would do
+		// with whatever they are standing next to (docs/IMPLEMENTATION_PLAN.md §M5).
+		_prompt = NewLabel(root, HorizontalAlignment.Center, new Vector2(-260f, 48f), anchorLeft: 0.5f,
+			anchorTop: 0.5f);
+		_prompt.Size = new Vector2(520f, 32f);
 
 		_ammo.Size = new Vector2(236f, 56f);
 		_round.Size = new Vector2(320f, 48f);
@@ -104,18 +111,26 @@ public partial class CombatHud : CanvasLayer
 				? $"tickets {match.GroundTickets}   {Clock(match.SecondsRemaining(tick))}"
 				: match.Phase.ToString().ToLowerInvariant();
 			_notice.Text = string.Empty;
+			_prompt.Text = string.Empty;
 			_loadout.Refresh(false, combat.PendingLoadout.Large);
 			return;
 		}
 
-		WeaponStats stats = combat.EquippedStats;
-		string weapon = WeaponCatalog.NameOf(combat.EquippedDefinitionId);
+		// A gunner's own weapons are not in their hands while they are behind a gun
+		// (docs/IMPLEMENTATION_PLAN.md §M5), so the corner shows the gun's belt.
+		EmplacementManager emplacements = EmplacementManager.Instance;
+		Emplacement gun = null;
+		bool mounted = emplacements != null && emplacements.TryMounted(combat.PeerId, out gun);
+
+		WeaponStats stats = mounted ? gun.Stats : combat.EquippedStats;
+		string weapon = WeaponCatalog.NameOf(mounted ? gun.WeaponDefinitionId : combat.EquippedDefinitionId);
+		short ammo = mounted ? gun.Weapon.Ammo : combat.Equipped.Ammo;
 
 		_status.Text = $"HP {combat.Health}\nK {combat.Kills}  D {combat.Deaths}";
 		_ammo.Text = stats.HasUnlimitedAmmo
 			? $"{weapon}\n--"
-			: $"{weapon}\n{combat.Equipped.Ammo} / {stats.MagazineSize}"
-				+ (combat.Equipped.IsReloading ? "  reloading" : string.Empty);
+			: $"{weapon}\n{ammo} / {stats.MagazineSize}"
+				+ (!mounted && combat.Equipped.IsReloading ? "  reloading" : string.Empty);
 
 		_round.Text = match.Phase switch
 		{
@@ -126,6 +141,7 @@ public partial class CombatHud : CanvasLayer
 
 		bool dead = combat.IsDowned;
 		_notice.Text = dead ? "down — respawning" : string.Empty;
+		_prompt.Text = dead ? string.Empty : emplacements?.PromptFor(combat) ?? string.Empty;
 		_loadout.Refresh(dead || match.Phase == RoundPhase.Ended, combat.PendingLoadout.Large);
 	}
 

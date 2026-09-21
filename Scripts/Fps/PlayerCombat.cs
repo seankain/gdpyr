@@ -70,6 +70,14 @@ public sealed class PlayerCombat
 	public readonly HitboxHistory History = new();
 
 	/// <summary>
+	/// The use key, as a tap or a hold (docs/IMPLEMENTATION_PLAN.md §M5).
+	/// Server-side: emplacement transitions are the one player action here that is
+	/// not predicted, so only the authority reads this
+	/// (<see cref="EmplacementManager"/>).
+	/// </summary>
+	public UseTracker Use;
+
+	/// <summary>
 	/// How far back this player's shots are compensated, in ticks. Derived from the
 	/// RTT their client reports and clamped hard, because that number is a claim and
 	/// not a measurement (docs/NETCODE.md §4.3).

@@ -3,6 +3,9 @@
 [ext_resource type="Material" uid="uid://cgh5xjavqxrgv" path="res://Levels/materials/PrototypeMat1.tres" id="2_4viys"]
 [ext_resource type="Texture2D" uid="uid://cpd0vl6ggnxlq" path="res://Textures/kenney_prototype/PNG/Green/texture_01.png" id="3_ugpq5"]
 [ext_resource type="Script" path="res://Scripts/Rts/Barracks.cs" id="4_barracks"]
+[ext_resource type="Script" path="res://Scripts/Rts/ResourceNode.cs" id="5_resourcenode"]
+[ext_resource type="Script" path="res://Scripts/Fps/Emplacement.cs" id="6_emplacement"]
+[ext_resource type="Script" path="res://Scripts/Fps/AmmoCan.cs" id="7_ammocan"]
 
 [sub_resource type="NavigationMesh" id="NavigationMesh_ground"]
 
@@ -211,3 +214,51 @@ shape = SubResource("BoxShape3D_barracks")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 0)
 mesh = SubResource("BoxMesh_barracks")
 surface_material_override/0 = SubResource("StandardMaterial3D_barracks")
+
+[node name="ResourceNode1" type="Node3D" parent="." groups=["resource_node"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -30, 0.5, -15)
+script = ExtResource("5_resourcenode")
+CaptureRadiusMeters = 10.0
+CaptureSeconds = 8.0
+IncomePoints = 25
+IncomeIntervalSeconds = 5.0
+
+[node name="ResourceNode2" type="Node3D" parent="." groups=["resource_node"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, -35)
+script = ExtResource("5_resourcenode")
+CaptureRadiusMeters = 12.0
+CaptureSeconds = 10.0
+IncomePoints = 35
+IncomeIntervalSeconds = 5.0
+
+[node name="ResourceNode3" type="Node3D" parent="." groups=["resource_node"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 30, 0.5, -55)
+script = ExtResource("5_resourcenode")
+CaptureRadiusMeters = 10.0
+CaptureSeconds = 8.0
+IncomePoints = 25
+IncomeIntervalSeconds = 5.0
+
+[node name="Emplacement1" type="Node3D" parent="." groups=["emplacement"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6, 0.5, 4)
+script = ExtResource("6_emplacement")
+
+[node name="Emplacement2" type="Node3D" parent="." groups=["emplacement"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14, 0.5, 4)
+script = ExtResource("6_emplacement")
+
+[node name="AmmoCan1" type="Node3D" parent="." groups=["ammo_can"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 0.5, 10)
+script = ExtResource("7_ammocan")
+
+[node name="AmmoCan2" type="Node3D" parent="." groups=["ammo_can"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0.5, 10)
+script = ExtResource("7_ammocan")
+
+[node name="AmmoCan3" type="Node3D" parent="." groups=["ammo_can"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 10)
+script = ExtResource("7_ammocan")
+
+[node name="AmmoCan4" type="Node3D" parent="." groups=["ammo_can"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0.5, 10)
+script = ExtResource("7_ammocan")

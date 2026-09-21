@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="ProjectileDefinition" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Fps/ProjectileDefinition.cs" id="1_projdef"]
+
+[resource]
+script = ExtResource("1_projdef")
+Name = &"cannon_76"
+MassGrams = 6000.0
+RadiusMillimeters = 38.0
+DragCoefficient = 0.28
+MuzzleVelocity = 320.0
+LifetimeSeconds = 8.0
+Damage = 90.0
+ExplosionRadiusMeters = 4.5
+ExplosionDamage = 80.0
+SweepRadiusMeters = 0.15
+TracerColor = Color(1, 0.85, 0.4, 1)
+TracerLengthMeters = 1.6
+TracerRadiusMeters = 0.06

@@ -31,8 +31,9 @@ FPS-controller tutorial project, ~1100 lines of C#:
 | Greybox assets | `Textures/kenney_prototype/`, `Scenes/Test.tscn` | Yes |
 
 Paths are as of M0, which moved the tutorial project into the layout in §3; M2, which renamed
-`Weapons.cs` to `WeaponDefinition.cs` when it grew a combat half; and M3, which added
-`Scripts/Rts/` and a fourth autoload. The two defects below were *not* fixed in M0; both were fixed
+`Weapons.cs` to `WeaponDefinition.cs` when it grew a combat half; M3, which added `Scripts/Rts/`
+and a fourth autoload; and M5, which added a fifth for the heavy guns
+(`Scripts/Fps/EmplacementManager.cs`). The two defects below were *not* fixed in M0; both were fixed
 in M1, which moved the simulation onto the fixed tick and made it read recorded `InputFrame`s
 rather than the device.
 
@@ -274,12 +275,43 @@ call. This makes one person enough to see a round.
 
 ### M5 — Economy, tiers, win/lose (3–4 days)
 
-- `ResourceNode`s with capture radius and income tick; contested state.
+- `ResourceNode`s with capture radius and income tick; contested state. Shipped as presence capture
+  counted in ticks (`Scripts/Sim/Capture.cs`), 15 Hz occupancy scans, and one reliable ~8-byte
+  message per *changed* node at 5 Hz ([`NETCODE.md`](NETCODE.md) §10.1). One addition to what the
+  bullet asked for: **a single ground-force body standing on a node stops it paying immediately**,
+  without having to finish a capture. Denial is the ground force's reason to leave a firefight and
+  walk somewhere, and eight seconds of standing there to make it theirs is a second decision on top
+  of the first. Holding a node earns the ground force nothing — they have tickets, not income; what
+  it buys them is the strategist's money not arriving.
 - Three unit tiers, **one unit each**: Infantry (T0) → Technical, HMG-armed (T1) → Tank (T2).
+  Shipped as three `.tres` files and three catalog lines, which is what §M3 promised the table was
+  for. The tiers differ where the fog made it matter: the technical sees 70 m and shoots to 50,
+  which is the scout M4 argued for; the tank sees 40 and shoots to 38 and is the only thing on the
+  field that survives being shot at. **One navigation mesh serves all three** — Godot bakes an
+  agent radius into the mesh, and a second bake per tier is a real cost for a greybox whose map is
+  mostly open ground, so a tank paths through gaps it does not fit through and shoves itself out of
+  them. That is the first thing to fix if vehicles start wedging in doorways.
 - Heavy-gun emplacements: pick up (movement penalty), deploy, mount, fire; ammo cans carried from
-  the ground spawn to resupply.
-- Win/lose: ground team loses at 0 tickets; strategist loses when points < cheapest unit cost **and**
-  no units remain alive **and** no resource node is held. Round end → scoreboard → restart.
+  the ground spawn to resupply. One key does all of it — a tap mounts, deploys and loads, a
+  half-second hold picks the thing up and carries it off — and the decision table is engine-free
+  and tested. Three deviations, all recorded in [`NETCODE.md`](NETCODE.md) §10.2: **mounting is not
+  predicted** (a rejected mount has no message to correct it with, and the round trip is the one §2
+  already accepts for RTS orders) while **firing is**, through the same `WeaponSim` a rifle uses;
+  a mounted gunner is *pinned* where they stood rather than teleported onto a seat, so there is
+  nothing to snap; and a deployed gun is **not a collider**, because one that could be sheltered
+  behind would have to be a static body the navigation bake and the projectile queries both knew
+  about. The gun is the one weapon in the catalog with no reload: its belt is its ammunition, and
+  a can fills it and wastes the rest.
+- Win/lose: ground team loses at 0 tickets; strategist loses when points < cheapest unit cost
+  **and** no units remain alive **and** no resource node is held. Round end → scoreboard → restart.
+  Shipped with **a fourth clause: nothing on a barracks queue.** A queued unit has already been
+  paid for (`BuildQueue.TryEnqueue` charges on order), so a strategist with an empty balance and
+  three riflemen in the oven is not out of the round — and the tick the last queue empties is the
+  tick the answer can change, which is why the check runs every tick rather than on a timer. The
+  clock running out is a **ground-force win**: twenty minutes with a ticket left is what surviving
+  an assault looks like. The scoreboard is one reliable message at round end (§10.3) and the
+  existing intermission restarts the round, because a playtest that needs somebody to press a key
+  between rounds gets fewer rounds per session.
 
 ### M6 — Playtest instrumentation (1–2 days, then ongoing)
 
@@ -320,13 +352,14 @@ in §2 at that time — that corner of the ecosystem moves.
 | C# GC hitches at 50+ units | Frame spikes correlated with unit count | No per-tick allocation in unit/projectile paths; pooled projectiles; entity registry instead of scene scans. |
 | ~~`MultiplayerSynchronizer` visibility gates *sync* but perhaps not *spawn*~~ | — | **Closed in M3.** Units replicate through a packed per-peer message (`NETCODE.md` §6.1), so a unit a peer is not told about has no node at all. M4 needed no spike: it applied the same filter to the player snapshot, which is now one packet per strategist rather than one broadcast. |
 | Netick spike (M1) burns a day and is discarded | — | Timebox to 1 day, hard stop. |
+| **Vehicles wedge on a navmesh baked for a rifleman** | Technicals and tanks stop on corners the infantry walks round | One region, one agent radius (§M5). Open ground hides it; the fix is a second region and a second bake per tier, and it is worth paying for only once somebody has watched a tank get stuck. |
 | Realistic muzzle velocities make leading imperceptible | Players report shooting feels hitscan | See `NETCODE.md` §4.4: at 940 m/s a 6 m/s target at 100 m needs only 0.64 m of lead. Muzzle velocity is a **gameplay tuning knob**, not a realism constant — expect to run 200–400 m/s. |
 
 ---
 
 ## 7. Immediate next actions
 
-M0 through M4 are done. M3 shipped the strategist camera and box selection, the four orders, the
+M0 through M5 are done. M3 shipped the strategist camera and box selection, the four orders, the
 `Unit` FSM over `NavigationAgent3D`, unit weapons through the same `ProjectileSim` players use,
 the barracks build queue and the strategist's point pool, team selection with a two-strategist cap,
 and the packed unit replicator the deviation in §M3 describes. It also closed the two items M2 left
@@ -335,58 +368,54 @@ predicted tracer still matches) are in, authored at 0° for every player weapon 
 infantry.
 
 M3.5 made one person enough to run a round: bots backfill both sides while anybody is connected and
-stand up again as people arrive. It also fixed a defect it could not live with — a dedicated server
-used to spawn an unmanned character for itself, which started the round before anyone had joined
-and stood at a spawn point costing the ground force a ticket every time a unit shot it.
+stand up again as people arrive. M4 put the fog in front of the strategist — a ground-force player
+is in a strategist's packet only while one of the strategist's units has them in sensor range with
+a clear line, and what is left behind is a decaying ghost rather than nothing.
 
-M4 put the fog in front of the strategist. A ground-force player is in a strategist's packet only
-while one of the strategist's units has them in sensor range with a clear line, and the same test
-decides which projectile messages they are told about, so a flanker who opens fire no longer lights
-themselves up from across the map. What is left behind is a decaying ghost rather than nothing,
-because stale information is what makes the role a game. The computer strategist reads the same
-service, so the two are behind one fog rather than two (`NETCODE.md` §6.2, §9).
+M5 gave both sides something to do with the map. The strategist's points are a rate rather than a
+pool: three nodes pay for being held and stop paying the moment a rifleman stands on one, which is
+the first reason the ground force has had to leave a firefight and walk somewhere. The catalog grew
+the two tiers the fog argued for — a technical that sees 70 m and shoots to 50, and a tank that
+survives being shot at — and the ground force got heavy guns it can pick up, carry, put down and
+feed. The round can now be lost from either side: at zero tickets, or when the strategist has no
+points, no units, nothing building and no ground, and it ends on a scoreboard and restarts itself.
 
-Still open from M2: **a full hitbox rewind for projectiles** (§4.3's "upgrade" — the ring is built
-and melee uses it, projectiles still use the cheap spawn-time advance). Nothing since has needed it,
-and units deliberately keep no history at all (`NETCODE.md` §5).
-
-1. **Play a round against the bots, then play one on the EC2 box.** Every number in
-   `Units/infantry.tres` is a guess: 50 points, 4 s to build, 45 m of sensor, 40 m of engagement,
-   2.5° of cone. So is `StrategistTickets = 1000`, which is exactly twenty riflemen. The first
-   question a playtest answers is whether twenty riflemen are a threat to six players or a queue of
-   free kills — and a bot round now answers a rough version of it in five minutes without booking
-   eight people. Watch `GroundForceTickets = 50` especially: five bots dying like bots may end a
-   round in a couple of minutes, and the fix is the ticket pool rather than the bots.
-2. **Play the strategist seat now that it is dark, and watch `SensorRadiusMeters` first.** 45 m was
-   picked in M3 as a *combat* number — how far a rifleman notices someone to shoot at — and M4 has
-   quietly promoted it to the whole of the strategist's map knowledge. If twenty riflemen light the
-   map up anyway, the answer is a smaller sensor than engagement range, which is also what makes a
-   cheap scout unit worth building in M5. The debug HUD's `fog` row is the instrument: "seen"
-   against "tracked", and "withheld" climbing at all.
-3. **Verify the fog on the real server, not on a listen host.** A host is its own authority and
-   cannot be filtered against itself, so `--listen` draws a curtain over the characters instead
-   (`NETCODE.md` §6.2). It is the right shape for judging whether the fog is *fun*; it is worth
-   nothing for judging whether it is *tight*. Two machines and a dedicated server is the only test
-   that answers the second question.
-4. **Tune `BotTraits.Default` against a person.** Turn rate 4.5 rad/s, a 3° held aim error, a 200 ms
-   reaction. Those three numbers are the whole difficulty dial, and they were picked to be
-   *mediocre* on purpose — a bot that beats a person in a straight fight makes the ground force look
-   weak, which is the opposite of what the instrument is for.
-5. **Verify the navigation bake on the real map.** It runs on the server's first tick against the
-   nodes in the `navmesh` group and falls back to steering straight at the destination if it
-   produces nothing — which is playable and wrong, so the debug HUD says "no navmesh" when it
-   happens. Bots path through the same mesh, so a failed bake now shows up as six bots grinding
-   along a wall. Check that line before drawing conclusions about pathing.
-6. **M5 — economy, tiers, win/lose.** The fog makes sensor radius a unit-design lever rather than a
-   combat constant, which is most of the argument for the three tiers: a scout that sees further
-   than it shoots is now a real unit and not a stat block.
-7. Three smaller things earlier milestones left where they were: a unit hit is tested against its
-   *current* capsule rather than a rewound one (justified in `NETCODE.md` §5, but worth revisiting
-   if players report missing units they clearly hit); the strategist HUD can only build from
-   barracks 0 — the RPCs take an index and the HUD only ever sends zero, and the computer
-   strategist already uses every barracks on the map, so the gap is only in the human's UI; and the
-   ground force is not fogged at all, which is a deliberate cut with a reason (§6.2) rather than an
-   oversight, but it does mean a modified ground-force client still has a map-wide unit radar.
+1. **Play a round and watch the three node numbers before anything else.** 25 points every five
+   seconds, twice, plus 35 from the middle, is 510 points a minute with everything held — ten
+   riflemen a minute, against `StrategistTickets = 1000` of starting capital. That is a guess made
+   at a text editor. The question a playtest answers first is whether the ground force ever *goes*:
+   the debug HUD's `nodes` row says how many are contested, and "0 contested" for twenty minutes
+   means the economy is decoration and the numbers are too small to be worth a walk.
+2. **Watch whether the tiers get built, and whether the tank is a mistake.** 400 points and 22
+   seconds is eight riflemen and most of a minute, and `StrategistBrain.TryChooseTier` will not buy
+   one until three riflemen are already out. A tank that six players cannot deal with makes the
+   round a foregone conclusion; one they melt in ten seconds makes the tier a trap the strategist
+   only falls into once. Both are findings; the fix in either direction is `Units/tank.tres` and
+   nothing else.
+3. **Watch whether anybody mounts a gun, and whether anybody ever carries a can.** The whole
+   emplacement loop is two guns, four cans and a walk, and the debug HUD's `guns` row counts all of
+   it. "0 cans spent" across a session means the belt is too big, the walk is too long, or a gun is
+   simply not worth standing behind while twenty riflemen are shooting at it — and which of the
+   three it is decides whether the feature is tuned or cut.
+4. **Verify the economy and the guns on the real server, not on a listen host.** Both are
+   server-authoritative state on reliable messages, so a listen host proves only that the rules are
+   right. What it cannot show is a mount that takes a round trip to happen (`NETCODE.md` §10.2) or
+   a carry whose speed the client mispredicts for that long. Two machines and the EC2 box is the
+   only test that answers whether either is annoying.
+5. **Still open from M2: a full hitbox rewind for projectiles** (§4.3's "upgrade" — the ring is
+   built and melee uses it, projectiles still use the cheap spawn-time advance). Nothing since has
+   needed it, and units deliberately keep no history at all (`NETCODE.md` §5).
+6. **M6 — playtest instrumentation.** It is the actual deliverable of the whole project, and M5
+   just made most of its columns exist: round length, outcome, ticket curve, the strategist's
+   income against their spending, units built and lost by tier, nodes held over time, cans spent.
+   `ScoreboardCodec`'s `RoundSummary` is already half the CSV's header row.
+7. Four smaller things earlier milestones left where they were: a unit hit is tested against its
+   *current* capsule rather than a rewound one (justified in `NETCODE.md` §5); the strategist HUD
+   can only build from barracks 0 — the RPCs take an index, the three build keys still send zero,
+   and the computer strategist already uses every barracks on the map, so the gap is only in the
+   human's UI; the ground force is not fogged at all, which is a deliberate cut with a reason
+   (§6.2) rather than an oversight; and one navigation mesh serves all three tiers (§M5), so a tank
+   paths like a rifleman and is wider than one.
 
 ---
 

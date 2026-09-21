@@ -27,6 +27,9 @@ public static class WeaponCatalog
 		"res://Weapons/dmr/dmr.tres",           // 2 — large
 		"res://Weapons/rifle/rifle.tres",       // 3 — large
 		"res://Weapons/launcher/launcher.tres", // 4 — large
+		"res://Weapons/hmg/hmg.tres",           // 5 — technical (M5)
+		"res://Weapons/cannon/cannon.tres",     // 6 — tank (M5)
+		"res://Weapons/heavy/heavy.tres",       // 7 — deployed emplacement (M5)
 	};
 
 	public const byte Hammer = 0;
@@ -34,6 +37,21 @@ public static class WeaponCatalog
 	public const byte Dmr = 2;
 	public const byte Rifle = 3;
 	public const byte Launcher = 4;
+
+	/// <summary>The technical's gun. Not a loadout choice: no player carries one.</summary>
+	public const byte Hmg = 5;
+
+	/// <summary>The tank's gun.</summary>
+	public const byte Cannon = 6;
+
+	/// <summary>
+	/// The heavy gun a ground-force player deploys and mounts
+	/// (docs/IMPLEMENTATION_PLAN.md §M5). It fires the technical's round out of a
+	/// bigger belt, and it is the one weapon here with no reload at all: its
+	/// magazine is its ammunition, and filling it again is a walk back to the spawn
+	/// for a can (<see cref="Fps.EmplacementManager"/>).
+	/// </summary>
+	public const byte Heavy = 7;
 
 	/// <summary>The large-weapon choice a ground-force player makes before each spawn.</summary>
 	public static readonly byte[] LargeWeapons = { Dmr, Rifle, Launcher };

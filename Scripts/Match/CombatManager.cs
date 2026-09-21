@@ -56,6 +56,9 @@ public partial class CombatManager : Node
 	/// <summary>Bytes counted for the match-state RPC, for the bandwidth HUD.</summary>
 	private const int MatchStateBytes = 22;
 
+	/// <summary>Bytes counted for one resource node's state RPC.</summary>
+	private const int NodeStateBytes = 8;
+
 	private readonly Dictionary<int, PlayerCombat> _players = new();
 	private readonly List<PlayerCombat> _ordered = new();
 	private readonly List<byte[]> _pendingSpawns = new();
@@ -69,11 +72,21 @@ public partial class CombatManager : Node
 	private ProjectileView _view;
 	private CombatHud _hud;
 	private TeamSelect _teamSelect;
+	private Scoreboard _scoreboard;
 	private StrategistController _strategist;
+
+	private uint[] _replicatedNodeVersions = Array.Empty<uint>();
+
+	/// <summary>The end-of-round table, on every peer. Empty until a round ends.</summary>
+	private readonly ScoreEntry[] _scores = new ScoreEntry[ScoreboardCodec.MaxEntries];
+
+	private RoundSummary _summary;
+	private int _scoreCount;
 
 	private uint _nextPredictedId = 1;
 	private uint _replicatedMatchVersion;
 	private uint _replicatedPointsVersion;
+	private bool _economyStarted;
 	private uint _intermissionEndTick;
 	private bool _intermissionArmed;
 
@@ -95,6 +108,13 @@ public partial class CombatManager : Node
 	/// filter (docs/NETCODE.md §6.2).
 	/// </summary>
 	public VisibilityService Visibility { get; private set; }
+
+	/// <summary>
+	/// The strategist's income and the nodes it comes from
+	/// (docs/IMPLEMENTATION_PLAN.md §M5). Ticked on the server; a client holds the
+	/// same nodes and is told who owns each of them.
+	/// </summary>
+	public EconomyService Economy { get; } = new();
 
 	/// <summary>Projectiles in flight in this process. For the net HUD (docs/NETCODE.md §8).</summary>
 	public int LiveProjectiles => _projectiles?.LiveCount ?? 0;
@@ -224,6 +244,17 @@ public partial class CombatManager : Node
 			return;
 		}
 
+		EmplacementManager emplacements = EmplacementManager.Instance;
+		emplacements?.ServerUse(combat, input, tick);
+
+		// A gunner's own weapons are not in their hands (docs/IMPLEMENTATION_PLAN.md
+		// §M5): while they are behind a gun, the trigger fires the gun.
+		if (emplacements != null && emplacements.TryMounted(peerId, out Emplacement mounted))
+		{
+			FireMounted(combat, mounted, input, tick, authoritative: true);
+			return;
+		}
+
 		combat.Slot = WeaponSim.SelectSlot(combat.Slot, input);
 
 		WeaponStats stats = combat.EquippedStats;
@@ -253,9 +284,18 @@ public partial class CombatManager : Node
 	/// </summary>
 	public void ServerPostTick(uint tick)
 	{
+		EnsureEconomy();
+
 		RecordHitboxes(tick);
 		StepProjectiles(tick, authoritative: true);
 		ServerRespawns(tick);
+
+		// Before the round is judged, not after: the strategist's defeat condition
+		// reads both the balance the nodes have just paid into and which nodes are
+		// held (docs/IMPLEMENTATION_PLAN.md §M5).
+		Economy.ServerTick(tick, this, UnitManager.Instance);
+		BroadcastNodeState(tick);
+
 		ServerRound(tick);
 
 		// After the units have moved and before PlayerManager broadcasts the snapshot
@@ -302,6 +342,54 @@ public partial class CombatManager : Node
 		// aimed rather than where they would have had to lead to allow for the link.
 		SpawnProjectile(tick, OwnerId.ForPeer(combat.PeerId), definitionId, combat.Character.EyePosition,
 			direction, combat.LagCompensationTicks);
+	}
+
+	/// <summary>
+	/// Runs a deployed heavy gun over its gunner's input
+	/// (docs/IMPLEMENTATION_PLAN.md §M5).
+	///
+	/// The same <see cref="WeaponSim"/> step a rifle goes through, over the same
+	/// frame, on both ends — so the belt count and the tracer appear on the tick the
+	/// trigger was pulled and the server confirms them a round trip later
+	/// (docs/NETCODE.md §4.3). What differs is where the round comes from and where
+	/// it may be pointed: the muzzle rather than the gunner's eye, and inside the
+	/// traverse arc the gun was deployed at rather than wherever they are looking.
+	/// </summary>
+	private void FireMounted(PlayerCombat combat, Emplacement gun, in InputContext input, uint tick,
+		bool authoritative)
+	{
+		WeaponStats stats = gun.Stats;
+
+		// The gunner's client steps the same belt the server does and keeps its own
+		// count: ServerGunState will not overwrite it while this peer is the gunner,
+		// because the server's number is a round trip old (docs/NETCODE.md §10.2).
+		WeaponAction action = WeaponSim.Step(ref gun.Weapon, stats, input, tick);
+
+		if (action != WeaponAction.Fire)
+		{
+			return;
+		}
+
+		combat.ShotsFired++;
+
+		Vector3 aim = EmplacementSim.Traverse(combat.Character.Yaw, combat.Character.Pitch, gun.DeployYaw);
+		Vector3 direction = WeaponSim.FireDirection(gun.Weapon, stats, combat.PeerId, aim);
+
+		if (authoritative)
+		{
+			SpawnProjectile(tick, OwnerId.ForPeer(combat.PeerId), gun.WeaponDefinitionId, gun.MuzzlePosition,
+				direction, combat.LagCompensationTicks);
+			return;
+		}
+
+		ShotsFired++;
+
+		uint id = PredictedIdBit | _nextPredictedId++;
+		if (_projectiles.TrySpawn(id, tick, OwnerId.ForPeer(combat.PeerId), gun.WeaponDefinitionId,
+			gun.MuzzlePosition, direction, 0, out _))
+		{
+			_predicted.Add((id, tick));
+		}
 	}
 
 	/// <summary>
@@ -719,6 +807,7 @@ public partial class CombatManager : Node
 
 			case RoundPhase.Live:
 				Match.Advance(tick);
+				CheckStrategistDefeat(tick);
 				break;
 		}
 
@@ -733,8 +822,10 @@ public partial class CombatManager : Node
 		{
 			_intermissionArmed = true;
 			_intermissionEndTick = tick + (uint)WeaponStats.SecondsToTicks(_gameMode.IntermissionSeconds);
-			GD.Print($"[match] round over: {Match.Outcome} | tickets {Match.GroundTickets}"
-				+ $" | deaths {Match.GroundDeaths} | next round in {_gameMode.IntermissionSeconds:0}s");
+			PublishScoreboard(tick, 0);
+			GD.Print($"[match] round over: {Match.Outcome} | winner {Match.Winner?.ToString() ?? "nobody"}"
+				+ $" | tickets {Match.GroundTickets} | deaths {Match.GroundDeaths}"
+				+ $" | next round in {_gameMode.IntermissionSeconds:0}s");
 			return;
 		}
 
@@ -744,13 +835,152 @@ public partial class CombatManager : Node
 		}
 
 		_intermissionArmed = false;
+		_scoreCount = 0;
 		Match.Reset();
 		_projectiles.Clear();
 		Visibility.Clear();
+		Economy.Reset();
+		SendNodeState(0);
+		EmplacementManager.Instance?.ResetAll();
 		UnitManager.Instance?.ClearUnits();
 		for (int i = 0; i < _ordered.Count; i++)
 		{
 			Respawn(_ordered[i], tick);
+		}
+	}
+
+	/// <summary>
+	/// Ends the round if the strategist has nothing left to play with
+	/// (docs/IMPLEMENTATION_PLAN.md §M5).
+	///
+	/// Cheap enough to ask every tick — five integers, all of them already counted —
+	/// and it has to be, because the tick the last queue empties is the tick the
+	/// answer changes. The condition itself is engine-free and tested
+	/// (<see cref="WinConditions.IsStrategistEliminated"/>).
+	/// </summary>
+	private void CheckStrategistDefeat(uint tick)
+	{
+		UnitManager units = UnitManager.Instance;
+		if (units == null)
+		{
+			return;
+		}
+
+		// Nobody in the chair is not a defeat: a round with no strategist connected
+		// is a round the bots have not filled yet (docs/IMPLEMENTATION_PLAN.md §M3.5),
+		// and ending it would make an empty server restart forever.
+		if (Teams.StrategistCount == 0)
+		{
+			return;
+		}
+
+		if (!WinConditions.IsStrategistEliminated(Match.StrategistPoints, UnitCatalog.CheapestCost,
+			units.LiveUnitCount, units.QueuedUnits, Economy.StrategistNodes))
+		{
+			return;
+		}
+
+		if (Match.RegisterStrategistDefeat(tick))
+		{
+			GD.Print($"[match] strategist eliminated | points {Match.StrategistPoints}"
+				+ $" | units {units.LiveUnitCount} | nodes {Economy.StrategistNodes}");
+		}
+	}
+
+	// ---- the scoreboard (docs/IMPLEMENTATION_PLAN.md §M5) -------------------
+
+	/// <summary>
+	/// The table the round ended on: one row per player, plus what the round cost
+	/// both sides. Valid on every peer once the round is over.
+	/// </summary>
+	public ReadOnlySpan<ScoreEntry> Scores => _scores.AsSpan(0, _scoreCount);
+
+	public RoundSummary Summary => _summary;
+
+	/// <summary>
+	/// Builds the scoreboard and sends it. Kills and deaths are server-side counters
+	/// the whole round — nothing else puts them on the wire — so this one reliable
+	/// message at the end is where a client learns them.
+	///
+	/// <paramref name="peerId"/> of 0 broadcasts; anything else is a peer that
+	/// joined after the round ended and needs the table that is on everyone else's
+	/// screen.
+	/// </summary>
+	private void PublishScoreboard(uint tick, int peerId)
+	{
+		if (peerId == 0)
+		{
+			CaptureScores(tick);
+		}
+
+		if (_scoreCount == 0 || !Multiplayer.HasMultiplayerPeer() || Multiplayer.GetPeers().Length == 0)
+		{
+			return;
+		}
+
+		byte[] payload = ScoreboardCodec.Encode(_summary, Scores);
+
+		if (peerId == 0)
+		{
+			Rpc(MethodName.ServerRoundSummary, payload);
+			NetworkManager.Instance?.Stats.RecordSent(payload.Length * Multiplayer.GetPeers().Length);
+			return;
+		}
+
+		RpcId(peerId, MethodName.ServerRoundSummary, payload);
+		NetworkManager.Instance?.Stats.RecordSent(payload.Length);
+	}
+
+	/// <summary>
+	/// Fills the local table from the roster. The server does this for itself as
+	/// well as for the wire: a listen host sends itself nothing, and its scoreboard
+	/// has to come from somewhere.
+	/// </summary>
+	private void CaptureScores(uint tick)
+	{
+		UnitManager units = UnitManager.Instance;
+
+		_scoreCount = 0;
+		for (int i = 0; i < _ordered.Count && _scoreCount < ScoreboardCodec.MaxEntries; i++)
+		{
+			PlayerCombat player = _ordered[i];
+			_scores[_scoreCount++] = new ScoreEntry
+			{
+				PeerId = player.PeerId,
+				Kills = (short)Mathf.Clamp(player.Kills, short.MinValue, short.MaxValue),
+				Deaths = (short)Mathf.Clamp(player.Deaths, short.MinValue, short.MaxValue),
+				Team = player.Team,
+				IsBot = BotRoster.IsBot(player.PeerId),
+			};
+		}
+
+		_summary = new RoundSummary
+		{
+			Outcome = (byte)Match.Outcome,
+			GroundTickets = (short)Mathf.Clamp(Match.GroundTickets, short.MinValue, short.MaxValue),
+			StrategistPoints = Match.StrategistPoints,
+			UnitsBuilt = (ushort)Mathf.Clamp(units?.UnitsProduced ?? 0, 0, ushort.MaxValue),
+			UnitsLost = (ushort)Mathf.Clamp(units?.UnitsLost ?? 0, 0, ushort.MaxValue),
+			RoundTicks = Match.ElapsedTicks(tick),
+		};
+	}
+
+	[Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
+		TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+	private void ServerRoundSummary(byte[] payload)
+	{
+		NetworkManager net = NetworkManager.Instance;
+		if (net == null || !net.IsClient)
+		{
+			return;
+		}
+
+		net.Stats.RecordReceived(payload.Length);
+
+		if (ScoreboardCodec.TryDecode(payload, _scores, out RoundSummary summary, out int count))
+		{
+			_summary = summary;
+			_scoreCount = count;
 		}
 	}
 
@@ -875,6 +1105,16 @@ public partial class CombatManager : Node
 			return;
 		}
 
+		// Mounting is not predicted — it is one round trip, once, and a rejected
+		// mount has no message to correct it with. Firing the gun is, through the
+		// same step the server will run over the same frames (docs/NETCODE.md §10.2).
+		if (EmplacementManager.Instance is { } emplacements
+			&& emplacements.TryMounted(combat.PeerId, out Emplacement mounted))
+		{
+			FireMounted(combat, mounted, input, tick, authoritative: false);
+			return;
+		}
+
 		combat.Slot = WeaponSim.SelectSlot(combat.Slot, input);
 
 		WeaponStats stats = combat.EquippedStats;
@@ -917,6 +1157,7 @@ public partial class CombatManager : Node
 	/// <summary>Closes a client's tick: applies what the server said, then flies the tracers.</summary>
 	public void ClientPostTick(uint tick)
 	{
+		EnsureEconomy();
 		ApplyPendingMessages(tick);
 		PrunePredictions(tick);
 		StepProjectiles(tick, authoritative: false);
@@ -1177,8 +1418,17 @@ public partial class CombatManager : Node
 		}
 
 		// The round is already running; a newcomer needs its state, not the next
-		// change to it.
+		// change to it. Same for the nodes: who holds one is state, and the next
+		// change to it might be minutes away.
 		SendMatchState(peerId);
+		SendNodeState(peerId);
+
+		// Somebody who connects during the intermission sees the table everyone else
+		// is looking at rather than an empty one.
+		if (Match.Phase == RoundPhase.Ended)
+		{
+			PublishScoreboard(0, peerId);
+		}
 	}
 
 	/// <summary>Broadcasts when <paramref name="peerId"/> is 0, otherwise sends to that one peer.</summary>
@@ -1193,6 +1443,146 @@ public partial class CombatManager : Node
 
 		RpcId(peerId, MethodName.ServerMatchState, (byte)Match.Phase, (byte)Match.Outcome, Match.GroundTickets,
 			Match.StartingGroundTickets, Match.StrategistPoints, Match.EndTick, Match.Version);
+	}
+
+	// ---- resource nodes (docs/IMPLEMENTATION_PLAN.md §M5) -------------------
+
+	/// <summary>
+	/// Tells everyone about the nodes that have changed since the last report.
+	///
+	/// Reliable and only on change, unlike a snapshot: who holds a node is state
+	/// that changes a handful of times a round, and the progress bar in between is
+	/// worth 5 Hz and eight bytes. There is no fog over it — both sides can see who
+	/// is standing on a pad from the other end of the map in any RTS anyone has
+	/// played, and a node nobody can find is not an objective.
+	/// </summary>
+	private void BroadcastNodeState(uint tick)
+	{
+		if (tick % SimConfig.NodeReportIntervalTicks != 0
+			|| !Multiplayer.HasMultiplayerPeer() || Multiplayer.GetPeers().Length == 0)
+		{
+			return;
+		}
+
+		int peers = Multiplayer.GetPeers().Length;
+		int sent = 0;
+
+		for (int i = 0; i < Economy.NodeCount; i++)
+		{
+			ResourceNode node = Economy.NodeAt(i);
+			if (node == null || node.Capture.Version == VersionOf(i))
+			{
+				continue;
+			}
+
+			SetVersion(i, node.Capture.Version);
+			Rpc(MethodName.ServerNodeState, i, (byte)node.Capture.Owner, (byte)node.Capture.Claimant,
+				NodeFlags(node), ProgressByte(node));
+			sent++;
+		}
+
+		if (sent > 0)
+		{
+			NetworkManager.Instance?.Stats.RecordSent(NodeStateBytes * sent * peers);
+		}
+	}
+
+	/// <summary>Broadcasts every node when <paramref name="peerId"/> is 0, otherwise sends to that one peer.</summary>
+	private void SendNodeState(int peerId)
+	{
+		if (!Multiplayer.HasMultiplayerPeer() || Multiplayer.GetPeers().Length == 0)
+		{
+			return;
+		}
+
+		for (int i = 0; i < Economy.NodeCount; i++)
+		{
+			ResourceNode node = Economy.NodeAt(i);
+			if (node == null)
+			{
+				continue;
+			}
+
+			SetVersion(i, node.Capture.Version);
+
+			if (peerId == 0)
+			{
+				Rpc(MethodName.ServerNodeState, i, (byte)node.Capture.Owner, (byte)node.Capture.Claimant,
+					NodeFlags(node), ProgressByte(node));
+			}
+			else
+			{
+				RpcId(peerId, MethodName.ServerNodeState, i, (byte)node.Capture.Owner,
+					(byte)node.Capture.Claimant, NodeFlags(node), ProgressByte(node));
+			}
+		}
+	}
+
+	[Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
+		TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+	private void ServerNodeState(int index, byte owner, byte claimant, byte flags, byte progress)
+	{
+		NetworkManager net = NetworkManager.Instance;
+		if (net == null || !net.IsClient)
+		{
+			return;
+		}
+
+		net.Stats.RecordReceived(NodeStateBytes);
+
+		ResourceNode node = Economy.NodeAt(index);
+		if (node == null)
+		{
+			return;
+		}
+
+		node.Capture.Apply(Sanitize(owner), Sanitize(claimant), (flags & 1) != 0,
+			progress / (float)byte.MaxValue, node.Rules);
+	}
+
+	/// <summary>A holder byte that arrived from the wire. Anything unknown is nobody's.</summary>
+	private static NodeHolder Sanitize(byte holder) =>
+		holder <= (byte)NodeHolder.Strategist ? (NodeHolder)holder : NodeHolder.Neutral;
+
+	private static byte NodeFlags(ResourceNode node) => (byte)(node.Capture.Contested ? 1 : 0);
+
+	private static byte ProgressByte(ResourceNode node) =>
+		(byte)Mathf.RoundToInt(node.Capture.Progress(node.Rules) * byte.MaxValue);
+
+	private uint VersionOf(int index) =>
+		index >= 0 && index < _replicatedNodeVersions.Length ? _replicatedNodeVersions[index] : 0u;
+
+	private void SetVersion(int index, uint version)
+	{
+		if (index >= 0 && index < _replicatedNodeVersions.Length)
+		{
+			_replicatedNodeVersions[index] = version;
+		}
+	}
+
+	/// <summary>
+	/// Finds the map's resource nodes, once. Autoloads are ready before the map is,
+	/// the same arrangement the barracks and the spawn points use.
+	///
+	/// On a client as well as on the server: a client holds the same nodes, paints
+	/// them for whoever the server says owns them, and never ticks a capture.
+	/// </summary>
+	private void EnsureEconomy()
+	{
+		if (_economyStarted)
+		{
+			return;
+		}
+
+		_economyStarted = true;
+		Economy.Collect(GetTree());
+		_replicatedNodeVersions = new uint[Economy.NodeCount];
+
+		if (Economy.NodeCount == 0)
+		{
+			GD.PushWarning($"[economy] no nodes in group '{ResourceNode.Group}';"
+				+ " the strategist's points are a fixed pool and cannot be denied");
+		}
 	}
 
 	/// <summary>
@@ -1317,14 +1707,19 @@ public partial class CombatManager : Node
 
 		_teamSelect = new TeamSelect { Name = "TeamSelect" };
 		AddChild(_teamSelect);
+
+		_scoreboard = new Scoreboard { Name = "Scoreboard" };
+		AddChild(_scoreboard);
 	}
 
 	private void UpdateHud(uint tick)
 	{
 		SyncLocalRole();
+		Economy.Refresh();
 		_view?.Render(_projectiles);
 		_hud?.Refresh(Local, Match, tick);
 		_strategist?.Refresh(tick);
+		_scoreboard?.Refresh(this);
 	}
 
 	/// <summary>

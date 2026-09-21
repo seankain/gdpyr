@@ -17,11 +17,21 @@ public enum RoundOutcome : byte
 {
 	Undecided,
 
-	/// <summary>The ground force ran out of tickets.</summary>
+	/// <summary>The ground force ran out of tickets. The strategist wins.</summary>
 	GroundForceEliminated,
 
-	/// <summary>The clock ran out with tickets left.</summary>
+	/// <summary>
+	/// The clock ran out with tickets left. The ground force wins: twenty minutes
+	/// with a ticket left is what surviving an assault looks like
+	/// (docs/IMPLEMENTATION_PLAN.md §M5).
+	/// </summary>
 	TimeExpired,
+
+	/// <summary>
+	/// The strategist has no points, no units, nothing building and no node held
+	/// (<see cref="WinConditions.IsStrategistEliminated"/>). The ground force wins.
+	/// </summary>
+	StrategistEliminated,
 }
 
 /// <summary>
@@ -55,6 +65,23 @@ public sealed class MatchState
 
 	/// <summary>Ground-force deaths this round. Not simply the ticket difference once M5 adds refunds.</summary>
 	public int GroundDeaths { get; private set; }
+
+	/// <summary>
+	/// Which side won, or null while the round is undecided. Derived rather than
+	/// stored: there is one outcome and two ways of reading it, and two fields would
+	/// eventually disagree.
+	/// </summary>
+	public Team? Winner => Outcome switch
+	{
+		RoundOutcome.GroundForceEliminated => Team.Strategist,
+		RoundOutcome.TimeExpired => Team.GroundForce,
+		RoundOutcome.StrategistEliminated => Team.GroundForce,
+		_ => null,
+	};
+
+	/// <summary>How long the round has run, in ticks. Reads as its full length once it is over.</summary>
+	public uint ElapsedTicks(uint tick) =>
+		Phase == RoundPhase.Warmup ? 0u : (Phase == RoundPhase.Ended ? EndTick : tick) - StartTick;
 
 	/// <summary>Bumped on every change worth replicating, so a client can ignore a stale message.</summary>
 	public uint Version { get; private set; }
@@ -107,6 +134,26 @@ public sealed class MatchState
 		}
 
 		End(tick, RoundOutcome.GroundForceEliminated);
+		return true;
+	}
+
+	/// <summary>
+	/// Ends the round because the strategist has nothing left to play with
+	/// (docs/IMPLEMENTATION_PLAN.md §M5). Returns true when this was the call that
+	/// ended it.
+	///
+	/// The condition itself is <see cref="WinConditions.IsStrategistEliminated"/> and
+	/// is tested there; what belongs here is only that it ends the round exactly once
+	/// and only while one is running.
+	/// </summary>
+	public bool RegisterStrategistDefeat(uint tick)
+	{
+		if (Phase != RoundPhase.Live)
+		{
+			return false;
+		}
+
+		End(tick, RoundOutcome.StrategistEliminated);
 		return true;
 	}
 

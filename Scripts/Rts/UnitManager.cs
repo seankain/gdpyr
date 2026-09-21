@@ -105,6 +105,24 @@ public partial class UnitManager : Node
 
 	public Barracks BarracksAt(int index) => index >= 0 && index < _barracks.Count ? _barracks[index] : null;
 
+	/// <summary>
+	/// Units on every barracks queue. Server-side: a queued unit has already been
+	/// paid for, so it is the difference between a strategist who is broke and one
+	/// who is out of the round (<see cref="Sim.WinConditions.IsStrategistEliminated"/>).
+	/// </summary>
+	public int QueuedUnits
+	{
+		get
+		{
+			int queued = 0;
+			for (int i = 0; i < _barracks.Count; i++)
+			{
+				queued += _barracks[i].Queue.Count;
+			}
+			return queued;
+		}
+	}
+
 	/// <summary>Units the server has produced this round. For the HUD and M6's CSV.</summary>
 	public int UnitsProduced { get; private set; }
 
@@ -1147,6 +1165,14 @@ public partial class UnitManager : Node
 
 		UnitDefinition infantry = UnitCatalog.Definition(UnitCatalog.Infantry);
 
+		// Baked for the rifleman, and used by all three of M5's tiers. Godot bakes one
+		// mesh per region and an agent radius is baked in, so a tank at 1.6 m will path
+		// through gaps it does not fit through and shove itself out of them. The
+		// alternative is a second region and a second bake per tier, which is a real
+		// cost for a greybox whose map is mostly open ground — so this is a deliberate
+		// cut, and the thing to fix first if vehicles start wedging in doorways
+		// (docs/IMPLEMENTATION_PLAN.md §M5).
+		//
 		// Set here rather than in the scene so the numbers are compile-checked and so
 		// they track the unit they exist for.
 		//

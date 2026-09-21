@@ -22,10 +22,25 @@ public static class UnitCatalog
 	/// <summary>Index is the wire id. Do not reorder.</summary>
 	private static readonly string[] Paths =
 	{
-		"res://Units/infantry.tres", // 0 — T0 rifleman
+		"res://Units/infantry.tres",  // 0 — T0 rifleman
+		"res://Units/technical.tres", // 1 — T1 gun truck
+		"res://Units/tank.tres",      // 2 — T2 tank
 	};
 
 	public const byte Infantry = 0;
+
+	/// <summary>
+	/// T1. Fast, thin, and the only unit that sees appreciably further than it
+	/// shoots — which is what makes it a scout rather than a cheaper tank, and the
+	/// unit the fog of war argues for (docs/IMPLEMENTATION_PLAN.md §M4, §M5).
+	/// </summary>
+	public const byte Technical = 1;
+
+	/// <summary>T2. Slow, blind at range, and the only thing on the field that survives being shot at.</summary>
+	public const byte Tank = 2;
+
+	/// <summary>The three tiers in order, which is the order the strategist's build keys are in.</summary>
+	public static readonly byte[] Tiers = { Infantry, Technical, Tank };
 
 	public static UnitDefinition[] Definitions { get; private set; } = System.Array.Empty<UnitDefinition>();
 
@@ -79,6 +94,33 @@ public static class UnitCatalog
 	public static string NameOf(byte id) => Definition(id)?.Name.ToString() ?? $"#{id}";
 
 	public static bool IsBuildable(byte id) => id < Definitions.Length && Definitions[id] != null;
+
+	/// <summary>
+	/// What the cheapest buildable unit costs, or <see cref="int.MaxValue"/> when
+	/// nothing can be built at all.
+	///
+	/// This is half of the strategist's defeat condition — "points below the
+	/// cheapest unit" (docs/IMPLEMENTATION_PLAN.md §M5) — and it is derived rather
+	/// than authored so that adding a fourth tier cannot leave a constant behind.
+	/// </summary>
+	public static int CheapestCost
+	{
+		get
+		{
+			int cheapest = int.MaxValue;
+			for (int i = 0; i < Definitions.Length; i++)
+			{
+				UnitDefinition definition = Definitions[i];
+				if (definition != null && definition.Cost < cheapest)
+				{
+					cheapest = definition.Cost;
+				}
+			}
+			return cheapest;
+		}
+	}
+
+	public static int CostOf(byte id) => Definition(id)?.Cost ?? int.MaxValue;
 
 	/// <summary>
 	/// Clamps a unit id that arrived from a client. A strategist picks what to

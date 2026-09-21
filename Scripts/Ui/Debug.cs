@@ -44,6 +44,8 @@ public partial class Debug : PanelContainer
 		FillCombat();
 		FillUnits();
 		FillFog();
+		FillEconomy();
+		FillEmplacements();
 	}
 
 	public override void _Input(InputEvent @event)
@@ -191,6 +193,48 @@ public partial class Debug : PanelContainer
 		SetProperty("fog", $"{fog.VisibleContacts}/{fog.TrackedContacts} seen"
 			+ $"  {fog.SensorCount} sensors  {fog.WithheldRecords} withheld"
 			+ $"  {fog.LineOfSightRays} rays");
+	}
+
+	/// <summary>
+	/// The economy (docs/IMPLEMENTATION_PLAN.md §M5). "held" against the node count
+	/// is the strategist's income as a rate; "contested" is the ground force being
+	/// somewhere that costs the strategist something, which is the thing M5 exists
+	/// to find out whether anybody bothers to do.
+	///
+	/// Shown on every peer, because who holds a node is not fogged: both sides can
+	/// see somebody standing on a pad in any RTS anyone has played.
+	/// </summary>
+	private void FillEconomy()
+	{
+		if (CombatManager.Instance is not { Economy: { NodeCount: > 0 } economy } combat)
+		{
+			return;
+		}
+
+		SetProperty("nodes", $"{economy.StrategistNodes} strategist  {economy.GroundNodes} ground"
+			+ $"  {economy.ContestedNodes} contested  of {economy.NodeCount}");
+
+		if (NetworkManager.Instance is { IsServer: true })
+		{
+			SetProperty("income", $"{economy.IncomePaid} paid  balance {combat.Match.StrategistPoints}");
+		}
+	}
+
+	/// <summary>
+	/// The heavy guns (docs/IMPLEMENTATION_PLAN.md §M5). "0 cans spent" next to a
+	/// live round is the resupply loop nobody is playing — which is a finding, not
+	/// a bug, but it is one worth being able to see.
+	/// </summary>
+	private void FillEmplacements()
+	{
+		if (EmplacementManager.Instance is not { GunCount: > 0 } emplacements)
+		{
+			return;
+		}
+
+		SetProperty("guns", $"{emplacements.MountedGuns}/{emplacements.GunCount} manned"
+			+ $"  {emplacements.CarriedItems} carried"
+			+ $"  {emplacements.CansSpent} cans spent  {emplacements.RoundsResupplied} rounds");
 	}
 
 	private void FillClientContacts(CombatManager combat)

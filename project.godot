@@ -29,6 +29,7 @@ Bootstrap="*res://Scripts/Core/Bootstrap.cs"
 NetworkManager="*res://Scripts/Net/NetworkManager.cs"
 CombatManager="*res://Scripts/Match/CombatManager.cs"
 UnitManager="*res://Scripts/Rts/UnitManager.cs"
+EmplacementManager="*res://Scripts/Fps/EmplacementManager.cs"
 PlayerManager="*res://Scripts/Net/PlayerManager.cs"
 
 [dotnet]
@@ -114,6 +115,15 @@ melee={
 ]
 }
 
+; M5: one key for every interaction with a heavy gun or an ammunition can — pick
+; up, put down, mount, dismount, resupply. The bit it sets has been on the wire
+; since M1 (InputButtons.Use); this is the device end of it finally being sampled.
+use={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":69,"key_label":0,"unicode":101,"location":0,"echo":false,"script":null)
+]
+}
+
 ; M3: the strategist's controls. Panning reuses move_* (WASD) rather than adding a
 ; second set, and selection reuses the mouse buttons under their own names so that
 ; "fire" is never what a strategist does. Keys on the movement row are deliberately
@@ -186,6 +196,16 @@ rts_select_all={
 rts_build_infantry={
 "deadzone": 0.5,
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":49,"key_label":0,"unicode":49,"location":0,"echo":false,"script":null)
+]
+}
+rts_build_technical={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":50,"key_label":0,"unicode":50,"location":0,"echo":false,"script":null)
+]
+}
+rts_build_tank={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":51,"key_label":0,"unicode":51,"location":0,"echo":false,"script":null)
 ]
 }
 rts_cancel_build={
