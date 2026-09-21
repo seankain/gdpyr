@@ -16,6 +16,7 @@ Scripts/Sim/    Engine-free simulation code; unit-tested without Godot
 Scripts/Fps/    Character controller, movement FSM, input sampler, weapons, viewmodel
 Scripts/Rts/    Units, barracks, orders, the strategist camera and selection
 Scripts/Match/  CombatManager (the round), MatchState, TeamService
+Scripts/Bots/   Computer players: the roster director, the ground pilot, the strategist
 Scripts/Ui/     Pause menu, reticle, combat HUD, RTS HUD, net debug HUD
 Scenes/         Greybox map, player, weapon, pause menu
 Units/          UnitDefinition resources
@@ -41,6 +42,18 @@ Godot consumes its own arguments first, so the game's arguments go after a bare 
 Default port is 7777/UDP. A dedicated-server export with no mode flag defaults to
 `--server` rather than to offline.
 
+Two more flags change how many computer players the authority keeps around:
+
+| Flag | Effect |
+|---|---|
+| `--bots <n>` | fill the ground force to `n` players, humans included |
+| `--bots <n>:<m>` | ...and the strategists to `m` |
+| `--no-bots` | no computer players at all |
+
+Neither flag is needed to get bots: the numbers default to `BotGroundForce` and `BotStrategists` in
+`Match/default_gamemode.tres` (6 and 1). `--bots 4` overrides only the ground force and leaves the
+strategists to the game mode.
+
 The server spawns a character per connected peer at the map's `player_spawn` markers; each client
 predicts its own and interpolates everyone else.
 
@@ -62,6 +75,28 @@ map:
 Right-clicking an enemy player orders an attack on that player rather than on the ground under
 them. Units are server-simulated and never predicted; the order marker appears immediately and the
 units move a round trip later, which is what an RTS feels like anyway.
+
+## Playing on your own
+
+Computer players fill both sides so that one person is enough for a round. They arrive as soon as
+anybody is connected and leave as people take their seats — a bot holds a slot only while nobody
+else wants it, and an empty server runs no bots at all.
+
+A bot is a player: same peer id, same character, same loadout, same place in the snapshot, same
+ticket when it dies. The only difference is that the server takes its input from a brain rather than
+from a socket (`docs/NETCODE.md` §9), so a client cannot tell one from a person and no part of the
+netcode had to learn about them.
+
+- **On the ground** they walk towards the enemy barracks, engage the nearest unit they can see,
+  close to about 25 m and then strafe, and hold fire when somebody on their side is in the way.
+  They are deliberately mediocre shots — a 3° aim error held for a third of a second at a time, and
+  a 200 ms reaction. `BotTraits.Default` in `Scripts/Sim/BotBrain.cs` is the whole difficulty dial.
+- **In the strategist's chair** one queues infantry at every barracks while the points last, keeps
+  four units home defending, and attack-moves the rest at whatever its units have actually seen —
+  it gets no free knowledge of where anybody is.
+
+The debug HUD below counts them: `bots: 5/6 ground  1/1 strategist` is five ground bots against a
+target of six, and one strategist bot against a target of one.
 
 Press `` ` `` on a client for the net debug HUD — RTT, clock lead, input buffer depth, mispredictions
 per second, prediction error, bytes in/out, server frame time. A headless server has no HUD and logs

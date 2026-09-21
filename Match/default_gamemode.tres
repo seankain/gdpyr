@@ -9,3 +9,5 @@ StrategistTickets = 1000
 RoundDurationMinutes = 20
 RespawnSeconds = 3.0
 IntermissionSeconds = 10.0
+BotGroundForce = 6
+BotStrategists = 1

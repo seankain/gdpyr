@@ -363,3 +363,37 @@ plan's 50-unit budget is real; "no navmesh" next to it is why twenty riflemen ar
 wall.
 
 Every hard bug in this system is a timing bug. Without these numbers you are guessing.
+
+---
+
+## 9. Computer players
+
+A bot is a player. It holds a peer id, a roster slot, a character, a loadout and a place in the
+player snapshot exactly as a person does; the only thing that differs is where its `InputFrame`
+comes from — `BotDirector` rather than a socket (`Scripts/Net/PlayerManager.cs`, one branch in the
+server's roster loop).
+
+That is the whole design, and it is what keeps the feature out of the netcode:
+
+- **No new message.** A bot arrives on a client through the same reliable `SpawnPlayer` and is
+  interpolated from the same snapshot as any other remote character. A client cannot tell the
+  difference, and does not need to.
+- **No new authority.** A bot's shots go through `WeaponSim` and `ProjectileSim`, its hits through
+  the same resolution, its deaths through the same ticket pool. A computer strategist's orders go
+  through the same `ApplyOrder`/`ApplyBuild` a client's RPC lands in, so it is subject to every
+  ownership check a person is (§6.3).
+- **No lag compensation.** A bot has no client and therefore no latency to owe, exactly as a unit
+  has none (§4.3). Its `LagCompensationTicks` stays 0 by virtue of never appearing in the clock
+  probe's table.
+
+Cost on the wire: 29 B per bot per snapshot at 30 Hz — **0.9 KB/s down per client per bot**. Seven
+bots (a full 6 + 1) is ~6 KB/s, which is the same as seven more people and is already inside the
+budget in §7 for that reason. Bots are also bounded by the same `SnapshotCodec.MaxPlayers` as
+everybody else: `BotFillPolicy` will not spawn one that the broadcast could not carry.
+
+What a bot knows is deliberately not everything the server does. A ground bot acquires only what it
+has line of sight to, at its own sensor radius. A computer strategist has no sensor of its own at
+all: its intel is the union of what its units have acquired (`Unit.TargetOwnerId`), and when it has
+seen nothing it sweeps the ground force's spawn areas, which are static map geometry a human
+strategist can see on screen anyway. So when §6.2's fog of war arrives for the human strategist,
+the bot is already behind one.

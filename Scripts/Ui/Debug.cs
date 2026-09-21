@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Gdpyr.Bots;
 using Gdpyr.Match;
 using Gdpyr.Net;
 using Gdpyr.Rts;
@@ -166,6 +167,14 @@ public partial class Debug : PanelContainer
 
 		SetProperty("players", $"{players.PlayerCount}");
 		SetProperty("move state", players.LocalStateName);
+
+		// Only the authority has any; a client's roster does not distinguish them
+		// from anyone else (docs/NETCODE.md §9).
+		if (players.Bots is { Enabled: true } bots)
+		{
+			SetProperty("bots", $"{bots.GroundBots}/{bots.GroundTarget} ground"
+				+ $"  {bots.StrategistBots}/{bots.StrategistTarget} strategist");
+		}
 
 		NetworkManager net = NetworkManager.Instance;
 		if (net != null && net.IsClient)

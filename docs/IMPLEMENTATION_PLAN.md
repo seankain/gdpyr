@@ -130,6 +130,7 @@ Scripts/
   Fps/         PlayerCharacter (predicted), InputFrame, movement FSM, weapons, emplacements
   Rts/         StrategistController, Selection, Unit, UnitDefinition, Barracks, ResourceNode
   Match/       MatchState (tickets/points), TeamService, VisibilityService (fog), win conditions
+  Bots/        BotDirector (backfill), BotPilot (ground), BotStrategist (RTS) — decisions in Sim/
   Ui/          Team select, loadout select, RTS HUD, net debug HUD
 Scenes/        Greybox map, player, units, props
 Tests/         xUnit project over Scripts/Sim (no engine required)
@@ -220,6 +221,36 @@ Each milestone ends in something you can play or measure. Estimates are solo-dev
 - **Done when:** a strategist queues 20 infantry, orders an attack, and the ground team fights them
   in a real firefight on a dedicated server.
 
+### M3.5 — Computer players (2 days)
+
+The blocker on every milestone from here is that playing the game needs eight people in a voice
+call. This makes one person enough to see a round.
+
+- `BotFillPolicy` (engine-free): how many bots each side should have, given who is already there.
+  Bots fill the seats nobody is sitting in and get up when somebody wants one; an empty server gets
+  none at all, because a headless Godot fighting itself spends the EC2 box's CPU credits before a
+  playtest starts (`DEPLOYMENT.md` §5).
+- **A bot is a player.** Same peer id (from a reserved band at the top of the positive range, so
+  `OwnerId`'s negative half stays the units'), same roster slot, same character, same snapshot
+  record. The only difference is that `PlayerManager` takes its `InputFrame` from `BotDirector`
+  instead of from a jitter buffer — one branch in the server's roster loop, and nothing downstream
+  of it knows. No new message, no new authority (`NETCODE.md` §9).
+- `BotBrain` (engine-free): one tick of intent as a pure function — turn towards the target at a
+  capped rate, hold an aim error for a window rather than re-rolling it per tick, strafe at
+  preferred range, sprint on the way, jump when wedged, fire only once it has both reacted and
+  turned onto the target.
+- `BotStrategist`: queues at every barracks while the points last, keeps a garrison, attack-moves
+  the rest. Its intel is the union of what its own units have acquired and nothing else, so it is
+  already behind the fog M4 builds.
+- Ground bots do not target players, and check that nobody on their own side is in the line of fire
+  before shooting: friendly fire between players is on, and a bot that kills the person it spawned
+  to help is worse than no bot.
+- `--bots <n>[:<m>]` / `--no-bots`, defaulting to the game mode's `BotGroundForce` and
+  `BotStrategists` (6 and 1).
+- **Done when:** one person can launch `--listen`, be shot at by infantry a computer strategist
+  ordered, and have five bots on their side doing the same thing back — and when a second person
+  joining takes a bot's seat rather than a ninth slot.
+
 ### M4 — Fog of war (2–3 days)
 
 - Server `VisibilityService`, recomputed at 5–10 Hz: a ground-team entity is visible to a strategist
@@ -250,7 +281,7 @@ Each milestone ends in something you can play or measure. Estimates are solo-dev
 Swap `TransportFactory` to a Steam `MultiplayerPeer`, add lobby create/join. Re-evaluate the options
 in §2 at that time — that corner of the ecosystem moves.
 
-**Total: ~22–28 engineering days to end of M6.**
+**Total: ~24–30 engineering days to end of M6.**
 
 ---
 
@@ -282,7 +313,7 @@ in §2 at that time — that corner of the ecosystem moves.
 
 ## 7. Immediate next actions
 
-M0 through M3 are done. M3 shipped the strategist camera and box selection, the four orders, the
+M0 through M3.5 are done. M3 shipped the strategist camera and box selection, the four orders, the
 `Unit` FSM over `NavigationAgent3D`, unit weapons through the same `ProjectileSim` players use,
 the barracks build queue and the strategist's point pool, team selection with a two-strategist cap,
 and the packed unit replicator the deviation in §M3 describes. It also closed the two items M2 left
@@ -290,26 +321,41 @@ open for whichever milestone needed them: **accuracy cones** (`NETCODE.md` §4.5
 predicted tracer still matches) are in, authored at 0° for every player weapon and 2.5° for
 infantry.
 
+M3.5 made one person enough to run a round: bots backfill both sides while anybody is connected and
+stand up again as people arrive. It also fixed a defect it could not live with — a dedicated server
+used to spawn an unmanned character for itself, which started the round before anyone had joined
+and stood at a spawn point costing the ground force a ticket every time a unit shot it.
+
 Still open from M2: **a full hitbox rewind for projectiles** (§4.3's "upgrade" — the ring is built
-and melee uses it, projectiles still use the cheap spawn-time advance). Nothing in M3 needed it,
+and melee uses it, projectiles still use the cheap spawn-time advance). Nothing since has needed it,
 and units deliberately keep no history at all (`NETCODE.md` §5).
 
-1. **Play M3 on the EC2 box.** Every number in `Units/infantry.tres` is a guess: 50 points, 4 s to
-   build, 45 m of sensor, 40 m of engagement, 2.5° of cone. So is `StrategistTickets = 1000`, which
-   is exactly twenty riflemen. The first question a playtest answers is whether twenty riflemen are
-   a threat to six players or a queue of free kills, and the cone and the sensor radius are the two
-   knobs that move it.
-2. **Verify the navigation bake on the real map.** It runs on the server's first tick against the
+1. **Play a round against the bots, then play one on the EC2 box.** Every number in
+   `Units/infantry.tres` is a guess: 50 points, 4 s to build, 45 m of sensor, 40 m of engagement,
+   2.5° of cone. So is `StrategistTickets = 1000`, which is exactly twenty riflemen. The first
+   question a playtest answers is whether twenty riflemen are a threat to six players or a queue of
+   free kills — and a bot round now answers a rough version of it in five minutes without booking
+   eight people. Watch `GroundForceTickets = 50` especially: five bots dying like bots may end a
+   round in a couple of minutes, and the fix is the ticket pool rather than the bots.
+2. **Tune `BotTraits.Default` against a person.** Turn rate 4.5 rad/s, a 3° held aim error, a 200 ms
+   reaction. Those three numbers are the whole difficulty dial, and they were picked to be
+   *mediocre* on purpose — a bot that beats a person in a straight fight makes the ground force look
+   weak, which is the opposite of what the instrument is for.
+3. **Verify the navigation bake on the real map.** It runs on the server's first tick against the
    nodes in the `navmesh` group and falls back to steering straight at the destination if it
    produces nothing — which is playable and wrong, so the debug HUD says "no navmesh" when it
-   happens. Check that line before drawing conclusions about pathing.
-3. **M4 — fog of war.** It is what makes the strategist a role rather than a spawn button (§6), and
+   happens. Bots path through the same mesh, so a failed bake now shows up as six bots grinding
+   along a wall. Check that line before drawing conclusions about pathing.
+4. **M4 — fog of war.** It is what makes the strategist a role rather than a spawn button (§6), and
    §6.1's replicator was chosen partly to make it a filter rather than a redesign. The harder half
-   is the player snapshot, which is still broadcast to everyone.
-4. Two smaller things M3 left where they were: a unit hit is tested against its *current* capsule
+   is the player snapshot, which is still broadcast to everyone. The computer strategist is already
+   behind a fog of its own (`NETCODE.md` §9), so it is a reasonable first consumer of whatever
+   `VisibilityService` ends up exposing.
+5. Two smaller things M3 left where they were: a unit hit is tested against its *current* capsule
    rather than a rewound one (justified in `NETCODE.md` §5, but worth revisiting if players report
-   missing units they clearly hit), and the strategist can only build from barracks 0 — the RPCs
-   take an index and the HUD only ever sends zero.
+   missing units they clearly hit), and the strategist HUD can only build from barracks 0 — the RPCs
+   take an index and the HUD only ever sends zero. The computer strategist already uses every
+   barracks on the map, so the gap is now only in the human's UI.
 
 ---
 

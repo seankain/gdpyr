@@ -771,22 +771,50 @@ public partial class CombatManager : Node
 	}
 
 	/// <summary>
+	/// Puts a peer on a side without them having asked, and reports what they got.
+	///
+	/// This is how a computer player takes a seat (docs/IMPLEMENTATION_PLAN.md
+	/// §M3.5): a bot has no client to send <see cref="ClientSelectTeam"/> from, but
+	/// it is a peer in every other respect and goes through the same assignment,
+	/// the same strategist cap and the same body handling as a person.
+	/// </summary>
+	public Team ServerAssignTeam(int peerId, Team team)
+	{
+		NetworkManager net = NetworkManager.Instance;
+		if (net != null && net.IsClient)
+		{
+			return TeamOf(peerId);
+		}
+
+		return AssignTeam(peerId, team);
+	}
+
+	/// <summary>
 	/// Server-side: puts a peer on a side, subject to the strategist cap, and makes
 	/// their body match. Going up takes the body off the field; coming back down
-	/// puts a fresh one on it.
+	/// puts a fresh one on it. Returns the side they ended up on.
 	/// </summary>
-	private void AssignTeam(int peerId, Team requested)
+	private Team AssignTeam(int peerId, Team requested)
 	{
 		PlayerCombat combat = Find(peerId);
 		if (combat == null)
 		{
-			return;
+			return Team.GroundForce;
+		}
+
+		// A computer strategist holding the last chair stands up for a person who
+		// wants it. Bots never do this for each other — the fill policy already
+		// accounts for the cap, and a bot evicting a bot would be a loop
+		// (docs/IMPLEMENTATION_PLAN.md §M3.5).
+		if (requested == Team.Strategist && !BotRoster.IsBot(peerId) && !Teams.CanJoin(peerId, requested))
+		{
+			PlayerManager.Instance?.Bots?.YieldSeat(Team.Strategist);
 		}
 
 		Team granted = Teams.Assign(peerId, requested);
 		if (granted == combat.Team)
 		{
-			return;
+			return granted;
 		}
 
 		combat.Team = granted;
@@ -805,8 +833,9 @@ public partial class CombatManager : Node
 			PlayerManager.Instance?.TeleportToSpawn(peerId, combat.Deaths);
 		}
 
-		GD.Print($"[match] peer {peerId} is now {granted}"
+		GD.Print($"[match] {BotRoster.NameOf(peerId)} is now {granted}"
 			+ $" ({Teams.StrategistCount}/{TeamService.MaxStrategists} strategists)");
+		return granted;
 	}
 
 	// ---- client ------------------------------------------------------------
