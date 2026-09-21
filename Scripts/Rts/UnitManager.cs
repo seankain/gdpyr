@@ -619,13 +619,46 @@ public partial class UnitManager : Node
 	}
 
 	/// <summary>
+	/// Server-side: issues an order on behalf of a peer that has no client to send
+	/// one, which is what a computer strategist is
+	/// (docs/IMPLEMENTATION_PLAN.md §M3.5).
+	///
+	/// It lands in the same <see cref="ApplyOrder"/> a client's RPC does, so the bot
+	/// is subject to every ownership check a person is. A span rather than an array
+	/// because the caller batches its orders out of a buffer it keeps, and the unit
+	/// path allocates nothing per tick (docs/IMPLEMENTATION_PLAN.md §3).
+	/// </summary>
+	public void ServerIssueOrder(int peerId, ReadOnlySpan<int> unitIds, OrderKind kind, Vector3 target,
+		int targetOwnerId)
+	{
+		if (NetworkManager.Instance is { IsClient: true })
+		{
+			return;
+		}
+
+		ApplyOrder(peerId, unitIds, (byte)kind, target, targetOwnerId);
+	}
+
+	/// <summary>Server-side: queues a unit on behalf of a peer with no client. See <see cref="ServerIssueOrder"/>.</summary>
+	public bool ServerQueueUnit(int peerId, int barracksIndex, byte definitionId)
+	{
+		if (NetworkManager.Instance is { IsClient: true })
+		{
+			return false;
+		}
+
+		return ApplyBuild(peerId, barracksIndex, definitionId);
+	}
+
+	/// <summary>
 	/// Validates and applies an order. Every one of these checks is answering a
 	/// byte a client chose (docs/NETCODE.md §1, §6.3): is the sender a strategist,
 	/// does the order type exist, does the sender's side own each unit.
 	/// </summary>
-	private void ApplyOrder(int senderPeerId, int[] unitIds, byte kind, Vector3 target, int targetOwnerId)
+	private void ApplyOrder(int senderPeerId, ReadOnlySpan<int> unitIds, byte kind, Vector3 target,
+		int targetOwnerId)
 	{
-		if (unitIds == null || unitIds.Length == 0 || !UnitOrder.IsIssuable(kind))
+		if (unitIds.Length == 0 || !UnitOrder.IsIssuable(kind))
 		{
 			RejectedOrders++;
 			return;
@@ -747,13 +780,14 @@ public partial class UnitManager : Node
 		}
 	}
 
-	private void ApplyBuild(int senderPeerId, int barracksIndex, byte definitionId)
+	/// <summary>Returns true when the unit was actually charged for and queued.</summary>
+	private bool ApplyBuild(int senderPeerId, int barracksIndex, byte definitionId)
 	{
 		Barracks barracks = ValidateBarracks(senderPeerId, barracksIndex);
 		if (barracks == null || !UnitCatalog.TrySanitize(definitionId, out byte id))
 		{
 			RejectedOrders++;
-			return;
+			return false;
 		}
 
 		UnitDefinition definition = UnitCatalog.Definition(id);
@@ -761,10 +795,10 @@ public partial class UnitManager : Node
 		if (definition == null || ledger == null)
 		{
 			RejectedOrders++;
-			return;
+			return false;
 		}
 
-		barracks.Queue.TryEnqueue(id, definition.Cost, definition.BuildTicks, ledger);
+		return barracks.Queue.TryEnqueue(id, definition.Cost, definition.BuildTicks, ledger);
 	}
 
 	private void ApplyCancelBuild(int senderPeerId, int barracksIndex)

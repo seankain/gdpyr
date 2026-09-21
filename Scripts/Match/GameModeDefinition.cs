@@ -37,4 +37,24 @@ public partial class GameModeDefinition : Resource
 	/// </summary>
 	[Export]
 	public float IntermissionSeconds = 10f;
+
+	[ExportCategory("Computer players")]
+
+	/// <summary>
+	/// Ground-force players to keep on the field, humans included: computer players
+	/// make up the difference while anybody is connected
+	/// (docs/IMPLEMENTATION_PLAN.md §M3.5). Six, because the round is 6v2 and the
+	/// point of the feature is that one person can see what a 6v2 plays like.
+	/// Zero turns ground bots off.
+	/// </summary>
+	[Export]
+	public int BotGroundForce = 6;
+
+	/// <summary>
+	/// Strategists to keep filled the same way. One, not two: both strategists
+	/// command the same pool of units out of the same barracks, so a second
+	/// computer one would add orders rather than opposition.
+	/// </summary>
+	[Export]
+	public int BotStrategists = 1;
 }

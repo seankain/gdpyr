@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Gdpyr.Bots;
 using Gdpyr.Core;
 using Gdpyr.Fps;
 using Gdpyr.Match;
@@ -44,6 +45,13 @@ public partial class PlayerManager : Node
 
 		/// <summary>Client only, and only for someone else's character.</summary>
 		public SnapshotInterpolator Interpolator;
+
+		/// <summary>
+		/// Server only: this character's frames come from <see cref="BotDirector"/>
+		/// rather than from a socket (docs/IMPLEMENTATION_PLAN.md §M3.5). Nothing
+		/// else about it differs, which is the whole design.
+		/// </summary>
+		public bool IsBot;
 	}
 
 	private readonly Dictionary<int, Player> _players = new();
@@ -59,6 +67,7 @@ public partial class PlayerManager : Node
 	private PackedScene _playerScene;
 	private Node3D _playersRoot;
 	private LocalInputSampler _sampler;
+	private BotDirector _bots;
 	private Player _local;
 	private bool _started;
 
@@ -73,6 +82,17 @@ public partial class PlayerManager : Node
 	public int PlayerCount => _ordered.Count;
 
 	public string LocalStateName => _local?.Character?.StateName ?? "-";
+
+	/// <summary>The computer players, on the authority. Null on a client, which never has any.</summary>
+	public BotDirector Bots => _bots;
+
+	/// <summary>Spawn points the map supplied, for whoever needs somewhere to go.</summary>
+	public int SpawnPointCount => _spawnPoints.Count;
+
+	/// <summary>Where the <paramref name="index"/>-th spawn point is. Wraps, like <see cref="SpawnTransform"/>.</summary>
+	public Vector3 SpawnPositionAt(int index) => SpawnTransform(index).Origin;
+
+	public bool HasPlayer(int peerId) => _players.ContainsKey(peerId);
 
 	public override void _Ready()
 	{
@@ -147,26 +167,70 @@ public partial class PlayerManager : Node
 			AddChild(_sampler);
 		}
 
-		// A client's characters all arrive from the server, including its own.
+		// A client's characters all arrive from the server, including its own. Bots
+		// are the authority's business for the same reason units are: a client is
+		// told about them and simulates neither (docs/NETCODE.md §9).
 		if (net.IsClient)
 		{
 			return;
 		}
 
-		Player host = Spawn(net.LocalPeerId, NextSpawnIndex(), simulated: true, local: net.HasLocalPlayer);
-		_local = net.HasLocalPlayer ? host : null;
+		_bots = new BotDirector(CombatManager.Instance?.GameMode, Bootstrap.Options);
+
+		// Only a host that is playing gets a character. A dedicated server used to
+		// spawn one for itself too, and an unmanned body standing on a spawn point is
+		// not free: units acquire it and shoot it, every one of those kills costs the
+		// ground force a ticket, and its presence in the roster starts the round
+		// before anybody has connected (see CombatManager.ServerRound) and reads to
+		// the bot director as a person to backfill around.
+		if (net.HasLocalPlayer)
+		{
+			_local = Spawn(net.LocalPeerId, NextSpawnIndex(), simulated: true, local: true);
+		}
 	}
 
 	// ---- server ------------------------------------------------------------
 
 	private void ServerTick(NetworkManager net)
 	{
+		// Bots before the roster loop: one that joins on this tick is simulated on
+		// this tick, and one that has left is gone before anything asks it for a
+		// frame (docs/IMPLEMENTATION_PLAN.md §M3.5).
+		_bots?.ServerTick(net.Tick);
+
+		SimulatePlayers(net);
+
+		// Units first, then combat: a round a unit fired on this tick has to be in
+		// the air before the projectiles are stepped and resolved, or every unit's
+		// shot would be a tick late (docs/IMPLEMENTATION_PLAN.md §M3).
+		UnitManager.Instance?.ServerTick(net.Tick);
+		CombatManager.Instance?.ServerPostTick(net.Tick);
+
+		if (net.Tick % SimConfig.SnapshotIntervalTicks == 0)
+		{
+			BroadcastSnapshot(net);
+		}
+	}
+
+	/// <summary>
+	/// Simulates every character on the authority, each from whichever source owns
+	/// its intent this tick: a remote client's jitter buffer, the local device, or a
+	/// bot's brain. The three are resolved here and nowhere else — past this point
+	/// nothing in the simulation knows or cares which it was.
+	/// </summary>
+	private void SimulatePlayers(NetworkManager net)
+	{
 		for (int i = 0; i < _ordered.Count; i++)
 		{
 			Player player = _ordered[i];
 			InputFrame frame;
 
-			if (player.Queue != null)
+			if (player.IsBot)
+			{
+				frame = _bots?.Sample(player.PeerId, net.Tick)
+					?? InputFrame.Neutral(net.Tick, player.Character.Yaw, player.Character.Pitch);
+			}
+			else if (player.Queue != null)
 			{
 				if (!player.Queue.TryPop(out frame))
 				{
@@ -184,17 +248,6 @@ public partial class PlayerManager : Node
 			}
 
 			Simulate(player, frame, net.Tick, authoritative: true);
-		}
-
-		// Units first, then combat: a round a unit fired on this tick has to be in
-		// the air before the projectiles are stepped and resolved, or every unit's
-		// shot would be a tick late (docs/IMPLEMENTATION_PLAN.md §M3).
-		UnitManager.Instance?.ServerTick(net.Tick);
-		CombatManager.Instance?.ServerPostTick(net.Tick);
-
-		if (net.Tick % SimConfig.SnapshotIntervalTicks == 0)
-		{
-			BroadcastSnapshot(net);
 		}
 	}
 
@@ -501,14 +554,12 @@ public partial class PlayerManager : Node
 
 	private void OfflineTick(NetworkManager net)
 	{
-		if (_local == null || _sampler == null)
-		{
-			return;
-		}
-
 		// Offline is a server with nobody to tell: the same authoritative path, with
-		// every broadcast a no-op for want of a peer.
-		Simulate(_local, _sampler.Sample(net.Tick), net.Tick, authoritative: true);
+		// every broadcast skipped for want of a peer. Bots run here too — playing a
+		// round on your own with no networking at all is the cheapest way to see
+		// whether they are worth anything.
+		_bots?.ServerTick(net.Tick);
+		SimulatePlayers(net);
 		UnitManager.Instance?.ServerTick(net.Tick);
 		CombatManager.Instance?.ServerPostTick(net.Tick);
 	}
@@ -537,7 +588,66 @@ public partial class PlayerManager : Node
 		Player player = Spawn(peerId, spawnIndex, simulated: true, local: false);
 		player.Queue = new ServerInputQueue();
 
-		Rpc(MethodName.SpawnPlayer, peerId, spawnIndex);
+		BroadcastSpawn(peerId, spawnIndex);
+	}
+
+	/// <summary>
+	/// Puts a computer player on the field (docs/IMPLEMENTATION_PLAN.md §M3.5).
+	/// Returns its character, or null when this process is not the authority or the
+	/// id is taken.
+	///
+	/// It is deliberately the same spawn every other player gets, announced with the
+	/// same reliable message: a client cannot tell a bot from a person, and does not
+	/// need to.
+	/// </summary>
+	public fps_controller SpawnBot(int peerId)
+	{
+		NetworkManager net = NetworkManager.Instance;
+		if (net is { IsClient: true } || _players.ContainsKey(peerId))
+		{
+			return null;
+		}
+
+		int spawnIndex = NextSpawnIndex();
+		Player player = Spawn(peerId, spawnIndex, simulated: true, local: false);
+		player.IsBot = true;
+
+		BroadcastSpawn(peerId, spawnIndex);
+		return player.Character;
+	}
+
+	/// <summary>Takes a computer player off the field again. Humans leave through <see cref="OnPeerLeft"/>.</summary>
+	public void DespawnBot(int peerId)
+	{
+		if (NetworkManager.Instance is { IsClient: true } || !_players.TryGetValue(peerId, out Player player)
+			|| !player.IsBot)
+		{
+			return;
+		}
+
+		Despawn(peerId);
+		BroadcastDespawn(peerId);
+	}
+
+	/// <summary>
+	/// Announces a spawn to whoever is connected. Guarded, because the authority is
+	/// also a process that may have no peer at all — offline, or a listen host
+	/// before anyone has joined.
+	/// </summary>
+	private void BroadcastSpawn(int peerId, int spawnIndex)
+	{
+		if (Multiplayer.HasMultiplayerPeer() && Multiplayer.GetPeers().Length > 0)
+		{
+			Rpc(MethodName.SpawnPlayer, peerId, spawnIndex);
+		}
+	}
+
+	private void BroadcastDespawn(int peerId)
+	{
+		if (Multiplayer.HasMultiplayerPeer() && Multiplayer.GetPeers().Length > 0)
+		{
+			Rpc(MethodName.DespawnPlayer, peerId);
+		}
 	}
 
 	private void OnPeerLeft(int peerId)
@@ -549,7 +659,7 @@ public partial class PlayerManager : Node
 		}
 
 		Despawn(peerId);
-		Rpc(MethodName.DespawnPlayer, peerId);
+		BroadcastDespawn(peerId);
 	}
 
 	/// <summary>Server -> clients, reliable: the roster is state, not a sample.</summary>
@@ -627,6 +737,7 @@ public partial class PlayerManager : Node
 		}
 
 		_ordered.Remove(player);
+		_bots?.Release(peerId);
 		CombatManager.Instance?.Unregister(peerId);
 		if (_local == player)
 		{

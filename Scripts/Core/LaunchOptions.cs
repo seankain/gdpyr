@@ -30,12 +30,15 @@ public sealed class LaunchOptions
 
 	public const string Usage =
 		"usage: gdpyr [--server [port]] | [--client <host[:port]>] | [--listen [port]]\n" +
+		"             [--bots <ground>[:<strategists>]] | [--no-bots]\n" +
 		"  --server [port]         headless authority, no local player (default port 7777)\n" +
 		"  --client <host[:port]>  connect to a server\n" +
 		"  --listen [port]         authority plus a local player\n" +
+		"  --bots <n>[:<m>]        fill each side to n ground and m strategists with bots\n" +
+		"  --no-bots               no computer players, whatever the game mode says\n" +
 		"  (no flags)              offline, no networking\n" +
 		"Godot consumes its own arguments first, so these go after a bare `--`:\n" +
-		"  gdpyr --headless -- --server 7777";
+		"  gdpyr --headless -- --server 7777 --bots 6:1";
 
 	/// <summary>An offline launch: what you get with no flags, and the value used after a parse failure.</summary>
 	public static readonly LaunchOptions Offline = new();
@@ -47,6 +50,17 @@ public sealed class LaunchOptions
 
 	public int Port { get; private init; } = DefaultPort;
 
+	/// <summary>
+	/// Ground-force players to keep filled with computer players, humans included
+	/// (docs/IMPLEMENTATION_PLAN.md §M3.5). Null means "whatever the game mode
+	/// says", which is the difference between a flag that was not given and a flag
+	/// that was given as zero.
+	/// </summary>
+	public int? GroundBots { get; private init; }
+
+	/// <summary>Strategists to keep filled. See <see cref="GroundBots"/>.</summary>
+	public int? StrategistBots { get; private init; }
+
 	/// <summary>Null when parsing succeeded; a one-line diagnostic otherwise.</summary>
 	public string Error { get; private init; }
 
@@ -54,12 +68,24 @@ public sealed class LaunchOptions
 
 	public bool HasLocalPlayer => Mode is LaunchMode.Client or LaunchMode.Listen or LaunchMode.Offline;
 
-	public override string ToString() => Mode switch
+	public override string ToString()
 	{
-		LaunchMode.Client => $"{Mode} -> {Host}:{Port}",
-		LaunchMode.Server or LaunchMode.Listen => $"{Mode} on port {Port}",
-		_ => Mode.ToString(),
-	};
+		string mode = Mode switch
+		{
+			LaunchMode.Client => $"{Mode} -> {Host}:{Port}",
+			LaunchMode.Server or LaunchMode.Listen => $"{Mode} on port {Port}",
+			_ => Mode.ToString(),
+		};
+
+		if (GroundBots is null && StrategistBots is null)
+		{
+			return mode;
+		}
+
+		return $"{mode} | bots {Describe(GroundBots)} ground, {Describe(StrategistBots)} strategist";
+	}
+
+	private static string Describe(int? count) => count?.ToString() ?? "default";
 
 	/// <summary>
 	/// Parses the user portion of the command line — what Godot hands back from
@@ -78,6 +104,9 @@ public sealed class LaunchOptions
 		LaunchMode? mode = null;
 		string host = DefaultHost;
 		int port = DefaultPort;
+		int? groundBots = null;
+		int? strategistBots = null;
+		bool botsRefused = false;
 
 		args ??= System.Array.Empty<string>();
 
@@ -131,6 +160,40 @@ public sealed class LaunchOptions
 					break;
 				}
 
+				case "--bots":
+				{
+					if (botsRefused)
+					{
+						return Failure("conflicting bot flags: --no-bots and --bots");
+					}
+
+					if (!TryTakeValue(args, ref i, out string value))
+					{
+						return Failure("--bots needs a count, e.g. --bots 6:1");
+					}
+
+					// Only what was named is overridden: `--bots 6` leaves the number of
+					// strategists to the game mode rather than silently zeroing it.
+					if (!TryParseBots(value, ref groundBots, ref strategistBots, out string error))
+					{
+						return Failure($"--bots: {error}");
+					}
+					break;
+				}
+
+				case "--no-bots":
+				{
+					if (groundBots.HasValue || strategistBots.HasValue)
+					{
+						return Failure("conflicting bot flags: --bots and --no-bots");
+					}
+
+					botsRefused = true;
+					groundBots = 0;
+					strategistBots = 0;
+					break;
+				}
+
 				default:
 					return Failure($"unrecognized argument '{arg}'");
 			}
@@ -138,7 +201,14 @@ public sealed class LaunchOptions
 
 		mode ??= dedicatedServer ? LaunchMode.Server : LaunchMode.Offline;
 
-		return new LaunchOptions { Mode = mode.Value, Host = host, Port = port };
+		return new LaunchOptions
+		{
+			Mode = mode.Value,
+			Host = host,
+			Port = port,
+			GroundBots = groundBots,
+			StrategistBots = strategistBots,
+		};
 	}
 
 	private static LaunchOptions Failure(string error) => new() { Error = error };
@@ -160,6 +230,59 @@ public sealed class LaunchOptions
 
 	private static bool TryParsePort(string text, out int port) =>
 		int.TryParse(text, out port) && port is > 0 and <= 65535;
+
+	/// <summary>
+	/// Parses <c>n</c> or <c>n:m</c> — how many players each side should be filled
+	/// to, humans included. The ceiling is the bot id band, which is the roster's
+	/// ceiling too (<see cref="Gdpyr.Sim.BotRoster.MaxBots"/>); the director clamps
+	/// the strategists again against the real cap, because that is a rule of the
+	/// game rather than of the command line.
+	/// </summary>
+	private static bool TryParseBots(string text, ref int? ground, ref int? strategists, out string error)
+	{
+		error = null;
+		text = text.Trim();
+
+		int colon = text.IndexOf(':');
+		string first = colon < 0 ? text : text[..colon];
+		string second = colon < 0 ? null : text[(colon + 1)..];
+
+		if (second != null && second.IndexOf(':') >= 0)
+		{
+			error = $"'{text}' is not <ground> or <ground>:<strategists>";
+			return false;
+		}
+
+		if (!TryParseCount(first, out int groundCount, out error))
+		{
+			return false;
+		}
+		ground = groundCount;
+
+		if (second == null)
+		{
+			return true;
+		}
+
+		if (!TryParseCount(second, out int strategistCount, out error))
+		{
+			return false;
+		}
+		strategists = strategistCount;
+		return true;
+	}
+
+	private static bool TryParseCount(string text, out int count, out string error)
+	{
+		error = null;
+		if (int.TryParse(text, out count) && count >= 0 && count <= Gdpyr.Sim.BotRoster.MaxBots)
+		{
+			return true;
+		}
+
+		error = $"'{text}' is not a count in 0-{Gdpyr.Sim.BotRoster.MaxBots}";
+		return false;
+	}
 
 	/// <summary>
 	/// Parses <c>host</c>, <c>host:port</c>, <c>[v6]</c> or <c>[v6]:port</c>. A bare
