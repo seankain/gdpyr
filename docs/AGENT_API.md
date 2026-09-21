@@ -7,8 +7,15 @@ game, a socket, an observation request, an action request, and a step.
 
 Companion documents:
 [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) §M6–M7 — scope and sequencing ·
+[`TRAINING.md`](TRAINING.md) — how to actually train something against it, with RLMatrix ·
 [`NETCODE.md`](NETCODE.md) — the tick model, the message set and the fog this API is filtered
 through · [`DEPLOYMENT.md`](DEPLOYMENT.md) — the box this must never be exposed on.
+
+> **Status.** §1–§8 and §10 shipped in M6, with the deviations recorded inline below. The
+> strategist seat (§6.2), the feature planes (§6.3), the strategist action (§7.4) and the
+> playtest harness (§9) are M7: `attach` refuses `policy: "strategist"` with
+> `not_implemented` rather than half-answering it. The .NET client in §9.3 shipped with M6
+> because it is what the "done when" is demonstrated with.
 
 ---
 
@@ -92,6 +99,13 @@ Python process is worse than no API at all.
   running slower than 60 Hz is the normal case, not an error.
 - **On socket close:** the seat is released outright and reverts to a bot. `BotDirector` then owns
   it again, including giving it up to a person who wants it (`BotFillPolicy`).
+- **While attached, the backfill leaves the seat alone.** Two small changes in `BotDirector` make
+  that true, and both were necessary rather than tidy. `RemoveOne` will not take an attached seat
+  unless a *person* has asked for one (`YieldSeat`), because the reconcile runs twice a second and
+  would otherwise evict a policy mid-episode. And `Census` counts an attached seat as somebody
+  **playing** rather than as backfill — without that, an agent-only server (which is exactly what a
+  training run is) sees nobody connected, fills neither side, and hands the policy an empty map to
+  learn on.
 - **Stepped mode:** there is no grace. The sim does not advance until every attached stepped seat
   has acted (§5.2), so a hung agent hangs the episode, which is what a training loop wants. A
   configurable `step_timeout_ms` ends the episode with `truncated: true` rather than hanging
@@ -144,6 +158,31 @@ which the hashes part company. If that tick is consistently late (tens of thousa
 engine is more stable than this section assumes and some assertions can tighten. If it is early,
 the table above is the contract. Either way the number is measured before anything depends on it.
 
+### 3.1 The measurement, taken
+
+**The two runs disagree from the first tick** — `./scripts/divergence.sh`, Godot 4.6, a seven-seat
+round with the backfill settled and one seat held on a fixed script.
+
+Not because the engine drifts that fast. Because there is nothing to drift *from*: `reset` starts a
+**fresh** round, not a repeatable one. Every stochastic decision in the game is a hash of the
+**absolute server tick** — `Spread.Seed(ownerId, salt, tick)` drives the accuracy cone, a bot's aim
+error, its strafe and its loiter point — and the server tick never rewinds. Two episodes therefore
+never share a starting state, whatever `seed` was passed. §1.2 was right that there is no *unseeded*
+randomness; what it did not say is that the seeds are keyed to a clock that only goes forwards.
+
+So the `seed` on `reset` **labels** an episode and is echoed on `round_start`; it does not determine
+one. The table above is the contract, and it is the contract for the strongest of reasons rather
+than as a precaution.
+
+Making episodes repeatable is a real option and a deliberate one: key those hashes on ticks *since
+the round started* rather than on the absolute tick. That changes `BotBrain`, the tests around it,
+and how bots play, so it is an M7 decision and was not slipped into M6. M6 shipped two things that
+pull in the same direction and were cheap: a round restart now zeroes each player's kills and deaths
+— so a second round's scoreboard is not a running total, and everyone starts on their own spawn
+point rather than one offset by a dead round's death count — and the probe warms the roster up
+before either run so both start with the same seats on the field.
+
+
 ---
 
 ## 4. Transport
@@ -166,7 +205,14 @@ u32 correlation     echoed on the response; 0 for unsolicited frames
 
 **Bodies.** The control plane is JSON, always. Observations are JSON or packed `float32`, chosen
 per session at the handshake. This is the one design choice that serves both consumers from one
-API: `numpy.frombuffer` for a trainer, a readable dict for a coding agent writing a playtest.
+API: a float array a tensor can be built from without parsing, and named fields for a coding agent
+writing a playtest.
+
+**Kind 3 is the packed-binary lane in both directions**: an observation from the server, and one or
+more packed ground actions from the agent (§7.2). Everything else a client sends is kind 1 with a
+JSON body. A packed observation carries its own twelve-byte header — seat (`i32`), flags (`u16`, bit
+0 omniscient, bit 1 unbounded), two reserved, tick (`u32`) — so a decoder never has to pair it with a
+separate envelope to know whose it is.
 
 **The schema is fetched, not compiled.** `welcome` returns the observation layout — ordered field
 names, shapes, dtypes, normalization bounds and a `schema_version` — so the binary path is
@@ -225,6 +271,11 @@ Held actions are held *exactly* — the same `InputFrame` is re-submitted, so a 
 four ticks produces the same button edges the FSM would see from a human holding it, and not four
 separate presses.
 
+**Deviation, shipped.** The movement axes and the buttons are held exactly; the *look* is held as a
+**target** and the angle walks towards it at the seat's turn-rate ceiling, one simulated tick at a
+time (§7.3, `AgentActionCodec.Resolve`). Holding the angle instead would let a policy at `step_mul` 4
+turn four ticks' worth of ceiling inside one tick, which is the snap the ceiling exists to forbid.
+
 ### 5.4 Faster than wall clock: a spike, not a promise
 
 **Throughput per instance is 60 ticks of game per second of wall clock, and the first answer to
@@ -258,6 +309,14 @@ What a ground bot may see is already settled by `NETCODE.md` §9: its own eyes, 
 radius, with line of sight. `BotPilot`'s acquisition is that filter, and the observation is built
 from the same scan rather than from a fresh look at server state.
 
+M6 made that literal: the radius-and-line-of-sight scan moved out of `BotPilot` into
+`Scripts/Bots/GroundSensor.cs`, and both the bot's target acquisition and the observation encoder
+call it. A policy and a bot look at one world through one pair of eyes, and a change to what a
+ground bot may know changes what a policy may know on the same commit. The bot still only *shoots*
+enemy units (`GroundSensor.NearestHostileUnit`); the observation carries friendlies and players too,
+flagged, because "what may I shoot" is a narrower question than "what can I see" and an observation
+that hid the teammate in the doorway would be lying.
+
 | Block | Floats | Contents |
 |---|---|---|
 | Round | 4 | phase, seconds remaining (normalized), ground tickets / starting, tick parity for `step_mul` alignment |
@@ -267,7 +326,14 @@ from the same scan rather than from a fresh look at server state.
 | Rays | 16 | a horizontal fan ±60° about the look direction, normalized hit distance — the cheap "can I walk that way" signal an FPS policy otherwise has to learn from collisions |
 | Objective | 6 | bearing sin/cos (2) and distance to the nearest enemy barracks, nodes held by each side (2), nodes contested |
 
-**144 floats, 576 bytes.** Contacts are the eight nearest the seat has actually acquired, ordered by
+**145 floats, 580 bytes**, and the sketch above said 144. The movement-state one-hot is seven wide,
+not six: the shipped FSM has idle, walking, sprinting, crouching, sliding, jumping and falling, so
+the self block is 20. Recorded rather than rounded — a client decodes by the schema `welcome`
+publishes and not by this document, which is the whole reason the schema is fetched (§4). The
+"reserve fraction" is published as `weapon.unlimited` for the same kind of reason: the game has no
+reserve-ammunition pool, so the float carries whether the magazine is counted at all.
+
+Contacts are the eight nearest the seat has actually acquired, ordered by
 distance, zero-padded. A ray fan is 16 physics queries per seat per decision; at `step_mul` 4 and
 six seats that is 1,440 queries a second, which is small next to the fog's own ray budget
 (`SimConfig.FogLineOfSightCandidates`) but is staggered across seats anyway.
@@ -318,12 +384,12 @@ obtained by cheating is not a result about this game.
 | `welcome` | ← | tick rate, build id, observation schema, current seed |
 | `config` | → | `mode` (realtime/stepped), `step_timeout_ms`, feature planes on/off |
 | `list_seats` | → ← | every roster slot: peer id, team, controller (human/bot/agent), alive |
-| `attach` | → ← | claim a seat by team + policy kind (+ optional `peer_id`, `step_mul`) |
+| `attach` | → ← | claim a seat by team + policy kind (+ optional `peer_id`, `step_mul`). `policy: "strategist"` is refused with `not_implemented` until M7 |
 | `detach` | → | release a seat back to its bot |
 | `act` | → | one action for one seat, for one tick |
 | `observe` | → ← | the current observation for one seat |
 | `step` | → ← | stepped mode: advance N ticks, return each attached seat's observation |
-| `reset` | → ← | end the round now and start a fresh one with a given seed and scenario |
+| `reset` | → ← | end the round now and start a fresh one. The `seed` labels the episode and is echoed on `round_start`; it does not determine it (§3.1). Scenarios are M7 |
 | `events` | → ← | every event since a tick (§8) |
 | `state_hash` | → ← | a hash of the tick's simulation state, for §3's divergence measurement |
 | `quit` | → | close the session; every seat it holds reverts to a bot |
@@ -331,7 +397,11 @@ obtained by cheating is not a result about this game.
 ### 7.2 Ground action
 
 The action **is** an `InputFrame`. In binary that is literally the twelve bytes
-`Scripts/Sim/InputFrame.cs` defines, prefixed by a seat id; in JSON:
+`Scripts/Sim/InputFrame.cs` defines, prefixed by a seat id, a flag word and two reserved bytes —
+**twenty bytes, not the sixteen sketched here**, because a seat is named by its peer id and
+`BotRoster` draws those from the top of the positive `int` range so they cannot collide with a Godot
+client's. A seat id folded into sixteen bits addresses somebody else's character, or nobody's. In
+JSON:
 
 ```json
 {"op":"act","seat":3,"tick":51204,
@@ -467,23 +537,40 @@ machine-readable summary on `--json`, and a trace file to re-run.
   `welcome`. Only running one needs the exported headless server, which `scripts/export-server.sh`
   already builds.
 
-### 9.3 The Python client
+### 9.3 The client, and the trainer
 
-`tools/gdpyr_env/` — a single module, no dependencies beyond `numpy`:
+**The client is .NET, not Python**, and the reference learner is
+[RLMatrix](https://github.com/asieradzk/RL_Matrix) — deep RL in C#, on TorchSharp, already proven
+against Godot. The rest of this repository is C#; a training loop in a second language would mean a
+second toolchain, a second set of types for `InputFrame`, and a second place for the observation
+layout to be wrong. [`TRAINING.md`](TRAINING.md) is the whole story; the shape is:
 
-```python
-from gdpyr_env import GdpyrEnv
+| `tools/` | Depends on | What it is |
+|---|---|---|
+| `Gdpyr.AgentClient` | `RLMatrix.Common` only | The protocol client, the schema-driven observation decoder, and `GdpyrGroundEnv : IEnvironmentAsync<float[]>`. No TorchSharp. |
+| `Gdpyr.Trainer` | the client + `RLMatrix` | `gdpyr-train`: PPO or DQN over one or more servers. Where libtorch is paid for. |
+| `Gdpyr.Probe` | the client only | `gdpyr-probe`: §3's divergence probe. Needs no libtorch, because the number it measures decides how every later assertion may be written. |
 
-env = GdpyrEnv(port=7900, seat="ground", step_mul=4)
-obs, info = env.reset(seed=7)
-for _ in range(900):
-    obs, events, terminated, truncated, info = env.step(env.action_space.sample())
-    if terminated or truncated:
-        obs, info = env.reset()
+```csharp
+var env = await GdpyrGroundEnv.CreateAsync(port: 7900, stepMul: 4, stepped: true);
+var agent = new LocalDiscreteRolloutAgent<float[]>(ppoOptions, new[] { env });
+
+for (int step = 0; step < 100_000; step++)
+{
+    await agent.Step(isTraining: true);
+}
 ```
 
-Gymnasium-shaped because that is what every trainer already accepts, but the shape is a thin wrapper
-over §7's operations and the protocol is usable without it.
+`GdpyrGroundEnv` is an ordinary `IEnvironmentAsync<float[]>`, so it drops into RLMatrix's networked
+trainer (`RemoteDiscreteRolloutAgent`, SignalR) unchanged as well. Two things that would otherwise
+be the server's opinion are kept out of it and put in one readable file each: the discretization of
+the action space (`GroundActionSpace.cs` — six heads of five, because RLMatrix requires uniform
+heads) and the reward (`GroundReward.cs`). **The game emits events and no rewards**, per §8.
+
+The protocol is usable without any of this. `tools/Gdpyr.AgentClient/AgentProtocol.cs` implements
+the framing and the packed action a *second* time on purpose: it is what an outside process links,
+and a client compiled against the game's own source would hide exactly the version skew the
+published schema exists to catch. `Tests/AgentInteropTests.cs` checks the two agree byte for byte.
 
 ---
 
@@ -492,20 +579,26 @@ over §7's operations and the protocol is usable without it.
 The same rule the rest of the codebase follows: the interesting part is engine-free and answered by
 `dotnet test`, with no Godot install.
 
-| Test | Lives in |
-|---|---|
-| Frame codec round-trips, including every button bit and the sbyte axis quantization | `Tests/AgentCodecTests.cs` |
-| Observation encoder: known state in, known float vector out; padding, ordering by distance, zero-fill | `Tests/AgentObservationTests.cs` |
-| The schema `welcome` publishes matches what the encoder writes — field count, offsets, bounds | `Tests/AgentObservationTests.cs` |
-| Turn-rate and APM clamps: a 180° snap arrives as 4.5 rad/s, nine commands become eight | `Tests/AgentLimitsTests.cs` |
-| Seat lease: grace expiry falls back to the pilot, socket close releases, a person's seat is refused | `Tests/AgentSeatTests.cs` |
-| Fog parity: the strategist observation contains exactly the peers `VisibilityService.IsVisibleTo` admits | `Tests/AgentObservationTests.cs` |
-| Scenario parser and the assertion vocabulary, including `between` and `over_seeds` | `Tests/ScenarioTests.cs` |
+| Test | Lives in | |
+|---|---|---|
+| Frame codec round-trips, including every button bit and the sbyte axis quantization | `Tests/AgentCodecTests.cs` | M6 |
+| Framing is total: a partial frame is not an error, an absurd length prefix and an unknown kind are fatal | `Tests/AgentCodecTests.cs` | M6 |
+| Observation encoder: known state in, known float vector out; padding, ordering by distance, zero-fill | `Tests/AgentObservationTests.cs` | M6 |
+| The schema `welcome` publishes matches what the encoder writes — field count, offsets, bounds | `Tests/AgentObservationTests.cs` | M6 |
+| Every float lands inside the bounds the schema publishes, for hostile inputs | `Tests/AgentObservationTests.cs` | M6 |
+| Turn-rate and APM clamps: a 180° snap arrives as 4.5 rad/s, nine commands become eight | `Tests/AgentLimitsTests.cs` | M6 |
+| Seat lease: grace expiry falls back to the pilot, socket close releases, a person's seat is refused | `Tests/AgentSeatTests.cs` | M6 |
+| Event ring: a reader that fell behind is told how much it lost; no record writes a duplicate JSON key | `Tests/AgentEventTests.cs` | M6 |
+| The external .NET client and the server agree on the framing, the buttons and the packed action, byte for byte | `Tests/AgentInteropTests.cs` | M6 |
+| `--agent-api` on a public address without a token is a start-up failure, not a warning | `Tests/LaunchOptionsTests.cs` | M6 |
+| Fog parity: the strategist observation contains exactly the peers `VisibilityService.IsVisibleTo` admits | `Tests/AgentObservationTests.cs` | M7 |
+| Scenario parser and the assertion vocabulary, including `between` and `over_seeds` | `Tests/ScenarioTests.cs` | M7 |
 
 One test is not engine-free and is worth the exception: the **divergence probe** of §3 — two seeded
-600-tick episodes in one headless process, comparing `state_hash` per tick and reporting the first
-disagreement. It runs under `scripts/playtest.sh`, not `dotnet test`, and its output is a number to
-be believed rather than a pass/fail.
+600-tick episodes against one headless server, comparing `state_hash` per tick and reporting the
+first disagreement. It runs under `./scripts/divergence.sh` (`tools/Gdpyr.Probe`), not
+`dotnet test`, and its output is a number to be believed rather than a pass/fail. §3.1 records what
+it said.
 
 ---
 
@@ -516,9 +609,9 @@ touches the UDP budget in that section.
 
 | Frame | Direction | Rate | ~Size |
 |---|---|---|---|
-| `act` (ground, binary) | A→S | 15 Hz per seat at `step_mul` 4 | 16 B |
+| `act` (ground, binary) | A→S | 15 Hz per seat at `step_mul` 4 | 20 B (§7.2) |
 | `act` (strategist, JSON) | A→S | 2 Hz per seat | ~200 B |
-| Observation (ground, binary) | S→A | 15 Hz per seat | 576 B |
+| Observation (ground, binary) | S→A | 15 Hz per seat | 592 B (§6.1) |
 | Observation (strategist, binary) | S→A | 2 Hz per seat | 4.3 KB |
 | Feature planes (optional) | S→A | with the observation | 16 KB |
 | Event | S→A | per event | ~120 B |
@@ -532,8 +625,11 @@ Six ground seats and one strategist, binary, no feature planes:
 
 ## 12. Open questions
 
-1. **How far apart do two seeded episodes actually drift?** §3 and §10 measure it; nothing should be
-   designed around an answer until it is measured.
+1. ~~**How far apart do two seeded episodes actually drift?**~~ **Answered, and the answer is
+   "immediately"** — §3.1. The follow-up question is the live one: *should* `reset` reproduce an
+   episode? Keying the seeded hashes on ticks since the round started rather than on the absolute
+   tick would make it so, at the cost of a change to `BotBrain` and to how bots play. It is worth
+   deciding before M7 writes assertions against either answer.
 2. **How many headless instances fit on one box?** The debug HUD reports server frame time
    (`NETCODE.md` §8); take the number before planning a training run.
 3. **Is the ray fan the right local observation, or should it be a small occupancy patch?** 16 rays
@@ -544,3 +640,11 @@ Six ground seats and one strategist, binary, no feature planes:
    fighting. A flag in the scoreboard row is one byte if it is ever wanted.
 5. **Self-play against the human seat.** Nothing prevents two attached policies on opposite sides;
    whether the round is worth watching is a question for after M6.
+6. **Should `--agent-unbounded` change the action space a client offers?** It does not today:
+   `GroundActionSpace` assumes the 4.5 rad/s ceiling either way, so a policy trained unbounded and
+   one trained bounded stay comparable. A research run that actually wants the snap has to say so.
+7. **RLMatrix pulls a Windows CUDA libtorch on every platform.** Its package depends on
+   `TorchSharp-cuda-windows`; `Gdpyr.Trainer.csproj` excludes that package's build assets on
+   non-Windows and references `TorchSharp-cpu` instead, but NuGet still downloads several gigabytes
+   nobody outside Windows can use. That is upstream packaging, and the fix belongs upstream
+   ([`TRAINING.md`](TRAINING.md) §2).

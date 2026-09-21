@@ -59,6 +59,11 @@ public sealed class BotPilot
 	private readonly BotTraits _traits;
 	private readonly fps_controller _character;
 
+	/// <summary>Reused by every scan so acquisition allocates nothing on the tick.</summary>
+	private readonly GroundContact[] _contacts = new GroundContact[GroundSensor.MaxContacts];
+
+	private int _contactCount;
+
 	private NavigationAgent3D _agent;
 
 	private ushort _targetUnitId;
@@ -186,9 +191,10 @@ public sealed class BotPilot
 	// ---- targets -----------------------------------------------------------
 
 	/// <summary>
-	/// The nearest enemy unit this bot can see. Walks the unit registry rather than
-	/// the scene, exactly as <see cref="UnitManager"/>'s own acquisition does
-	/// (docs/IMPLEMENTATION_PLAN.md §1).
+	/// The nearest enemy unit this bot can see, out of <see cref="GroundSensor"/>'s
+	/// scan — the same filter an attached policy's observation is built from, so a
+	/// policy and a bot are looking at one world through one pair of eyes
+	/// (docs/AGENT_API.md §6.1).
 	///
 	/// Enemy *players* are never candidates. There are only two sides, a strategist
 	/// has no body on the field, and friendly fire between players is on — a bot
@@ -196,39 +202,8 @@ public sealed class BotPilot
 	/// </summary>
 	private void AcquireTarget(fps_controller character, Team team, uint tick)
 	{
-		UnitManager units = UnitManager.Instance;
-		if (units == null)
-		{
-			_targetUnitId = 0;
-			return;
-		}
-
-		Vector3 eye = character.EyePosition;
-		ushort best = 0;
-		float bestDistance = float.MaxValue;
-
-		for (int i = 0; i < units.SlotCount; i++)
-		{
-			Unit unit = units.UnitAt(i);
-			if (unit == null || !unit.IsAlive || unit.Team == team)
-			{
-				continue;
-			}
-
-			float distance = eye.DistanceTo(unit.Hitbox.Center);
-			if (distance > _traits.SensorRadiusMeters || distance >= bestDistance)
-			{
-				continue;
-			}
-
-			if (!HasLineOfSight(eye, unit.Hitbox.Center))
-			{
-				continue;
-			}
-
-			best = unit.UnitId;
-			bestDistance = distance;
-		}
+		_contactCount = GroundSensor.Scan(character, _peerId, team, _traits.SensorRadiusMeters, _contacts);
+		ushort best = GroundSensor.NearestHostileUnit(_contacts.AsSpan(0, _contactCount), team);
 
 		if (best != _targetUnitId)
 		{
@@ -466,17 +441,8 @@ public sealed class BotPilot
 
 	// ---- world queries -----------------------------------------------------
 
-	private bool HasLineOfSight(Vector3 from, Vector3 to)
-	{
-		PhysicsDirectSpaceState3D space = _character?.GetWorld3D()?.DirectSpaceState;
-		if (space == null)
-		{
-			return true;
-		}
-
-		PhysicsRayQueryParameters3D query = PhysicsRayQueryParameters3D.Create(from, to, CollisionLayers.World);
-		return space.IntersectRay(query).Count == 0;
-	}
+	private bool HasLineOfSight(Vector3 from, Vector3 to) =>
+		GroundSensor.HasLineOfSight(_character, from, to);
 
 	/// <summary>
 	/// Whether somebody on the bot's own side is standing in the shot.

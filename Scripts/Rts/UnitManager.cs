@@ -5,6 +5,7 @@ using Gdpyr.Fps;
 using Gdpyr.Match;
 using Gdpyr.Net;
 using Gdpyr.Sim;
+using Gdpyr.Sim.Agent;
 using Godot;
 
 namespace Gdpyr.Rts;
@@ -267,6 +268,8 @@ public partial class UnitManager : Node
 				TargetOwnerId = OwnerId.None,
 			};
 			UnitsProduced++;
+			AgentEventBus.Emit(AgentEventKind.UnitBuilt, tick, unit.UnitId, definitionId, i,
+				unit.GlobalPosition.X, unit.GlobalPosition.Z);
 		}
 	}
 
@@ -577,8 +580,14 @@ public partial class UnitManager : Node
 		return hit;
 	}
 
-	/// <summary>Applies damage to a unit. Returns true when that killed it.</summary>
-	public bool Damage(Unit unit, float amount, uint tick)
+	/// <summary>
+	/// Applies damage to a unit. Returns true when that killed it.
+	///
+	/// <paramref name="attackerOwnerId"/> is carried only so that the agent API's
+	/// <c>unit_lost</c> record can name who did it (docs/AGENT_API.md §8); nothing
+	/// in the simulation reads it.
+	/// </summary>
+	public bool Damage(Unit unit, float amount, int attackerOwnerId, uint tick)
 	{
 		if (unit == null || !unit.ApplyDamage(amount))
 		{
@@ -587,6 +596,8 @@ public partial class UnitManager : Node
 
 		UnitsLost++;
 		unit.DespawnTick = tick + CorpseTicks;
+		AgentEventBus.Emit(AgentEventKind.UnitLost, tick, unit.UnitId, unit.DefinitionId, attackerOwnerId,
+			unit.GlobalPosition.X, unit.GlobalPosition.Z);
 		return true;
 	}
 

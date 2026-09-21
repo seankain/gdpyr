@@ -9,5 +9,10 @@
          compiles the engine-free sources itself; it must not be pulled into the
          game assembly by the SDK's default **/*.cs glob. -->
     <Compile Remove="Tests/**/*.cs" />
+    <!-- tools/ holds the external agent client, the trainer and the divergence
+         probe (docs/TRAINING.md). They talk to a running server over a socket and
+         are built on their own; the game assembly must not compile them, and must
+         never take a dependency on RLMatrix or TorchSharp. -->
+    <Compile Remove="tools/**/*.cs" />
   </ItemGroup>
 </Project>

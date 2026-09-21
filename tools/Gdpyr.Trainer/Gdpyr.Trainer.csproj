@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Gdpyr.Trainer</RootNamespace>
+    <AssemblyName>gdpyr-train</AssemblyName>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+
+    <!-- Which libtorch this build links. RLMatrix's package depends on
+         TorchSharp-cuda-windows, which drags in a ~2 GB Windows CUDA
+         redistributable; on anything else that is both unusable and a hard build
+         error, because libtorch refuses to have two runtime packages referenced at
+         once. Override with -p:TorchBackend=cuda-windows or =cpu.
+         See docs/TRAINING.md §2. -->
+    <TorchBackend Condition="'$(TorchBackend)' == '' and '$(OS)' == 'Windows_NT'">cuda-windows</TorchBackend>
+    <TorchBackend Condition="'$(TorchBackend)' == ''">cpu</TorchBackend>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Gdpyr.AgentClient/Gdpyr.AgentClient.csproj" />
+    <PackageReference Include="RLMatrix" Version="0.5.2" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TorchBackend)' == 'cpu'">
+    <!-- ExcludeAssets="all" keeps the CUDA package's targets out of the build, so
+         the CPU runtime can be the one that loads. NuGet still downloads it: that
+         is RLMatrix's packaging, not something this project can undo. -->
+    <PackageReference Include="libtorch-cuda-12.1-win-x64" Version="2.2.1.1" ExcludeAssets="all" />
+    <PackageReference Include="TorchSharp-cpu" Version="0.102.2" />
+  </ItemGroup>
+
+</Project>

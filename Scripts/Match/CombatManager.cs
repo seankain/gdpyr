@@ -5,6 +5,7 @@ using Gdpyr.Fps;
 using Gdpyr.Net;
 using Gdpyr.Rts;
 using Gdpyr.Sim;
+using Gdpyr.Sim.Agent;
 using Gdpyr.Ui;
 using Godot;
 
@@ -482,7 +483,7 @@ public partial class CombatManager : Node
 		}
 		else if (unitVictim != null)
 		{
-			flags |= DamageUnit(unitVictim, stats.Damage, attacker, tick);
+			flags |= DamageUnit(unitVictim, stats.Damage, attacker, OwnerId.ForPeer(attacker.PeerId), tick);
 		}
 		else if (!blocked)
 		{
@@ -592,7 +593,7 @@ public partial class CombatManager : Node
 		}
 		else if (unitVictim != null)
 		{
-			flags |= DamageUnit(unitVictim, stats.Damage, attacker, tick);
+			flags |= DamageUnit(unitVictim, stats.Damage, attacker, ownerId, tick);
 		}
 
 		if (stats.IsExplosive)
@@ -666,7 +667,7 @@ public partial class CombatManager : Node
 			float damage = stats.SplashDamageAt(UnitManager.DistanceToBlast(unit, point));
 			if (damage > 0f)
 			{
-				flags |= DamageUnit(unit, damage, attacker, tick);
+				flags |= DamageUnit(unit, damage, attacker, attackerOwnerId, tick);
 			}
 		}
 
@@ -678,7 +679,7 @@ public partial class CombatManager : Node
 	/// ground force's pool is theirs, and a unit is already paid for out of the
 	/// strategist's points.
 	/// </summary>
-	private HitFlags DamageUnit(Unit unit, float amount, PlayerCombat attacker, uint tick)
+	private HitFlags DamageUnit(Unit unit, float amount, PlayerCombat attacker, int attackerOwnerId, uint tick)
 	{
 		UnitManager units = UnitManager.Instance;
 		if (units == null || unit == null || !unit.IsAlive || amount <= 0f)
@@ -686,7 +687,7 @@ public partial class CombatManager : Node
 			return HitFlags.None;
 		}
 
-		bool killed = units.Damage(unit, amount, tick);
+		bool killed = units.Damage(unit, amount, attackerOwnerId, tick);
 		ConfirmHit(attacker, null, killed);
 
 		if (killed && attacker != null)
@@ -694,8 +695,31 @@ public partial class CombatManager : Node
 			attacker.Kills++;
 		}
 
+		// A unit is named on the stream the way a projectile names it: one signed id
+		// across both spaces, units in the negative half (see OwnerId). A ground
+		// policy shoots units far more often than it shoots people, so a stream that
+		// only recorded player damage would be a stream nothing could learn from.
+		if (AgentEventBus.Active != null)
+		{
+			byte weapon = attacker?.EquippedDefinitionId ?? (byte)0;
+			int victimId = OwnerId.ForUnit(unit.UnitId);
+			AgentEventBus.Emit(AgentEventKind.Damage, tick, attackerOwnerId, victimId, weapon, amount,
+				unit.Health);
+			if (killed)
+			{
+				AgentEventBus.Emit(AgentEventKind.Kill, tick, attackerOwnerId, victimId, weapon,
+					UnitSeparation(attacker, unit));
+			}
+		}
+
 		return killed ? HitFlags.Killed : HitFlags.None;
 	}
+
+	/// <summary>How far the shooter was from a unit it killed. Zero when a unit or the world did it.</summary>
+	private static float UnitSeparation(PlayerCombat attacker, Unit unit) =>
+		attacker?.Character == null || unit == null
+			? 0f
+			: attacker.Character.SimPosition.DistanceTo(unit.GlobalPosition);
 
 	/// <summary>
 	/// Applies damage and, if that killed the victim, spends a ticket for it.
@@ -716,6 +740,21 @@ public partial class CombatManager : Node
 
 		bool killed = victim.ApplyDamage(amount);
 		ConfirmHit(attacker, victim, killed);
+
+		// The event stream is what a trainer derives its own reward from, and what
+		// M8's per-round CSV is written out of (docs/AGENT_API.md §8). It costs a
+		// null check on a round nobody has attached to.
+		if (AgentEventBus.Active != null)
+		{
+			byte weapon = attacker?.EquippedDefinitionId ?? (byte)0;
+			float range = Separation(attacker, victim);
+			AgentEventBus.Emit(AgentEventKind.Damage, tick, attackerOwnerId, victim.PeerId, weapon,
+				amount, victim.Health);
+			if (killed)
+			{
+				AgentEventBus.Emit(AgentEventKind.Kill, tick, attackerOwnerId, victim.PeerId, weapon, range);
+			}
+		}
 
 		if (!killed)
 		{
@@ -739,6 +778,21 @@ public partial class CombatManager : Node
 		GD.Print($"[combat] peer {victim.PeerId} killed by {DescribeOwner(attackerOwnerId)}"
 			+ $" | tickets {Match.GroundTickets}");
 		return HitFlags.Killed;
+	}
+
+	/// <summary>
+	/// How far apart two players were, for the kill record. Zero when the attacker
+	/// was a unit or the world, which is the same "unknown" a null attacker means
+	/// everywhere else on the stream.
+	/// </summary>
+	private static float Separation(PlayerCombat attacker, PlayerCombat victim)
+	{
+		if (attacker?.Character == null || victim?.Character == null)
+		{
+			return 0f;
+		}
+
+		return attacker.Character.SimPosition.DistanceTo(victim.Character.SimPosition);
 	}
 
 	/// <summary>Names whatever fired a round, for the server log.</summary>
@@ -800,6 +854,8 @@ public partial class CombatManager : Node
 			case RoundPhase.Warmup when _ordered.Count > 0:
 				Match.Start(tick, _gameMode.GroundForceTickets, _gameMode.StrategistTickets,
 					_gameMode.RoundDurationMinutes * 60 * SimConfig.TickRate);
+				AgentEventBus.Emit(AgentEventKind.RoundStart, tick, RoundSeed, Match.GroundTickets,
+					Match.StrategistPoints, _gameMode.RoundDurationMinutes);
 				GD.Print($"[match] round live | tickets {Match.GroundTickets}"
 					+ $" | points {Match.StrategistPoints}"
 					+ $" | {_gameMode.RoundDurationMinutes} minutes");
@@ -823,6 +879,9 @@ public partial class CombatManager : Node
 			_intermissionArmed = true;
 			_intermissionEndTick = tick + (uint)WeaponStats.SecondsToTicks(_gameMode.IntermissionSeconds);
 			PublishScoreboard(tick, 0);
+			AgentEventBus.Emit(AgentEventKind.RoundEnd, tick, (int)Match.Outcome, Match.GroundTickets,
+				UnitManager.Instance?.UnitsLost ?? 0, _summary.Minutes,
+				UnitManager.Instance?.UnitsProduced ?? 0);
 			GD.Print($"[match] round over: {Match.Outcome} | winner {Match.Winner?.ToString() ?? "nobody"}"
 				+ $" | tickets {Match.GroundTickets} | deaths {Match.GroundDeaths}"
 				+ $" | next round in {_gameMode.IntermissionSeconds:0}s");
@@ -834,6 +893,20 @@ public partial class CombatManager : Node
 			return;
 		}
 
+		RestartRound(tick);
+	}
+
+	/// <summary>
+	/// Wipes the field and puts the round back in warmup, which the next tick with
+	/// anybody on it turns live again.
+	///
+	/// Extracted from the intermission so that the agent API's <c>reset</c> and the
+	/// clock arrive at the same state by the same path (docs/AGENT_API.md §7.1): a
+	/// training loop that reset the round through a shortcut would eventually be
+	/// training against a round shape no playtest ever produces.
+	/// </summary>
+	private void RestartRound(uint tick)
+	{
 		_intermissionArmed = false;
 		_scoreCount = 0;
 		Match.Reset();
@@ -845,8 +918,39 @@ public partial class CombatManager : Node
 		UnitManager.Instance?.ClearUnits();
 		for (int i = 0; i < _ordered.Count; i++)
 		{
+			// A fresh round is a fresh scoreboard. Without this the table published at
+			// the end of round two carries round one's kills, and every player
+			// respawns at their own spawn point offset by a death count from a round
+			// that is over — so no two rounds even start in the same places.
+			_ordered[i].Kills = 0;
+			_ordered[i].Deaths = 0;
 			Respawn(_ordered[i], tick);
 		}
+	}
+
+	/// <summary>
+	/// Ends the round now and starts a fresh one — what the agent API's
+	/// <c>reset</c> does (docs/AGENT_API.md §7.1).
+	///
+	/// A live round is ended as undecided and its scoreboard is published, so a
+	/// policy's episode terminates with the same <c>RoundSummary</c> a human's
+	/// would; a round already over skips straight past the intermission. Server
+	/// only, and never reachable from a client: the one caller is the agent socket,
+	/// which the deploy unit never opens.
+	/// </summary>
+	public void ServerResetRound(uint tick)
+	{
+		if (Match.Phase == RoundPhase.Live)
+		{
+			Match.End(tick, RoundOutcome.Undecided);
+			PublishScoreboard(tick, 0);
+			AgentEventBus.Emit(AgentEventKind.RoundEnd, tick, (int)Match.Outcome, Match.GroundTickets,
+				UnitManager.Instance?.UnitsLost ?? 0, Match.ElapsedTicks(tick) / (float)SimConfig.TickRate / 60f,
+				UnitManager.Instance?.UnitsProduced ?? 0);
+		}
+
+		GD.Print($"[match] round reset by the agent api at tick {tick}");
+		RestartRound(tick);
 	}
 
 	/// <summary>
@@ -896,6 +1000,14 @@ public partial class CombatManager : Node
 	public ReadOnlySpan<ScoreEntry> Scores => _scores.AsSpan(0, _scoreCount);
 
 	public RoundSummary Summary => _summary;
+
+	/// <summary>
+	/// The label the agent API's <c>reset</c> put on this episode
+	/// (docs/AGENT_API.md §7.1). It is carried on <c>round_start</c> and in the
+	/// trace; the simulation consumes no global seed, because it has no RNG of its
+	/// own to seed (docs/AGENT_API.md §1.2).
+	/// </summary>
+	public int RoundSeed { get; set; }
 
 	/// <summary>
 	/// Builds the scoreboard and sends it. Kills and deaths are server-side counters

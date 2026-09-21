@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Gdpyr.Agent;
 using Gdpyr.Bots;
 using Gdpyr.Core;
 using Gdpyr.Fps;
@@ -71,6 +72,9 @@ public partial class PlayerManager : Node
 	private Node3D _playersRoot;
 	private LocalInputSampler _sampler;
 	private BotDirector _bots;
+
+	/// <summary>The agent control channel, when <c>--agent-api</c> asked for one. Null otherwise.</summary>
+	private AgentServer _agents;
 	private Player _local;
 	private bool _started;
 
@@ -104,6 +108,32 @@ public partial class PlayerManager : Node
 
 	public bool HasPlayer(int peerId) => _players.ContainsKey(peerId);
 
+	/// <summary>This peer's character, or null. The agent API's observations are taken from it.</summary>
+	public fps_controller CharacterOf(int peerId) =>
+		_players.TryGetValue(peerId, out Player player) ? player.Character : null;
+
+	/// <summary>
+	/// Characters whose intent arrives over a socket — the people connected to this
+	/// authority. Read by the agent API, which refuses stepped mode while any of
+	/// them is playing (docs/AGENT_API.md §5.2).
+	/// </summary>
+	public int RemotePeerCount
+	{
+		get
+		{
+			int count = 0;
+			for (int i = 0; i < _ordered.Count; i++)
+			{
+				if (!_ordered[i].IsBot && _ordered[i].Queue != null)
+				{
+					count++;
+				}
+			}
+
+			return count;
+		}
+	}
+
 	public override void _Ready()
 	{
 		Instance = this;
@@ -125,6 +155,9 @@ public partial class PlayerManager : Node
 
 	public override void _ExitTree()
 	{
+		_agents?.Dispose();
+		_agents = null;
+
 		if (Instance == this)
 		{
 			Instance = null;
@@ -140,6 +173,20 @@ public partial class PlayerManager : Node
 		}
 
 		EnsureStarted(net);
+
+		if (_agents != null)
+		{
+			// Drained before the gate, so an action that arrives while the sim is held
+			// is seen on the tick that unblocks (docs/AGENT_API.md §5.2).
+			_agents.Pump(net.Tick);
+
+			// Stepped mode: the engine frame still happens, the *game* does not.
+			if (_agents.ShouldHoldTick(net.Tick))
+			{
+				return;
+			}
+		}
+
 		net.BeginTick();
 
 		if (net.IsServer)
@@ -187,6 +234,20 @@ public partial class PlayerManager : Node
 
 		_bots = new BotDirector(CombatManager.Instance?.GameMode, Bootstrap.Options);
 
+		if (Bootstrap.Options is { HasAgentApi: true })
+		{
+			_agents = AgentServer.TryStart(Bootstrap.Options);
+			if (_agents == null)
+			{
+				// Fatal, for the reason a server that cannot bind its UDP port is fatal:
+				// an agent channel that silently is not listening looks exactly like a
+				// training run that is not learning (docs/AGENT_API.md §4.1).
+				GD.PrintErr("gdpyr: --agent-api was given but the channel could not be opened");
+				GetTree().Quit(1);
+				return;
+			}
+		}
+
 		// Only a host that is playing gets a character. A dedicated server used to
 		// spawn one for itself too, and an unmanned body standing on a spawn point is
 		// not free: units acquire it and shoot it, every one of those kills costs the
@@ -228,6 +289,10 @@ public partial class PlayerManager : Node
 		}
 
 		ApplyLocalFog();
+
+		// Last, so an observation carries the state the tick actually ended in and an
+		// event is on the stream before the trainer is asked to act on it.
+		_agents?.AfterTick(net.Tick);
 	}
 
 	/// <summary>

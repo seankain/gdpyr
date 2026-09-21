@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Gdpyr.AgentClient</RootNamespace>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- RLMatrix.Common carries IEnvironmentAsync and the agent option types and
+         nothing else: no TorchSharp, no libtorch, a few hundred kilobytes. That is
+         what lets this library be referenced by a scripted playtest that has no
+         intention of training anything. The learner lives in ../Gdpyr.Trainer,
+         which is where the heavy dependency is paid for. -->
+    <PackageReference Include="RLMatrix.Common" Version="0.5.2" />
+  </ItemGroup>
+
+</Project>

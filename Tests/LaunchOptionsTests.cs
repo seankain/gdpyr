@@ -221,4 +221,137 @@ public class LaunchOptionsTests
 	{
 		Assert.NotNull(LaunchOptions.Parse(new[] { "--bots", "--listen" }).Error);
 	}
+
+	// ---- the agent channel (docs/AGENT_API.md §4.1) ------------------------
+
+	[Fact]
+	public void AgentApi_IsOffUnlessItIsAskedFor()
+	{
+		var options = LaunchOptions.Parse(new[] { "--server" });
+
+		Assert.Null(options.Error);
+		Assert.False(options.HasAgentApi);
+		Assert.Null(options.AgentPort);
+	}
+
+	[Fact]
+	public void AgentApi_WithABarePort_BindsLoopback()
+	{
+		var options = LaunchOptions.Parse(new[] { "--server", "--agent-api", "7900" });
+
+		Assert.Null(options.Error);
+		Assert.True(options.HasAgentApi);
+		Assert.Equal(7900, options.AgentPort);
+		Assert.Equal(LaunchOptions.AgentLoopbackHost, options.AgentHost);
+		Assert.Null(options.AgentToken);
+	}
+
+	[Fact]
+	public void AgentApi_OnLoopbackByName_NeedsNoToken()
+	{
+		var options = LaunchOptions.Parse(new[] { "--listen", "--agent-api", "localhost:7900" });
+
+		Assert.Null(options.Error);
+		Assert.Equal("localhost", options.AgentHost);
+		Assert.Equal(7900, options.AgentPort);
+	}
+
+	[Fact]
+	public void AgentApi_OnAPublicAddressWithoutAToken_IsFatal()
+	{
+		// The socket can spawn players, issue orders and reset rounds, and the box in
+		// docs/DEPLOYMENT.md has a public Elastic IP. Not a warning.
+		var options = LaunchOptions.Parse(new[] { "--server", "--agent-api", "0.0.0.0:7900" });
+
+		Assert.NotNull(options.Error);
+		Assert.Contains("--agent-token", options.Error);
+	}
+
+	[Fact]
+	public void AgentApi_OnAPublicAddressWithAToken_IsAllowed()
+	{
+		var options = LaunchOptions.Parse(new[]
+		{
+			"--server", "--agent-api", "10.0.0.4:7900", "--agent-token", "hunter2",
+		});
+
+		Assert.Null(options.Error);
+		Assert.Equal("10.0.0.4", options.AgentHost);
+		Assert.Equal("hunter2", options.AgentToken);
+	}
+
+	[Fact]
+	public void AgentApi_NeedsAnAuthority_NotAClient()
+	{
+		Assert.NotNull(LaunchOptions.Parse(new[] { "--client", "host", "--agent-api", "7900" }).Error);
+		Assert.NotNull(LaunchOptions.Parse(new[] { "--agent-api", "7900" }).Error);
+	}
+
+	[Theory]
+	[InlineData("--agent-token", "secret")]
+	[InlineData("--agent-unbounded", null)]
+	[InlineData("--agent-omniscient", null)]
+	public void AgentFlags_WithoutTheChannel_Fail(string flag, string value)
+	{
+		string[] args = value == null
+			? new[] { "--server", flag }
+			: new[] { "--server", flag, value };
+
+		Assert.NotNull(LaunchOptions.Parse(args).Error);
+	}
+
+	[Fact]
+	public void AgentApi_ResearchFlagsAreCarried()
+	{
+		var options = LaunchOptions.Parse(new[]
+		{
+			"--server", "--agent-api", "7900", "--agent-unbounded", "--agent-omniscient",
+		});
+
+		Assert.Null(options.Error);
+		Assert.True(options.AgentUnbounded);
+		Assert.True(options.AgentOmniscient);
+		Assert.Contains("unbounded", options.ToString());
+		Assert.Contains("omniscient", options.ToString());
+	}
+
+	[Theory]
+	[InlineData("")]
+	[InlineData("nope")]
+	[InlineData("127.0.0.1")]
+	[InlineData("127.0.0.1:0")]
+	[InlineData("127.0.0.1:99999")]
+	public void AgentApi_WithABadAddress_Fails(string value)
+	{
+		Assert.NotNull(LaunchOptions.Parse(new[] { "--server", "--agent-api", value }).Error);
+	}
+
+	[Fact]
+	public void AgentApi_GivenTwice_Fails()
+	{
+		Assert.NotNull(LaunchOptions.Parse(new[]
+		{
+			"--server", "--agent-api", "7900", "--agent-api", "7901",
+		}).Error);
+	}
+
+	[Fact]
+	public void AgentApi_WithoutAPort_Fails()
+	{
+		Assert.NotNull(LaunchOptions.Parse(new[] { "--server", "--agent-api" }).Error);
+	}
+
+	[Theory]
+	[InlineData("127.0.0.1", true)]
+	[InlineData("127.1.2.3", true)]
+	[InlineData("localhost", true)]
+	[InlineData("::1", true)]
+	[InlineData("0.0.0.0", false)]
+	[InlineData("203.0.113.10", false)]
+	[InlineData("", false)]
+	[InlineData(null, false)]
+	public void Loopback_IsRecognizedTextually_AndAnythingElseIsTreatedAsPublic(string host, bool loopback)
+	{
+		Assert.Equal(loopback, LaunchOptions.IsLoopback(host));
+	}
 }

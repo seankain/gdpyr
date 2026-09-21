@@ -12,6 +12,12 @@ WorkingDirectory=/opt/gdpyr
 # Everything after `--` reaches OS.GetCmdlineUserArgs(). The dedicated-server
 # export already forces headless; --headless is kept so a plain (non-dedicated)
 # export also runs correctly here.
+#
+# --agent-api is deliberately absent and must stay absent. That socket can spawn
+# players, issue orders and reset rounds, and this box has a public Elastic IP;
+# training and playtests run on a local machine, or on one whose security group
+# has no inbound rule for the agent port (docs/AGENT_API.md §4.1,
+# docs/TRAINING.md §8).
 ExecStart=/opt/gdpyr/gdpyr-server --headless -- --server 7777
 
 # Godot resolves its user data directory from HOME. /opt is read-only under
