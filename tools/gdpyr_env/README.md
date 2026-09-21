@@ -39,16 +39,26 @@ Three things worth knowing before you train against it:
   turn rate, and a strategist to eight commands a second. `--agent-unbounded` lifts them, is stamped
   into every observation, and is for research runs rather than for playtests (§7.3).
 
-A strategist seat takes a list of commands rather than an `InputFrame`:
+A strategist seat takes a list of commands rather than an `InputFrame`, and the ids those commands
+name come from `list_units` — the observation carries positions and no ids (`AGENT_API.md` §6.2,
+§7.5):
 
 ```python
 with GdpyrEnv(port=7900, policy="strategist", step_mul=30) as env:
     obs, info = env.reset(seed=3)
+    army = [unit for unit in env.list_units() if unit["alive"]]
     obs, reward, terminated, truncated, info = env.step([
         {"cmd": "build", "barracks": 0, "tier": 0},
-        {"cmd": "order", "kind": "attack", "units": [1, 2], "target": [42.0, -8.5]},
+        {"cmd": "order", "kind": "attack",
+         "units": [unit["id"] for unit in army], "target": [42.0, -8.5]},
     ])
 ```
+
+Entry *i* of `list_units()` is unit *i* of the observation's unit block, so a policy can select by
+what it sees and command by what it names. The C# client makes the same join
+(`tools/Gdpyr.AgentClient/GdpyrStrategistEnv.cs`) and ships a worked discretization of that command
+space beside it — six discrete heads, at most two commands a decision — which is worth reading
+before inventing one: [`docs/TRAINING.md`](../../docs/TRAINING.md) §7.
 
 Pass `feature_planes=True` for the optional `32 × 32 × 4` grid, which arrives in
 `info["planes"]` as an `(N, N, C)` array (§6.3). It is a strategist affordance: a ground policy's

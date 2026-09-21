@@ -284,6 +284,27 @@ class GdpyrEnv:
         run = self.field(values, name)
         return float(run[0]) if run.size else 0.0
 
+    def list_units(self) -> List[Dict[str, Any]]:
+        """The units this strategist seat commands, in the order the observation carries them.
+
+        The strategist vector carries a unit's tier, position, health and order and
+        no id, and an ``order`` command names ids (``AGENT_API.md`` §6.2, §7.4). This
+        is the call that joins the two: entry *i* here is unit *i* of the
+        observation's unit block, and its ``id`` is what an order names::
+
+            army = env.list_units()
+            env.step([{"cmd": "order", "kind": "attack",
+                       "units": [u["id"] for u in army if u["alive"]],
+                       "target": [42.0, -8.5]}])
+
+        One round trip per decision, which at a strategist's 2 Hz is nothing.
+        """
+        if self.policy != "strategist":
+            raise AgentError("a ground seat commands no units")
+
+        response = self._request({"op": "list_units", "seat": self.seat})
+        return list(response.get("units", []))
+
     def sample_action(self) -> GroundAction:
         """A uniformly silly ground action. For smoke tests, not for training."""
         return GroundAction(
