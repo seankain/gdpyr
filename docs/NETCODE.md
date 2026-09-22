@@ -214,6 +214,34 @@ the mechanism arriving.
 - Integrator is step-size stable: 1 ms vs 0.5 ms steps agree within 1 cm at 300 m.
 - Determinism: same spawn record → bit-identical trajectory across 1000 runs.
 
+### 4.7 Aiming down the sights
+
+The `Ads` bit has been in `InputFrame` since M1 and unread until now. What reads it is
+`Scripts/Sim/Ads.cs`: a pure step over `(state, stats, input)`, exactly as `WeaponSim` is, that
+counts how many ticks of a weapon's raise have elapsed. Held is up, released is down, at the same
+rate in both directions, and a swap mid-raise keeps *how far up* the sights are rather than how many
+ticks of the last weapon's raise that took.
+
+Nothing authoritative reads the result yet — no accuracy cone narrows, no movement slows — so **the
+aim state stays off the wire**. It needs to be there anyway rather than on the render frame, for two
+reasons:
+
+1. What it decides is what the local player sees: the camera's field of view, where the viewmodel is
+   held, whether the scope's surround is up, and how far the mouse turns them. All four are
+   presentation, and all four read the *recorded* frame, so a paused, dead or role-choosing player's
+   sights behave like everything else that reads an `InputFrame` (§3.1) — a player killed behind an
+   optic lowers it over the same ticks they raised it, because their frame becomes look-only.
+2. The server steps it for every player anyway, from the inputs it already has, so the day something
+   authoritative does want to know whether a shot was aimed, the number is there and both ends
+   already agree on it without a byte being added to the snapshot.
+
+**Zoom and look sensitivity move together.** Magnification is defined as the ratio of the two
+tangents — `tan(hip/2) / tan(aimed/2)` — and `LocalInputSampler` divides sampled mouse motion by
+whatever magnification is in force, so a pixel of travel is worth the same distance on screen at
+every power. It is a change at the device end of the boundary and on the right side of it: what
+reaches the simulation is still an absolute, quantized angle, and the sights the scale came from were
+themselves advanced from a recorded frame.
+
 ---
 
 ## 5. Hitbox history

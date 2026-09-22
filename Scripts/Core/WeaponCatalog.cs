@@ -64,6 +64,14 @@ public static class WeaponCatalog
 	/// <summary>Each weapon's projectile, indexed by the *weapon's* id.</summary>
 	public static ProjectileStats[] Projectiles { get; private set; } = System.Array.Empty<ProjectileStats>();
 
+	/// <summary>
+	/// What raising each weapon's sights does (<see cref="Ads"/>), parallel to
+	/// <see cref="Definitions"/>. Local to whoever is holding the weapon — an aim
+	/// state never goes on the wire — but read from the same catalog on every
+	/// process, so a weapon's optic is the same one everywhere.
+	/// </summary>
+	public static AimStats[] Aim { get; private set; } = System.Array.Empty<AimStats>();
+
 	public static bool IsLoaded { get; private set; }
 
 	public static int Count => Definitions.Length;
@@ -84,6 +92,7 @@ public static class WeaponCatalog
 		var definitions = new WeaponDefinition[Paths.Length];
 		var stats = new WeaponStats[Paths.Length];
 		var projectiles = new ProjectileStats[Paths.Length];
+		var aim = new AimStats[Paths.Length];
 
 		for (int i = 0; i < Paths.Length; i++)
 		{
@@ -100,11 +109,13 @@ public static class WeaponCatalog
 			definitions[i] = definition;
 			stats[i] = definition.ToStats();
 			projectiles[i] = definition.Projectile?.ToStats() ?? default;
+			aim[i] = definition.ToAimStats();
 		}
 
 		Definitions = definitions;
 		Stats = stats;
 		Projectiles = projectiles;
+		Aim = aim;
 		IsLoaded = true;
 	}
 
@@ -112,6 +123,13 @@ public static class WeaponCatalog
 		id < Definitions.Length ? Definitions[id] : null;
 
 	public static WeaponStats StatsFor(byte id) => id < Stats.Length ? Stats[id] : default;
+
+	/// <summary>
+	/// What raising this weapon's sights does. <see cref="AimStats.None"/> for an id
+	/// this build does not have, which is the same answer as "there is nothing to
+	/// raise" and keeps the caller from having to ask twice.
+	/// </summary>
+	public static AimStats AimFor(byte id) => id < Aim.Length ? Aim[id] : AimStats.None;
 
 	public static string NameOf(byte id) => Definition(id)?.Name.ToString() ?? $"#{id}";
 
