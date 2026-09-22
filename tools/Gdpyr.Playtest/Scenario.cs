@@ -241,7 +241,7 @@ public sealed class Scenario
 				Name = Text(root, "name", System.IO.Path.GetFileNameWithoutExtension(path)),
 				DurationTicks = Math.Max(Int(root, "duration_ticks", DefaultDurationTicks), 1),
 				WarmupTicks = Math.Max(Int(root, "warmup_ticks", 60), 0),
-				Seeds = Seeds(root),
+				Seeds = ReadSeeds(root),
 			};
 
 			if (root.TryGetProperty("roster", out JsonElement roster) && roster.ValueKind == JsonValueKind.Object)
@@ -265,7 +265,7 @@ public sealed class Scenario
 		}
 	}
 
-	private static int[] Seeds(JsonElement root)
+	private static int[] ReadSeeds(JsonElement root)
 	{
 		if (root.TryGetProperty("seeds", out JsonElement seeds) && seeds.ValueKind == JsonValueKind.Array)
 		{

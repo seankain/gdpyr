@@ -43,6 +43,26 @@ public partial class NetworkManager : Node
 	public bool Connected { get; private set; }
 
 	/// <summary>
+	/// Client only: the link was refused, never answered, or dropped. The main menu
+	/// reads it to decide whether "connecting…" is still true, which is the one
+	/// question the transport could not answer before there was a menu to ask it
+	/// (docs/LAN.md §4).
+	/// </summary>
+	public bool ConnectionFailed { get; private set; }
+
+	/// <summary>Client only: the handshake is in flight. Neither connected nor refused.</summary>
+	public bool IsConnecting => IsClient && !Connected && !ConnectionFailed;
+
+	/// <summary>
+	/// True once a transport has been chosen, whether by the command line or in the
+	/// menu. A second choice is refused rather than layered on top of the first.
+	/// </summary>
+	public bool HasStarted { get; private set; }
+
+	/// <summary>Answers LAN discovery while this process is a server. Null otherwise.</summary>
+	public ServerAdvertiser Advertiser { get; private set; }
+
+	/// <summary>
 	/// The tick being simulated: authoritative on a server, the client's estimate of
 	/// the server's tick otherwise (docs/NETCODE.md §2).
 	/// </summary>
@@ -96,21 +116,27 @@ public partial class NetworkManager : Node
 		}
 
 		LaunchOptions options = Bootstrap.Options;
-		Mode = options.Mode;
 
 		switch (options.Mode)
 		{
 			case LaunchMode.Server:
 			case LaunchMode.Listen:
+				Mode = options.Mode;
+				HasStarted = true;
 				StartServer(options.Port);
 				break;
 
 			case LaunchMode.Client:
+				Mode = options.Mode;
+				HasStarted = true;
 				StartClient(options.Host, options.Port);
 				break;
 
 			default:
-				GD.Print("[net] offline: no peer");
+				// No mode flag: the main menu decides, and nothing is bound until it
+				// does (Scripts/Ui/MainMenu.cs). A dedicated-server build never lands
+				// here — LaunchOptions.Parse defaults it to Server.
+				GD.Print("[net] no peer yet: waiting for the main menu");
 				break;
 		}
 	}
@@ -121,6 +147,111 @@ public partial class NetworkManager : Node
 		{
 			Instance = null;
 		}
+	}
+
+	// ---- chosen in the menu (docs/LAN.md §4) -------------------------------
+
+	/// <summary>
+	/// Becomes the authority, with a local player. What "Host" in the main menu does.
+	/// Returns false when the port could not be bound, which is a message for the
+	/// menu rather than a reason to quit: nothing has been given up yet.
+	/// </summary>
+	public bool HostListen(int port)
+	{
+		if (HasStarted)
+		{
+			return false;
+		}
+
+		Error error = TransportFactory.CreateServer(port, out MultiplayerPeer peer);
+		if (error != Error.Ok)
+		{
+			GD.PrintErr($"[net] could not listen on UDP {port}: {error}");
+			return false;
+		}
+
+		Mode = LaunchMode.Listen;
+		HasStarted = true;
+		Multiplayer.MultiplayerPeer = peer;
+		Multiplayer.PeerConnected += OnPeerConnected;
+		Multiplayer.PeerDisconnected += OnPeerDisconnected;
+		LocalPeerId = Multiplayer.GetUniqueId();
+		Connected = true;
+		GD.Print($"[net] listening on UDP {port} ({Mode})");
+
+		StartAdvertising(port);
+		return true;
+	}
+
+	/// <summary>
+	/// Opens a socket to a server. ENet is asynchronous, so true here means the
+	/// socket exists and the menu should wait on <see cref="Connected"/> and
+	/// <see cref="ConnectionFailed"/>, not that anybody answered.
+	/// </summary>
+	public bool JoinServer(string host, int port)
+	{
+		if (HasStarted)
+		{
+			return false;
+		}
+
+		Mode = LaunchMode.Client;
+		HasStarted = true;
+		StartClient(host, port);
+
+		if (Mode != LaunchMode.Client)
+		{
+			// StartClient resets the mode when the socket never opened.
+			ConnectionFailed = true;
+			HasStarted = false;
+			return false;
+		}
+
+		return true;
+	}
+
+	/// <summary>
+	/// Drops a link that never came up, so the menu can try a different address.
+	///
+	/// Only ever called before a round starts: once the map is loaded there is a
+	/// roster, a clock and a prediction ledger built around this peer, and none of
+	/// them is torn down here. Leaving a round you are in is still quitting the
+	/// process (docs/LAN.md §4).
+	/// </summary>
+	public void AbandonConnection()
+	{
+		if (!IsClient || Connected)
+		{
+			return;
+		}
+
+		if (Multiplayer.HasMultiplayerPeer())
+		{
+			Multiplayer.MultiplayerPeer.Close();
+			Multiplayer.MultiplayerPeer = null;
+		}
+
+		Multiplayer.ConnectedToServer -= OnConnectedToServer;
+		Multiplayer.ConnectionFailed -= OnConnectionFailed;
+		Multiplayer.ServerDisconnected -= OnServerDisconnected;
+
+		Mode = LaunchMode.Offline;
+		HasStarted = false;
+		Connected = false;
+		ConnectionFailed = false;
+	}
+
+	/// <summary>A round on your own, against the bots: no peer, no packets (docs/NETCODE.md §9).</summary>
+	public void PlayOffline()
+	{
+		if (HasStarted)
+		{
+			return;
+		}
+
+		Mode = LaunchMode.Offline;
+		HasStarted = true;
+		GD.Print("[net] offline: no peer");
 	}
 
 	/// <summary>
@@ -165,6 +296,35 @@ public partial class NetworkManager : Node
 		LocalPeerId = Multiplayer.GetUniqueId();
 		Connected = true;
 		GD.Print($"[net] listening on UDP {port} ({Mode})");
+
+		StartAdvertising(port);
+	}
+
+	/// <summary>
+	/// Opens the discovery socket so that other machines' menus can list this server
+	/// (docs/LAN.md §4). Never fatal: a host that cannot be found still plays, and
+	/// <c>--no-advertise</c> asks for exactly that.
+	/// </summary>
+	private void StartAdvertising(int port)
+	{
+		if (!Bootstrap.Options.Advertise || Advertiser != null)
+		{
+			return;
+		}
+
+		string name = Bootstrap.Options.ServerName ?? ServerAdvertiser.DefaultName();
+		Advertiser = ServerAdvertiser.TryStart(name, port);
+
+		if (Advertiser == null)
+		{
+			GD.PushWarning($"[net] every discovery port in {DiscoveryCodec.PortBase}"
+				+ $"-{DiscoveryCodec.PortBase + DiscoveryCodec.PortSpan - 1} is taken;"
+				+ " this server will not appear in anybody's browser");
+			return;
+		}
+
+		AddChild(Advertiser);
+		GD.Print($"[net] advertising '{name}' on UDP {Advertiser.Port} for UDP {port}");
 	}
 
 	private void StartClient(string host, int port)
@@ -296,6 +456,7 @@ public partial class NetworkManager : Node
 	private void OnConnectionFailed()
 	{
 		Connected = false;
+		ConnectionFailed = true;
 		GD.PrintErr("[net] connection failed: no answer from the server. "
 			+ "Check the address, and that UDP 7777 is open on the host.");
 	}
@@ -303,6 +464,7 @@ public partial class NetworkManager : Node
 	private void OnServerDisconnected()
 	{
 		Connected = false;
+		ConnectionFailed = true;
 		GD.PrintErr("[net] server disconnected");
 	}
 

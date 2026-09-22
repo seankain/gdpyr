@@ -379,6 +379,8 @@ route, so there is no second behaviour to write.
 | `ServerNodeState` | S→C | Reliable | 5 Hz per *changed* node | ~8 B |
 | `ServerGunState` / `ServerCanState` | S→C | Reliable | per transition | ~32 B / ~24 B |
 | `ServerRoundSummary` (scoreboard) | S→C | Reliable | once per round | 16 B + 9 B/player |
+| `ServerRequestRoleChoice` | S→C | Reliable | per person per round | ~4 B |
+| `ClientSelectTeam` / `ClientSelectLoadout` | C→S | Reliable | per choice | ~4 B |
 | `ClockProbe` / `ClockReply` | both | Unreliable | 2 Hz | ~12 B |
 
 Both snapshots say *visible*, and since M4 the player one means it: a strategist peer is sent its
@@ -402,6 +404,18 @@ M5's four messages change none of that. Three of them are state rather than samp
 node, where a gun is, what the round ended as — and cost bytes only when something happens; the
 node one is additionally filtered to the nodes whose state actually changed since the last report,
 so eight nodes at a standstill cost nothing at all (§10.1).
+
+`ServerRequestRoleChoice` is the role menu, and is deliberately the only message it needed. The
+server holds a person off the field until they pick a side — on joining, and again when a round
+starts — and "held" is expressed as a health of zero, which every client already knows how to draw
+(`PlayerCombat.HoldForRoleChoice`). So the *consequences* ride the snapshot that was going out
+anyway, the *answer* rides `ClientSelectTeam`, which has existed since M3, and the team a player
+ends up on rides the flag byte's team bit. There is no third team and no wire change: `Team` is one
+bit and stays one bit.
+
+**LAN discovery is not on this wire at all.** The server browser answers "who is listening?" before
+there is a connection to ask it over, so it is its own datagram on its own UDP socket
+(`Scripts/Net/DiscoveryCodec.cs`, [`LAN.md`](LAN.md) §4) and the transport knows nothing about it.
 
 ---
 

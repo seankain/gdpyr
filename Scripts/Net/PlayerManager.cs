@@ -172,6 +172,16 @@ public partial class PlayerManager : Node
 			return;
 		}
 
+		// Nothing is simulated while the main menu is up (docs/IMPLEMENTATION_PLAN.md
+		// §3, "Ui/ Main menu"). This node is an autoload and the menu is a scene, so
+		// without the gate the roster would be built, the spawn points collected off
+		// the menu scene and the agent channel opened before anybody had picked a
+		// server to play on.
+		if (!Session.InGame)
+		{
+			return;
+		}
+
 		EnsureStarted(net);
 
 		if (_agents != null)
@@ -210,7 +220,10 @@ public partial class PlayerManager : Node
 	/// </summary>
 	private void EnsureStarted(NetworkManager net)
 	{
-		if (_started)
+		// A peer can connect in the frame between a listen host binding its port and
+		// the map entering the tree. Its character is spawned either way; the roster
+		// is not built off a scene with no spawn points in it.
+		if (_started || !Session.InGame)
 		{
 			return;
 		}

@@ -5,7 +5,11 @@ namespace Gdpyr.Core;
 /// <summary>How this process takes part in a session.</summary>
 public enum LaunchMode
 {
-	/// <summary>No networking. The editor default, and the fallback for a build launched with no flags.</summary>
+	/// <summary>
+	/// No networking. What a build launched with no flags parses as — which now means
+	/// the main menu, where the player picks one of the other three or a round on
+	/// their own (<see cref="Session"/>) — and the editor default.
+	/// </summary>
 	Offline,
 
 	/// <summary>Authoritative simulation, no local player. What runs on the EC2 box.</summary>
@@ -37,6 +41,7 @@ public sealed class LaunchOptions
 	public const string Usage =
 		"usage: gdpyr [--server [port]] | [--client <host[:port]>] | [--listen [port]]\n" +
 		"             [--bots <ground>[:<strategists>]] | [--no-bots]\n" +
+		"             [--name <text>] [--no-advertise]\n" +
 		"             [--agent-api [host:]port] [--agent-token <token>]\n" +
 		"             [--agent-unbounded] [--agent-omniscient]\n" +
 		"  --server [port]         headless authority, no local player (default port 7777)\n" +
@@ -44,11 +49,13 @@ public sealed class LaunchOptions
 		"  --listen [port]         authority plus a local player\n" +
 		"  --bots <n>[:<m>]        fill each side to n ground and m strategists with bots\n" +
 		"  --no-bots               no computer players, whatever the game mode says\n" +
+		"  --name <text>           what this server calls itself in the browser (default: the hostname)\n" +
+		"  --no-advertise          do not answer LAN discovery; the address still works\n" +
 		"  --agent-api [host:]port listen for external policies (docs/AGENT_API.md); loopback by default\n" +
 		"  --agent-token <token>   required for a non-loopback agent bind\n" +
 		"  --agent-unbounded       lift the turn-rate and APM ceilings; research runs only\n" +
 		"  --agent-omniscient      drop the fog for attached seats; labelled as cheating\n" +
-		"  (no flags)              offline, no networking\n" +
+		"  (no flags)              the main menu: the servers on this network, or a round on your own\n" +
 		"Godot consumes its own arguments first, so these go after a bare `--`:\n" +
 		"  gdpyr --headless -- --server 7777 --bots 6:1 --agent-api 7900";
 
@@ -72,6 +79,26 @@ public sealed class LaunchOptions
 
 	/// <summary>Strategists to keep filled. See <see cref="GroundBots"/>.</summary>
 	public int? StrategistBots { get; private init; }
+
+	/// <summary>
+	/// What this server calls itself in another machine's server browser
+	/// (docs/LAN.md §4). Null means "the machine's own name", which is resolved where
+	/// the environment is — <c>ServerAdvertiser.DefaultName</c> — rather than here,
+	/// so that this class stays engine-free and a parse stays a pure function.
+	/// </summary>
+	public string ServerName { get; private init; }
+
+	/// <summary>
+	/// Whether this process answers LAN discovery queries while it is a server.
+	/// On by default: a host nobody can find is the problem the browser exists to
+	/// solve. <c>--no-advertise</c> turns it off without changing anything else —
+	/// the address still works, because discovery is a convenience and not the
+	/// transport.
+	///
+	/// It is not restricted to a server mode: a process launched with no flags picks
+	/// its mode in the main menu, and may end up hosting from there.
+	/// </summary>
+	public bool Advertise { get; private init; } = true;
 
 	/// <summary>
 	/// Port the agent control channel listens on, or null when it was not asked for
@@ -115,6 +142,16 @@ public sealed class LaunchOptions
 			mode += $" | bots {Describe(GroundBots)} ground, {Describe(StrategistBots)} strategist";
 		}
 
+		if (ServerName != null)
+		{
+			mode += $" | name '{ServerName}'";
+		}
+
+		if (!Advertise)
+		{
+			mode += " | not advertised";
+		}
+
 		if (AgentPort is { } agentPort)
 		{
 			mode += $" | agent api {AgentHost}:{agentPort}"
@@ -148,6 +185,8 @@ public sealed class LaunchOptions
 		int? groundBots = null;
 		int? strategistBots = null;
 		bool botsRefused = false;
+		string serverName = null;
+		bool advertise = true;
 		int? agentPort = null;
 		string agentHost = AgentLoopbackHost;
 		string agentToken = null;
@@ -226,6 +265,26 @@ public sealed class LaunchOptions
 					}
 					break;
 				}
+
+				case "--name":
+				{
+					if (serverName != null)
+					{
+						return Failure("--name given twice");
+					}
+
+					if (!TryTakeValue(args, ref i, out string value) || string.IsNullOrWhiteSpace(value))
+					{
+						return Failure("--name needs a name, e.g. --name \"the kitchen box\"");
+					}
+
+					serverName = value.Trim();
+					break;
+				}
+
+				case "--no-advertise":
+					advertise = false;
+					break;
 
 				case "--agent-api":
 				{
@@ -316,6 +375,8 @@ public sealed class LaunchOptions
 			Port = port,
 			GroundBots = groundBots,
 			StrategistBots = strategistBots,
+			ServerName = serverName,
+			Advertise = advertise,
 			AgentPort = agentPort,
 			AgentHost = agentHost,
 			AgentToken = agentToken,
@@ -380,6 +441,15 @@ public sealed class LaunchOptions
 
 		return true;
 	}
+
+	/// <summary>
+	/// Parses an address a person typed — the main menu's box — with exactly the
+	/// rules <c>--client</c> uses. Two spellings of "where is the server" that
+	/// disagreed about IPv6 or about a missing port would be one spelling too many,
+	/// so this is the same parser and not a second one.
+	/// </summary>
+	public static bool TryParseAddress(string text, out string host, out int port, out string error) =>
+		TryParseEndpoint(text, out host, out port, out error);
 
 	private static LaunchOptions Failure(string error) => new() { Error = error };
 

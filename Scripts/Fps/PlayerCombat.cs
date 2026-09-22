@@ -41,16 +41,32 @@ public sealed class PlayerCombat
 	public Team Team { get; set; } = Team.GroundForce;
 
 	/// <summary>
+	/// True while this player has been asked which side they want and has not
+	/// answered (<see cref="Match.TeamService.RequireChoice"/>). The server's copy is
+	/// the authority and is mirrored here the way <see cref="Team"/> is; a client
+	/// sets its own from the request the server sends it.
+	///
+	/// Nothing new happens to a character while this is true — the player is simply
+	/// not alive, which the simulation has meant "keep the look angles and ignore the
+	/// rest" since M1. That is the whole reason the role menu needed no third team
+	/// and no wire change (docs/IMPLEMENTATION_PLAN.md §M3).
+	/// </summary>
+	public bool AwaitingRole { get; set; }
+
+	/// <summary>
 	/// A strategist has no body on the field. Rather than a second lifecycle for a
 	/// character that is present but not playing, they are simply never alive: the
 	/// simulation already feeds a character that is not alive nothing but its look
 	/// angles, hides it, takes it off the player collision layer and refuses to
 	/// damage it. Switching sides is then one assignment in each direction.
+	///
+	/// A player who has not yet picked a side is not alive either, for the same
+	/// reason and by the same mechanism.
 	/// </summary>
-	public bool IsAlive => Team == Team.GroundForce && Health > 0;
+	public bool IsAlive => !AwaitingRole && Team == Team.GroundForce && Health > 0;
 
 	/// <summary>True for a player who is on the ground and has been killed.</summary>
-	public bool IsDowned => Team == Team.GroundForce && Health <= 0;
+	public bool IsDowned => !AwaitingRole && Team == Team.GroundForce && Health <= 0;
 
 	/// <summary>The tick a dead player comes back on. Only meaningful while dead.</summary>
 	public uint RespawnTick { get; set; }
@@ -135,6 +151,21 @@ public sealed class PlayerCombat
 	{
 		Health = 0;
 		Deaths++;
+	}
+
+	/// <summary>
+	/// Takes this player off the field until they pick a side. Server-side, and the
+	/// one thing the role menu does to the simulation.
+	///
+	/// The health goes to zero as well as the flag, because that is what the rest of
+	/// the network already reads: a snapshot carries health and not intentions, so
+	/// every other client hides the body through the path a death goes through. No
+	/// ticket is charged — nobody killed them (docs/NETCODE.md §7).
+	/// </summary>
+	public void HoldForRoleChoice()
+	{
+		AwaitingRole = true;
+		Health = 0;
 	}
 
 	/// <summary>Brings the player back with a full magazine and whatever they chose next.</summary>

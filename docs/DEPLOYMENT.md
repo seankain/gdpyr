@@ -40,6 +40,13 @@ without `--agent-token` is a fatal start-up error, and training runs on a local 
 ([`AGENT_API.md`](AGENT_API.md) §4.1, [`TRAINING.md`](TRAINING.md) §8). Two inbound rules stays two
 inbound rules.
 
+**There is no rule for LAN discovery either, and no reason for one.** The server browser in the
+main menu is a UDP broadcast ([`LAN.md`](LAN.md) §4), and a broadcast does not leave the subnet — a
+box with an Elastic IP could never appear in it. `deploy/gdpyr-server.service` passes
+`--no-advertise` so it does not bind a port to answer a question nobody out here can ask. Players
+reach this server the way this page has always said: its address, typed into the menu's address box
+or passed to `--client`.
+
 **If and only if you use a custom Network ACL:** NACLs are *stateless*. You need inbound UDP 7777
 **and** outbound UDP 1024–65535. The default VPC NACL allows everything and needs no change. This is
 the single most common "the port is open but nothing connects" cause on AWS.

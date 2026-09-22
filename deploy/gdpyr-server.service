@@ -18,7 +18,12 @@ WorkingDirectory=/opt/gdpyr
 # training and playtests run on a local machine, or on one whose security group
 # has no inbound rule for the agent port (docs/AGENT_API.md §4.1,
 # docs/TRAINING.md §8).
-ExecStart=/opt/gdpyr/gdpyr-server --headless -- --server 7777
+#
+# --no-advertise for a reason that is not security: LAN discovery is a broadcast
+# (docs/LAN.md §4) and a broadcast does not cross the internet, so the socket
+# would bind a port on a public box to answer questions nobody can ask. Players
+# reach this server by its Elastic IP, typed into the main menu's address box.
+ExecStart=/opt/gdpyr/gdpyr-server --headless -- --server 7777 --no-advertise
 
 # Godot resolves its user data directory from HOME. /opt is read-only under
 # ProtectSystem=strict, so logs and state go here instead.
