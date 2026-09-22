@@ -25,6 +25,7 @@ public static class UnitCatalog
 		"res://Units/infantry.tres",  // 0 — T0 rifleman
 		"res://Units/technical.tres", // 1 — T1 gun truck
 		"res://Units/tank.tres",      // 2 — T2 tank
+		"res://Units/builder.tres",   // 3 — builder, not a tier
 	};
 
 	public const byte Infantry = 0;
@@ -39,7 +40,15 @@ public static class UnitCatalog
 	/// <summary>T2. Slow, blind at range, and the only thing on the field that survives being shot at.</summary>
 	public const byte Tank = 2;
 
-	/// <summary>The three tiers in order, which is the order the strategist's build keys are in.</summary>
+	/// <summary>
+	/// The one unit that fights nothing it can avoid: it puts up pillboxes, sandbag
+	/// walls and sniper towers (docs/NETCODE.md §10.5). Not a tier — it is
+	/// deliberately absent from <see cref="Tiers"/>, which is what the computer
+	/// strategist chooses its army from.
+	/// </summary>
+	public const byte Builder = 3;
+
+	/// <summary>The three fighting tiers in order, which is the order the strategist's build keys are in.</summary>
 	public static readonly byte[] Tiers = { Infantry, Technical, Tank };
 
 	public static UnitDefinition[] Definitions { get; private set; } = System.Array.Empty<UnitDefinition>();
@@ -94,6 +103,9 @@ public static class UnitCatalog
 	public static string NameOf(byte id) => Definition(id)?.Name.ToString() ?? $"#{id}";
 
 	public static bool IsBuildable(byte id) => id < Definitions.Length && Definitions[id] != null;
+
+	/// <summary>Whether units of this kind can be sent to put a structure up.</summary>
+	public static bool CanConstruct(byte id) => Definition(id)?.CanConstruct ?? false;
 
 	/// <summary>
 	/// What the cheapest buildable unit costs, or <see cref="int.MaxValue"/> when

@@ -19,6 +19,13 @@ public enum AgentCommandKind : byte
 
 	/// <summary>Move where a barracks' fresh units walk to.</summary>
 	Rally = 4,
+
+	/// <summary>
+	/// Send builders to put a structure up (docs/NETCODE.md §10.5). Names its
+	/// builders as an order names its units, and lands in the same
+	/// <c>ServerConstruct</c> a human strategist's request does.
+	/// </summary>
+	Construct = 5,
 }
 
 /// <summary>
@@ -57,6 +64,12 @@ public struct AgentCommand
 
 	/// <summary>What to shoot at, as an <see cref="OwnerId"/>. Only meaningful for an attack order.</summary>
 	public int TargetOwnerId;
+
+	/// <summary>Which structure, as a structure-catalog index. Only meaningful for <see cref="AgentCommandKind.Construct"/>.</summary>
+	public byte Structure;
+
+	/// <summary>Which way the structure faces [rad]. Only meaningful for <see cref="AgentCommandKind.Construct"/>.</summary>
+	public float Yaw;
 
 	/// <summary>Index into the seat's unit-id buffer, for an order.</summary>
 	public int UnitsOffset;
@@ -129,8 +142,18 @@ public sealed class AgentCommandList
 	/// </summary>
 	public bool AddOrder(AgentCommand command, ReadOnlySpan<int> unitIds)
 	{
-		int room = Math.Min(unitIds.Length, MaxUnitIds - _ids);
 		command.Kind = AgentCommandKind.Order;
+		return AddWithUnits(command, unitIds);
+	}
+
+	/// <summary>
+	/// Adds a command that names units — an order, or a construct naming its
+	/// builders — copying the ids into the shared buffer as <see cref="AddOrder"/>
+	/// does. The command keeps whatever kind it was given.
+	/// </summary>
+	public bool AddWithUnits(AgentCommand command, ReadOnlySpan<int> unitIds)
+	{
+		int room = Math.Min(unitIds.Length, MaxUnitIds - _ids);
 		command.UnitsOffset = _ids;
 		command.UnitsCount = Math.Max(room, 0);
 

@@ -32,6 +32,7 @@ public static class WeaponCatalog
 		"res://Weapons/heavy/heavy.tres",       // 7 — deployed emplacement (M5)
 		"res://Weapons/turret/turret.tres",     // 8 — barracks gun
 		"res://Weapons/mortar/mortar.tres",     // 9 — barracks mortar
+		"res://Weapons/marksman/marksman.tres", // 10 — sniper tower
 	};
 
 	public const byte Hammer = 0;
@@ -67,6 +68,13 @@ public static class WeaponCatalog
 	/// answer to cover next to the door.
 	/// </summary>
 	public const byte Mortar = 9;
+
+	/// <summary>
+	/// The marksman in a sniper tower (docs/NETCODE.md §10.5): the DMR's round, one
+	/// every two seconds, from a belt with no bottom. Slow enough that a player who
+	/// has been seen has a moment to get behind something, and two hits to a kill.
+	/// </summary>
+	public const byte Marksman = 10;
 
 	/// <summary>The large-weapon choice a ground-force player makes before each spawn.</summary>
 	public static readonly byte[] LargeWeapons = { Dmr, Rifle, Launcher };

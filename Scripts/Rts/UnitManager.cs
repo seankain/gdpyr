@@ -154,6 +154,8 @@ public partial class UnitManager : Node
 		_unitsRoot = new Node3D { Name = "Units" };
 		AddChild(_unitsRoot);
 
+		ReadyStructures();
+
 		if (NetworkManager.Instance is { } net)
 		{
 			net.PeerJoined += OnPeerJoined;
@@ -185,6 +187,10 @@ public partial class UnitManager : Node
 		{
 			SimulateUnit(_ordered[i], tick);
 		}
+
+		// After the units, which counted the builders standing at each site, and
+		// before combat, so that a pillbox's round flies on the tick it was fired.
+		ServerStructures(tick);
 
 		Defenses.ServerTick(tick, CombatManager.Instance, GetTree()?.Root?.World3D?.DirectSpaceState);
 
@@ -370,10 +376,19 @@ public partial class UnitManager : Node
 			unit.TargetOwnerId = OwnerId.None;
 		}
 
+		// A builder with a site to work on works on it whenever it is in reach, and
+		// stands still to do it (docs/NETCODE.md §10.5). The structure counts it.
+		Structure site = unit.Order.Kind == OrderKind.Build ? ResolveBuildOrder(unit) : null;
+		bool working = site != null && Construction.InReach(site.Footprint, unit.GlobalPosition);
+		if (working)
+		{
+			site.Workers++;
+		}
+
 		Vector3 destination = UnitBrain.Destination(unit.Order, unit.GlobalPosition, hasTarget, targetPoint,
 			unit.Traits, out bool hasDestination);
 
-		float destinationDistance = hasDestination ? unit.GlobalPosition.DistanceTo(destination) : 0f;
+		float destinationDistance = hasDestination && !working ? unit.GlobalPosition.DistanceTo(destination) : 0f;
 
 		var situation = new UnitSituation(unit.IsAlive, unit.Order.Kind, hasTarget, targetDistance,
 			destinationDistance);
@@ -383,9 +398,10 @@ public partial class UnitManager : Node
 		UnitBrain.AdvancePatrol(ref unit.Order, arrived);
 
 		// A unit that stops to fight stops; one on a move order shoots on the walk.
-		bool holding = unit.State == UnitStateId.Engaging && UnitBrain.HoldsWhileEngaging(unit.Order.Kind);
+		bool holding = working
+			|| (unit.State == UnitStateId.Engaging && UnitBrain.HoldsWhileEngaging(unit.Order.Kind));
 		unit.Steer(destination, hasDestination && !holding, SimConfig.TickDelta);
-		unit.FaceTowards(hasTarget ? targetPoint : destination, SimConfig.TickDelta);
+		unit.FaceTowards(hasTarget ? targetPoint : working ? site.Pose.Base : destination, SimConfig.TickDelta);
 
 		ServerFire(unit, tick, hasTarget, targetPoint, targetVelocity);
 	}
@@ -1192,6 +1208,8 @@ public partial class UnitManager : Node
 			RpcId(peerId, MethodName.ServerBarracksState, i, (byte)Mathf.Min(queue.Count, byte.MaxValue),
 				queue.Head, (byte)0);
 		}
+
+		SendStructuresTo(peerId);
 	}
 
 	// ---- roster -------------------------------------------------------------
@@ -1246,6 +1264,7 @@ public partial class UnitManager : Node
 		}
 
 		Defenses.Reset();
+		ClearStructures();
 
 		UnitsProduced = 0;
 		UnitsLost = 0;
@@ -1335,6 +1354,10 @@ public partial class UnitManager : Node
 				+ " units will steer straight at their destination");
 			return;
 		}
+
+		// Kept, so that a structure finished or knocked down later can have the mesh
+		// re-baked around it (ServerNavigation).
+		_navigationRegion = region;
 
 		UnitDefinition infantry = UnitCatalog.Definition(UnitCatalog.Infantry);
 

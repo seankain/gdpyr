@@ -406,6 +406,9 @@ route, so there is no second behaviour to write.
 | `MatchState` (tickets, points) | S→C | Reliable | on change | ~22 B |
 | `ServerNodeState` | S→C | Reliable | 5 Hz per *changed* node | ~8 B |
 | `ServerGunState` / `ServerCanState` | S→C | Reliable | per transition | ~32 B / ~24 B |
+| `ServerSpawnStructure` / `ServerDespawnStructure` | S→C | Reliable | per structure per life | ~26 B / ~8 B |
+| `ServerStructureState` | S→C | Reliable | on a flag change, else 5 Hz while it changes | ~8 B |
+| `ClientConstruct` / `ClientAssist` | C→S | Reliable | per placement | ~24 B / ~8 B + 4 B/builder |
 | `ServerRoundSummary` (scoreboard) | S→C | Reliable | once per round | 16 B + 9 B/player |
 | `ServerRequestRoleChoice` | S→C | Reliable | per person per round | ~4 B |
 | `ClientSelectTeam` / `ClientSelectLoadout` | C→S | Reliable | per choice | ~4 B |
@@ -523,7 +526,7 @@ exists to be.
 
 ---
 
-## 10. Economy, emplacements, the scoreboard and barracks defences
+## 10. Economy, emplacements, the scoreboard, barracks defences and structures
 
 M5 added three things that are neither a per-tick sample nor a projectile, and all three are on the
 wire as **state**: sent when it changes, reliable, and absent the rest of the time.
@@ -692,6 +695,120 @@ Measured on the Test map (`Tests/Scenarios/barracks_defense.json`, `barracks_mor
 standing still 40 m in front of the door is hit 0.6 s after coming into view and dead at 0.87 s, three
 rounds of 45; one standing behind the arena wall, where neither gun can see, takes 82 from the first
 shell at 8.6 s and dies to the second at 12.6 s.
+
+### 10.5 Builders and structures
+
+Added so that the strategist can shape the ground rather than only fill it. §5 of the plan cut
+builder units from the first pass because capture-by-presence tests the economy with less code, and
+that is still how the economy works: a builder does not mine anything. It **puts up structures** —
+pillboxes, sandbag walls and sniper towers — that stop rounds, stop bodies, and, for the two with a
+gun, shoot.
+
+**The builder** is the fourth line in the unit catalog (`Units/builder.tres`, id 3): 60 points, six
+seconds at the barracks, 80 health, a rifleman's pace and a pistol. What makes it a builder is one
+flag, `UnitDefinition.CanConstruct`. It is not a tier — `UnitCatalog.Tiers` is still the three
+fighting units, which is what the computer strategist chooses its army from — and it costs more than
+a rifleman, so the "points below the cheapest unit" half of the defeat condition is unchanged.
+
+**The structures** are three resources (`Structures/*.tres`, `StructureCatalog`, ids in
+`StructureKinds`), and every number that decides how strong one is lives there:
+
+| | Pillbox | Sandbag wall | Sniper tower |
+|---|---|---|---|
+| cost, build time (one builder) | 150, 15 s | 25, 5 s | 125, 14 s |
+| health; share of a bullet it takes | 700; 0.25 | 400; 0.3 | 450; 0.5 |
+| boxes (across × deep × high) | 3.6 × 3.6 × 2.2 m | 4.0 × 0.8 × 1.1 m | 2 × 2 × 7 m column, 3.2 × 3.2 × 0.9 m cabin on it |
+| gun | `turret` (catalog 8): 45 m, 0.6 s reaction, 120°/s, 2° cone | — | `marksman` (catalog 10): the DMR round every 2 s, bottomless; 90 m, 1.2 s, 60°/s, 0.35° |
+| eyes | 50 m, from just outside each wall | none | 90 m, from over the parapet |
+
+Explosives do their whole damage to a structure and bullets a share of it
+(`Construction.DamageTaken`), which is what makes the launcher the answer to a pillbox and a rifle a
+poor one. The sniper tower's cabin hides the ground within about 12 m of its foot from the marksman —
+dead ground, and the way in.
+
+**Placing one.** With builders selected, `5`/`6`/`7` arm a pillbox, a wall or a tower the way `X`
+arms an attack-move, and the next right-click sends `ClientConstruct` (builders, kind, point, yaw).
+The yaw is the camera's, so a wall lies across the screen and `Q`/`E` are how one is turned. The
+server's `ApplyConstruct` answers every byte of it, in this order (`PlacementResult`): the sender is a
+strategist; the kind exists; at least one named unit is a live builder of theirs; there is a free
+slot of `SimConfig.MaxStructures` (32); the rectangle is on the map, clear of every standing
+structure (touching is allowed, so walls chain) and more than 10 m from a barracks door; the ground
+is found by a ray down, and the site is moved onto it; the navigation mesh comes within 1.5 m of the
+footprint, so a builder can reach it and it is not on a roof; and a box query finds nothing on the
+world layer where its boxes would go. Then it is **charged, on placement**, exactly as a unit is
+charged on the queue — a site is a commitment, and one knocked down before it is finished is not
+refunded. The builders get `OrderKind.Build`, which is deliberately not `IsIssuable` through the
+generic order message: it names a structure, so it has its own request with its own checks.
+
+**Building one.** Every builder standing within 2.5 m of the footprint adds one tick of work a tick,
+up to four (`Construction.Work`), so two builders take half as long. A site starts at 10% of its
+health and gains the rest with the work, so a site shot at while it goes up finishes as hurt as it
+was made. Until it is finished it is **not solid** and is only as tall as it has been built — the
+model and the analytic hit volume are both squashed by the same progress (`StructureShape.Raised`),
+so what you can see of a half-built wall is exactly what stops a round. When the last tick of work is
+in, it finishes only if **no ground-force body is standing in its footprint**: standing on a site is
+how the ground force keeps one from finishing, as standing on a node is how it keeps one from paying,
+and the strategist's HUD rings a held site in red. The strategist's own units are walked out of the
+footprint instead. Builders right-clicked onto a site finish it; onto a hurt structure, they mend it
+at half the build rate, for nothing — the price of a repair is a builder standing in the open.
+
+**Finished, it is part of the world.** A finished structure is a `StaticBody3D` on the world layer
+**on every peer**, so movement and a client's prediction of its own movement, every sight line (units,
+fog, defences, bots) and the projectile world ray all stop against it without being taught a new
+layer. Which structure a round hit is still decided analytically, against the same boxes grown by
+2 cm, so that the analytic answer wins a tie with the world ray at the same face and the round is
+credited. A round a structure's own side fires is stopped by it and never damages it. The navigation
+mesh is **re-baked on a thread** when a structure finishes or falls (`UnitManager.ServerNavigation`,
+requests folded while a bake is running); until the new mesh is swapped in, a unit may walk into a
+new wall and slide along it, which is the fallback every unit already has.
+
+**Its gun is a barracks gun.** The target selection, reaction, slew and fire that §10.4 describes now
+run over a small interface, `IGunPost`, which a `DefenseMount` and a `Structure` both implement; the
+only differences are where a post looks from and where its round leaves from. A pillbox does both
+through the slit in whichever wall faces the target (a sight line from the middle of a concrete box
+would start inside the concrete, and one from the roof would miss everybody standing close to it),
+and gives the fog four sensors, one outside each wall. A structure's rounds name it from a fourth
+range of the owner id's negative half: `OwnerId.ForStructure(slot)` is `-(65552 + slot)`, directly
+below the defences'.
+
+**On the wire:** three reliable messages, all state — `ServerSpawnStructure` (slot, kind, team, base,
+yaw; ~26 B, once per structure per life), `ServerStructureState` (health, progress, flags; ~8 B,
+sent at once when it is finished, knocked down or held up, because those change what a client
+collides with, and at 5 Hz while only its health or progress moves) and `ServerDespawnStructure` —
+plus `ClientConstruct` and `ClientAssist` the other way. Rounds are ordinary spawn records, and a
+client points the barrel from them, as for a defence. A knocked-down structure lies as rubble for
+three seconds before it is despawned. Structures, like defences, **count for nothing in the defeat
+condition**: a pillbox holds no ground and earns nothing, so a strategist with only concrete left
+has nothing left to play with.
+
+**The computer strategist** keeps one builder, bought once it has four fighting units, and fortifies
+the resource nodes — the ones it holds, then the neutral ones, nearest its barracks first — with a
+pillbox 6 m in front of the node towards the ground force's spawn, then a wall 10 m in front lying
+across that line, then a tower 7 m behind (`StrategistBrain.TryPlanStructure`, `Layout`). While a
+builder is idle with a structure planned that it cannot yet afford, the queue stops spending the
+structure's price (`StructureSavings`) — without that, the queue spends every point as it arrives
+and no pillbox is ever affordable. A refused placement is not asked for again for 30 s. **Ground bots**
+shoot the nearest hostile unit, and only when there is none the nearest structure with a gun — a
+rifle does a quarter of its damage to concrete, and a bot that preferred the pillbox would stand in
+front of it losing the argument.
+
+Measured on the Test map (`Tests/Scenarios/pillbox_fire.json`, `sniper_tower_reach.json`,
+`sandbag_cover.json`, `sandbag_absorbs.json`, `builder_fortifies.json`): a player standing 30 m from
+a pillbox is first hit 0.67 s after being put there and dead at 1.2 s, three rounds of 45, while one
+65 m away is untouched; a player 80 m from a tower is hit at 1.4 s and dead at 3.4 s, two rounds of
+60; a crouched player behind a sandbag wall is never fired on by a rifleman 30 m away while one
+crouched in the open is killed; thirty rifle rounds into a wall stop in it and do 6 each, not 20; and
+the computer strategist, alone on the map, buys its builder at 44 s, places a pillbox 6 m from node 3
+at 45 s, takes the node with the builder standing on it at 80 s and finishes the pillbox at 87 s. (Its
+first choice, node 2, is refused as blocked — a crate stands where the pillbox would go — and the
+30-second retry sends it to the next node, which is the refusal path working.) The re-bake that
+follows takes 1.07 s on the worker and 0.2 ms of the tick.
+
+**Not in it:** demos do not record structures (they are not in the unit snapshot, and a structure's
+messages are not journalled — [`DEMOS.md`](DEMOS.md) §6); the agent API's strategist observation has
+no structure block, so the schema is unchanged (a policy may build through `construct` but cannot
+see what it built, [`AGENT_API.md`](AGENT_API.md) §6.2); a hammer does not damage a structure; and
+one navigation mesh still serves every unit (§M5 of the plan).
 
 ---
 

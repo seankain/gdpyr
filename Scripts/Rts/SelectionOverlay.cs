@@ -70,6 +70,17 @@ public partial class SelectionOverlay : Control
 	private OrderKind _orderKind;
 	private float _orderAge = float.MaxValue;
 
+	private static readonly Color GhostColor = new(0.45f, 0.95f, 0.55f, 0.9f);
+	private static readonly Color BlockedGhostColor = new(1f, 0.35f, 0.3f, 0.9f);
+	private static readonly Color ProgressColor = new(1f, 0.85f, 0.35f);
+	private static readonly Color HealthColor = new(0.45f, 0.95f, 0.55f);
+	private static readonly Color BarBackColor = new(0f, 0f, 0f, 0.6f);
+
+	private bool _ghostActive;
+	private bool _ghostPlausible;
+	private Footprint _ghost;
+	private readonly Vector2[] _ghostScreen = new Vector2[5];
+
 	public override void _Ready()
 	{
 		MouseFilter = MouseFilterEnum.Ignore;
@@ -112,6 +123,18 @@ public partial class SelectionOverlay : Control
 		{
 			_contacts.Add(contacts[i]);
 		}
+	}
+
+	/// <summary>
+	/// The structure the next right-click will place, drawn where it would stand
+	/// (docs/NETCODE.md §10.5). <paramref name="plausible"/> is the client's guess;
+	/// the server has the last word.
+	/// </summary>
+	public void SetGhost(bool active, in Footprint footprint, bool plausible)
+	{
+		_ghostActive = active;
+		_ghost = footprint;
+		_ghostPlausible = plausible;
 	}
 
 	public void FlashOrder(Vector3 point, OrderKind kind)
@@ -162,6 +185,8 @@ public partial class SelectionOverlay : Control
 		}
 
 		DrawContacts();
+		DrawStructures();
+		DrawGhost();
 
 		if (_orderAge < OrderMarkerSeconds && TryScreen(_orderPoint, out Vector2 marker))
 		{
@@ -213,6 +238,68 @@ public partial class SelectionOverlay : Control
 			DrawRect(rect, color, filled: false, width: 1.5f);
 			DrawLine(rect.Position, rect.End, color, 1.5f);
 		}
+	}
+
+	/// <summary>
+	/// A bar over each of the strategist's structures that is going up or is hurt:
+	/// progress for a site, health for a finished one. A whole, finished structure
+	/// gets nothing, so the bars on screen are the ones that need a builder.
+	/// </summary>
+	private void DrawStructures()
+	{
+		UnitManager units = UnitManager.Instance;
+		for (int i = 0; units != null && i < SimConfig.MaxStructures; i++)
+		{
+			Structure structure = units.StructureAt(i);
+			if (structure == null || !IsInstanceValid(structure) || structure.IsDestroyed)
+			{
+				continue;
+			}
+
+			bool site = !structure.IsBuilt;
+			float fraction = site ? structure.Progress : structure.Health / Mathf.Max(structure.MaxHealth, 1f);
+			if (!site && fraction >= 0.999f)
+			{
+				continue;
+			}
+
+			Vector3 over = structure.Pose.Base + (Vector3.Up * (structure.Shape.Height + 1f));
+			if (!TryScreen(over, out Vector2 screen))
+			{
+				continue;
+			}
+
+			const float Width = 40f;
+			const float Height = 5f;
+			var back = new Rect2(screen - new Vector2(Width * 0.5f, Height * 0.5f), new Vector2(Width, Height));
+			DrawRect(back, BarBackColor);
+			DrawRect(new Rect2(back.Position, new Vector2(Width * Mathf.Clamp(fraction, 0f, 1f), Height)),
+				site ? ProgressColor : HealthColor);
+
+			if (structure.IsObstructed)
+			{
+				DrawRect(back.Grow(2f), BlockedGhostColor, filled: false, width: 1.5f);
+			}
+		}
+	}
+
+	private void DrawGhost()
+	{
+		if (!_ghostActive)
+		{
+			return;
+		}
+
+		for (int i = 0; i < 4; i++)
+		{
+			if (!TryScreen(_ghost.Corner(i), out _ghostScreen[i]))
+			{
+				return;
+			}
+		}
+
+		_ghostScreen[4] = _ghostScreen[0];
+		DrawPolyline(_ghostScreen, _ghostPlausible ? GhostColor : BlockedGhostColor, 2f);
 	}
 
 	private bool TryScreen(Vector3 world, out Vector2 screen)

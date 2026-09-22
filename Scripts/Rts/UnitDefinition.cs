@@ -95,6 +95,14 @@ public partial class UnitDefinition : Resource
 	[Export]
 	public float AccuracyConeDegrees = 2.5f;
 
+	/// <summary>
+	/// Whether it can put up structures (docs/NETCODE.md §10.5). The builder's one
+	/// trait: a flag rather than a tier, because what makes a builder different is
+	/// what it may be ordered to do, not how hard it is to kill.
+	/// </summary>
+	[Export]
+	public bool CanConstruct;
+
 	[ExportCategory("Presentation")]
 
 	[Export]

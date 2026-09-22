@@ -628,6 +628,26 @@ public sealed class GdpyrConnection : IDisposable
 		return response.GetProperty("unit").GetInt32();
 	}
 
+	/// <summary>
+	/// Puts a finished structure on the map, free (docs/AGENT_API.md §9.1): a
+	/// pillbox, a sandbag wall or a sniper tower, by name or by catalog index.
+	/// Returns its slot; the server refuses one that does not fit where it was put.
+	/// </summary>
+	public async Task<int> SpawnStructureAsync(string structure, string team, float[] at, float yaw,
+		CancellationToken cancel = default)
+	{
+		JsonElement response = await RequestAsync(writer =>
+		{
+			writer.WriteString("op", "spawn");
+			writer.WriteString("structure", structure ?? "pillbox");
+			writer.WriteString("team", team ?? "strategist");
+			writer.WriteNumber("yaw", yaw);
+			WriteVector(writer, "at", at);
+		}, cancel).ConfigureAwait(false);
+
+		return response.GetProperty("structure").GetInt32();
+	}
+
 	private static void WriteVector(Utf8JsonWriter writer, string name, float[] values)
 	{
 		writer.WriteStartArray(name);

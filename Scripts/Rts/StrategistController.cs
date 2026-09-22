@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Gdpyr.Core;
 using Gdpyr.Fps;
@@ -66,6 +67,21 @@ public partial class StrategistController : Node3D
 	/// <summary>What the next right-click means. Reset to Move after each order is given.</summary>
 	private OrderKind _pendingOrder = OrderKind.Move;
 
+	/// <summary>No structure armed: the next right-click is an order.</summary>
+	private const byte NotPlacing = byte.MaxValue;
+
+	/// <summary>
+	/// The structure the next right-click puts up, or <see cref="NotPlacing"/>
+	/// (docs/NETCODE.md §10.5). Armed by 5/6/7 the way X/C/B arm an order, and spent
+	/// by one placement for the same reason: a key that stayed armed would turn the
+	/// next move order into a pillbox.
+	/// </summary>
+	private byte _placing = NotPlacing;
+
+	/// <summary>Scratch for the client's own guess at whether a site is clear. Rebuilt per frame while placing.</summary>
+	private readonly Footprint[] _footprints = new Footprint[SimConfig.MaxStructures];
+	private readonly Vector3[] _doors = new Vector3[SimConfig.MaxBarracks];
+
 	public override void _Ready()
 	{
 		// The camera stops when the pause menu is up, unlike the netcode: this is the
@@ -99,6 +115,8 @@ public partial class StrategistController : Node3D
 		{
 			_hud.Overlay.SetDrag(true, _dragFrom, GetViewport().GetMousePosition());
 		}
+
+		UpdateGhost();
 	}
 
 	/// <summary>Called once per simulation tick by the combat manager, which owns this node.</summary>
@@ -110,6 +128,8 @@ public partial class StrategistController : Node3D
 		{
 			RefreshContacts(combat, tick);
 			_hud.Refresh(combat.Match, UnitManager.Instance, tick, _selected.Count, _pendingOrder, combat.Economy);
+			_hud.RefreshBuilders(UnitManager.Instance, combat.Local?.Team ?? Team.Strategist, _placing,
+				CountSelectedBuilders());
 		}
 	}
 
@@ -121,14 +141,18 @@ public partial class StrategistController : Node3D
 			return;
 		}
 
-		if (@event.IsActionPressed("rts_order_attack")) { _pendingOrder = OrderKind.Attack; }
-		else if (@event.IsActionPressed("rts_order_patrol")) { _pendingOrder = OrderKind.Patrol; }
-		else if (@event.IsActionPressed("rts_order_defend")) { _pendingOrder = OrderKind.Defend; }
-		else if (@event.IsActionPressed("rts_order_stop")) { IssueOrder(OrderKind.Stop, Vector3.Zero, OwnerId.None); }
+		if (@event.IsActionPressed("rts_order_attack")) { Arm(OrderKind.Attack); }
+		else if (@event.IsActionPressed("rts_order_patrol")) { Arm(OrderKind.Patrol); }
+		else if (@event.IsActionPressed("rts_order_defend")) { Arm(OrderKind.Defend); }
+		else if (@event.IsActionPressed("rts_order_stop")) { _placing = NotPlacing; IssueOrder(OrderKind.Stop, Vector3.Zero, OwnerId.None); }
 		else if (@event.IsActionPressed("rts_select_all")) { SelectAll(); }
 		else if (@event.IsActionPressed("rts_build_infantry")) { UnitManager.Instance?.RequestBuild(0, UnitCatalog.Infantry); }
 		else if (@event.IsActionPressed("rts_build_technical")) { UnitManager.Instance?.RequestBuild(0, UnitCatalog.Technical); }
 		else if (@event.IsActionPressed("rts_build_tank")) { UnitManager.Instance?.RequestBuild(0, UnitCatalog.Tank); }
+		else if (@event.IsActionPressed("rts_build_builder")) { UnitManager.Instance?.RequestBuild(0, UnitCatalog.Builder); }
+		else if (@event.IsActionPressed("rts_place_pillbox")) { ArmPlacement(StructureKinds.Pillbox); }
+		else if (@event.IsActionPressed("rts_place_sandbags")) { ArmPlacement(StructureKinds.SandbagWall); }
+		else if (@event.IsActionPressed("rts_place_tower")) { ArmPlacement(StructureKinds.SniperTower); }
 		else if (@event.IsActionPressed("rts_cancel_build")) { UnitManager.Instance?.RequestCancelBuild(0); }
 		else
 		{
@@ -406,6 +430,19 @@ public partial class StrategistController : Node3D
 			return;
 		}
 
+		if (_placing != NotPlacing)
+		{
+			PlaceAtCursor(point);
+			return;
+		}
+
+		// Builders right-clicked onto one of their own side's structures go and work
+		// on it: finish it if it is a site, mend it if it is hurt.
+		if (TryAssistAtCursor())
+		{
+			return;
+		}
+
 		OrderKind kind = _pendingOrder;
 		int targetOwnerId = OwnerId.None;
 
@@ -459,6 +496,164 @@ public partial class StrategistController : Node3D
 		// One order per modifier press: leaving attack-move armed is how a retreat
 		// becomes a charge.
 		_pendingOrder = OrderKind.Move;
+	}
+
+	// ---- builders (docs/NETCODE.md §10.5) -------------------------------------
+
+	/// <summary>Arms an order for the next right-click, which disarms any structure.</summary>
+	private void Arm(OrderKind kind)
+	{
+		_pendingOrder = kind;
+		_placing = NotPlacing;
+	}
+
+	/// <summary>
+	/// Arms a structure for the next right-click. The same key again puts it away,
+	/// which is the only way out of placement besides Z and a placement.
+	/// </summary>
+	private void ArmPlacement(byte kind)
+	{
+		_placing = _placing == kind ? NotPlacing : kind;
+		_pendingOrder = OrderKind.Move;
+	}
+
+	/// <summary>
+	/// Sends the selected builders to put the armed structure up at
+	/// <paramref name="point"/>, facing the way the camera is turned: a wall lies
+	/// across the screen, so Q and E are how one is turned. Everything else about
+	/// whether it fits is the server's to say.
+	/// </summary>
+	private void PlaceAtCursor(Vector3 point)
+	{
+		int[] builders = SelectedBuilderIds();
+		if (builders.Length == 0)
+		{
+			// Nothing to build it with: stay armed, so selecting a builder and
+			// clicking again is all it takes.
+			return;
+		}
+
+		UnitManager.Instance?.RequestConstruct(builders, _placing, point, _yaw);
+		_hud.Overlay.FlashOrder(point, OrderKind.Defend);
+		_placing = NotPlacing;
+	}
+
+	/// <summary>Builders in the selection, onto a site or a hurt structure of their own side under the cursor.</summary>
+	private bool TryAssistAtCursor()
+	{
+		PruneSelection();
+		if (CountSelectedBuilders() == 0)
+		{
+			return false;
+		}
+
+		Structure structure = PickStructure(GetViewport().GetMousePosition(),
+			CombatManager.Instance?.Local?.Team ?? Team.Strategist);
+		if (structure == null || (structure.IsBuilt && structure.Health >= structure.MaxHealth))
+		{
+			return false;
+		}
+
+		UnitManager.Instance?.RequestAssist(SelectedBuilderIds(), structure.Slot);
+		_hud.Overlay.FlashOrder(structure.Pose.Base, OrderKind.Defend);
+		return true;
+	}
+
+	private int CountSelectedBuilders()
+	{
+		int count = 0;
+		for (int i = 0; i < _selected.Count; i++)
+		{
+			Unit unit = _selected[i];
+			if (unit != null && IsInstanceValid(unit) && unit.IsAlive && UnitCatalog.CanConstruct(unit.DefinitionId))
+			{
+				count++;
+			}
+		}
+		return count;
+	}
+
+	private int[] SelectedBuilderIds()
+	{
+		var ids = new int[CountSelectedBuilders()];
+		int at = 0;
+		for (int i = 0; i < _selected.Count && at < ids.Length; i++)
+		{
+			Unit unit = _selected[i];
+			if (unit != null && IsInstanceValid(unit) && unit.IsAlive && UnitCatalog.CanConstruct(unit.DefinitionId))
+			{
+				ids[at++] = unit.UnitId;
+			}
+		}
+		return ids;
+	}
+
+	/// <summary>
+	/// Draws the armed structure where the cursor is, green where the flat rules
+	/// allow it and red where they do not. A guess: the server also asks the world
+	/// whether anything is in the way and whether a builder can walk there, which a
+	/// client could answer only with a navigation mesh it does not have.
+	/// </summary>
+	private void UpdateGhost()
+	{
+		if (_placing == NotPlacing || _dragging || !TryGroundPoint(out Vector3 point))
+		{
+			_hud.Overlay.SetGhost(false, default, false);
+			return;
+		}
+
+		StructureShape shape = StructureCatalog.ShapeOf(_placing);
+		Footprint ghost = new StructurePose(point, _yaw).FootprintOf(shape);
+
+		UnitManager units = UnitManager.Instance;
+		int existing = 0;
+		for (int i = 0; units != null && i < SimConfig.MaxStructures; i++)
+		{
+			if (units.StructureAt(i) is { IsDestroyed: false } structure)
+			{
+				_footprints[existing++] = structure.Footprint;
+			}
+		}
+
+		int doors = 0;
+		for (int i = 0; units != null && i < units.BarracksCount && doors < _doors.Length; i++)
+		{
+			_doors[doors++] = units.BarracksAt(i).SpawnPosition;
+		}
+
+		bool clear = StructurePlacement.Check(ghost, _footprints.AsSpan(0, existing), _doors.AsSpan(0, doors))
+			== PlacementResult.Ok;
+		bool affordable = CombatManager.Instance is not { } combat
+			|| combat.Match.StrategistPoints >= StructureCatalog.CostOf(_placing);
+
+		_hud.Overlay.SetGhost(true, ghost, clear && affordable && CountSelectedBuilders() > 0);
+	}
+
+	/// <summary>The structure of <paramref name="team"/>'s under the cursor, if any.</summary>
+	private Structure PickStructure(Vector2 screen, Team team)
+	{
+		UnitManager units = UnitManager.Instance;
+		Structure best = null;
+		float bestDistance = PickRadiusPixels * 1.5f;
+
+		for (int i = 0; units != null && i < SimConfig.MaxStructures; i++)
+		{
+			Structure structure = units.StructureAt(i);
+			if (structure == null || !IsInstanceValid(structure) || structure.IsDestroyed || structure.Team != team
+				|| !TryScreen(structure.AimPoint, out Vector2 at))
+			{
+				continue;
+			}
+
+			float distance = at.DistanceTo(screen);
+			if (distance < bestDistance)
+			{
+				bestDistance = distance;
+				best = structure;
+			}
+		}
+
+		return best;
 	}
 
 	// ---- picking -----------------------------------------------------------

@@ -59,6 +59,40 @@ public class ScenarioTests
 	}
 
 	[Fact]
+	public void ASpawnCanPutUpAStructureFacingAWay()
+	{
+		Scenario scenario = Scenario.Parse("""
+			{
+			  "spawns": [ { "structure": "sandbag_wall", "at": [-60, 0.5, 50], "yaw": 1.5 } ],
+			  "assert": [ { "metric": "events.damage.count", "op": ">=", "value": 1 } ]
+			}
+			""");
+
+		ScenarioSpawn spawn = Assert.Single(scenario.Spawns);
+		Assert.Equal("sandbag_wall", spawn.Structure);
+		Assert.Null(spawn.Unit);
+		Assert.Null(spawn.Peer);
+		Assert.Equal(1.5f, spawn.Yaw);
+		Assert.Equal("strategist", spawn.Team);
+	}
+
+	[Theory]
+	[InlineData("""{ "at": [0, 0, 0] }""")]
+	[InlineData("""{ "unit": "infantry", "structure": "pillbox" }""")]
+	[InlineData("""{ "peer": "agent0", "unit": "infantry" }""")]
+	public void ASpawnNamesExactlyOneThing(string spawn)
+	{
+		var error = Assert.Throws<ScenarioException>(() => Scenario.Parse($$"""
+			{
+			  "spawns": [ {{spawn}} ],
+			  "assert": [ { "metric": "events.kill.count", "op": ">=", "value": 1 } ]
+			}
+			"""));
+
+		Assert.Contains("exactly one", error.Message);
+	}
+
+	[Fact]
 	public void ASweepIsASeedsArrayAndASingleRunIsASeed()
 	{
 		Assert.Equal(new[] { 7, 11, 13 }, Scenario.Parse("""

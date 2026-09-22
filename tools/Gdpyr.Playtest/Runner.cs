@@ -366,6 +366,22 @@ public sealed class Runner
 	{
 		foreach (ScenarioSpawn spawn in scenario.Spawns)
 		{
+			if (spawn.Structure != null)
+			{
+				int slot = await _connection.SpawnStructureAsync(spawn.Structure, spawn.Team, spawn.At, spawn.Yaw,
+					cancel).ConfigureAwait(false);
+
+				Trace(trace, _connection.Tick, "spawn", writer =>
+				{
+					writer.WriteString("structure", spawn.Structure);
+					writer.WriteString("team", spawn.Team);
+					writer.WriteNumber("slot", slot);
+					writer.WriteNumber("yaw", spawn.Yaw);
+					WriteVector(writer, "at", spawn.At);
+				});
+				continue;
+			}
+
 			if (spawn.Unit != null)
 			{
 				int unit = await _connection.SpawnUnitAsync(spawn.Unit, spawn.Team, spawn.At, spawn.Order,

@@ -138,6 +138,23 @@ public sealed class BuildQueue
 	/// <summary>The definition at the head, or 0 when nothing is queued.</summary>
 	public byte Head => _count > 0 ? _definitions[0] : (byte)0;
 
+	/// <summary>
+	/// How many of one kind are on the queue. The computer strategist asks it about
+	/// builders, so that a builder already in the oven is not bought twice.
+	/// </summary>
+	public int CountOf(byte definitionId)
+	{
+		int found = 0;
+		for (int i = 0; i < _count; i++)
+		{
+			if (_definitions[i] == definitionId)
+			{
+				found++;
+			}
+		}
+		return found;
+	}
+
 	public void Clear()
 	{
 		_count = 0;

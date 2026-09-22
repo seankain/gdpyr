@@ -126,6 +126,15 @@ public sealed class ScenarioSpawn
 	/// <summary>The unit tier to place. Null for a seat placement.</summary>
 	public string Unit;
 
+	/// <summary>
+	/// A structure to place, finished and free — <c>pillbox</c>, <c>sandbag_wall</c>,
+	/// <c>sniper_tower</c> (docs/NETCODE.md §10.5). Null for anything else.
+	/// </summary>
+	public string Structure;
+
+	/// <summary>Which way a structure faces [rad]: its front, and for a wall its broad side, towards +Z at 0.</summary>
+	public float Yaw;
+
 	public string Team = "strategist";
 
 	public string Order = "none";
@@ -444,16 +453,20 @@ public sealed class Scenario
 			{
 				Peer = Text(element, "peer", null),
 				Unit = Text(element, "unit", null),
+				Structure = Text(element, "structure", null),
+				Yaw = (float)Number(element, "yaw", 0.0),
 				Team = Text(element, "team", "strategist"),
 				Order = Text(element, "order", "none"),
 				At = Numbers(element, "at", new[] { 0f, 0f, 0f }),
 				Look = Numbers(element, "look", new[] { 0f, 0f }),
 			};
 
-			if (spawn.Peer == null && spawn.Unit == null)
+			int named = (spawn.Peer != null ? 1 : 0) + (spawn.Unit != null ? 1 : 0) + (spawn.Structure != null ? 1 : 0);
+			if (named != 1)
 			{
 				throw new ScenarioException(
-					$"'{scenario.Name}': a spawn names either a 'peer' (a seat to place) or a 'unit'");
+					$"'{scenario.Name}': a spawn names exactly one of a 'peer' (a seat to place), a 'unit'"
+					+ " or a 'structure'");
 			}
 
 			scenario.Spawns.Add(spawn);

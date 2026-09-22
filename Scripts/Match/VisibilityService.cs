@@ -50,7 +50,7 @@ public sealed class VisibilityService
 		public bool Known;
 	}
 
-	private readonly VisionField _sensors = new(SimConfig.MaxUnits);
+	private readonly VisionField _sensors = new(SimConfig.MaxUnits + (SimConfig.MaxStructures * 4));
 	private readonly Dictionary<int, Contact> _contacts = new();
 	private readonly int[] _candidates = new int[SimConfig.FogLineOfSightCandidates];
 	private readonly Func<Vector3, Vector3, bool> _lineOfSight;
@@ -213,9 +213,11 @@ public sealed class VisibilityService
 	}
 
 	/// <summary>
-	/// The strategist's eyes: every unit it has alive on the field. Barracks do not
-	/// see — a side with no units is blind on purpose, because that is what makes
-	/// building one a decision (docs/IMPLEMENTATION_PLAN.md §M4).
+	/// The strategist's eyes: every unit it has alive on the field, and every
+	/// finished structure that has eyes of its own — a pillbox's periscope, a
+	/// tower's marksman (docs/NETCODE.md §10.5). Barracks do not see — a side with
+	/// no units is blind on purpose, because that is what makes building one a
+	/// decision (docs/IMPLEMENTATION_PLAN.md §M4) — and a sandbag wall sees nothing.
 	/// </summary>
 	private void BuildSensors(UnitManager units)
 	{
@@ -232,6 +234,21 @@ public sealed class VisibilityService
 			// From the eye rather than the feet, so the ray below leaves from the same
 			// place the unit's own target acquisition does.
 			_sensors.Add(unit.EyePosition, unit.Traits.SensorRadiusMeters);
+		}
+
+		for (int i = 0; units != null && i < SimConfig.MaxStructures; i++)
+		{
+			Structure structure = units.StructureAt(i);
+			if (structure == null || !structure.IsBuilt || structure.IsDestroyed || structure.Team != Team.Strategist)
+			{
+				continue;
+			}
+
+			float radius = structure.Definition?.SensorRadiusMeters ?? 0f;
+			for (int s = 0; s < structure.SensorCount; s++)
+			{
+				_sensors.Add(structure.SensorAt(s), radius);
+			}
 		}
 	}
 

@@ -611,6 +611,17 @@ public sealed partial class AgentServer
 				list.Add(command);
 				break;
 
+			case "construct":
+				// The builders to send, the structure by name or index, where, and
+				// which way it faces (docs/NETCODE.md §10.5).
+				command.Kind = AgentCommandKind.Construct;
+				command.Structure = StructureKind(Text(element, "structure", "pillbox"));
+				command.Yaw = element.TryGetProperty("yaw", out JsonElement yaw) && yaw.TryGetDouble(out double radians)
+					? (float)radians
+					: 0f;
+				list.AddWithUnits(command, UnitIds(element));
+				break;
+
 			case "noop":
 				command.Kind = AgentCommandKind.Noop;
 				list.Add(command);
@@ -938,6 +949,12 @@ public sealed partial class AgentServer
 
 		var where = new Vector3(x, y, z);
 
+		if (root.TryGetProperty("structure", out JsonElement _))
+		{
+			SpawnStructure(session, correlation, root, where);
+			return;
+		}
+
 		if (root.TryGetProperty("unit", out JsonElement _))
 		{
 			UnitManager units = UnitManager.Instance;
@@ -1009,8 +1026,65 @@ public sealed partial class AgentServer
 		"infantry" or "rifleman" or "0" => UnitCatalog.Infantry,
 		"technical" or "1" => UnitCatalog.Technical,
 		"tank" or "2" => UnitCatalog.Tank,
+		"builder" or "3" => UnitCatalog.Builder,
 		_ => UnitCatalog.Infantry,
 	};
+
+	/// <summary>
+	/// A structure by the name the schema publishes, or by catalog index; 255 for
+	/// anything else, which the server refuses rather than guessing at.
+	/// </summary>
+	private static byte StructureKind(string name)
+	{
+		for (int i = 0; i < AgentJson.StructureNames.Length; i++)
+		{
+			if (name == AgentJson.StructureNames[i] || name == i.ToString(System.Globalization.CultureInfo.InvariantCulture))
+			{
+				return (byte)i;
+			}
+		}
+
+		return byte.MaxValue;
+	}
+
+	/// <summary>
+	/// Puts a finished structure on the map for a scenario, free and without a
+	/// builder (docs/AGENT_API.md §9.1, docs/NETCODE.md §10.5). The structure half
+	/// of the unit spawn above, and as narrow.
+	/// </summary>
+	private void SpawnStructure(AgentSession session, uint correlation, JsonElement root, Vector3 where)
+	{
+		UnitManager units = UnitManager.Instance;
+		if (units == null)
+		{
+			session.SendError(correlation, "no_round", "this process has no unit manager");
+			return;
+		}
+
+		string name = Text(root, "structure", "pillbox");
+		byte kind = StructureKind(name);
+		Team team = Text(root, "team", "strategist") == "ground" ? Team.GroundForce : Team.Strategist;
+		float yaw = root.TryGetProperty("yaw", out JsonElement value) && value.TryGetDouble(out double read)
+			? (float)read
+			: 0f;
+
+		int slot = units.ServerPlaceStructure(kind, where, yaw, team, out PlacementResult result);
+		if (slot < 0)
+		{
+			session.SendError(correlation, "structure_refused",
+				$"no {name} at ({where.X:0.#}, {where.Z:0.#}): {StructurePlacement.Describe(result)}");
+			return;
+		}
+
+		session.SendJson(AgentFrameKind.Response, correlation, writer =>
+		{
+			writer.WriteString("op", "spawned");
+			writer.WriteNumber("structure", slot);
+			writer.WriteNumber("owner", OwnerId.ForStructure(slot));
+			writer.WriteString("kind", AgentJson.StructureNames[kind]);
+			writer.WriteString("team", team == Team.Strategist ? "strategist" : "ground");
+		});
+	}
 
 	private void Events(AgentSession session, uint correlation, JsonElement root)
 	{

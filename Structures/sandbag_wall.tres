@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="StructureDefinition" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Rts/StructureDefinition.cs" id="1_structdef"]
+
+[resource]
+script = ExtResource("1_structdef")
+Name = &"sandbag_wall"
+Cost = 25
+BuildSeconds = 5.0
+MaxHealth = 400.0
+BulletDamageScale = 0.3
+BodySize = Vector3(4.0, 1.1, 0.8)
+TopSize = Vector3(0, 0, 0)
+TopElevationMeters = 0.0
+SensorRadiusMeters = 0.0
+EyeHeightMeters = 1.1
+WeaponId = -1
+Color = Color(0.62, 0.55, 0.38, 1)

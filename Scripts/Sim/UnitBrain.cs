@@ -116,7 +116,8 @@ public static class UnitBrain
 	/// A move order is "be over there"; interrupting it to fight is how an RTS
 	/// player loses a flank they had already paid for. An attack-move is the order
 	/// that means "stop for anything you meet", and is what the strategist is meant
-	/// to reach for when they want a firefight.
+	/// to reach for when they want a firefight. A builder sent to a site keeps
+	/// walking for the same reason a move order does: getting there is the order.
 	/// </summary>
 	public static bool HoldsWhileEngaging(OrderKind order) =>
 		order is OrderKind.None or OrderKind.Attack or OrderKind.Defend;
@@ -144,6 +145,12 @@ public static class UnitBrain
 
 			case OrderKind.Patrol:
 				return order.Returning ? order.Anchor : order.Target;
+
+			case OrderKind.Build:
+				// Where it was sent to stand, next to the site. Whether it is close enough
+				// to work is measured from the structure's edge by whoever knows where the
+				// structure is (Construction.InReach), not from this point.
+				return order.Target;
 
 			case OrderKind.Defend:
 				// Chases only as far as the leash, then goes home. Without this a probe

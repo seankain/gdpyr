@@ -279,6 +279,11 @@ Stated rather than discovered:
   the recorded unit snapshots. The strategist's orders are not journalled — they arrive as their own
   RPCs rather than as an `InputFrame`, so the one place §4.1 hooks does not see them — and until
   they are, re-simulating the round would produce an army that never got built.
+- **Structures are not in a demo at all.** Pillboxes, sandbag walls and sniper towers
+  ([`NETCODE.md`](NETCODE.md) §10.5) are not in the unit snapshot and their three messages are not
+  journalled, so a replay shows builders working on nothing and riflemen crouching behind thin air.
+  Recording `ServerSpawnStructure` / `ServerStructureState` / `ServerDespawnStructure` as three more
+  record tags is the fix, and it is a demo version bump.
 - **No scrubbing.** A demo is read forwards. Seeking backwards means either keeping every keyframe
   in memory or re-reading from the start, and neither is worth doing before somebody wants it.
 - **No round-trip test.** The format is tested end to end over a `MemoryStream`

@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="UnitDefinition" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Rts/UnitDefinition.cs" id="1_unitdef"]
+
+[resource]
+script = ExtResource("1_unitdef")
+Name = &"builder"
+Cost = 60
+BuildSeconds = 6.0
+MaxHealth = 80.0
+MoveSpeed = 4.5
+HeightMeters = 1.7
+RadiusMeters = 0.4
+EyeHeightMeters = 1.4
+SensorRadiusMeters = 35.0
+EngageRangeMeters = 20.0
+LeashRadiusMeters = 15.0
+ArrivalRadiusMeters = 1.0
+WeaponId = 1
+AccuracyConeDegrees = 4.0
+CanConstruct = true
+Color = Color(0.95, 0.8, 0.25, 1)

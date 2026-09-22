@@ -269,7 +269,7 @@ public sealed class EpisodeMetrics
 	public static readonly HashSet<string> AgentEventKinds = new(StringComparer.Ordinal)
 	{
 		"round_start", "round_end", "kill", "damage", "unit_built", "unit_lost", "node_captured",
-		"seat_attached", "seat_released",
+		"seat_attached", "seat_released", "structure_placed", "structure_built", "structure_lost",
 	};
 
 	private bool TryRead(string name, string aggregate, out double value, out uint tick)

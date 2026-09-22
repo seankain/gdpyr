@@ -1,4 +1,5 @@
 using System;
+using Godot;
 
 namespace Gdpyr.Sim;
 
@@ -32,14 +33,26 @@ public readonly struct StrategistTraits
 	/// </summary>
 	public readonly int InfantryPerHeavy;
 
+	/// <summary>Builders it keeps on the field (docs/NETCODE.md §10.5). Zero is a strategist that never builds.</summary>
+	public readonly int Builders;
+
+	/// <summary>
+	/// Fighting units it wants on the field before it pays for a builder. A builder
+	/// is the one unit that applies no pressure, and a strategist that opens with
+	/// one has spent its first sixty points on not playing.
+	/// </summary>
+	public readonly int UnitsBeforeBuilders;
+
 	public StrategistTraits(int decisionIntervalTicks, int queueDepth, int garrisonUnits,
-		float reorderRadiusMeters, int infantryPerHeavy = 3)
+		float reorderRadiusMeters, int infantryPerHeavy = 3, int builders = 1, int unitsBeforeBuilders = 4)
 	{
 		DecisionIntervalTicks = Math.Max(decisionIntervalTicks, 1);
 		QueueDepth = Math.Max(queueDepth, 0);
 		GarrisonUnits = Math.Max(garrisonUnits, 0);
 		ReorderRadiusMeters = MathF.Max(reorderRadiusMeters, 0.1f);
 		InfantryPerHeavy = Math.Max(infantryPerHeavy, 0);
+		Builders = Math.Max(builders, 0);
+		UnitsBeforeBuilders = Math.Max(unitsBeforeBuilders, 0);
 	}
 
 	/// <summary>
@@ -184,4 +197,129 @@ public static class StrategistBrain
 
 		return costs[0] > 0 && balance >= costs[0];
 	}
+
+	// ---- builders and structures (docs/NETCODE.md §10.5) --------------------
+
+	/// <summary>
+	/// Whether to put a builder on a queue: it has fewer than it wants, counting the
+	/// ones already queued, and enough of an army out that the sixty points are not
+	/// its only pressure.
+	/// </summary>
+	public static bool ShouldQueueBuilder(int balance, int cost, int builders, int queuedBuilders, int fightingUnits,
+		in StrategistTraits traits) =>
+		cost > 0 && balance >= cost
+		&& builders + queuedBuilders < traits.Builders
+		&& fightingUnits >= traits.UnitsBeforeBuilders;
+
+	/// <summary>
+	/// Points to hold back from the army for a structure: the whole of its cost while
+	/// a builder is standing idle waiting to put it up, and only while the army is
+	/// already <see cref="StrategistTraits.UnitsBeforeBuilders"/> strong.
+	///
+	/// Without it a builder never builds anything: the queue spends every point the
+	/// moment it arrives (<see cref="ShouldQueue"/>), so the balance never reaches
+	/// the price of a pillbox. With it the army stops growing for the few seconds it
+	/// takes to save up — and never while the army is short, because a strategist
+	/// buying concrete with nobody to stand behind it has stopped applying pressure.
+	/// </summary>
+	public static int StructureSavings(int structureCost, bool builderWaiting, int fightingUnits,
+		in StrategistTraits traits) =>
+		builderWaiting && structureCost > 0 && fightingUnits >= traits.UnitsBeforeBuilders ? structureCost : 0;
+
+	/// <summary>
+	/// What to build next and at which of <paramref name="sites"/>: a pillbox at the
+	/// first site without one, then a wall in front of the first pillbox without one,
+	/// then a tower behind it. Sites are in the caller's order of importance, so the
+	/// first one fortified is the one the caller cares most about. False when every
+	/// site has all three.
+	/// </summary>
+	public static bool TryPlanStructure(ReadOnlySpan<FortificationSite> sites, out int site, out byte kind)
+	{
+		site = -1;
+		kind = StructureKinds.Pillbox;
+
+		for (int i = 0; i < sites.Length; i++)
+		{
+			if (!sites[i].HasPillbox)
+			{
+				site = i;
+				kind = StructureKinds.Pillbox;
+				return true;
+			}
+		}
+
+		for (int i = 0; i < sites.Length; i++)
+		{
+			if (!sites[i].HasWall)
+			{
+				site = i;
+				kind = StructureKinds.SandbagWall;
+				return true;
+			}
+		}
+
+		for (int i = 0; i < sites.Length; i++)
+		{
+			if (!sites[i].HasTower)
+			{
+				site = i;
+				kind = StructureKinds.SniperTower;
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/// <summary>
+	/// Where a structure of <paramref name="kind"/> goes at a site, and which way it
+	/// faces: the pillbox forward of the anchor towards the threat, the wall further
+	/// forward and lying across the line, the tower behind — so the wall screens the
+	/// pillbox and the tower sees over both.
+	/// </summary>
+	public static void Layout(Vector3 anchor, Vector3 threat, byte kind, out Vector3 at, out float yaw)
+	{
+		Vector3 towards = threat - anchor;
+		towards.Y = 0f;
+		Vector3 forward = towards.LengthSquared() > 1e-4f ? towards.Normalized() : Vector3.Back;
+
+		float offset = kind switch
+		{
+			StructureKinds.Pillbox => PillboxForwardMeters,
+			StructureKinds.SandbagWall => WallForwardMeters,
+			_ => -TowerBackMeters,
+		};
+
+		at = anchor + (forward * offset);
+		yaw = StructurePlacement.YawFacing(anchor, anchor + forward);
+	}
+
+	/// <summary>How far in front of the anchor a pillbox goes [m].</summary>
+	public const float PillboxForwardMeters = 6f;
+
+	/// <summary>How far in front of the anchor its wall goes: clear of the pillbox, close enough to screen it [m].</summary>
+	public const float WallForwardMeters = 10f;
+
+	/// <summary>How far behind the anchor the tower goes [m].</summary>
+	public const float TowerBackMeters = 7f;
+
+	/// <summary>How near a structure must be to a site to count as that site's.</summary>
+	public const float SiteRadiusMeters = 16f;
+}
+
+/// <summary>
+/// One place the computer strategist means to fortify — a resource node it holds —
+/// and what already stands there (docs/NETCODE.md §10.5).
+/// </summary>
+public struct FortificationSite
+{
+	/// <summary>What is being fortified.</summary>
+	public Vector3 Anchor;
+
+	/// <summary>Where the fire is expected from: the ground force's spawn.</summary>
+	public Vector3 Threat;
+
+	public bool HasPillbox;
+	public bool HasWall;
+	public bool HasTower;
 }
