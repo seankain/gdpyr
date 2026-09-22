@@ -233,6 +233,17 @@ public static class SimConfig
 	/// </summary>
 	public const int MaxDefenses = 16;
 
+	/// <summary>
+	/// Structures a strategist's builders may have standing at once — pillboxes,
+	/// sandbag walls and sniper towers, finished or not (docs/NETCODE.md §10.5).
+	/// A structure names itself on the wire by its slot in the unit manager's
+	/// structure table, as the owner of every round it fires
+	/// (<see cref="OwnerId.ForStructure"/>) and in every state message about it, so
+	/// this is the width of that name. It is also what keeps a strategist from
+	/// walling the map in: every structure is a collider and a navigation rebake.
+	/// </summary>
+	public const int MaxStructures = 32;
+
 	// ---- fog of war (docs/NETCODE.md §6.2) ---------------------------------
 
 	/// <summary>

@@ -43,6 +43,30 @@ public sealed class BotStrategist
 	private readonly int[] _census = new int[SimConfig.MaxUnitDefinitions];
 	private readonly int[] _costs = new int[SimConfig.MaxUnitDefinitions];
 
+	/// <summary>Builders with nothing to build, gathered per decision.</summary>
+	private readonly int[] _idleBuilders = new int[SimConfig.MaxUnits];
+
+	/// <summary>The places it means to fortify, and which resource node each one is.</summary>
+	private readonly FortificationSite[] _sites = new FortificationSite[SimConfig.MaxResourceNodes];
+	private readonly int[] _siteNodes = new int[SimConfig.MaxResourceNodes];
+
+	/// <summary>
+	/// Per node and structure, the tick a refused placement may be tried again on.
+	/// A site the server refuses — a wall in the way, ground a builder cannot reach —
+	/// would otherwise be asked for twice a second for the rest of the round.
+	/// </summary>
+	private readonly uint[] _retryTick = new uint[SimConfig.MaxResourceNodes * StructureKinds.Count];
+
+	/// <summary>How long a refused placement is left alone before it is tried again.</summary>
+	private const int PlacementRetryTicks = SimConfig.TickRate * 30;
+
+	/// <summary>
+	/// Points held back from the queue this decision for a structure a builder is
+	/// waiting to put up (<see cref="StrategistBrain.StructureSavings"/>). Set by
+	/// <see cref="Fortify"/>, which runs first, and read by <see cref="Build"/>.
+	/// </summary>
+	private int _savings;
+
 	private uint _nextDecisionTick;
 
 	public BotStrategist(int peerId, in StrategistTraits traits)
@@ -89,6 +113,9 @@ public sealed class BotStrategist
 			return;
 		}
 
+		// Fortify first: it decides whether this decision's points are the army's or
+		// a waiting builder's.
+		Fortify(tick, combat, units);
 		Build(combat, units);
 		Command(tick, combat, units);
 	}
@@ -107,7 +134,9 @@ public sealed class BotStrategist
 	/// </summary>
 	private void Build(CombatManager combat, UnitManager units)
 	{
-		int tiers = Math.Min(UnitCatalog.Count, SimConfig.MaxUnitDefinitions);
+		// The fighting tiers only: a builder is not the best thing it can afford,
+		// whatever its index says (Fortify buys those).
+		int tiers = Math.Min(UnitCatalog.Tiers.Length, Math.Min(UnitCatalog.Count, SimConfig.MaxUnitDefinitions));
 		if (tiers == 0)
 		{
 			return;
@@ -139,8 +168,8 @@ public sealed class BotStrategist
 			}
 
 			// The balance is re-read per barracks because the previous one may just
-			// have spent it.
-			int points = combat.Match.StrategistPoints;
+			// have spent it, less whatever a waiting builder is being saved for.
+			int points = combat.Match.StrategistPoints - _savings;
 			if (!StrategistBrain.TryChooseTier(points, _costs.AsSpan(0, tiers), _census.AsSpan(0, tiers),
 				_traits, out byte tier))
 			{
@@ -182,6 +211,12 @@ public sealed class BotStrategist
 		{
 			Unit unit = units.UnitAt(i);
 			if (unit == null || !unit.IsAlive || unit.Team != Team.Strategist)
+			{
+				continue;
+			}
+
+			// Builders are Fortify's, and are never sent to fight.
+			if (UnitCatalog.CanConstruct(unit.DefinitionId))
 			{
 				continue;
 			}
@@ -240,6 +275,223 @@ public sealed class BotStrategist
 			// (StrategistBrain.OrderFor).
 			units.ServerIssueOrder(_peerId, _assault.AsSpan(0, assaultOrders),
 				StrategistBrain.OrderFor(garrison: false), objective, targetOwnerId);
+		}
+	}
+
+	/// <summary>
+	/// Keeps a builder and uses it (docs/NETCODE.md §10.5): one is bought once there
+	/// is an army out, an idle one finishes any site that has nobody working on it,
+	/// and otherwise fortifies the resource nodes — the ones it holds first, then the
+	/// neutral ones, nearest home first — with a pillbox, then a wall in front of it,
+	/// then a tower behind it, facing the ground force's spawn.
+	///
+	/// The nodes, because they are what the strategist's income is and what the
+	/// ground force walks to: a pillbox on one is the thing standing on it that a
+	/// rifleman cannot. The spawn as the threat is static map geometry, as the
+	/// assault's sweep is; nothing here reads where anybody actually is.
+	/// </summary>
+	private void Fortify(uint tick, CombatManager combat, UnitManager units)
+	{
+		_savings = 0;
+		if (_traits.Builders == 0 || !UnitCatalog.IsBuildable(UnitCatalog.Builder))
+		{
+			return;
+		}
+
+		int builders = 0;
+		int idle = 0;
+		for (int i = 0; i < units.SlotCount; i++)
+		{
+			Unit unit = units.UnitAt(i);
+			if (unit == null || !unit.IsAlive || unit.Team != Team.Strategist
+				|| !UnitCatalog.CanConstruct(unit.DefinitionId))
+			{
+				continue;
+			}
+
+			builders++;
+			if (unit.Order.Kind != OrderKind.Build)
+			{
+				_idleBuilders[idle++] = unit.UnitId;
+			}
+		}
+
+		QueueBuilder(combat, units, builders);
+
+		if (idle == 0)
+		{
+			return;
+		}
+
+		ReadOnlySpan<int> free = _idleBuilders.AsSpan(0, idle);
+
+		// A site somebody paid for and nobody is building is money on the floor.
+		int abandoned = AbandonedSite(units);
+		if (abandoned >= 0)
+		{
+			units.ServerAssist(_peerId, free, abandoned);
+			return;
+		}
+
+		PlayerManager players = PlayerManager.Instance;
+		if (players == null || players.SpawnPointCount == 0)
+		{
+			return;
+		}
+
+		Vector3 threat = players.SpawnPositionAt(0);
+		int sites = CollectSites(tick, combat.Economy, units, threat);
+		if (!StrategistBrain.TryPlanStructure(_sites.AsSpan(0, sites), out int site, out byte kind))
+		{
+			return;
+		}
+
+		int cost = StructureCatalog.CostOf(kind);
+		if (combat.Match.StrategistPoints < cost)
+		{
+			_savings = StrategistBrain.StructureSavings(cost, builderWaiting: true, units.LiveUnitCount - builders,
+				_traits);
+			return;
+		}
+
+		StrategistBrain.Layout(_sites[site].Anchor, threat, kind, out Vector3 at, out float facing);
+		PlacementResult result = units.ServerConstruct(_peerId, free, kind, at, facing, out _);
+		if (result != PlacementResult.Ok && result != PlacementResult.CannotAfford)
+		{
+			_retryTick[(_siteNodes[site] * StructureKinds.Count) + kind] = tick + PlacementRetryTicks;
+		}
+	}
+
+	/// <summary>Puts a builder on the first queue it owns, when it has fewer than it wants.</summary>
+	private void QueueBuilder(CombatManager combat, UnitManager units, int builders)
+	{
+		int queued = 0;
+		int door = -1;
+		for (int i = 0; i < units.BarracksCount; i++)
+		{
+			Barracks barracks = units.BarracksAt(i);
+			if (barracks == null || barracks.Team != Team.Strategist)
+			{
+				continue;
+			}
+
+			queued += barracks.Queue.CountOf(UnitCatalog.Builder);
+			if (door < 0)
+			{
+				door = i;
+			}
+		}
+
+		int fighting = units.LiveUnitCount - builders;
+		if (door >= 0 && StrategistBrain.ShouldQueueBuilder(combat.Match.StrategistPoints,
+			UnitCatalog.CostOf(UnitCatalog.Builder), builders, queued, fighting, _traits))
+		{
+			units.ServerQueueUnit(_peerId, door, UnitCatalog.Builder);
+		}
+	}
+
+	/// <summary>The slot of a site of its own that no builder is working on, or -1.</summary>
+	private static int AbandonedSite(UnitManager units)
+	{
+		for (int slot = 0; slot < SimConfig.MaxStructures; slot++)
+		{
+			Structure structure = units.StructureAt(slot);
+			if (structure == null || structure.IsBuilt || structure.IsDestroyed || structure.Team != Team.Strategist)
+			{
+				continue;
+			}
+
+			bool worked = false;
+			for (int i = 0; i < units.SlotCount && !worked; i++)
+			{
+				Unit unit = units.UnitAt(i);
+				worked = unit != null && unit.IsAlive && unit.Order.Kind == OrderKind.Build
+					&& unit.Order.TargetOwnerId == structure.ShooterId;
+			}
+
+			if (!worked)
+			{
+				return slot;
+			}
+		}
+
+		return -1;
+	}
+
+	/// <summary>
+	/// The nodes worth fortifying, most important first — held, then neutral; nearest
+	/// home first within each — with what already stands at each. A node the ground
+	/// force holds or is fighting over is not somewhere to send a builder.
+	/// </summary>
+	private int CollectSites(uint tick, EconomyService economy, UnitManager units, Vector3 threat)
+	{
+		int count = 0;
+		if (economy == null)
+		{
+			return 0;
+		}
+
+		Vector3 home = Home(units, threat, hasObjective: true);
+
+		for (int pass = 0; pass < 2; pass++)
+		{
+			NodeHolder wanted = pass == 0 ? NodeHolder.Strategist : NodeHolder.Neutral;
+			int first = count;
+
+			for (int i = 0; i < economy.NodeCount && count < _sites.Length; i++)
+			{
+				ResourceNode node = economy.NodeAt(i);
+				if (node == null || node.Capture.Owner != wanted || node.Capture.Contested)
+				{
+					continue;
+				}
+
+				var site = new FortificationSite { Anchor = node.GlobalPosition, Threat = threat };
+				Survey(units, ref site);
+
+				int retry = i * StructureKinds.Count;
+				site.HasPillbox |= tick < _retryTick[retry + StructureKinds.Pillbox];
+				site.HasWall |= tick < _retryTick[retry + StructureKinds.SandbagWall];
+				site.HasTower |= tick < _retryTick[retry + StructureKinds.SniperTower];
+
+				// Nearest home first, by insertion into this pass's run.
+				float distance = home.DistanceSquaredTo(site.Anchor);
+				int at = count;
+				while (at > first && home.DistanceSquaredTo(_sites[at - 1].Anchor) > distance)
+				{
+					_sites[at] = _sites[at - 1];
+					_siteNodes[at] = _siteNodes[at - 1];
+					at--;
+				}
+
+				_sites[at] = site;
+				_siteNodes[at] = i;
+				count++;
+			}
+		}
+
+		return count;
+	}
+
+	/// <summary>What of its own already stands within reach of a site, finished or going up.</summary>
+	private static void Survey(UnitManager units, ref FortificationSite site)
+	{
+		float radius = StrategistBrain.SiteRadiusMeters;
+		for (int slot = 0; slot < SimConfig.MaxStructures; slot++)
+		{
+			Structure structure = units.StructureAt(slot);
+			if (structure == null || structure.IsDestroyed || structure.Team != Team.Strategist
+				|| structure.Pose.Base.DistanceSquaredTo(site.Anchor) > radius * radius)
+			{
+				continue;
+			}
+
+			switch (structure.Kind)
+			{
+				case StructureKinds.Pillbox: site.HasPillbox = true; break;
+				case StructureKinds.SandbagWall: site.HasWall = true; break;
+				case StructureKinds.SniperTower: site.HasTower = true; break;
+			}
 		}
 	}
 

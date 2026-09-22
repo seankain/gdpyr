@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="StructureDefinition" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Rts/StructureDefinition.cs" id="1_structdef"]
+
+[resource]
+script = ExtResource("1_structdef")
+Name = &"pillbox"
+Cost = 150
+BuildSeconds = 15.0
+MaxHealth = 700.0
+BulletDamageScale = 0.25
+BodySize = Vector3(3.6, 2.2, 3.6)
+TopSize = Vector3(0, 0, 0)
+TopElevationMeters = 0.0
+SensorRadiusMeters = 50.0
+EyeHeightMeters = 1.6
+WeaponId = 8
+MuzzleHeightMeters = 1.5
+RangeMeters = 45.0
+ReactionSeconds = 0.6
+TraverseDegreesPerSecond = 120.0
+OnTargetDegrees = 2.0
+AccuracyConeDegrees = 2.0
+Color = Color(0.55, 0.55, 0.52, 1)

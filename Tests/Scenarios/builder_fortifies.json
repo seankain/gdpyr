@@ -1,0 +1,18 @@
+{
+  "name": "the computer strategist buys a builder and puts up a structure at a node",
+  "seeds": [2],
+  "duration_ticks": 6600,
+  "warmup_ticks": 60,
+  "roster": { "ground": 0, "strategists": 1 },
+
+  "seats": [
+    { "id": "chair", "team": "strategist", "policy": "strategist", "step_mul": 30 }
+  ],
+
+  "assert": [
+    { "metric": "events.unit_built.tier.max", "op": "==", "value": 3 },
+    { "metric": "events.structure_placed.count", "op": ">=", "value": 1 },
+    { "metric": "events.structure_built.count", "op": ">=", "value": 1 },
+    { "metric": "events.structure_lost.count", "op": "==", "value": 0 }
+  ]
+}

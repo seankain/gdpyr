@@ -603,6 +603,7 @@ public partial class CombatManager : Node
 		// Units are resolved after players and against the same fraction, so whichever
 		// the round reaches first wins however they are ordered in memory.
 		Unit unitVictim = null;
+		Structure structureVictim = null;
 		if (UnitManager.Instance is { } units)
 		{
 			unitVictim = units.QuerySegment(segment.From, segment.To, segment.SweepRadius, ownerId, ownerTeam,
@@ -613,6 +614,21 @@ public partial class CombatManager : Node
 				victim = null;
 				blocked = true;
 				point = unitPoint;
+			}
+
+			// Structures last, and the same way. A finished one is also a world
+			// collider, so the world ray above has already stopped the round at its
+			// face; the analytic test is what says *whose* face that was
+			// (docs/NETCODE.md §10.5).
+			structureVictim = units.QueryStructureSegment(segment.From, segment.To, segment.SweepRadius, ownerTeam,
+				ref nearest, out Vector3 structurePoint);
+
+			if (structureVictim != null)
+			{
+				victim = null;
+				unitVictim = null;
+				blocked = true;
+				point = structurePoint;
 			}
 		}
 
@@ -635,18 +651,24 @@ public partial class CombatManager : Node
 		{
 			flags |= DamageUnit(unitVictim, stats.Damage, attacker, ownerId, tick);
 		}
+		else if (structureVictim != null)
+		{
+			flags |= DamageStructure(structureVictim, stats.Damage, stats.IsExplosive, attacker, ownerId, tick);
+		}
 
 		if (stats.IsExplosive)
 		{
 			flags |= HitFlags.Exploded;
-			flags |= Explode(point, stats, attacker, ownerId, ownerTeam, victim, unitVictim, tick);
+			flags |= Explode(point, stats, attacker, ownerId, ownerTeam, victim, unitVictim, structureVictim, tick);
 		}
 
 		Broadcast(MethodName.ServerProjectileHit, ProjectileCodec.EncodeHit(new ProjectileHit
 		{
 			Id = segment.Id,
 			Point = point,
-			VictimPeerId = victim?.PeerId ?? (unitVictim != null ? OwnerId.ForUnit(unitVictim.UnitId) : 0),
+			VictimPeerId = victim?.PeerId
+				?? (unitVictim != null ? OwnerId.ForUnit(unitVictim.UnitId)
+					: structureVictim?.ShooterId ?? 0),
 			Flags = flags,
 		}), point);
 	}
@@ -668,6 +690,11 @@ public partial class CombatManager : Node
 			return UnitManager.Instance?.Defenses.OwnerOf(ownerId)?.Team ?? Team.Strategist;
 		}
 
+		if (OwnerId.IsStructure(ownerId))
+		{
+			return UnitManager.Instance?.StructureOf(ownerId)?.Team ?? Team.Strategist;
+		}
+
 		return TeamOf(OwnerId.PeerOf(ownerId));
 	}
 
@@ -676,7 +703,7 @@ public partial class CombatManager : Node
 	/// deliberate: a launcher that is safe at point blank is a shotgun.
 	/// </summary>
 	private HitFlags Explode(Vector3 point, in ProjectileStats stats, PlayerCombat attacker, int attackerOwnerId,
-		Team attackerTeam, PlayerCombat direct, Unit directUnit, uint tick)
+		Team attackerTeam, PlayerCombat direct, Unit directUnit, Structure directStructure, uint tick)
 	{
 		HitFlags flags = HitFlags.None;
 
@@ -716,7 +743,71 @@ public partial class CombatManager : Node
 			}
 		}
 
+		// Structures take a blast whole: explosives are what they are weak to.
+		for (int i = 0; units != null && i < SimConfig.MaxStructures; i++)
+		{
+			Structure structure = units.StructureAt(i);
+			if (structure == null || structure == directStructure || structure.IsDestroyed
+				|| structure.Team == attackerTeam)
+			{
+				continue;
+			}
+
+			float damage = stats.SplashDamageAt(UnitManager.DistanceToBlast(structure, point));
+			if (damage > 0f)
+			{
+				flags |= DamageStructure(structure, damage, explosive: true, attacker, attackerOwnerId, tick);
+			}
+		}
+
 		return flags;
+	}
+
+	/// <summary>
+	/// Applies a hit to a structure (docs/NETCODE.md §10.5). Like a unit's, it costs
+	/// nobody a ticket; unlike a unit's, what it takes depends on what it was hit
+	/// with, and the stream records what it actually took. Knocking one down counts
+	/// as a kill, because it is the strategist's points destroyed.
+	/// </summary>
+	private HitFlags DamageStructure(Structure structure, float amount, bool explosive, PlayerCombat attacker,
+		int attackerOwnerId, uint tick)
+	{
+		UnitManager units = UnitManager.Instance;
+		if (units == null || structure == null || structure.IsDestroyed || amount <= 0f)
+		{
+			return HitFlags.None;
+		}
+
+		bool killed = units.DamageStructure(structure, amount, explosive, attackerOwnerId, tick, out float dealt);
+		ConfirmHit(attacker, null, killed);
+
+		if (killed && attacker != null)
+		{
+			attacker.Kills++;
+		}
+
+		if (AgentEventBus.Active != null)
+		{
+			byte weapon = attacker?.EquippedDefinitionId ?? (byte)0;
+			int victimId = structure.ShooterId;
+			AgentEventBus.Emit(AgentEventKind.Damage, tick, attackerOwnerId, victimId, weapon, dealt,
+				structure.Health);
+			if (killed)
+			{
+				float range = attacker?.Character == null
+					? 0f
+					: attacker.Character.SimPosition.DistanceTo(structure.Pose.Base);
+				AgentEventBus.Emit(AgentEventKind.Kill, tick, attackerOwnerId, victimId, weapon, range);
+			}
+		}
+
+		if (killed)
+		{
+			GD.Print($"[combat] {StructureCatalog.NameOf(structure.Kind)} {structure.Slot} destroyed by"
+				+ $" {DescribeOwner(attackerOwnerId)}");
+		}
+
+		return killed ? HitFlags.Killed : HitFlags.None;
 	}
 
 	/// <summary>
@@ -853,6 +944,14 @@ public partial class CombatManager : Node
 		{
 			DefenseMount mount = UnitManager.Instance?.Defenses.OwnerOf(ownerId);
 			return mount != null ? $"barracks {mount.Kind.ToString().ToLowerInvariant()} {mount.Name}" : "a barracks";
+		}
+
+		if (OwnerId.IsStructure(ownerId))
+		{
+			Structure structure = UnitManager.Instance?.StructureOf(ownerId);
+			return structure != null
+				? $"{StructureCatalog.NameOf(structure.Kind)} {structure.Slot}"
+				: "a structure";
 		}
 
 		return OwnerId.IsPeer(ownerId) ? $"peer {OwnerId.PeerOf(ownerId)}" : "the world";
@@ -1521,6 +1620,10 @@ public partial class CombatManager : Node
 		if (OwnerId.IsDefense(spawn.OwnerPeerId))
 		{
 			UnitManager.Instance?.Defenses.OnShot(spawn.OwnerPeerId, spawn.Direction);
+		}
+		else if (OwnerId.IsStructure(spawn.OwnerPeerId))
+		{
+			UnitManager.Instance?.OnStructureShot(spawn.OwnerPeerId, spawn.Direction);
 		}
 
 		// Everyone else's shot is fast-forwarded to the tick this client is rendering,

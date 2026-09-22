@@ -24,13 +24,15 @@ public partial class StrategistHud : CanvasLayer
 	private const string Keys =
 		"WASD/edge pan · Q/E rotate · wheel zoom · LMB select · RMB order\n"
 		+ "X attack-move · C patrol · B defend · Z stop · F select all\n"
-		+ "1/2/3 queue infantry/technical/tank · Backspace cancel · RMB with nothing selected sets the rally point\n"
+		+ "1/2/3 queue infantry/technical/tank · 4 queue builder · Backspace cancel · RMB with nothing selected sets the rally point\n"
+		+ "with builders selected: 5/6/7 then RMB places pillbox/sandbags/tower (Q/E turns it) · RMB on a site finishes or mends it\n"
 		+ "F1 ground force · F2 strategist";
 
 	private Label _points;
 	private Label _production;
 	private Label _selection;
 	private Label _economy;
+	private Label _builders;
 	private Label _keys;
 
 	public SelectionOverlay Overlay { get; private set; }
@@ -55,7 +57,8 @@ public partial class StrategistHud : CanvasLayer
 		_production = NewLabel(root, new Vector2(24f, 48f), new Vector2(520f, 32f));
 		_selection = NewLabel(root, new Vector2(24f, 80f), new Vector2(520f, 32f));
 		_economy = NewLabel(root, new Vector2(24f, 112f), new Vector2(640f, 32f));
-		_keys = NewLabel(root, new Vector2(24f, -108f), new Vector2(900f, 96f), anchorTop: 1f);
+		_builders = NewLabel(root, new Vector2(24f, 144f), new Vector2(760f, 32f));
+		_keys = NewLabel(root, new Vector2(24f, -132f), new Vector2(1100f, 120f), anchorTop: 1f);
 		_keys.Text = Keys;
 	}
 
@@ -77,6 +80,30 @@ public partial class StrategistHud : CanvasLayer
 
 		_selection.Text = $"selected {selectedCount}   next order: {Describe(pendingOrder)}";
 		_economy.Text = Economy(economy);
+	}
+
+	/// <summary>
+	/// The builders' line (docs/NETCODE.md §10.5): how many there are, what is
+	/// standing and what is going up, and — while a structure is armed — what the
+	/// next right-click will put down and what it costs.
+	/// </summary>
+	public void RefreshBuilders(UnitManager units, Team team, byte placing, int buildersSelected)
+	{
+		int builders = units?.BuilderCount(team) ?? 0;
+		int standing = units?.StructureCount ?? 0;
+		int sites = units?.SitesUnderConstruction ?? 0;
+
+		string line = $"builders {builders}   structures {standing}/{SimConfig.MaxStructures}"
+			+ (sites > 0 ? $" ({sites} going up)" : string.Empty);
+
+		if (StructureKinds.IsValid(placing))
+		{
+			line += buildersSelected > 0
+				? $"   placing {StructureCatalog.NameOf(placing).Replace('_', ' ')} ({StructureCatalog.CostOf(placing)})"
+				: "   select a builder to place with";
+		}
+
+		_builders.Text = line;
 	}
 
 	/// <summary>

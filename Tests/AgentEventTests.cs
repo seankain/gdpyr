@@ -2,6 +2,7 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Text.Json;
+using Gdpyr.Sim;
 using Gdpyr.Sim.Agent;
 using Xunit;
 
@@ -87,7 +88,7 @@ public class AgentEventTests
 	[Fact]
 	public void EveryKindHasAFullSlateOfFieldNames()
 	{
-		for (byte kind = 0; kind <= (byte)AgentEventKind.SeatReleased; kind++)
+		for (byte kind = 0; kind <= (byte)AgentEventSchema.Last; kind++)
 		{
 			var value = (AgentEventKind)kind;
 			Assert.NotEqual("unknown", AgentEventSchema.NameOf(value));
@@ -101,7 +102,7 @@ public class AgentEventTests
 		// WriteEvent writes "kind" and "tick" for every record; a slot with either
 		// name would make a document with a duplicate key, which a strict JSON
 		// reader throws on rather than merging.
-		for (byte kind = 0; kind <= (byte)AgentEventKind.SeatReleased; kind++)
+		for (byte kind = 0; kind <= (byte)AgentEventSchema.Last; kind++)
 		{
 			foreach (string name in AgentEventSchema.FieldsOf((AgentEventKind)kind))
 			{
@@ -114,7 +115,7 @@ public class AgentEventTests
 	[Fact]
 	public void EveryEventSerializesWithNoDuplicateKeys()
 	{
-		for (byte kind = 0; kind <= (byte)AgentEventKind.SeatReleased; kind++)
+		for (byte kind = 0; kind <= (byte)AgentEventSchema.Last; kind++)
 		{
 			var buffer = new ArrayBufferWriter<byte>(256);
 			using (var writer = new Utf8JsonWriter(buffer))
@@ -184,5 +185,56 @@ public class AgentEventTests
 		}
 
 		return count;
+	}
+
+	[Fact]
+	public void StructuresAreOnTheStreamUnderTheirOwnNames()
+	{
+		Assert.Equal("structure_placed", AgentEventSchema.NameOf(AgentEventKind.StructurePlaced));
+		Assert.Equal("structure_built", AgentEventSchema.NameOf(AgentEventKind.StructureBuilt));
+		Assert.Equal("structure_lost", AgentEventSchema.NameOf(AgentEventKind.StructureLost));
+		Assert.Equal(AgentEventKind.StructureLost, AgentEventSchema.Last);
+		Assert.Equal("killer", AgentEventSchema.FieldsOf(AgentEventKind.StructureLost)[2]);
+	}
+
+	[Fact]
+	public void TheSchemaNamesEveryStructureAndTheCommandThatBuildsThem()
+	{
+		Assert.Equal(StructureKinds.Count, AgentJson.StructureNames.Length);
+		Assert.Contains("construct", AgentJson.CommandNames);
+	}
+
+	[Fact]
+	public void AConstructCommandKeepsItsKindAndItsBuilders()
+	{
+		var list = new AgentCommandList();
+		var command = new AgentCommand
+		{
+			Kind = AgentCommandKind.Construct,
+			Structure = StructureKinds.SniperTower,
+			Yaw = 1.25f,
+			X = 10f,
+			Z = -4f,
+		};
+
+		Assert.True(list.AddWithUnits(command, new[] { 7, 9 }));
+
+		AgentCommand stored = Assert.Single(list.Commands.ToArray());
+		Assert.Equal(AgentCommandKind.Construct, stored.Kind);
+		Assert.Equal(StructureKinds.SniperTower, stored.Structure);
+		Assert.Equal(1.25f, stored.Yaw);
+		Assert.Equal(new[] { 7, 9 }, list.UnitsOf(stored).ToArray());
+	}
+
+	[Fact]
+	public void ThePlaytestHarnessKnowsEveryKindTheGameEmits()
+	{
+		// A kind the harness does not know reads as a typo rather than as zero, so a
+		// scenario claiming "no structure was lost" would fail for the wrong reason.
+		for (byte kind = 0; kind <= (byte)AgentEventSchema.Last; kind++)
+		{
+			Assert.Contains(AgentEventSchema.NameOf((AgentEventKind)kind),
+				Gdpyr.Playtest.EpisodeMetrics.AgentEventKinds);
+		}
 	}
 }

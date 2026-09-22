@@ -330,6 +330,23 @@ call. This makes one person enough to see a round.
   **the ~100 m ring is a level-design constraint**. The ground spawn and every resource node go
   outside it, or the round turns into a ticket drain or a clock, and the Test map's barracks and
   third node moved to satisfy it. Ground bots wait at the edge of the ring rather than on the door.
+- **Builders and structures** *(added after the barracks defences)*. §5 cut builder units from
+  the first pass; they are back, but as the thing §5 did not cut — capture-by-presence is still
+  the economy — so a builder does not mine, it **builds** ([`NETCODE.md`](NETCODE.md) §10.5). A
+  fourth catalog unit (`Units/builder.tres`, 60 points, `4` to queue) puts up three structures from
+  `Structures/*.tres`: a **pillbox** (150, 15 s) with a barracks-style gun that shrugs off rifle
+  fire, a **sandbag wall** (25, 5 s) that is waist-high cover and nothing else, and a **sniper
+  tower** (125, 14 s) with a marksman who sees and shoots to 90 m. With builders selected, `5`/`6`/`7`
+  arm one and a right-click places it, facing the way the camera is turned; it is paid for on
+  placement, goes up while builders stand next to it, and cannot finish while a ground-force body
+  stands on it. Three decisions worth writing down: **a finished structure is world geometry on
+  every peer** — a static collider on layer 1 — so movement, prediction, every sight line and every
+  round stop against it with nothing taught a new layer, at the cost of a threaded navigation re-bake
+  whenever one finishes or falls; **a structure is not a unit**, so it counts for nothing in the
+  defeat condition, exactly as a defence does; and **its gun is a barracks gun** — `DefenseBattery`'s
+  target, slew and fire now run over an `IGunPost` interface both implement, rather than a copy. The
+  computer strategist keeps one builder and fortifies the nodes, and ground bots shoot a pillbox only
+  when there is no unit to shoot.
 
 ### M6 — Agent API: headless play for external policies (3–4 days) ✅ *shipped*
 
@@ -555,7 +572,7 @@ in §2 at that time — that corner of the ecosystem moves.
 
 | Cut | Rationale |
 |---|---|
-| **Builder units** in the first pass | Resource nodes captured by proximity test the same economy loop with far less code. Add builders in M5+ if capture-by-presence feels flat. |
+| ~~**Builder units** in the first pass~~ | Resource nodes captured by proximity test the same economy loop with far less code. **Builders were added after M5** (§M5, [`NETCODE.md`](NETCODE.md) §10.5), and the cut still holds where it mattered: they build structures, they do not harvest, and capture-by-presence is still the economy. |
 | **Dropships and troop carriers** | Transport/logistics is a second system (load/unload, pathing, drop physics). Defer until the base loop is proven fun. |
 | Matchmaking, and any server list that is not a broadcast | Direct IP over Tailscale, and — since the main menu — LAN discovery on top of it: each server answers a broadcast query on UDP 7780–7783 with its name, port and roster ([`LAN.md`](LAN.md) §4). That is ~200 lines, one datagram each way, no registry and no service to run, and it covers the case the cut was really about: a room of people who should not have to be told an IP. It reaches the broadcast domain and stops there. Anything further away is still typed in, and matchmaking is still M9's problem. |
 | Animation, audio, VFX beyond placeholders | Greybox. |
@@ -681,7 +698,15 @@ a command line that names a mode goes straight through before a widget is built.
    before anybody is on the field and again after the intermission; and answering it with the mouse
    leaves the pointer where the side you picked wants it. Wi-Fi with client isolation and a machine
    with a Docker bridge are the two environments most likely to embarrass the list.
-9. Four smaller things earlier milestones left where they were: a unit hit is tested against its
+9. **Watch whether anybody builds, and what the ground force does about it.** Builders and
+   structures ([`NETCODE.md`](NETCODE.md) §10.5) were written with every number authored rather
+   than played: a pillbox's 700 health against a quarter of a rifle round, a wall's 25 points, a
+   tower that kills at 80 m in 3.4 s. The debug HUD's `structures` row counts what is standing, what
+   was built, what was lost and how many navigation re-bakes that cost. "0 built" across a session
+   means the feature is unused; a pillbox that nobody can take without a launcher means the ground
+   force's loadout decides the round; and a re-bake count much higher than the built count means
+   sites are being knocked down as fast as they go up. `Structures/*.tres` is the whole dial.
+10. Four smaller things earlier milestones left where they were: a unit hit is tested against its
    *current* capsule rather than a rewound one (justified in `NETCODE.md` §5); the strategist HUD
    can only build from barracks 0 — the RPCs take an index, the three build keys still send zero,
    and the computer strategist already uses every barracks on the map, so the gap is only in the

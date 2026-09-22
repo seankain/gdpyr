@@ -31,7 +31,8 @@ Scripts/Agent/  The agent control channel: listener, sessions, seats, observatio
 Scripts/Ui/     Main menu and server browser, role select, pause menu, reticle, combat HUD, RTS HUD,
                 net debug HUD, the `~` console and the demo camera
 Scenes/         Main menu, greybox map, player, weapon, pause menu
-Units/          UnitDefinition resources
+Units/          UnitDefinition resources: three fighting tiers and the builder
+Structures/     StructureDefinition resources: pillbox, sandbag wall, sniper tower
 Tests/          xUnit over the engine-free sources — `dotnet test`, no Godot needed
 Tests/Scenarios/ Playtest scenario files: data, and authoring one needs no Godot install
 tools/          External processes that talk to a server over a socket: the agent client (both
@@ -133,11 +134,22 @@ map:
 | left-drag, left-click, `F` | box select, single select, select all |
 | right-click | order the selection (or, with nothing selected, move the barracks rally point) |
 | `X` `C` `B` `Z` | attack-move · patrol · defend · stop, applied by the next right-click |
-| `1`, Backspace | queue an infantryman, cancel the last one |
+| `1` `2` `3` `4`, Backspace | queue an infantryman, a technical, a tank or a builder; cancel the last one |
+| `5` `6` `7` | with builders selected: put a pillbox, a sandbag wall or a sniper tower where the next right-click lands |
 
 Right-clicking an enemy player orders an attack on that player rather than on the ground under
 them. Units are server-simulated and never predicted; the order marker appears immediately and the
 units move a round trip later, which is what an RTS feels like anyway.
+
+**Builders** put up three structures ([`docs/NETCODE.md`](docs/NETCODE.md) §10.5). A **pillbox**
+(150 points) is a concrete box with a gun in it that takes a quarter of a bullet's damage and all of
+an explosive's; a **sandbag wall** (25) is waist-high cover and nothing else; a **sniper tower** (125)
+puts a marksman eight metres up who sees and shoots to 90 m. A structure faces the way the camera
+does, so a wall lies across the screen and `Q`/`E` turn it. It is paid for when it is placed, goes up
+while builders stand beside it — two build twice as fast — and cannot finish while somebody from the
+ground force is standing where it goes. Right-clicking builders onto one of your own sites or damaged
+structures finishes or mends it. Finished, it is solid for everybody: it stops bullets, bodies and
+sight lines, and a crouched player behind a sandbag wall is hidden from a rifleman in front of it.
 
 On the ground, right mouse raises the sights. What that gets you is the weapon's:
 
@@ -176,7 +188,9 @@ round full of bots starts without waiting for anybody.
   a 200 ms reaction. `BotTraits.Default` in `Scripts/Sim/BotBrain.cs` is the whole difficulty dial.
 - **In the strategist's chair** one queues infantry at every barracks while the points last, keeps
   four units home defending, and attack-moves the rest at whatever its units have actually seen —
-  it gets no free knowledge of where anybody is.
+  it gets no free knowledge of where anybody is. Once it has four fighting units it buys a builder,
+  and fortifies the resource nodes with a pillbox, a wall in front of it and a tower behind, facing
+  the ground force's spawn. Ground bots shoot a pillbox or a tower only when no unit is in sight.
 
 The debug HUD below counts them: `bots: 5/6 ground  1/1 strategist` is five ground bots against a
 target of six, and one strategist bot against a target of one.

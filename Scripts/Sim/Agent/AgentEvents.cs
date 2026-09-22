@@ -14,6 +14,9 @@ public enum AgentEventKind : byte
 	NodeCaptured = 6,
 	SeatAttached = 7,
 	SeatReleased = 8,
+	StructurePlaced = 9,
+	StructureBuilt = 10,
+	StructureLost = 11,
 }
 
 /// <summary>
@@ -65,13 +68,21 @@ public static class AgentEventSchema
 		// throws on rather than one it merges.
 		new[] { "seat", "policy", "step_mul", "", "" },                                        // SeatAttached
 		new[] { "seat", "policy", "reason", "", "" },                                          // SeatReleased
+		// A structure is named by its slot here and by OwnerId.ForStructure(slot) as
+		// the attacker or victim of a kill or damage record (docs/NETCODE.md §10.5).
+		new[] { "structure", "type", "builders", "x", "z" },                                   // StructurePlaced
+		new[] { "structure", "type", "", "x", "z" },                                           // StructureBuilt
+		new[] { "structure", "type", "killer", "x", "z" },                                     // StructureLost
 	};
 
 	private static readonly string[] Kinds =
 	{
 		"round_start", "round_end", "kill", "damage", "unit_built", "unit_lost", "node_captured",
-		"seat_attached", "seat_released",
+		"seat_attached", "seat_released", "structure_placed", "structure_built", "structure_lost",
 	};
+
+	/// <summary>The highest kind there is. Everything from 0 to this has a name and a slate of fields.</summary>
+	public static AgentEventKind Last => (AgentEventKind)(Kinds.Length - 1);
 
 	public static string NameOf(AgentEventKind kind) =>
 		(byte)kind < Kinds.Length ? Kinds[(byte)kind] : "unknown";

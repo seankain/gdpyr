@@ -212,4 +212,23 @@ public class BuildQueueTests
 		Assert.False(queue.Tick(5, out _));
 		Assert.True(queue.Tick(6, out _));
 	}
+
+	[Fact]
+	public void TheQueueCountsEachKindOnIt()
+	{
+		const byte Builder = 3;
+		var queue = new BuildQueue();
+		ResourceLedger ledger = Funded();
+
+		queue.TryEnqueue(Infantry, Cost, BuildTicks, ledger);
+		queue.TryEnqueue(Builder, 60, BuildTicks, ledger);
+		queue.TryEnqueue(Infantry, Cost, BuildTicks, ledger);
+
+		Assert.Equal(2, queue.CountOf(Infantry));
+		Assert.Equal(1, queue.CountOf(Builder));
+		Assert.Equal(0, queue.CountOf(2));
+
+		queue.CancelLast(ledger);
+		Assert.Equal(1, queue.CountOf(Infantry));
+	}
 }

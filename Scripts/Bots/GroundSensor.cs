@@ -19,6 +19,14 @@ public struct GroundContact
 	/// <summary>Set when this is a unit.</summary>
 	public ushort UnitId;
 
+	/// <summary>
+	/// Set when this is a structure with a gun: its <c>OwnerId.ForStructure</c>, and 0
+	/// for anything else (docs/NETCODE.md §10.5).
+	/// </summary>
+	public int StructureOwnerId;
+
+	public bool IsStructure => StructureOwnerId != 0;
+
 	public Team Team;
 
 	/// <summary>Where the thing is aimed at — a hitbox centre, not a pair of feet.</summary>
@@ -131,7 +139,80 @@ public static class GroundSensor
 			});
 		}
 
+		// Structures with a gun are things that shoot back, so they are contacts;
+		// a sandbag wall is scenery, which the ray fan already reports.
+		for (int i = 0; units != null && i < SimConfig.MaxStructures; i++)
+		{
+			Structure structure = units.StructureAt(i);
+			if (structure == null || structure.IsDestroyed || !structure.IsArmed)
+			{
+				continue;
+			}
+
+			Vector3 at = structure.AimPoint;
+			float distance = eye.DistanceTo(at);
+			if (distance > sensorRadiusMeters || !CanSee(space, eye, structure))
+			{
+				continue;
+			}
+
+			Insert(into, ref count, new GroundContact
+			{
+				IsPlayer = false,
+				StructureOwnerId = structure.ShooterId,
+				Team = structure.Team,
+				Position = at,
+				Velocity = Vector3.Zero,
+				HealthFraction = Mathf.Clamp(structure.Health / Mathf.Max(structure.MaxHealth, 1f), 0f, 1f),
+				DistanceMeters = distance,
+			});
+		}
+
 		return count;
+	}
+
+	/// <summary>
+	/// Whether a structure can be seen from <paramref name="eye"/>: a clear line to
+	/// the middle of it, or a line whose first obstacle is the structure itself —
+	/// which, once it is finished, it always is, because it is a world collider too.
+	/// </summary>
+	public static bool CanSee(PhysicsDirectSpaceState3D space, Vector3 eye, Structure structure)
+	{
+		if (space == null)
+		{
+			return true;
+		}
+
+		PhysicsRayQueryParameters3D query = PhysicsRayQueryParameters3D.Create(eye, structure.AimPoint,
+			CollisionLayers.World);
+		Godot.Collections.Dictionary hit = space.IntersectRay(query);
+		return hit.Count == 0 || UnitManager.DistanceToBlast(structure, hit["position"].AsVector3()) < 0.1f;
+	}
+
+	/// <summary>
+	/// What a ground bot shoots at, as an owner id: the nearest hostile unit in the
+	/// scan, and only when there is none, the nearest hostile structure with a gun.
+	/// Units first because they move and a pillbox does not — and because a rifle
+	/// does a quarter of its damage to concrete, a bot that preferred the pillbox
+	/// would stand in front of it losing the argument.
+	/// </summary>
+	public static int NearestHostileTarget(ReadOnlySpan<GroundContact> contacts, Team team)
+	{
+		ushort unit = NearestHostileUnit(contacts, team);
+		if (unit != 0)
+		{
+			return OwnerId.ForUnit(unit);
+		}
+
+		for (int i = 0; i < contacts.Length; i++)
+		{
+			if (contacts[i].IsStructure && contacts[i].Team != team)
+			{
+				return contacts[i].StructureOwnerId;
+			}
+		}
+
+		return OwnerId.None;
 	}
 
 	/// <summary>
@@ -146,7 +227,7 @@ public static class GroundSensor
 	{
 		for (int i = 0; i < contacts.Length; i++)
 		{
-			if (!contacts[i].IsPlayer && contacts[i].Team != team)
+			if (!contacts[i].IsPlayer && !contacts[i].IsStructure && contacts[i].Team != team)
 			{
 				return contacts[i].UnitId;
 			}

@@ -186,6 +186,15 @@ public partial class Debug : PanelContainer
 		{
 			SetProperty("rejected orders", $"{units.RejectedOrders}");
 		}
+
+		// Builders' work (docs/NETCODE.md §10.5). "0 built" across a session means the
+		// feature is not being used; a rebake count far above it means sites are being
+		// knocked down as fast as they go up.
+		SetProperty("structures", $"{units.StructureCount}/{SimConfig.MaxStructures} standing"
+			+ $"  {units.SitesUnderConstruction} going up"
+			+ (NetworkManager.Instance is { IsServer: true }
+				? $"  {units.StructuresBuilt} built  {units.StructuresLost} lost  {units.NavigationRebakes} rebakes"
+				: string.Empty));
 	}
 
 	/// <summary>

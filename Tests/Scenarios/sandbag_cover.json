@@ -1,0 +1,27 @@
+{
+  "name": "crouching behind a sandbag wall hides a player from a rifleman who kills one crouching in the open",
+  "seeds": [4, 12],
+  "duration_ticks": 720,
+  "warmup_ticks": 60,
+  "roster": { "ground": 2, "strategists": 0 },
+
+  "seats": [
+    { "id": "covered", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/crouch_still.json" },
+    { "id": "exposed", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/crouch_still.json" }
+  ],
+
+  "spawns": [
+    { "structure": "sandbag_wall", "team": "strategist", "at": [-60, 0.5, 48.6], "yaw": 3.14159 },
+    { "unit": "infantry", "team": "strategist", "at": [-60, 0.5, 20], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [-10, 0.5, 20], "order": "none" },
+    { "peer": "covered", "at": [-60, 1, 50], "look": [0, 0] },
+    { "peer": "exposed", "at": [-10, 1, 50], "look": [0, 0] }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "observation.exposed.self.alive.min", "op": "==", "value": 0 },
+    { "metric": "observation.covered.self.alive.min", "op": "==", "value": 1 },
+    { "metric": "observation.covered.self.health.min", "op": "==", "value": 1 }
+  ]
+}

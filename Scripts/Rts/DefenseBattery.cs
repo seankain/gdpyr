@@ -8,6 +8,63 @@ using Godot;
 namespace Gdpyr.Rts;
 
 /// <summary>
+/// Anything with a gun that turns on its own: a barracks' defences, and the
+/// pillboxes and towers a builder puts up (docs/NETCODE.md §10.4, §10.5).
+///
+/// It exists so that one set of rules — who to shoot, when it may fire, how fast
+/// it swings, where the round goes — runs every gun that nobody is holding, rather
+/// than a copy per thing it is mounted on. What differs between them is only where
+/// the gun looks from and where its round leaves from, and that is what the two
+/// position members say.
+/// </summary>
+public interface IGunPost
+{
+	DefenseTraits Traits { get; }
+
+	Team Team { get; }
+
+	/// <summary>What every round it fires names as its owner.</summary>
+	int ShooterId { get; }
+
+	byte WeaponDefinitionId { get; }
+
+	WeaponStats Stats { get; }
+
+	float AccuracyConeRadians { get; }
+
+	/// <summary>
+	/// Where range and line of sight to <paramref name="point"/> are measured from:
+	/// for a pillbox, the slit in whichever wall faces it, so that its own concrete
+	/// is never in the way of its own sight line.
+	/// </summary>
+	Vector3 EyeToward(Vector3 point);
+
+	/// <summary>Where a round aimed at <paramref name="point"/> leaves from.</summary>
+	Vector3 MuzzleToward(Vector3 point);
+
+	/// <summary>The gun's weapon, stepped in place.</summary>
+	ref WeaponState Belt { get; }
+
+	/// <summary>The peer it is shooting at, or 0.</summary>
+	int TargetPeerId { get; set; }
+
+	uint TargetSinceTick { get; set; }
+
+	uint NextScanTick { get; set; }
+
+	/// <summary>Offsets its first scan, so a row of guns does not scan on the same tick.</summary>
+	int ScanStagger { get; }
+
+	/// <summary>Where it is pointed. World angles, in <see cref="Aim"/>'s convention.</summary>
+	float AimYaw { get; set; }
+
+	float AimPitch { get; set; }
+
+	/// <summary>Turns the body to the aim angles. Presentation only.</summary>
+	void ApplyPose();
+}
+
+/// <summary>
 /// Every barracks' guns and mortars: who each is shooting at, and the rounds it
 /// puts in the air (docs/NETCODE.md §10.4).
 ///
@@ -111,32 +168,76 @@ public sealed class DefenseBattery
 	private static void Simulate(DefenseMount mount, uint tick, CombatManager combat,
 		PhysicsDirectSpaceState3D space)
 	{
-		if (tick >= mount.NextScanTick)
+		if (mount.Kind == DefenseKind.Mortar)
 		{
-			Acquire(mount, tick, combat, space);
-
-			uint stagger = mount.NextScanTick == 0 ? (uint)(mount.Index % SimConfig.UnitTargetRefreshTicks) : 0u;
-			mount.NextScanTick = tick + (uint)SimConfig.UnitTargetRefreshTicks + stagger;
+			PlayerCombat target = Engage(mount, tick, combat, space);
+			if (target != null)
+			{
+				FireMortar(mount, target, tick, combat);
+			}
+			return;
 		}
 
-		PlayerCombat target = Resolve(mount, combat);
+		StepGun(mount, tick, combat, space);
+	}
+
+	/// <summary>
+	/// One tick of a direct-fire gun on a post: scan when one is due, keep or drop
+	/// the target, swing onto it, and fire when <see cref="DefenseSim.MayFire"/> says
+	/// so. A barracks' gun, a pillbox and a tower all run through here.
+	/// </summary>
+	public static void StepGun(IGunPost post, uint tick, CombatManager combat, PhysicsDirectSpaceState3D space)
+	{
+		if (combat == null)
+		{
+			return;
+		}
+
+		PlayerCombat target = Engage(post, tick, combat, space);
+		if (target != null)
+		{
+			FireGun(post, target, tick, combat);
+		}
+	}
+
+	/// <summary>
+	/// Stands a gun down: no target, and the belt stepped with the trigger off so
+	/// that its cadence stays a function of the ticks. For a post that exists but
+	/// may not shoot this tick — a site not yet finished.
+	/// </summary>
+	public static void Idle(IGunPost post, uint tick)
+	{
+		post.TargetPeerId = 0;
+		Trigger(post, tick, pull: false);
+	}
+
+	/// <summary>
+	/// The scan and the resolve every post shares: re-acquire when a scan is due,
+	/// then hand back the current target if it is still worth shooting at. A null
+	/// answer has already stood the trigger down.
+	/// </summary>
+	private static PlayerCombat Engage(IGunPost post, uint tick, CombatManager combat,
+		PhysicsDirectSpaceState3D space)
+	{
+		if (tick >= post.NextScanTick)
+		{
+			Acquire(post, tick, combat, space);
+
+			uint stagger = post.NextScanTick == 0 ? (uint)(post.ScanStagger % SimConfig.UnitTargetRefreshTicks) : 0u;
+			post.NextScanTick = tick + (uint)SimConfig.UnitTargetRefreshTicks + stagger;
+		}
+
+		PlayerCombat target = Resolve(post, combat);
 		if (target == null)
 		{
-			mount.TargetPeerId = 0;
+			post.TargetPeerId = 0;
 
 			// The belt is still stepped with the trigger off, so its cadence is a
 			// function of the ticks and not of when somebody last walked into range.
-			Trigger(mount, tick, pull: false);
-			return;
+			Trigger(post, tick, pull: false);
 		}
 
-		if (mount.Kind == DefenseKind.Mortar)
-		{
-			FireMortar(mount, target, tick, combat);
-			return;
-		}
-
-		FireGun(mount, target, tick, combat);
+		return target;
 	}
 
 	/// <summary>
@@ -145,18 +246,17 @@ public sealed class DefenseBattery
 	/// allows. The line-of-sight ray is the expensive part, so it is only asked of a
 	/// candidate that would otherwise win.
 	/// </summary>
-	private static void Acquire(DefenseMount mount, uint tick, CombatManager combat,
-		PhysicsDirectSpaceState3D space)
+	private static void Acquire(IGunPost post, uint tick, CombatManager combat, PhysicsDirectSpaceState3D space)
 	{
-		DefenseTraits traits = mount.Traits;
-		Vector3 muzzle = mount.MuzzlePosition;
+		DefenseTraits traits = post.Traits;
 
-		PlayerCombat held = mount.TargetPeerId != 0 ? combat.Find(mount.TargetPeerId) : null;
-		if (IsCandidate(mount, held))
+		PlayerCombat held = post.TargetPeerId != 0 ? combat.Find(post.TargetPeerId) : null;
+		if (IsCandidate(post, held))
 		{
-			Vector3 at = AimPoint(mount, held);
-			bool seen = !traits.NeedsLineOfSight || HasLineOfSight(space, muzzle, held.Character.EyePosition);
-			if (DefenseSim.ShouldKeep(traits, muzzle.DistanceTo(at), seen))
+			Vector3 at = AimPoint(post, held);
+			Vector3 eye = post.EyeToward(at);
+			bool seen = !traits.NeedsLineOfSight || HasLineOfSight(space, eye, held.Character.EyePosition);
+			if (DefenseSim.ShouldKeep(traits, eye.DistanceTo(at), seen))
 			{
 				return;
 			}
@@ -168,18 +268,20 @@ public sealed class DefenseBattery
 		for (int i = 0; i < combat.PlayerCount; i++)
 		{
 			PlayerCombat player = combat.PlayerAt(i);
-			if (!IsCandidate(mount, player))
+			if (!IsCandidate(post, player))
 			{
 				continue;
 			}
 
-			float distance = muzzle.DistanceTo(AimPoint(mount, player));
+			Vector3 at = AimPoint(post, player);
+			Vector3 eye = post.EyeToward(at);
+			float distance = eye.DistanceTo(at);
 			if (distance >= bestDistance || !DefenseSim.CanEngage(traits, distance, lineOfSight: true))
 			{
 				continue;
 			}
 
-			if (traits.NeedsLineOfSight && !HasLineOfSight(space, muzzle, player.Character.EyePosition))
+			if (traits.NeedsLineOfSight && !HasLineOfSight(space, eye, player.Character.EyePosition))
 			{
 				continue;
 			}
@@ -189,12 +291,12 @@ public sealed class DefenseBattery
 		}
 
 		int peer = best?.PeerId ?? 0;
-		if (peer != mount.TargetPeerId)
+		if (peer != post.TargetPeerId)
 		{
 			// The reaction is counted from the switch: a gun that swaps to somebody new
 			// has to find them before it may fire, exactly as a bot does.
-			mount.TargetPeerId = peer;
-			mount.TargetSinceTick = tick;
+			post.TargetPeerId = peer;
+			post.TargetSinceTick = tick;
 		}
 	}
 
@@ -203,21 +305,22 @@ public sealed class DefenseBattery
 	/// side and not beyond the hysteresis ring. Runs every tick, as a unit's does,
 	/// because where the target is is what the gun is pointing at.
 	/// </summary>
-	private static PlayerCombat Resolve(DefenseMount mount, CombatManager combat)
+	private static PlayerCombat Resolve(IGunPost post, CombatManager combat)
 	{
-		if (mount.TargetPeerId == 0)
+		if (post.TargetPeerId == 0)
 		{
 			return null;
 		}
 
-		PlayerCombat target = combat.Find(mount.TargetPeerId);
-		if (!IsCandidate(mount, target))
+		PlayerCombat target = combat.Find(post.TargetPeerId);
+		if (!IsCandidate(post, target))
 		{
 			return null;
 		}
 
-		float distance = mount.MuzzlePosition.DistanceTo(AimPoint(mount, target));
-		return DefenseSim.ShouldKeep(mount.Traits, distance, lineOfSight: true) ? target : null;
+		Vector3 at = AimPoint(post, target);
+		float distance = post.EyeToward(at).DistanceTo(at);
+		return DefenseSim.ShouldKeep(post.Traits, distance, lineOfSight: true) ? target : null;
 	}
 
 	/// <summary>
@@ -225,45 +328,45 @@ public sealed class DefenseBattery
 	/// with; a mortar at the ground under the feet, which is what a shell has to hit
 	/// to go off beside somebody rather than sail past their shoulder.
 	/// </summary>
-	private static Vector3 AimPoint(DefenseMount mount, PlayerCombat player) =>
-		mount.Kind == DefenseKind.Mortar ? player.Character.SimPosition : player.Character.Hitbox.Center;
+	private static Vector3 AimPoint(IGunPost post, PlayerCombat player) =>
+		post.Traits.Kind == DefenseKind.Mortar ? player.Character.SimPosition : player.Character.Hitbox.Center;
 
-	private static bool IsCandidate(DefenseMount mount, PlayerCombat player) =>
-		player?.Character != null && player.IsAlive && !player.AwaitingRole && player.Team != mount.Team;
+	private static bool IsCandidate(IGunPost post, PlayerCombat player) =>
+		player?.Character != null && player.IsAlive && !player.AwaitingRole && player.Team != post.Team;
 
-	private static void FireGun(DefenseMount mount, PlayerCombat target, uint tick, CombatManager combat)
+	private static void FireGun(IGunPost post, PlayerCombat target, uint tick, CombatManager combat)
 	{
-		Vector3 muzzle = mount.MuzzlePosition;
-		byte weaponId = mount.WeaponDefinitionId;
+		Vector3 chest = target.Character.Hitbox.Center;
+		Vector3 muzzle = post.MuzzleToward(chest);
+		byte weaponId = post.WeaponDefinitionId;
 
 		ProjectileStats projectile = weaponId < WeaponCatalog.Projectiles.Length
 			? WeaponCatalog.Projectiles[weaponId]
 			: default;
 
-		Vector3 lead = UnitBrain.Lead(muzzle, target.Character.Hitbox.Center, target.Character.Velocity,
-			projectile.MuzzleVelocity);
+		Vector3 lead = UnitBrain.Lead(muzzle, chest, target.Character.Velocity, projectile.MuzzleVelocity);
 		Aim.Angles(lead - muzzle, out float wantYaw, out float wantPitch);
 
-		float yaw = mount.Yaw;
-		float pitch = mount.Pitch;
-		float error = DefenseSim.Slew(ref yaw, ref pitch, wantYaw, wantPitch, mount.Traits);
-		mount.Yaw = yaw;
-		mount.Pitch = pitch;
-		mount.ApplyPose();
+		float yaw = post.AimYaw;
+		float pitch = post.AimPitch;
+		float error = DefenseSim.Slew(ref yaw, ref pitch, wantYaw, wantPitch, post.Traits);
+		post.AimYaw = yaw;
+		post.AimPitch = pitch;
+		post.ApplyPose();
 
-		bool pull = DefenseSim.MayFire(mount.Traits, tick, mount.TargetSinceTick, error);
-		if (!Trigger(mount, tick, pull))
+		bool pull = DefenseSim.MayFire(post.Traits, tick, post.TargetSinceTick, error);
+		if (!Trigger(post, tick, pull))
 		{
 			return;
 		}
 
 		// Along the barrel, not along the line to the target: a gun still swinging
 		// the last degree onto somebody fires where it is pointed.
-		Vector3 direction = Spread.Apply(Aim.Direction(mount.Yaw, mount.Pitch), mount.AccuracyConeRadians,
-			Spread.Seed(mount.ShooterId, weaponId, mount.Weapon.ShotIndex));
+		Vector3 direction = Spread.Apply(Aim.Direction(post.AimYaw, post.AimPitch), post.AccuracyConeRadians,
+			Spread.Seed(post.ShooterId, weaponId, post.Belt.ShotIndex));
 
 		// No lag compensation, as for a unit: nobody's latency is owed.
-		combat.SpawnProjectile(tick, mount.ShooterId, weaponId, muzzle, direction, catchUpTicks: 0);
+		combat.SpawnProjectile(tick, post.ShooterId, weaponId, muzzle, direction, catchUpTicks: 0);
 	}
 
 	private static void FireMortar(DefenseMount mount, PlayerCombat target, uint tick, CombatManager combat)
@@ -305,13 +408,13 @@ public sealed class DefenseBattery
 	/// <see cref="WeaponState.NextFireTick"/>. Neither defence weapon has a magazine,
 	/// so the one thing that can never come out of this is a reload.
 	/// </summary>
-	private static bool Trigger(DefenseMount mount, uint tick, bool pull)
+	private static bool Trigger(IGunPost post, uint tick, bool pull)
 	{
 		InputButtons buttons = pull ? InputButtons.Fire : InputButtons.None;
-		var frame = InputFrame.Create(tick, 0f, 0f, mount.Yaw, mount.Pitch, buttons);
+		var frame = InputFrame.Create(tick, 0f, 0f, post.AimYaw, post.AimPitch, buttons);
 		var context = new InputContext(frame, (ushort)InputButtons.None, SimConfig.TickDelta);
 
-		return WeaponSim.Step(ref mount.Weapon, mount.Stats, context, tick) == WeaponAction.Fire;
+		return WeaponSim.Step(ref post.Belt, post.Stats, context, tick) == WeaponAction.Fire;
 	}
 
 	private static bool HasLineOfSight(PhysicsDirectSpaceState3D space, Vector3 from, Vector3 to)

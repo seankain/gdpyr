@@ -1,0 +1,24 @@
+{
+  "name": "a sniper tower kills a player at 80 m that no unit can see",
+  "seeds": [3, 17],
+  "duration_ticks": 600,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 0 },
+
+  "seats": [
+    { "id": "mark", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json" }
+  ],
+
+  "spawns": [
+    { "structure": "sniper_tower", "team": "strategist", "at": [-60, 0.5, 80], "yaw": 3.14159 },
+    { "peer": "mark", "at": [-60, 1, 0], "look": [0, 0] }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.kill.count", "op": ">=", "value": 1 },
+    { "metric": "events.kill.attacker.max", "op": "between", "value": [-65583, -65552] },
+    { "metric": "events.damage.amount.max", "op": "between", "value": [59.9, 60.1] },
+    { "metric": "observation.mark.self.alive.min", "op": "==", "value": 0 }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "repeat": true,
+  "steps": [
+    { "ticks": 60, "move": [0, 0], "look": { "dyaw": 0, "dpitch": 0 }, "buttons": ["crouch"] },
+    { "ticks": 840, "move": [0, 0], "look": { "dyaw": 0, "dpitch": 0 }, "buttons": ["crouch", "fire"] }
+  ]
+}

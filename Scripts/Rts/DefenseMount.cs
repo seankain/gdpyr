@@ -26,7 +26,7 @@ namespace Gdpyr.Rts;
 /// and to the projectile queries (docs/NETCODE.md §10.2). The barracks it stands
 /// against is the cover.
 /// </summary>
-public partial class DefenseMount : Node3D
+public partial class DefenseMount : Node3D, IGunPost
 {
 	/// <summary>Nodes in this group are the defences. The map owns them, not the manager.</summary>
 	public const string Group = "barracks_defense";
@@ -118,6 +118,28 @@ public partial class DefenseMount : Node3D
 	public float Yaw { get; set; }
 
 	public float Pitch { get; set; }
+
+	// ---- IGunPost: a defence looks from, and fires from, its muzzle -----------
+
+	Vector3 IGunPost.EyeToward(Vector3 point) => MuzzlePosition;
+
+	Vector3 IGunPost.MuzzleToward(Vector3 point) => MuzzlePosition;
+
+	ref WeaponState IGunPost.Belt => ref Weapon;
+
+	int IGunPost.ScanStagger => Index;
+
+	float IGunPost.AimYaw
+	{
+		get => Yaw;
+		set => Yaw = value;
+	}
+
+	float IGunPost.AimPitch
+	{
+		get => Pitch;
+		set => Pitch = value;
+	}
 
 	private Barracks _barracks;
 	private Node3D _yawPivot;

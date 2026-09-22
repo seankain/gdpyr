@@ -125,11 +125,17 @@ public static class AgentJson
 			writer.WriteStringValue(name);
 		}
 		writer.WriteEndArray();
+		writer.WriteStartArray("structures");
+		foreach (string name in StructureNames)
+		{
+			writer.WriteStringValue(name);
+		}
+		writer.WriteEndArray();
 		writer.WriteNumber("max_commands", AgentCommandList.MaxCommands);
 		writer.WriteEndObject();
 
 		writer.WriteStartObject("events");
-		for (byte kind = 0; kind <= (byte)AgentEventKind.SeatReleased; kind++)
+		for (byte kind = 0; kind <= (byte)AgentEventSchema.Last; kind++)
 		{
 			var value = (AgentEventKind)kind;
 			writer.WriteStartArray(AgentEventSchema.NameOf(value));
@@ -179,7 +185,13 @@ public static class AgentJson
 	};
 
 	/// <summary>Every command a strategist seat may name (docs/AGENT_API.md §7.4).</summary>
-	public static readonly string[] CommandNames = { "order", "build", "cancel", "rally", "noop" };
+	public static readonly string[] CommandNames = { "order", "build", "cancel", "rally", "noop", "construct" };
+
+	/// <summary>
+	/// The structures a <c>construct</c> command may name, in structure-catalog order
+	/// (docs/NETCODE.md §10.5). A command may also name one by its index.
+	/// </summary>
+	public static readonly string[] StructureNames = { "pillbox", "sandbag_wall", "sniper_tower" };
 
 	/// <summary>Every order kind a command may name. <c>stop</c> is a command and never a stored state.</summary>
 	public static readonly string[] OrderNames = { "move", "attack", "patrol", "defend", "stop" };

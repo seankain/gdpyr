@@ -1,0 +1,28 @@
+{
+  "name": "a finished pillbox kills what it can reach and nothing past that",
+  "seeds": [5, 9],
+  "duration_ticks": 360,
+  "warmup_ticks": 60,
+  "roster": { "ground": 2, "strategists": 0 },
+
+  "seats": [
+    { "id": "near", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json" },
+    { "id": "far", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json" }
+  ],
+
+  "spawns": [
+    { "structure": "pillbox", "team": "strategist", "at": [-60, 0.5, 60], "yaw": 3.14159 },
+    { "peer": "near", "at": [-60, 1, 30], "look": [0, 0] },
+    { "peer": "far", "at": [-60, 1, -5], "look": [0, 0] }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.kill.count", "op": ">=", "value": 1 },
+    { "metric": "events.kill.attacker.max", "op": "between", "value": [-65583, -65552] },
+    { "metric": "events.damage.attacker.max", "op": "between", "value": [-65583, -65552] },
+    { "metric": "observation.near.self.alive.min", "op": "==", "value": 0 },
+    { "metric": "observation.far.self.alive.min", "op": "==", "value": 1 },
+    { "metric": "observation.far.self.health.min", "op": "==", "value": 1 }
+  ]
+}

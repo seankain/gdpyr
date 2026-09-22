@@ -409,6 +409,13 @@ public sealed partial class AgentServer : IDisposable
 					units.ServerSetRally(seat.PeerId, command.Barracks, at);
 					break;
 
+				case AgentCommandKind.Construct:
+					// The ground under the point is found by the server; the policy only
+					// names where on the map (docs/NETCODE.md §10.5).
+					units.ServerConstruct(seat.PeerId, list.UnitsOf(command), command.Structure, at, command.Yaw,
+						out _);
+					break;
+
 				case AgentCommandKind.Noop:
 				default:
 					break;

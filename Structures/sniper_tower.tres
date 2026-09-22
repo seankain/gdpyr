@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="StructureDefinition" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Rts/StructureDefinition.cs" id="1_structdef"]
+
+[resource]
+script = ExtResource("1_structdef")
+Name = &"sniper_tower"
+Cost = 125
+BuildSeconds = 14.0
+MaxHealth = 450.0
+BulletDamageScale = 0.5
+BodySize = Vector3(2.0, 7.0, 2.0)
+TopSize = Vector3(3.2, 0.9, 3.2)
+TopElevationMeters = 7.0
+SensorRadiusMeters = 90.0
+EyeHeightMeters = 8.9
+WeaponId = 10
+MuzzleHeightMeters = 8.8
+RangeMeters = 90.0
+ReactionSeconds = 1.2
+TraverseDegreesPerSecond = 60.0
+OnTargetDegrees = 0.5
+AccuracyConeDegrees = 0.35
+Color = Color(0.45, 0.36, 0.25, 1)

@@ -391,6 +391,14 @@ Four things the shipped encoder settled that the table above does not say
   An unseen enemy and a dead one look the same, and they should: a policy that could tell the
   difference would be reading the absence of a record as intelligence the fog exists to withhold.
 
+**Builders and structures are not a block of their own** ([`NETCODE.md`](NETCODE.md) §10.5), and
+the schema is unchanged by them. A builder is a unit in the unit block with no tier bit set (its
+catalog id is 3, past the one-hot's three), a unit on a `Build` order has no order bit set, and a
+barracks building one reads a head tier of 1, the same as a tank. What a policy's builders put up is
+not in the vector at all: a strategist policy can build (§7.4) but cannot see what it built. That is
+the first thing to add when somebody trains one that wants to — a structure block, and a schema
+version.
+
 **Fog parity is one call, not a re-implementation.** The live records come from
 `VisibilityService.IsVisible`, the ghosts from `VisibilityService.TryContact` — the same two
 answers a human strategist's snapshot and HUD are built from (`NETCODE.md` §6.2). The rule that
@@ -504,7 +512,18 @@ A list of commands, applied in order, rate-limited by §7.3:
 ]}}
 ```
 
-`cmd` is one of `order` (kind: move/attack/patrol/defend/stop), `build`, `cancel`, `rally`, `noop`.
+`cmd` is one of `order` (kind: move/attack/patrol/defend/stop), `build`, `cancel`, `rally`, `noop`
+and `construct`. `construct` sends builders to put a structure up ([`NETCODE.md`](NETCODE.md) §10.5)
+and lands in the same `UnitManager.ServerConstruct` a human strategist's `ClientConstruct` does, so it
+is charged, placed and refused by the same rules:
+
+```json
+{"cmd":"construct","units":[31],"structure":"pillbox","target":[-24.0,-94.0],"yaw":3.14}
+```
+
+`structure` is one of the names `welcome` publishes under `strategist_action.structures` —
+`pillbox`, `sandbag_wall`, `sniper_tower` — or its index; `yaw` is the way its front faces, in
+radians, and the server finds the ground under `target` itself.
 Unit ids that the seat does not own are rejected by `ApplyOrder` exactly as a client's would be,
 and the rejection is counted in `UnitManager.RejectedOrders` — so a policy emitting garbage shows
 up on the debug HUD rather than silently doing nothing.
@@ -582,11 +601,16 @@ from position deltas and gets it slightly wrong.
 | `node_captured` / `node_contested` | node, owner, claimant |
 | `gun_mounted` / `can_spent` | peer, emplacement |
 | `seat_attached` / `seat_released` | seat, peer, reason |
+| `structure_placed` | structure (its slot), type, builders sent, x, z |
+| `structure_built` / `structure_lost` | structure, type, x, z; and for a loss, the killer |
 
 An `attacker` or `victim` is an `OwnerId` (`Scripts/Sim/OwnerId.cs`): positive is a peer, and
-everything the strategist's side fires with is negative — `-1` to `-65535` a unit, and `-65536` down
-to `-65551` a barracks' own gun or mortar ([`NETCODE.md`](NETCODE.md) §10.4). A defence is never a
-victim, because nothing can damage one; its `weapon` field reads 0, as a unit's does.
+everything the strategist's side fires with is negative — `-1` to `-65535` a unit, `-65536` down
+to `-65551` a barracks' own gun or mortar ([`NETCODE.md`](NETCODE.md) §10.4), and `-65552` down to
+`-65583` a structure a builder put up, by its slot ([`NETCODE.md`](NETCODE.md) §10.5). A defence
+is never a victim, because nothing can damage one; a structure is, and its `damage` records carry
+what it actually took after its armour, not what the round would have done to a body. Either one's
+`weapon` field reads 0, as a unit's does.
 
 **This event stream is most of M8's per-round CSV.** The columns that milestone names — round
 length, ticket curve, strategist income against spending, units built and lost by tier, nodes held
@@ -627,6 +651,11 @@ of assertions. It is checked into the repo beside the tests.
   ]
 }
 ```
+
+A spawn names exactly one of a `peer` (a seat to place), a `unit` (`infantry`, `technical`,
+`tank` or `builder`) or a `structure` (`pillbox`, `sandbag_wall`, `sniper_tower`, with a `yaw`). A
+structure is put up finished and free, and the server refuses one that does not fit where it was put
+rather than guessing — a pillbox inside a wall is a typo in the scenario, not a test.
 
 That is `Tests/Scenarios/rifle_lethality.json` as checked in. Two differences from the sketch above
 it are worth naming, because both are the published schema winning an argument with a document:

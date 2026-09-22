@@ -1,0 +1,25 @@
+{
+  "name": "rifle rounds fired from a crouch stop in a sandbag wall and do 30% of their damage to it",
+  "seeds": [6],
+  "duration_ticks": 240,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 0 },
+
+  "seats": [
+    { "id": "rifleman", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/crouch_and_fire.json" }
+  ],
+
+  "spawns": [
+    { "structure": "sandbag_wall", "team": "strategist", "at": [-60, 0.5, 50], "yaw": 0 },
+    { "peer": "rifleman", "at": [-60, 1, 60], "look": [0, 0] }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.damage.count", "op": ">=", "value": 5 },
+    { "metric": "events.damage.victim.max", "op": "between", "value": [-65583, -65552] },
+    { "metric": "events.damage.amount.max", "op": "between", "value": [5.9, 6.1] },
+    { "metric": "events.kill.count", "op": "==", "value": 0 },
+    { "metric": "events.structure_lost.count", "op": "==", "value": 0 }
+  ]
+}

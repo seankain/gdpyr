@@ -79,7 +79,8 @@ public sealed class BotPilot
 
 	private NavigationAgent3D _agent;
 
-	private ushort _targetUnitId;
+	/// <summary>What it is shooting at, as an owner id: a unit, a structure, or none.</summary>
+	private int _targetOwnerId;
 	private uint _targetSinceTick;
 	private uint _nextScanTick;
 
@@ -101,8 +102,8 @@ public sealed class BotPilot
 
 	public int PeerId => _peerId;
 
-	/// <summary>What it is shooting at, as a unit id. 0 for nothing. For the debug HUD.</summary>
-	public ushort TargetUnitId => _targetUnitId;
+	/// <summary>What it is shooting at, as a unit id. 0 for nothing, or for a structure. For the debug HUD.</summary>
+	public ushort TargetUnitId => OwnerId.UnitOf(_targetOwnerId);
 
 	/// <summary>
 	/// One tick of intent. Called by <see cref="Net.PlayerManager"/> in place of
@@ -121,7 +122,7 @@ public sealed class BotPilot
 		{
 			// A dead bot holds its angles and does nothing else, which is precisely
 			// what PlayerManager does to a dead human's recorded frame.
-			_targetUnitId = 0;
+			_targetOwnerId = OwnerId.None;
 			return InputFrame.Neutral(tick, character.Yaw, character.Pitch);
 		}
 
@@ -141,10 +142,10 @@ public sealed class BotPilot
 
 		if (!hasTarget)
 		{
-			_targetUnitId = 0;
+			_targetOwnerId = OwnerId.None;
 		}
 
-		bool visible = hasTarget && HasLineOfSight(eye, targetPosition)
+		bool visible = hasTarget && TargetInSight(eye, targetPosition)
 			&& !FriendlyInLineOfFire(eye, targetPosition, combat.Team);
 
 		// A bot with something to shoot at walks towards it; the brain stops it and
@@ -221,13 +222,13 @@ public sealed class BotPilot
 	private void AcquireTarget(fps_controller character, Team team, uint tick)
 	{
 		_contactCount = GroundSensor.Scan(character, _peerId, team, _traits.SensorRadiusMeters, _contacts);
-		ushort best = GroundSensor.NearestHostileUnit(_contacts.AsSpan(0, _contactCount), team);
+		int best = GroundSensor.NearestHostileTarget(_contacts.AsSpan(0, _contactCount), team);
 
-		if (best != _targetUnitId)
+		if (best != _targetOwnerId)
 		{
 			// The reaction delay is measured from the switch, not from the scan: a bot
 			// that swaps targets has to re-acquire the new one before it may fire.
-			_targetUnitId = best;
+			_targetOwnerId = best;
 			_targetSinceTick = tick;
 		}
 	}
@@ -243,18 +244,11 @@ public sealed class BotPilot
 		targetPosition = Vector3.Zero;
 		distance = float.MaxValue;
 
-		if (_targetUnitId == 0)
+		if (_targetOwnerId == OwnerId.None || !TryTargetState(out targetPosition, out Vector3 targetVelocity))
 		{
 			return false;
 		}
 
-		Unit unit = UnitManager.Instance?.Find(_targetUnitId);
-		if (unit == null || !unit.IsAlive)
-		{
-			return false;
-		}
-
-		targetPosition = unit.Hitbox.Center;
 		distance = eye.DistanceTo(targetPosition);
 
 		// Hysteresis, as units have: a target walking the edge of the sensor must not
@@ -272,7 +266,7 @@ public sealed class BotPilot
 		// The same first-order lead units use, for the same reason: without it a bot
 		// firing at a unit crossing in front of it misses every time, and the
 		// firefight M3.5 exists to produce never happens (docs/NETCODE.md §4.4).
-		Vector3 lead = UnitBrain.Lead(eye, targetPosition, unit.Velocity, muzzleVelocity);
+		Vector3 lead = UnitBrain.Lead(eye, targetPosition, targetVelocity, muzzleVelocity);
 		Vector3 to = lead - eye;
 		if (to.LengthSquared() < 0.0001f)
 		{
@@ -281,6 +275,59 @@ public sealed class BotPilot
 
 		aimDirection = to.Normalized();
 		return true;
+	}
+
+	/// <summary>
+	/// Where the current target is and how fast it is going: a unit's capsule, or
+	/// the middle of what stands of a structure, which is not going anywhere.
+	/// </summary>
+	private bool TryTargetState(out Vector3 position, out Vector3 velocity)
+	{
+		position = Vector3.Zero;
+		velocity = Vector3.Zero;
+
+		UnitManager units = UnitManager.Instance;
+		if (units == null)
+		{
+			return false;
+		}
+
+		if (OwnerId.IsStructure(_targetOwnerId))
+		{
+			Structure structure = units.StructureOf(_targetOwnerId);
+			if (structure == null || structure.IsDestroyed)
+			{
+				return false;
+			}
+
+			position = structure.AimPoint;
+			return true;
+		}
+
+		Unit unit = units.Find(OwnerId.UnitOf(_targetOwnerId));
+		if (unit == null || !unit.IsAlive)
+		{
+			return false;
+		}
+
+		position = unit.Hitbox.Center;
+		velocity = unit.Velocity;
+		return true;
+	}
+
+	/// <summary>
+	/// Whether the target can be seen from the eye. A structure is seen when the
+	/// first thing the line meets is the structure, since a finished one is itself
+	/// the world geometry an ordinary sight line would call "blocked".
+	/// </summary>
+	private bool TargetInSight(Vector3 eye, Vector3 targetPosition)
+	{
+		if (OwnerId.IsStructure(_targetOwnerId) && UnitManager.Instance?.StructureOf(_targetOwnerId) is { } structure)
+		{
+			return GroundSensor.CanSee(_character.GetWorld3D()?.DirectSpaceState, eye, structure);
+		}
+
+		return HasLineOfSight(eye, targetPosition);
 	}
 
 	// ---- where to stand ----------------------------------------------------
