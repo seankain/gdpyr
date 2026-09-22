@@ -1,15 +1,18 @@
 using Gdpyr.Core;
 using Gdpyr.Match;
+using Gdpyr.Sim;
 using Godot;
 using System;
 
 namespace Gdpyr.Fps;
 
 /// <summary>
-/// The first-person viewmodel: which weapon is in shot, and its sway.
+/// The first-person viewmodel: which weapon is in shot, where it is held, and its
+/// sway.
 ///
 /// Since M2 the weapon it shows is read from the simulation rather than from the
-/// keyboard. The equipped slot is simulated state — the server has an opinion
+/// keyboard, and since the sights went in, where it is held is read from there
+/// too. The equipped slot is simulated state — the server has an opinion
 /// about it, a replayed tick reproduces it — so a viewmodel that switched itself
 /// on a keypress would be showing a weapon the player is not holding whenever the
 /// two disagreed (docs/NETCODE.md §3.1). Sway stays on the render frame and stays
@@ -21,6 +24,13 @@ public partial class WeaponInit : Node3D
 
 	public MeshInstance3D WeaponMesh;
 	public MeshInstance3D WeaponShadow;
+
+	/// <summary>
+	/// How far into a scoped weapon's raise the viewmodel leaves the shot. Matches
+	/// where <see cref="Ui.ScopeOverlay"/> starts to cover the screen, so the gun
+	/// goes as the eyepiece arrives rather than before or after it.
+	/// </summary>
+	private const float ScopeHidesViewmodelAt = 0.55f;
 
 	private Vector2 mouseMovement = Vector2.Zero;
 	private Vector3 rotationDegrees = Vector3.Zero;
@@ -61,6 +71,7 @@ public partial class WeaponInit : Node3D
 	public override void _Process(double delta)
 	{
 		FollowSimulation();
+		AimWeapon();
 		SwayWeapon((float)delta);
 	}
 
@@ -84,6 +95,34 @@ public partial class WeaponInit : Node3D
 		if (equipped.HasValue)
 		{
 			EquipWeapon(WeaponCatalog.Definition(equipped.Value));
+		}
+	}
+
+	/// <summary>
+	/// Brings the sights up: the viewmodel is drawn somewhere between where the
+	/// weapon is carried and where it is aimed, at whatever fraction of the raise
+	/// the simulation has reached (<see cref="Ads"/>).
+	///
+	/// Behind an optic the viewmodel is what the player would be looking *through*,
+	/// so it is taken out of shot once the scope's surround has the screen —
+	/// <see cref="Ui.ScopeOverlay"/> fades in over the same part of the raise. Over
+	/// irons there is nothing to hide: the weapon centring *is* the sight picture.
+	/// </summary>
+	private void AimWeapon()
+	{
+		if (WeaponType == null)
+		{
+			return;
+		}
+
+		LocalAim.TryRead(out AimStats stats, out float progress);
+
+		Position = WeaponType.Position.Lerp(WeaponType.AimPosition, progress);
+		Rotation = WeaponType.Rotation.Lerp(WeaponType.AimRotation, progress);
+
+		if (WeaponMesh != null)
+		{
+			WeaponMesh.Visible = !stats.IsScoped || progress < ScopeHidesViewmodelAt;
 		}
 	}
 

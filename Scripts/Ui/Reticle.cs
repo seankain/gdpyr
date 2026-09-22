@@ -1,3 +1,4 @@
+using Gdpyr.Fps;
 using Godot;
 using System;
 
@@ -22,6 +23,13 @@ public partial class Reticle : CenterContainer
 	[Export]
 	public float ReticleDistance = 2.0f;
 
+	/// <summary>
+	/// How far into a raise the hip reticle goes away. Early, because past this the
+	/// player is aiming at the sights and not at the four lines
+	/// (<see cref="Gdpyr.Sim.Ads"/>).
+	/// </summary>
+	private const float HiddenFromProgress = 0.4f;
+
 	// Called when the node enters the scene tree for the first time.
 	public override void _Ready()
 	{
@@ -31,6 +39,15 @@ public partial class Reticle : CenterContainer
 	// Called every frame. 'delta' is the elapsed time since the previous frame.
 	public override void _Process(double delta)
 	{
+		// Sights up replace the hip reticle: over irons the centred weapon is the
+		// sight picture, and an optic draws its own (ScopeOverlay).
+		bool aiming = LocalAim.Progress >= HiddenFromProgress;
+		Visible = !aiming;
+		if (aiming)
+		{
+			return;
+		}
+
 		AdjustReticleLines();
 	}
 

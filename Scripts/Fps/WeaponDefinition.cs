@@ -98,6 +98,50 @@ public partial class WeaponDefinition : Resource
 	[Export]
 	public ProjectileDefinition Projectile;
 
+	[ExportCategory("Optics")]
+
+	/// <summary>
+	/// How much the view is magnified with the sights all the way up. 1 — the
+	/// default — is a weapon that does not aim at all, which is what the mounted
+	/// guns and the hammer are: a player pressing the aim button with one of those
+	/// up gets nothing, rather than a magnification of one applied to everything.
+	///
+	/// A magnification rather than an aimed field of view, so that the number means
+	/// the same thing whatever FOV the camera is carried at
+	/// (<see cref="Ads.FovDegrees"/>).
+	/// </summary>
+	[Export]
+	public float AimMagnification = 1f;
+
+	/// <summary>
+	/// Time from the hip to fully aimed, and back. Quantized to whole ticks by
+	/// <see cref="WeaponStats.SecondsToTicks"/> for the reason the rate of fire is:
+	/// a raise that is not a whole number of ticks cannot be reproduced from the
+	/// recorded frames.
+	/// </summary>
+	[Export]
+	public float AimSeconds = 0.2f;
+
+	/// <summary>
+	/// True for a weapon aimed through an optic. The scope's surround takes the
+	/// screen once it is most of the way up and the viewmodel goes with it; a weapon
+	/// with this false simply brings its own sights into the middle of the screen.
+	/// </summary>
+	[Export]
+	public bool Scoped;
+
+	/// <summary>
+	/// Where the viewmodel is held with the sights up, in the same camera-relative
+	/// space <see cref="Position"/> is authored in. Presentation only, like
+	/// <see cref="Position"/> itself.
+	/// </summary>
+	[Export]
+	public Vector3 AimPosition;
+
+	/// <summary>The viewmodel's rotation with the sights up [rad], as <see cref="Rotation"/> is.</summary>
+	[Export]
+	public Vector3 AimRotation;
+
 	[ExportCategory("WeaponSway")]
 	[Export]
 	public Vector2 SwayMin = new Vector2(-20,20);
@@ -122,6 +166,16 @@ public partial class WeaponDefinition : Resource
 	[ExportCategory("WeaponSway")]
 	[Export]
 	public float RandomSwayAmount = 5.0f;
+
+	/// <summary>
+	/// What raising this weapon's sights does, in ticks and magnification
+	/// (<see cref="Ads"/>). A melee weapon has nothing to raise whatever else is
+	/// authored on it, and so does anything left at a magnification of one.
+	/// </summary>
+	public AimStats ToAimStats() =>
+		IsMelee || AimMagnification <= 1f
+			? AimStats.None
+			: new AimStats(AimMagnification, WeaponStats.SecondsToTicks(AimSeconds), Scoped);
 
 	/// <summary>The simulation's view of this weapon: everything in ticks and rounds.</summary>
 	public WeaponStats ToStats() => new(

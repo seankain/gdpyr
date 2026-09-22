@@ -17,6 +17,8 @@
 [ext_resource type="Script" uid="uid://chguu6pbiy5xy" path="res://Scripts/Fps/WeaponSubViewport.cs" id="14_imije"]
 [ext_resource type="Script" uid="uid://dxrw2xale501k" path="res://Scripts/Fps/WeaponCamera.cs" id="14_l52yo"]
 [ext_resource type="PackedScene" uid="uid://cpausemenuscene1" path="res://Scenes/PauseMenu.tscn" id="15_pausem"]
+[ext_resource type="Script" path="res://Scripts/Fps/AimZoom.cs" id="16_aimzm"]
+[ext_resource type="Script" path="res://Scripts/Ui/ScopeOverlay.cs" id="17_scope"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_87822"]
 
@@ -381,6 +383,7 @@ mesh = SubResource("BoxMesh_4oumj")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.596318, -0.218104)
 
 [node name="Camera3D" type="Camera3D" parent="CameraController" unique_id=1006281648]
+script = ExtResource("16_aimzm")
 
 [node name="WeaponRig" type="Node3D" parent="CameraController/Camera3D" unique_id=414985442]
 
@@ -438,6 +441,16 @@ width = 2.0
 [node name="Left" type="Line2D" parent="UserInterface/Reticle" unique_id=794884766]
 points = PackedVector2Array(-5, 0, -15, 0)
 width = 2.0
+
+[node name="ScopeOverlay" type="Control" parent="UserInterface" unique_id=918273645]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("17_scope")
 
 [node name="DebugPanel" type="PanelContainer" parent="UserInterface" unique_id=1036157794]
 unique_name_in_owner = true

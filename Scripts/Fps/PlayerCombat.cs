@@ -82,6 +82,15 @@ public sealed class PlayerCombat
 
 	public readonly WeaponState[] Weapons = new WeaponState[SimConfig.WeaponSlots];
 
+	/// <summary>
+	/// How far up this player's sights are (<see cref="Ads"/>). Advanced by the same
+	/// pure step on the server and on the owning client, from the same recorded
+	/// frames, so it needs no room in the snapshot: nobody but the player behind them
+	/// can see their own sights, and the one process that draws them is the one that
+	/// sampled the button.
+	/// </summary>
+	public AimState Aim;
+
 	/// <summary>Where this player's hitbox has been (docs/NETCODE.md §5). Server-side.</summary>
 	public readonly HitboxHistory History = new();
 
@@ -120,6 +129,9 @@ public sealed class PlayerCombat
 
 	public WeaponStats EquippedStats => WeaponCatalog.StatsFor(EquippedDefinitionId);
 
+	/// <summary>What raising the equipped weapon's sights does.</summary>
+	public AimStats EquippedAim => WeaponCatalog.AimFor(EquippedDefinitionId);
+
 	/// <summary>Arms all three slots from a loadout and selects the large weapon.</summary>
 	public void Equip(LoadoutSelection loadout)
 	{
@@ -129,6 +141,9 @@ public sealed class PlayerCombat
 			byte id = Loadout[slot];
 			Weapons[slot] = WeaponState.Ready(id, WeaponCatalog.StatsFor(id));
 		}
+
+		// Sights come down with the weapons they were on: a life starts at the hip.
+		Aim = default;
 
 		// Spawning with the large weapon up is what a player wants every time; the
 		// alternative is a keypress at the start of every life.

@@ -77,8 +77,16 @@ public partial class LocalInputSampler : Node
 			return InputFrame.Create(tick, 0f, 0f, Yaw, Pitch, InputButtons.None);
 		}
 
-		Yaw -= _mouseDelta.X * MouseSensitivity * SimConfig.TickDelta;
-		Pitch = Mathf.Clamp(Pitch - (_mouseDelta.Y * MouseSensitivity * SimConfig.TickDelta),
+		// Zoom and turn rate move together (Ads.LookScale): sampled at the hip's
+		// radians per pixel, a four-power scope sweeps four times as much of what the
+		// player can see, which makes the magnification worse than useless. This is
+		// the device end of the boundary and the right side of it — what the
+		// simulation gets is still an absolute, quantized angle, and the sights the
+		// scale comes from were themselves advanced from a recorded frame.
+		float lookScale = LocalAim.LookScale;
+
+		Yaw -= _mouseDelta.X * MouseSensitivity * lookScale * SimConfig.TickDelta;
+		Pitch = Mathf.Clamp(Pitch - (_mouseDelta.Y * MouseSensitivity * lookScale * SimConfig.TickDelta),
 			-Quantize.HalfPi, Quantize.HalfPi);
 		_mouseDelta = Vector2.Zero;
 

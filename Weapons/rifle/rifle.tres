@@ -20,4 +20,7 @@ RoundsPerMinute = 600.0
 MagazineSize = 30
 ReloadSeconds = 2.2
 IsMelee = false
+AimMagnification = 1.25
+AimSeconds = 0.18
+AimPosition = Vector3(0, -0.1, -0.42)
 Projectile = ExtResource("2_projectile")

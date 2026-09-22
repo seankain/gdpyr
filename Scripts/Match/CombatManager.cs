@@ -263,8 +263,18 @@ public partial class CombatManager : Node
 	public void ServerSimulate(int peerId, in InputContext input, uint tick)
 	{
 		PlayerCombat combat = Find(peerId);
-		if (combat == null || !combat.IsAlive)
+		if (combat == null)
 		{
+			return;
+		}
+
+		if (!combat.IsAlive)
+		{
+			// A player who is off the field still has sights to lower: their frame is
+			// look-only by then (InputFrame.LookOnly), so the same step that raised them
+			// brings them down over the same ticks rather than snapping the view back
+			// the instant they are killed.
+			Ads.Step(ref combat.Aim, combat.EquippedAim, input);
 			return;
 		}
 
@@ -275,11 +285,18 @@ public partial class CombatManager : Node
 		// §M5): while they are behind a gun, the trigger fires the gun.
 		if (emplacements != null && emplacements.TryMounted(peerId, out Emplacement mounted))
 		{
+			// A mounted gun is aimed over its own sights, which is what the traverse arc
+			// already is; whatever the gunner had up is put away with the weapon.
+			Ads.Step(ref combat.Aim, AimStats.None, input);
 			FireMounted(combat, mounted, input, tick, authoritative: true);
 			return;
 		}
 
 		combat.Slot = WeaponSim.SelectSlot(combat.Slot, input);
+
+		// After the slot, so that the weapon that has just come up is the one whose
+		// raise this tick counts against.
+		Ads.Step(ref combat.Aim, combat.EquippedAim, input);
 
 		WeaponStats stats = combat.EquippedStats;
 		if (WeaponSim.Step(ref combat.Equipped, stats, input, tick) != WeaponAction.Fire)
@@ -1334,8 +1351,16 @@ public partial class CombatManager : Node
 	public void ClientSimulateLocal(in InputContext input, uint tick)
 	{
 		PlayerCombat combat = Local;
-		if (combat?.Character == null || !combat.IsAlive)
+		if (combat?.Character == null)
 		{
+			return;
+		}
+
+		if (!combat.IsAlive)
+		{
+			// The same lowering the server runs for a player who is off the field, over
+			// the same look-only frame.
+			Ads.Step(ref combat.Aim, combat.EquippedAim, input);
 			return;
 		}
 
@@ -1345,11 +1370,13 @@ public partial class CombatManager : Node
 		if (EmplacementManager.Instance is { } emplacements
 			&& emplacements.TryMounted(combat.PeerId, out Emplacement mounted))
 		{
+			Ads.Step(ref combat.Aim, AimStats.None, input);
 			FireMounted(combat, mounted, input, tick, authoritative: false);
 			return;
 		}
 
 		combat.Slot = WeaponSim.SelectSlot(combat.Slot, input);
+		Ads.Step(ref combat.Aim, combat.EquippedAim, input);
 
 		WeaponStats stats = combat.EquippedStats;
 		WeaponAction action = WeaponSim.Step(ref combat.Equipped, stats, input, tick);

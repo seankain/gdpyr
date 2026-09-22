@@ -126,6 +126,20 @@ Right-clicking an enemy player orders an attack on that player rather than on th
 them. Units are server-simulated and never predicted; the order marker appears immediately and the
 units move a round trip later, which is what an RTS feels like anyway.
 
+On the ground, right mouse raises the sights. What that gets you is the weapon's:
+
+| Weapon | Aiming |
+|---|---|
+| DMR | a four-power optic — the eyepiece takes the screen, the gun leaves it, and the view goes with it |
+| rifle, launcher, pistol | the sights come to the middle of the screen, with a fraction of the zoom |
+| hammer, a mounted heavy gun | nothing to raise; a mounted gun is aimed over its own sights |
+
+Turn rate is divided by whatever magnification is in force, so a pixel of mouse travel is worth the
+same distance on screen at every power — a four-power scope at the hip's sensitivity sweeps four
+times as much of what you can see. The sights are a client's own: they are raised from the same
+recorded input frame the rest of the simulation runs on, and nothing about them goes on the wire
+([`docs/NETCODE.md`](docs/NETCODE.md) §4.7).
+
 ## Playing on your own
 
 Computer players fill both sides so that one person is enough for a round. They arrive as soon as
