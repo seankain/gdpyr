@@ -474,6 +474,12 @@ strategist in it means the fog is not being applied; "seen" climbing towards "tr
 goes in is what scouting looks like as a number. On a strategist's client, the other side of it:
 how many players it is still being told about, and how many it is drawing from memory.
 
+M8.5 added one row that is only there while it is true: the demo being recorded, its kind, how many
+ticks are in it and how big it is ([`DEMOS.md`](DEMOS.md)). "Two hundred bytes after five minutes"
+is a recording that stopped, and there is no other way to see it. There is no row for a demo being
+*watched*, because this panel lives in the local player's interface and a replay has no local
+player — the read head gets a one-line bar of its own instead.
+
 Every hard bug in this system is a timing bug. Without these numbers you are guessing.
 
 ---
@@ -617,3 +623,35 @@ server, once.
 The server fills the same table locally before sending it, because a listen host sends itself
 nothing and its scoreboard has to come from somewhere; a peer that connects during the intermission
 is sent the table everyone else is looking at.
+
+---
+
+## 11. Demos
+
+The tick model §2 and §3 describe has one property that is worth more than it cost: the simulation
+reads nothing but the recorded `InputFrame` for the tick, and `PlayerManager.SimulatePlayers` is the
+one place a character's intent — a socket, a device or a bot's brain — becomes that frame. Writing
+the frame out there writes the round down. That is the input journal Quake III's `com_journal` is
+named after, and it is what a demo is here.
+
+Two consequences follow from the authority model rather than from a decision.
+
+**Only the authority can journal.** A client is never told what anybody else pressed (§1), so a
+client's demo is what it *was* sent — its own input and the snapshots — and plays back by
+interpolation rather than by re-simulation. The two kinds are `Journal` and `Stream`, and `record`
+writes whichever the process it is running in can.
+
+**A journal alone is not enough to draw.** Physics is not bit-exact across builds and the RTS half
+is not journalled at all, so the file also carries the snapshots the authority broadcast, verbatim:
+the player snapshot at `SnapshotRate` and the unit snapshot at `UnitSnapshotRate`, the same bytes
+§7's message set already puts on the wire. Playback re-runs the movement step over the journal at
+the full tick rate and lets those keyframes correct it every second tick, which is the same
+arrangement §3.2 uses on a client — predict at 60 Hz, correct at 30 — pointed at a file instead of a
+socket.
+
+The demo's version is therefore tied to the wire's: the payloads are the codecs' own bytes and a
+protocol change invalidates old demos. `DemoHeader.IsPlayable` makes that a refusal rather than a
+mystery, and the same check refuses a demo recorded at a different `SimConfig.TickRate` — every
+recorded tick index would mean something else.
+
+The whole of it, including what this first cut does not replay, is [`DEMOS.md`](DEMOS.md).

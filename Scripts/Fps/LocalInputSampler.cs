@@ -70,8 +70,11 @@ public partial class LocalInputSampler : Node
 	public InputFrame Sample(uint tick)
 	{
 		// Paused means neutral input, not "no input frame": the server keeps
-		// simulating either way, and a missing frame reads to it as packet loss.
-		if (!_enabled || GetTree().Paused)
+		// simulating either way, and a missing frame reads to it as packet loss. The
+		// console counts as paused for the same reason it counts as anything: the
+		// keys are being typed at a text box, and Input.IsActionPressed cannot tell
+		// (Scripts/Core/InputFocus.cs).
+		if (!_enabled || GetTree().Paused || InputFocus.TextEntry)
 		{
 			_mouseDelta = Vector2.Zero;
 			return InputFrame.Create(tick, 0f, 0f, Yaw, Pitch, InputButtons.None);

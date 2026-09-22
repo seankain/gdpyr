@@ -498,6 +498,35 @@ actually judged by.
   reason the agent API was sequenced ahead of it — **and the reason it must not displace it.** An
   agent can tell you the round still ends; only people can tell you they want another one.
 
+### M8.5 — Demos: recording a round and watching it back (1–2 days) ✅ *shipped*
+
+Sequenced here rather than earlier because it is M8's other half: a CSV row says a round ended in
+nine minutes with four tickets left, and a demo is the nine minutes. It cost a day because §3's tick
+model had already paid for it — the simulation reads nothing but the recorded `InputFrame`, and
+`PlayerManager.SimulatePlayers` is the one place a character's intent becomes one, so the journal is
+a single line in the loop that already exists.
+
+- A tagged, length-delimited container under `user://demos`, engine-free and total on read like
+  every other codec here — header, records, writer, reader, summary, and a `dotnet test` suite over
+  a `MemoryStream` that includes the truncated, spliced and hostile cases
+  ([`DEMOS.md`](DEMOS.md) §2).
+- Two kinds, decided by what the recording process actually has rather than by a setting: the
+  authority journals every character's input and adds the snapshots it broadcast; a client records
+  its own input and the packets it was sent ([`NETCODE.md`](NETCODE.md) §11).
+- A `~` console — an autoload, so it is at the main menu as well as in the map — with `record`,
+  `stoprecord`, `mark`, `demos`, `demoinfo`, `playdemo`, `stopdemo`, `demospeed`, `demopause` and
+  `demofollow`. The command table and the line parser are engine-free and unit-tested; the part with
+  a text box in it is not.
+- `--record <name>` and `--playdemo <name>`, because a dedicated server has no console to type into.
+- Playback re-runs the movement step over the journal at the full tick rate and lets the keyframes
+  correct it — the arrangement §3.2 of the netcode design uses on a client, pointed at a file.
+
+**Deliberately not in it:** projectiles and hit effects are not re-fired, the strategist's orders are
+not journalled (they arrive as their own RPCs rather than as an `InputFrame`, so the one hook does
+not see them), there is no scrubbing, and "a recorded round replays as the same round" is not
+asserted anywhere — that assertion needs an engine, and the honest place for it is the playtest
+harness, which already runs a seeded episode headlessly ([`DEMOS.md`](DEMOS.md) §6).
+
 ### M9 — Steam (deferred, 2–3 days when needed) *(was M7)*
 
 Swap `TransportFactory` to a Steam `MultiplayerPeer`, add lobby create/join. Re-evaluate the options

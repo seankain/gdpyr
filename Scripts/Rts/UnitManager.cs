@@ -65,6 +65,9 @@ public partial class UnitManager : Node
 	private readonly UnitSnapshot[] _snapshotScratch = new UnitSnapshot[SimConfig.MaxUnits];
 	private readonly Dictionary<ushort, SnapshotInterpolator> _interpolators = new();
 
+	/// <summary>Scratch for <see cref="ApplyRecordedSnapshot"/>; a field so playback allocates nothing per tick.</summary>
+	private readonly HashSet<ushort> _recordedIds = new();
+
 	private BarracksStatus[] _barracksStatus = Array.Empty<BarracksStatus>();
 
 	private Node3D _unitsRoot;
@@ -925,7 +928,13 @@ public partial class UnitManager : Node
 	private void BroadcastUnitSnapshot(uint tick)
 	{
 		int peers = Multiplayer.HasMultiplayerPeer() ? Multiplayer.GetPeers().Length : 0;
-		if (peers == 0)
+
+		// A demo is the other consumer of this packet, and an authority recording one
+		// may well have no peers at all — a round played on your own is the cheapest
+		// way to record anything (docs/DEMOS.md §4.1). The snapshot is built when
+		// either of the two wants it and skipped when neither does.
+		DemoRecorder demo = PlayerManager.Instance?.Recorder;
+		if (peers == 0 && demo == null)
 		{
 			return;
 		}
@@ -953,6 +962,13 @@ public partial class UnitManager : Node
 		// test would make them blink in and out of an FPS at forty metres
 		// (docs/NETCODE.md §6.2).
 		byte[] payload = UnitSnapshotCodec.Encode(tick, _snapshotScratch.AsSpan(0, count));
+		demo?.UnitSnapshot(tick, payload);
+
+		if (peers == 0)
+		{
+			return;
+		}
+
 		Rpc(MethodName.ServerUnitSnapshot, payload);
 		NetworkManager.Instance?.Stats.RecordSent(payload.Length * peers);
 	}
@@ -1054,12 +1070,19 @@ public partial class UnitManager : Node
 
 	private void ApplyPendingSnapshots()
 	{
+		DemoRecorder demo = PlayerManager.Instance?.Recorder;
+
 		for (int s = 0; s < _pendingSnapshots.Count; s++)
 		{
 			if (!UnitSnapshotCodec.TryDecode(_pendingSnapshots[s], _snapshotScratch, out uint tick, out int count))
 			{
 				continue;
 			}
+
+			// Recorded here rather than where it arrives, because this is where the
+			// packet's own tick has been decoded and a demo's records are ordered by
+			// the tick they are about (docs/DEMOS.md §4.2).
+			demo?.UnitSnapshot(tick, _pendingSnapshots[s]);
 
 			for (int i = 0; i < count; i++)
 			{
@@ -1080,6 +1103,59 @@ public partial class UnitManager : Node
 		}
 
 		_pendingSnapshots.Clear();
+	}
+
+	/// <summary>
+	/// Applies one recorded unit snapshot during demo playback (docs/DEMOS.md §5.2),
+	/// and returns false when the payload does not decode.
+	///
+	/// It differs from the live path in one way, and the difference is the reason
+	/// this is a separate method rather than a flag on that one: a unit a demo has
+	/// never mentioned is *created* here, and one missing from the newest snapshot
+	/// is despawned. On the wire that would be wrong twice over — a unit is
+	/// announced by its own reliable message, and a snapshot is an unreliable
+	/// datagram that may simply not have arrived, so treating an absence as a death
+	/// would kill the whole army on one dropped packet. A file drops nothing and
+	/// reorders nothing, so here the snapshot is the roster.
+	/// </summary>
+	public bool ApplyRecordedSnapshot(ReadOnlySpan<byte> payload)
+	{
+		EnsureStarted(server: false);
+
+		if (!UnitSnapshotCodec.TryDecode(payload, _snapshotScratch, out uint tick, out int count))
+		{
+			return false;
+		}
+
+		_recordedIds.Clear();
+
+		for (int i = 0; i < count; i++)
+		{
+			ref UnitSnapshot snapshot = ref _snapshotScratch[i];
+			_recordedIds.Add(snapshot.UnitId);
+
+			Unit unit = Find(snapshot.UnitId);
+			if (unit == null)
+			{
+				unit = CreateUnit(snapshot.UnitId, snapshot.DefinitionId, snapshot.Position, snapshot.Team,
+					simulated: false);
+				_interpolators[snapshot.UnitId] = new SnapshotInterpolator();
+			}
+
+			unit.ApplyRemoteState(snapshot.State, snapshot.HealthPercent);
+			_interpolators[snapshot.UnitId].Push(tick, snapshot.Position, snapshot.Yaw, 0f);
+		}
+
+		for (int i = _ordered.Count - 1; i >= 0; i--)
+		{
+			ushort id = _ordered[i].UnitId;
+			if (!_recordedIds.Contains(id))
+			{
+				Despawn(id);
+			}
+		}
+
+		return true;
 	}
 
 	/// <summary>
