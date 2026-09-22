@@ -523,7 +523,7 @@ exists to be.
 
 ---
 
-## 10. Economy, emplacements and the scoreboard
+## 10. Economy, emplacements, the scoreboard and barracks defences
 
 M5 added three things that are neither a per-tick sample nor a projectile, and all three are on the
 wire as **state**: sent when it changes, reliable, and absent the rest of the time.
@@ -623,6 +623,75 @@ server, once.
 The server fills the same table locally before sending it, because a listen host sends itself
 nothing and its scoreboard has to come from somewhere; a peer that connects during the intermission
 is sent the table everyone else is looking at.
+
+### 10.4 Barracks defences
+
+Added after playtesting, because the default round had become the ground force parked on the
+barracks door shooting every unit the strategist paid for as it walked out. A barracks now defends
+the ground around itself: nobody can stand within about 100 m of it for long.
+
+A defence is a `DefenseMount`: a map node authored as a child of the barracks it guards, in the
+`barracks_defense` group, named by its index in that group sorted by scene path. It is the
+building's, not the strategist's — it costs nothing, is never on a queue, cannot be selected,
+ordered or killed, runs out of nothing, and is not a unit, so it counts for nothing in the
+strategist's defeat condition ([`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) §M5). Two kinds, with every number an export on the node:
+
+| | Gun (`Kind = Gun`) | Mortar (`Kind = Mortar`) |
+|---|---|---|
+| weapon | `turret` (catalog 8): the technical's 12.7 mm round, 450 rpm, **no magazine** | `mortar` (catalog 9): an 81 mm shell at 34 m/s, one every 4 s, **no magazine** |
+| engages | nearest ground-force player within 100 m **it can see** | nearest ground-force player 15–100 m away, **seen or not** |
+| before it fires | 0.5 s reaction, then it must have swung to within 2° at 90°/s | 1.5 s laying time |
+| aims | first-order lead on the chest, 1.2° cone | where they are standing now, no lead, 3 m scatter |
+
+The gun is the one a player reads: it has to see you, turn to you and has a reaction to beat, so a
+sprint across its front to cover is a real decision. The mortar is the answer to that cover. It has
+no line-of-sight test at all and drops an 8 m blast on wherever you were when it fired, six to seven
+seconds later — so what it punishes is **standing still inside the ring**, which is exactly what
+camping a door is. The high-arc elevation is found by false position over the real integrator
+(`MortarSolver`, in `Scripts/Sim/Defense.cs`): range falls monotonically above the elevation of
+greatest range, so a bracket on that branch cannot find the low, flat solution a wall would stop.
+
+**Nothing new is on the wire.** A defence fires through `CombatManager.SpawnProjectile` like a
+unit, so every client already receives its rounds as ordinary spawn records, and the only state a
+client ever needs — which way the barrel is pointing — is the direction of the last one
+(`DefenseBattery.OnShot`). Its rounds name it as their owner from a third range of the owner id's
+negative half, below the units': `OwnerId.ForDefense(i)` is `-(65536 + i)`, and
+`SimConfig.MaxDefenses` (16) is the width of that range. "Negative is the strategist's side" stays
+true, which is what the agent client's reward functions read the event stream by
+([`AGENT_API.md`](AGENT_API.md) §8). Nothing is predicted, because nothing about a defence is any
+client's own.
+
+**The ring is a level-design constraint, and the map has to be built around it.** A barracks'
+`DefendedRadiusMeters` — the furthest any of its defences reaches, plus how far that defence stands
+off-centre — is drawn on the ground as a red ring, and it is what the rules below are measured
+against:
+
+- **The ground force's spawn goes outside it**, with room to spare. A spawn inside the ring is a
+  ticket drain with no decision in it.
+- **Every resource node goes outside it.** A node inside is one the ground force can never stand on,
+  and a strategist holding a node can never be eliminated (`WinConditions.IsStrategistEliminated`),
+  so a node inside the ring turns the round into a clock.
+- **Keep the ring inside the playable space where you can.** A ring that runs past a wall leaves
+  ground between the two that looks outside the ring and is not.
+
+`Scenes/Test.tscn` moved its barracks to (100, 0.5, −100), in the corner of the walled 240 m arena,
+for these reasons: the ring is 107 m; the ground spawn is 144 m from the nearest defence; and
+resource node 3 moved out of the ring to (−25, −100). Its two guns stand at diagonally opposite
+corners of the building, so that between them they see all four walls, and the mortar is on the
+roof.
+
+**Ground bots wait at the ring's edge**, 10 m outside it on the side they came from, instead of on
+the door; a unit they chase inside it is fought from that edge, and a bot that finds itself inside
+walks straight out (`BotPilot.OutsideDefences`). The waiting point is snapped to the navigation
+mesh, because the part of a ring beyond a wall is a waiting point a bot slides along the wall
+towards — back into the guns. A three-minute soak of six ground bots against one strategist bot on
+the Test map loses nobody to the defences; before the snap, the same soak lost 11 bots, every one of
+them to a gun, after sliding along a wall into the ring.
+
+Measured on the Test map (`Tests/Scenarios/barracks_defense.json`, `barracks_mortar.json`): a player
+standing still 40 m in front of the door is hit 0.6 s after coming into view and dead at 0.87 s, three
+rounds of 45; one standing behind the arena wall, where neither gun can see, takes 82 from the first
+shell at 8.6 s and dies to the second at 12.6 s.
 
 ---
 

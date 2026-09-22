@@ -262,7 +262,11 @@ place:
 The dense objective term is a bet that walking towards the enemy barracks is
 roughly right. It is what stops a fresh policy standing still for ever; it is also
 the first thing to delete when you want to find out what the policy has actually
-learned.
+learned. It is a worse bet than it was: the barracks now defends the ~100 m around
+itself ([`NETCODE.md`](NETCODE.md) §10.4), so the last hundred metres of progress the
+term pays for end in a death, and a policy has to learn the ring from the death
+penalty alone. Measuring progress to the edge of the ring rather than to the door is
+the obvious change; it has not been made.
 
 ## 7. The strategist seat
 

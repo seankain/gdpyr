@@ -319,6 +319,17 @@ call. This makes one person enough to see a round.
   an assault looks like. The scoreboard is one reliable message at round end (§10.3) and the
   existing intermission restarts the round, because a playtest that needs somebody to press a key
   between rounds gets fewer rounds per session.
+- **Barracks defences** *(added after playtesting)*. Rounds kept ending up as the ground force
+  parked on the barracks door, killing every unit the strategist paid for as it walked out. A
+  barracks now carries its own guns and a mortar (`DefenseMount`, [`NETCODE.md`](NETCODE.md)
+  §10.4): free, bottomless, unkillable, and not units, so they count for nothing in the defeat
+  condition above. The gun has to see you, turn to you and has a reaction to beat; the mortar needs
+  none of that and drops a shell where you were standing, which is what makes camping behind cover
+  by the door as costly as camping in the open. Nothing new is on the wire — their rounds are
+  ordinary spawn records under a third range of `OwnerId` — and the one real cost is to the map:
+  **the ~100 m ring is a level-design constraint**. The ground spawn and every resource node go
+  outside it, or the round turns into a ticket drain or a clock, and the Test map's barracks and
+  third node moved to satisfy it. Ground bots wait at the edge of the ring rather than on the door.
 
 ### M6 — Agent API: headless play for external policies (3–4 days) ✅ *shipped*
 

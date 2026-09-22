@@ -30,6 +30,8 @@ public static class WeaponCatalog
 		"res://Weapons/hmg/hmg.tres",           // 5 — technical (M5)
 		"res://Weapons/cannon/cannon.tres",     // 6 — tank (M5)
 		"res://Weapons/heavy/heavy.tres",       // 7 — deployed emplacement (M5)
+		"res://Weapons/turret/turret.tres",     // 8 — barracks gun
+		"res://Weapons/mortar/mortar.tres",     // 9 — barracks mortar
 	};
 
 	public const byte Hammer = 0;
@@ -52,6 +54,19 @@ public static class WeaponCatalog
 	/// for a can (<see cref="Fps.EmplacementManager"/>).
 	/// </summary>
 	public const byte Heavy = 7;
+
+	/// <summary>
+	/// A barracks' own gun (docs/NETCODE.md §10.4). The technical's round again, out
+	/// of a belt with no bottom: a defence that could run dry is one the ground
+	/// force waits out from behind a wall, and then the door is theirs.
+	/// </summary>
+	public const byte Turret = 8;
+
+	/// <summary>
+	/// A barracks' mortar. The one round in the catalog fired on a high arc, and the
+	/// answer to cover next to the door.
+	/// </summary>
+	public const byte Mortar = 9;
 
 	/// <summary>The large-weapon choice a ground-force player makes before each spawn.</summary>
 	public static readonly byte[] LargeWeapons = { Dmr, Rifle, Launcher };

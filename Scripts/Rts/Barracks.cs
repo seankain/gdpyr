@@ -1,3 +1,4 @@
+using Gdpyr.Core;
 using Gdpyr.Sim;
 using Godot;
 
@@ -40,6 +41,18 @@ public partial class Barracks : Node3D
 	/// <summary>Where finished units are sent. Set by the strategist; defaults ahead of the door.</summary>
 	public Vector3 RallyPoint { get; set; }
 
+	/// <summary>
+	/// How far out, measured flat from the middle of the building, its own defences
+	/// can reach: the furthest any child <see cref="DefenseMount"/> engages, plus how
+	/// far that mount stands off-centre. 0 for a barracks with none.
+	///
+	/// An outer bound rather than a footprint — a gun that cannot see round a wall
+	/// does not cover what is behind it — which is the right way round for the two
+	/// things that read it: a bot deciding where it is safe to wait, and a ring on
+	/// the ground telling a player where it is not (docs/NETCODE.md §10.4).
+	/// </summary>
+	public float DefendedRadiusMeters { get; private set; }
+
 	private Marker3D _spawnPoint;
 	private Vector3 _forward = Vector3.Forward;
 	private Vector3 _right = Vector3.Right;
@@ -61,6 +74,51 @@ public partial class Barracks : Node3D
 		}
 
 		RallyPoint = SpawnPosition + (_forward * DefaultRallyDistance);
+
+		// Children are ready before their parent, so the mounts have their numbers.
+		foreach (Node child in GetChildren())
+		{
+			if (child is DefenseMount mount)
+			{
+				Vector3 offset = mount.GlobalPosition - GlobalPosition;
+				offset.Y = 0f;
+				DefendedRadiusMeters = Mathf.Max(DefendedRadiusMeters, offset.Length() + mount.RangeMeters);
+			}
+		}
+
+		if (DefendedRadiusMeters > 0f && !Bootstrap.IsDedicatedServer)
+		{
+			BuildDefenseRing(DefendedRadiusMeters);
+		}
+	}
+
+	/// <summary>
+	/// A line on the ground at <see cref="DefendedRadiusMeters"/>. The ring only works
+	/// as a design if the people it keeps out can see where it is: dying to a gun
+	/// you did not know was there teaches nothing but that the map is unfair.
+	/// </summary>
+	private void BuildDefenseRing(float radius)
+	{
+		const float HalfWidth = 0.3f;
+
+		AddChild(new MeshInstance3D
+		{
+			Name = "DefenseRing",
+			Position = new Vector3(0f, 0.05f, 0f),
+			Mesh = new TorusMesh
+			{
+				InnerRadius = Mathf.Max(radius - HalfWidth, 0f),
+				OuterRadius = radius + HalfWidth,
+				Rings = 128,
+				RingSegments = 4,
+			},
+			CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+			MaterialOverride = new StandardMaterial3D
+			{
+				AlbedoColor = new Color(0.85f, 0.2f, 0.15f),
+				ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+			},
+		});
 	}
 
 	/// <summary>

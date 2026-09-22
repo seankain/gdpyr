@@ -1,0 +1,23 @@
+{
+  "name": "the barracks mortar finds what its guns cannot see",
+  "seeds": [7, 11],
+  "duration_ticks": 900,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 0 },
+
+  "seats": [
+    { "id": "wall", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json" }
+  ],
+
+  "spawns": [
+    { "peer": "wall", "at": [100, 1, -125], "look": [0, 0] }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.kill.count", "op": ">=", "value": 1 },
+    { "metric": "events.damage.attacker.min", "op": "==", "value": -65538 },
+    { "metric": "events.damage.attacker.max", "op": "==", "value": -65538 },
+    { "metric": "observation.self.alive.min", "op": "==", "value": 0 }
+  ]
+}

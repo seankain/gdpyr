@@ -169,8 +169,9 @@ netcode had to learn about them. The one thing they are never asked is which sid
 director assigns that on the tick they join, so the role menu is a question for people only and a
 round full of bots starts without waiting for anybody.
 
-- **On the ground** they walk towards the enemy barracks, engage the nearest unit they can see,
-  close to about 25 m and then strafe, and hold fire when somebody on their side is in the way.
+- **On the ground** they walk towards the enemy barracks and wait at the edge of its defences,
+  engage the nearest unit they can see, close to about 25 m and then strafe, and hold fire when
+  somebody on their side is in the way.
   They are deliberately mediocre shots — a 3° aim error held for a third of a second at a time, and
   a 200 ms reaction. `BotTraits.Default` in `Scripts/Sim/BotBrain.cs` is the whole difficulty dial.
 - **In the strategist's chair** one queues infantry at every barracks while the points last, keeps

@@ -136,6 +136,13 @@ public partial class UnitManager : Node
 	/// <summary>Orders refused because the sender did not own the units or the order made no sense.</summary>
 	public int RejectedOrders { get; private set; }
 
+	/// <summary>
+	/// The barracks' own guns and mortars (docs/NETCODE.md §10.4). Held here because
+	/// they belong to the barracks this manager already owns, and ticked straight
+	/// after the units for the reason the units are ticked before combat.
+	/// </summary>
+	public DefenseBattery Defenses { get; } = new();
+
 	public override void _Ready()
 	{
 		Instance = this;
@@ -178,6 +185,8 @@ public partial class UnitManager : Node
 		{
 			SimulateUnit(_ordered[i], tick);
 		}
+
+		Defenses.ServerTick(tick, CombatManager.Instance, GetTree()?.Root?.World3D?.DirectSpaceState);
 
 		ServerReapCorpses(tick);
 
@@ -232,6 +241,7 @@ public partial class UnitManager : Node
 
 		_started = true;
 		CollectBarracks();
+		Defenses.Collect(GetTree());
 
 		if (server)
 		{
@@ -1234,6 +1244,8 @@ public partial class UnitManager : Node
 		{
 			_barracks[i].Queue.Clear();
 		}
+
+		Defenses.Reset();
 
 		UnitsProduced = 0;
 		UnitsLost = 0;

@@ -1,0 +1,27 @@
+{
+  "name": "the barracks guns close the ground in front of the door",
+  "seeds": [7, 11],
+  "duration_ticks": 360,
+  "warmup_ticks": 60,
+  "roster": { "ground": 2, "strategists": 0 },
+
+  "seats": [
+    { "id": "door", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json" },
+    { "id": "field", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json" }
+  ],
+
+  "spawns": [
+    { "peer": "door", "at": [100, 1, -60], "look": [0, 0] },
+    { "peer": "field", "at": [-60, 1, 50], "look": [0, 0] }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.kill.count", "op": ">=", "value": 1 },
+    { "metric": "events.kill.attacker.max", "op": "between", "value": [-65537, -65536] },
+    { "metric": "events.damage.attacker.max", "op": "between", "value": [-65537, -65536] },
+    { "metric": "observation.door.self.alive.min", "op": "==", "value": 0 },
+    { "metric": "observation.field.self.alive.min", "op": "==", "value": 1 },
+    { "metric": "observation.field.self.health.min", "op": "==", "value": 1 }
+  ]
+}
