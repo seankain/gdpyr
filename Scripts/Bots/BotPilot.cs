@@ -46,6 +46,19 @@ public sealed class BotPilot
 	/// <summary>How far around the objective a bot will post itself, so six do not stack on one door.</summary>
 	private const float LoiterRadiusMeters = 14f;
 
+	/// <summary>How far outside a defended barracks' ring a bot waits: far enough that a stray burst is a warning.</summary>
+	private const float StandoffMarginMeters = 10f;
+
+	/// <summary>Half the arc of the ring a bot's waiting point wanders over, so six do not wait on one spot.</summary>
+	private const float StandoffArcRadians = Mathf.Pi / 6f;
+
+	/// <summary>
+	/// How far inside its waiting ring a bot may stand before it is walked back out.
+	/// A bot standing on its waiting point is never exactly on the ring, and one that
+	/// was sent back out every time it arrived would never stop walking.
+	/// </summary>
+	private const float StandoffToleranceMeters = 2f;
+
 	/// <summary>A friendly this close to the line of fire is close enough to be shot by mistake.</summary>
 	private const float FriendlySweepRadiusMeters = 0.3f;
 
@@ -146,6 +159,11 @@ public sealed class BotPilot
 		else
 		{
 			hasGoal = Objective(tick, character, out goal);
+		}
+
+		if (hasGoal)
+		{
+			goal = OutsideDefences(character, combat.Team, goal);
 		}
 
 		Vector3 moveDirection = SteerDirection(character, tick, hasGoal, goal);
@@ -275,6 +293,11 @@ public sealed class BotPilot
 	/// the strategist's pressure comes from — so a ground force that walks towards
 	/// it is a ground force that meets units. The offset is what stops six bots
 	/// queueing through one doorway.
+	///
+	/// A barracks with defences of its own is waited for from outside them, on the
+	/// side the bot came from (docs/NETCODE.md §10.4). The door is not somewhere a
+	/// body can stand any more, and a bot that walked to it anyway would spend the
+	/// ground force's tickets on nothing.
 	/// </summary>
 	private bool Objective(uint tick, fps_controller character, out Vector3 goal)
 	{
@@ -297,6 +320,7 @@ public sealed class BotPilot
 		Team team = CombatManager.Instance?.TeamOf(_peerId) ?? Team.GroundForce;
 
 		Vector3 anchor = Vector3.Zero;
+		float defended = 0f;
 		float best = float.MaxValue;
 		bool found = false;
 
@@ -313,6 +337,7 @@ public sealed class BotPilot
 			{
 				best = distance;
 				anchor = barracks.GlobalPosition;
+				defended = barracks.DefendedRadiusMeters;
 				found = true;
 			}
 		}
@@ -322,11 +347,82 @@ public sealed class BotPilot
 			return false;
 		}
 
-		// A point on a circle around the objective, held until the next bucket.
 		uint seed = Spread.Seed(_peerId, LoiterSeedSalt, bucket);
+
+		if (defended > 0f)
+		{
+			// A point on the ring's edge, somewhere in an arc facing the bot, held until
+			// the next bucket.
+			float ring = defended + StandoffMarginMeters;
+			float swing = (((seed >> 8) / 16777216f) * 2f) - 1f;
+			goal = Reachable(DefenseSim.StandoffPoint(anchor, character.SimPosition, ring,
+				swing * StandoffArcRadians));
+
+			// A ring that runs past the map's edge puts part of that arc beyond a wall,
+			// and the nearest place a bot can actually stand to a point beyond a wall is
+			// along the wall — back towards the guns. Straight out from the barracks is
+			// always the way away from it.
+			if (DefenseSim.IsInside(anchor, goal, ring - StandoffToleranceMeters))
+			{
+				goal = Reachable(DefenseSim.StandoffPoint(anchor, character.SimPosition, ring, 0f));
+			}
+
+			return true;
+		}
+
+		// A point on a circle around the objective, held until the next bucket.
 		float angle = (seed >> 8) * (Quantize.TwoPi / 16777216f);
 		goal = anchor + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * LoiterRadiusMeters;
 		return true;
+	}
+
+	/// <summary>
+	/// <paramref name="goal"/>, unless it or the bot is inside an enemy barracks'
+	/// defences, in which case the edge of them straight out from the bot. A bot that
+	/// has seen a unit by the door fights it from outside the ring — and the unit,
+	/// sooner or later, has to come out. A bot that has strayed inside, cutting a
+	/// corner on its way round or strafing in a firefight, leaves by the shortest way.
+	/// </summary>
+	private Vector3 OutsideDefences(fps_controller character, Team team, Vector3 goal)
+	{
+		UnitManager units = UnitManager.Instance;
+
+		for (int i = 0; units != null && i < units.BarracksCount; i++)
+		{
+			Barracks barracks = units.BarracksAt(i);
+			if (barracks == null || barracks.Team == team || barracks.DefendedRadiusMeters <= 0f)
+			{
+				continue;
+			}
+
+			float ring = barracks.DefendedRadiusMeters + StandoffMarginMeters;
+			if (DefenseSim.IsInside(barracks.GlobalPosition, goal, ring - StandoffToleranceMeters)
+				|| DefenseSim.IsInside(barracks.GlobalPosition, character.SimPosition, ring - StandoffToleranceMeters))
+			{
+				return Reachable(DefenseSim.StandoffPoint(barracks.GlobalPosition, character.SimPosition, ring, 0f));
+			}
+		}
+
+		return goal;
+	}
+
+	/// <summary>
+	/// The nearest point to <paramref name="point"/> a bot can stand on, or the point
+	/// itself when there is no navigation mesh to ask. A waiting point on the far side
+	/// of a wall is one the bot slides along the wall towards for ever.
+	/// </summary>
+	private Vector3 Reachable(Vector3 point)
+	{
+		if (UnitManager.Instance is not { NavigationReady: true } || _character == null
+			|| !GodotObject.IsInstanceValid(_character))
+		{
+			return point;
+		}
+
+		// A map that has not synced its regions yet answers with the origin, which is
+		// somewhere, but not somewhere near the point that was asked about.
+		Vector3 snapped = NavigationServer3D.MapGetClosestPoint(_character.GetWorld3D().NavigationMap, point);
+		return snapped == Vector3.Zero ? point : snapped;
 	}
 
 	/// <summary>

@@ -223,6 +223,16 @@ public static class SimConfig
 	/// </summary>
 	public const int MaxBarracks = 4;
 
+	/// <summary>
+	/// Barracks defences one map may carry — the guns and mortars that keep the
+	/// ground force off the door (<see cref="DefenseSim"/>). A defence names itself
+	/// on the wire as the owner of every round it fires, by its index in the map's
+	/// <c>barracks_defense</c> group (<see cref="OwnerId.ForDefense"/>), so this is
+	/// the width of that range of the owner-id space rather than a level-design
+	/// opinion.
+	/// </summary>
+	public const int MaxDefenses = 16;
+
 	// ---- fog of war (docs/NETCODE.md §6.2) ---------------------------------
 
 	/// <summary>

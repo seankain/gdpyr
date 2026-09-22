@@ -583,6 +583,11 @@ from position deltas and gets it slightly wrong.
 | `gun_mounted` / `can_spent` | peer, emplacement |
 | `seat_attached` / `seat_released` | seat, peer, reason |
 
+An `attacker` or `victim` is an `OwnerId` (`Scripts/Sim/OwnerId.cs`): positive is a peer, and
+everything the strategist's side fires with is negative — `-1` to `-65535` a unit, and `-65536` down
+to `-65551` a barracks' own gun or mortar ([`NETCODE.md`](NETCODE.md) §10.4). A defence is never a
+victim, because nothing can damage one; its `weapon` field reads 0, as a unit's does.
+
 **This event stream is most of M8's per-round CSV.** The columns that milestone names — round
 length, ticket curve, strategist income against spending, units built and lost by tier, nodes held
 over time, cans spent — are all in the table above, and the counters behind them already exist and

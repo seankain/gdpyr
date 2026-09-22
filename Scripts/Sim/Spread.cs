@@ -68,6 +68,29 @@ public static class Spread
 			+ (up * (sinTheta * MathF.Sin(phi)))).Normalized();
 	}
 
+	/// <summary>
+	/// An offset uniformly inside a disc of <paramref name="radius"/> on the ground
+	/// plane. For a round whose error is where it comes down rather than which way it
+	/// left — a mortar's — and seeded for the same reason the cone is.
+	/// </summary>
+	public static Vector3 Disc(float radius, uint seed)
+	{
+		if (radius <= 0f)
+		{
+			return Vector3.Zero;
+		}
+
+		uint a = Mix(seed);
+		uint b = Mix(a ^ 0x85EB_CA6Bu);
+
+		// Uniform over the area, so the radius goes as the root: a uniform radius
+		// piles shells into the middle exactly as a uniform angle piles shots.
+		float r = radius * MathF.Sqrt((a >> 8) * UnitScale);
+		float phi = (b >> 8) * UnitScale * Quantize.TwoPi;
+
+		return new Vector3(r * MathF.Cos(phi), 0f, r * MathF.Sin(phi));
+	}
+
 	/// <summary>Degrees as a designer authors them to the half-angle the cone is expressed in.</summary>
 	public static float ConeFromDegrees(float degrees) =>
 		degrees <= 0f ? 0f : Math.Clamp(degrees, 0f, 90f) * (MathF.PI / 180f);

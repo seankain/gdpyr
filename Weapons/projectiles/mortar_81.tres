@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="ProjectileDefinition" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Fps/ProjectileDefinition.cs" id="1_projdef"]
+
+[resource]
+script = ExtResource("1_projdef")
+Name = &"mortar_81"
+MassGrams = 4200.0
+RadiusMillimeters = 40.5
+DragCoefficient = 0.30
+MuzzleVelocity = 34.0
+LifetimeSeconds = 14.0
+Damage = 100.0
+ExplosionRadiusMeters = 8.0
+ExplosionDamage = 120.0
+SweepRadiusMeters = 0.1
+TracerColor = Color(1, 0.3, 0.2, 1)
+TracerLengthMeters = 0.6
+TracerRadiusMeters = 0.09

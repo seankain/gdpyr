@@ -7,6 +7,7 @@
 [ext_resource type="Script" path="res://Scripts/Rts/ResourceNode.cs" id="5_resourcenode"]
 [ext_resource type="Script" path="res://Scripts/Fps/Emplacement.cs" id="6_emplacement"]
 [ext_resource type="Script" path="res://Scripts/Fps/AmmoCan.cs" id="7_ammocan"]
+[ext_resource type="Script" path="res://Scripts/Rts/DefenseMount.cs" id="8_defense"]
 
 [sub_resource type="NavigationMesh" id="NavigationMesh_ground"]
 
@@ -200,7 +201,7 @@ navigation_mesh = SubResource("NavigationMesh_ground")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, -35)
 
 [node name="Barracks1" type="Node3D" parent="." groups=["barracks"]]
-transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 40, 0.5, -70)
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 100, 0.5, -100)
 script = ExtResource("4_barracks")
 
 [node name="SpawnPoint" type="Marker3D" parent="Barracks1"]
@@ -216,6 +217,23 @@ shape = SubResource("BoxShape3D_barracks")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 0)
 mesh = SubResource("BoxMesh_barracks")
 surface_material_override/0 = SubResource("StandardMaterial3D_barracks")
+
+[node name="DefenseGunA" type="Node3D" parent="Barracks1" groups=["barracks_defense"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.5, 0, -4.5)
+script = ExtResource("8_defense")
+
+[node name="DefenseGunB" type="Node3D" parent="Barracks1" groups=["barracks_defense"]]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 5.5, 0, 4.5)
+script = ExtResource("8_defense")
+
+[node name="DefenseMortar" type="Node3D" parent="Barracks1" groups=["barracks_defense"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6, 0)
+script = ExtResource("8_defense")
+Kind = 1
+WeaponId = 9
+MinRangeMeters = 15.0
+ReactionSeconds = 1.5
+MuzzleHeightMeters = 0.6
 
 [node name="ResourceNode1" type="Node3D" parent="." groups=["resource_node"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -30, 0.5, -15)
@@ -234,7 +252,7 @@ IncomePoints = 35
 IncomeIntervalSeconds = 5.0
 
 [node name="ResourceNode3" type="Node3D" parent="." groups=["resource_node"]]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 30, 0.5, -55)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -25, 0.5, -100)
 script = ExtResource("5_resourcenode")
 CaptureRadiusMeters = 10.0
 CaptureSeconds = 8.0

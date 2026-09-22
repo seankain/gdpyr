@@ -663,6 +663,11 @@ public partial class CombatManager : Node
 			return UnitManager.Instance?.Find(OwnerId.UnitOf(ownerId))?.Team ?? Team.Strategist;
 		}
 
+		if (OwnerId.IsDefense(ownerId))
+		{
+			return UnitManager.Instance?.Defenses.OwnerOf(ownerId)?.Team ?? Team.Strategist;
+		}
+
 		return TeamOf(OwnerId.PeerOf(ownerId));
 	}
 
@@ -842,6 +847,12 @@ public partial class CombatManager : Node
 		{
 			ushort unitId = OwnerId.UnitOf(ownerId);
 			return $"{UnitCatalog.NameOf(UnitManager.Instance?.Find(unitId)?.DefinitionId ?? 0)} {unitId}";
+		}
+
+		if (OwnerId.IsDefense(ownerId))
+		{
+			DefenseMount mount = UnitManager.Instance?.Defenses.OwnerOf(ownerId);
+			return mount != null ? $"barracks {mount.Kind.ToString().ToLowerInvariant()} {mount.Name}" : "a barracks";
 		}
 
 		return OwnerId.IsPeer(ownerId) ? $"peer {OwnerId.PeerOf(ownerId)}" : "the world";
@@ -1503,6 +1514,13 @@ public partial class CombatManager : Node
 		if (Local != null && spawn.OwnerPeerId == Local.PeerId && TryAdoptPrediction(spawn))
 		{
 			return;
+		}
+
+		// A barracks defence has no state on the wire but its rounds, so a round is
+		// what turns its barrel (docs/NETCODE.md §10.4).
+		if (OwnerId.IsDefense(spawn.OwnerPeerId))
+		{
+			UnitManager.Instance?.Defenses.OnShot(spawn.OwnerPeerId, spawn.Direction);
 		}
 
 		// Everyone else's shot is fast-forwarded to the tick this client is rendering,
