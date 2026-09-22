@@ -40,6 +40,7 @@ public partial class Debug : PanelContainer
 		SetProperty("phys ms", $"{Performance.GetMonitor(Performance.Monitor.TimePhysicsProcess) * 1000.0:0.00}");
 
 		FillNetwork();
+		FillDemo();
 		FillPlayers();
 		FillCombat();
 		FillUnits();
@@ -50,7 +51,10 @@ public partial class Debug : PanelContainer
 
 	public override void _Input(InputEvent @event)
 	{
-		if (@event.IsActionPressed("debug"))
+		// Exact, because `~` is shift and this key: the console is bound to the same
+		// physical key with shift held (Scripts/Ui/GameConsole.cs), and an inexact
+		// match here would open both at once.
+		if (@event.IsActionPressed("debug", exactMatch: true))
 		{
 			Visible = !Visible;
 		}
@@ -99,6 +103,29 @@ public partial class Debug : PanelContainer
 		SetProperty("server frame ms", $"{net.ServerFrameMilliseconds:0.00}");
 		SetProperty("mispredict/s", $"{net.Stats.MispredictionsPerSecond:0.0}");
 		SetProperty("pred error", $"mean {net.Stats.MeanErrorMeters * 100f:0.00} cm  max {net.Stats.MaxErrorMeters * 100f:0.00} cm");
+	}
+
+	/// <summary>
+	/// Whether a demo is being written, and how much of one (docs/DEMOS.md).
+	///
+	/// One row, and only while it is true, for the reason every other row here
+	/// exists: "the file is two hundred bytes and the round has been going for five
+	/// minutes" is a bug you cannot see any other way. There is no row for a demo
+	/// being *watched*, because this panel lives in the local player's HUD and a
+	/// replay has no local player — the read head is reported by the replay bar
+	/// instead (Scripts/Ui/GameConsole.cs).
+	/// </summary>
+	private void FillDemo()
+	{
+		if (PlayerManager.Instance?.Recorder is not { } recorder)
+		{
+			return;
+		}
+
+		SetProperty("demo", $"{recorder.FileName}  {recorder.Kind}"
+			+ $"  {recorder.TickCount} ticks ({recorder.Seconds:0.0}s)"
+			+ $"  {DemoRecorder.FormatBytes(recorder.Bytes)}"
+			+ (recorder.Failed == null ? string.Empty : $"  FAILED: {recorder.Failed}"));
 	}
 
 	/// <summary>

@@ -34,6 +34,11 @@ CombatManager="*res://Scripts/Match/CombatManager.cs"
 UnitManager="*res://Scripts/Rts/UnitManager.cs"
 EmplacementManager="*res://Scripts/Fps/EmplacementManager.cs"
 PlayerManager="*res://Scripts/Net/PlayerManager.cs"
+; After PlayerManager, and the only autoload that is not part of the simulation:
+; it ticks nothing and is read by nothing. It is an autoload rather than a node in
+; a scene because it has to exist at the main menu as well as in the map —
+; `playdemo` is asked for before there is a round (docs/DEMOS.md §3).
+GameConsole="*res://Scripts/Ui/GameConsole.cs"
 
 [dotnet]
 
@@ -74,6 +79,11 @@ crouch={
 debug={
 "deadzone": 0.5,
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":96,"key_label":0,"unicode":96,"location":0,"echo":false,"script":null)
+]
+}
+console={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":true,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":96,"key_label":0,"unicode":126,"location":0,"echo":false,"script":null)
 ]
 }
 sprint={

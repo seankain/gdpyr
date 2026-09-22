@@ -11,6 +11,8 @@ dedicated-server authoritative.
   server, in C#, with [RLMatrix](https://github.com/asieradzk/RL_Matrix)
 - [`docs/RL_ARCHITECTURE.md`](docs/RL_ARCHITECTURE.md) — which algorithm to reach for in 2026, what
   changed since PPO, and the order to run things in here
+- [`docs/DEMOS.md`](docs/DEMOS.md) — recording a round and watching it back: the console, the
+  journal, and what playback does with it
 - [`docs/LAN.md`](docs/LAN.md) — hosting a room of machines from a checkout, with a dev build
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — AWS EC2 dedicated-server runbook
 
@@ -20,13 +22,14 @@ dedicated-server authoritative.
 Scripts/Core/   Bootstrap (CLI args, engine settings), LaunchOptions, weapon and unit catalogs
 Scripts/Net/    TransportFactory, NetworkManager (transport + clocks), PlayerManager (tick loop, roster)
 Scripts/Sim/    Engine-free simulation code; unit-tested without Godot
+Scripts/Sim/Demo/ The demo container: header, records, writer, reader — a codec like the others
 Scripts/Fps/    Character controller, movement FSM, input sampler, weapons, viewmodel
 Scripts/Rts/    Units, barracks, orders, the strategist camera and selection
 Scripts/Match/  CombatManager (the round), MatchState, TeamService
 Scripts/Bots/   Computer players: the roster director, the ground pilot, the strategist, the sensor
 Scripts/Agent/  The agent control channel: listener, sessions, seats, observations, feature planes
 Scripts/Ui/     Main menu and server browser, role select, pause menu, reticle, combat HUD, RTS HUD,
-                net debug HUD
+                net debug HUD, the `~` console and the demo camera
 Scenes/         Main menu, greybox map, player, weapon, pause menu
 Units/          UnitDefinition resources
 Tests/          xUnit over the engine-free sources — `dotnet test`, no Godot needed
@@ -41,6 +44,9 @@ The simulation runs in `_PhysicsProcess` at a fixed 60 Hz and reads nothing but 
 `InputFrame` for the tick. `Scripts/Fps/LocalInputSampler.cs` is the only place the `Input`
 singleton is read, and rendering-only work (viewmodel sway, the correction offset the camera is
 drawn with) is the only thing left on the render frame.
+
+That one property is what makes demos cheap: write the frames out where they are resolved and you
+have written the round down ([`docs/DEMOS.md`](docs/DEMOS.md)).
 
 ## Running
 
@@ -85,6 +91,13 @@ Two more flags change how many computer players the authority keeps around:
 Neither flag is needed to get bots: the numbers default to `BotGroundForce` and `BotStrategists` in
 `Match/default_gamemode.tres` (6 and 1). `--bots 4` overrides only the ground force and leaves the
 strategists to the game mode.
+
+Two more record a round or watch one back ([`docs/DEMOS.md`](docs/DEMOS.md)):
+
+| Flag | Effect |
+|---|---|
+| `--record <name>` | write a demo from the round's first tick; how a headless server records |
+| `--playdemo <name>` | watch a demo instead of playing; no mode flag may go beside it |
 
 Four more open the agent control channel, which lets a process that is not a Godot client take a
 bot's seat ([`docs/AGENT_API.md`](docs/AGENT_API.md)):
@@ -177,6 +190,39 @@ a line every five seconds instead:
 
 How to read those numbers, and how to inject latency with `tc netem` to test against something other
 than a perfect link, is in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) §4.
+
+## Watching a round back
+
+Press `~` — shift and the backtick — for the console. It is there at the main menu as well as in the
+map, because `playdemo` is asked for before there is a round; `` ` `` on its own is still the net
+debug HUD above.
+
+```
+record game.demo        start writing a demo of this round
+stoprecord              close it
+mark <text>             put a note in the demo at this tick
+playdemo game.demo      watch one
+demos, demoinfo <name>  what is in the folder, and what is in one
+demospeed, demopause, demofollow <peer>
+```
+
+A demo is the round's **input journal** — every character's `InputFrame`, every tick, as the
+authority resolved it — plus the snapshots it broadcast. Playback re-runs the movement step over the
+journal at the full 60 Hz and lets the snapshots correct it, which is why a replay moves the way the
+round did rather than the way a 30 Hz recording of it would. Journalling is also the cheap half of
+the file: eight players of intent is 8.4 KB/s, against 24 KB/s for the keyframes beside it.
+
+A client can record too. It is never told what anybody else pressed, so what it writes is its own
+input and the packets it was sent, and that plays back by interpolation — a Source-style demo rather
+than a journal. Neither is chosen: `record` writes the kind this process can.
+
+| Flag | Effect |
+|---|---|
+| `--record <name>` | record from the round's first tick; how a headless server records |
+| `--playdemo <name>` | go straight past the menu into a replay |
+
+The whole of it — the format, the cost, the camera, and what this first cut deliberately leaves out
+— is [`docs/DEMOS.md`](docs/DEMOS.md).
 
 ## Building
 

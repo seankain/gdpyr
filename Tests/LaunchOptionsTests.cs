@@ -426,4 +426,106 @@ public class LaunchOptionsTests
 	{
 		Assert.Equal(loopback, LaunchOptions.IsLoopback(host));
 	}
+
+	// ---- demos (docs/DEMOS.md §4.3) ----------------------------------------
+
+	[Fact]
+	public void Record_TakesANameAndWorksInAnyMode()
+	{
+		LaunchOptions options = LaunchOptions.Parse(new[] { "--server", "--record", "tuesday" });
+
+		Assert.Null(options.Error);
+		Assert.Equal(LaunchMode.Server, options.Mode);
+
+		// The extension is filled in exactly as the console fills it in: one set of
+		// rules for what a demo is called (Sim/Demo/DemoFormat.TryParseName).
+		Assert.Equal("tuesday.dem", options.RecordDemo);
+		Assert.Contains("recording tuesday.dem", options.ToString());
+	}
+
+	[Fact]
+	public void Record_KeepsAnExtensionItWasGiven()
+	{
+		LaunchOptions options = LaunchOptions.Parse(new[] { "--client", "10.0.0.2", "--record", "game.demo" });
+
+		Assert.Null(options.Error);
+		Assert.Equal("game.demo", options.RecordDemo);
+	}
+
+	[Theory]
+	[InlineData("--record")]
+	[InlineData("--playdemo")]
+	public void ADemoFlag_NeedsAName(string flag)
+	{
+		Assert.Contains("needs a name", LaunchOptions.Parse(new[] { flag }).Error);
+	}
+
+	[Theory]
+	[InlineData("--record")]
+	[InlineData("--playdemo")]
+	public void ADemoFlag_RefusesAPathRatherThanAName(string flag)
+	{
+		string error = LaunchOptions.Parse(new[] { flag, "../../etc/passwd" }).Error;
+
+		Assert.Contains(flag, error);
+		Assert.Contains("file name", error);
+	}
+
+	[Fact]
+	public void ADemoFlag_GivenTwiceIsARefusal()
+	{
+		Assert.Contains("twice", LaunchOptions.Parse(new[] { "--record", "a", "--record", "b" }).Error);
+		Assert.Contains("twice", LaunchOptions.Parse(new[] { "--playdemo", "a", "--playdemo", "b" }).Error);
+	}
+
+	[Fact]
+	public void PlayDemo_IsOfflineAndSaysSo()
+	{
+		LaunchOptions options = LaunchOptions.Parse(new[] { "--playdemo", "game.demo" });
+
+		Assert.Null(options.Error);
+		Assert.Equal(LaunchMode.Offline, options.Mode);
+		Assert.Equal("game.demo", options.PlayDemo);
+		Assert.Contains("playing game.demo", options.ToString());
+	}
+
+	[Theory]
+	[InlineData("--server")]
+	[InlineData("--listen")]
+	public void PlayDemo_RefusesAModeFlagBesideIt(string mode)
+	{
+		string error = LaunchOptions.Parse(new[] { mode, "--playdemo", "game.demo" }).Error;
+
+		Assert.Contains("watched, not played", error);
+	}
+
+	[Fact]
+	public void PlayDemo_RefusesAClientFlagBesideIt() =>
+		Assert.Contains("watched, not played",
+			LaunchOptions.Parse(new[] { "--client", "10.0.0.2", "--playdemo", "game.demo" }).Error);
+
+	[Fact]
+	public void PlayDemo_AndRecordAreOpposites() =>
+		Assert.Contains("opposites",
+			LaunchOptions.Parse(new[] { "--playdemo", "a.dem", "--record", "b.dem" }).Error);
+
+	[Fact]
+	public void PlayDemo_IsRefusedOnADedicatedServerBuild()
+	{
+		// A dedicated-server export defaults to Server with no mode flag, so this is
+		// the one place the refusal cannot be about a conflicting flag.
+		string error = LaunchOptions.Parse(new[] { "--playdemo", "game.demo" }, dedicatedServer: true).Error;
+
+		Assert.Contains("no window", error);
+	}
+
+	[Fact]
+	public void ADedicatedServer_MayStillRecord()
+	{
+		LaunchOptions options = LaunchOptions.Parse(new[] { "--record", "box.dem" }, dedicatedServer: true);
+
+		Assert.Null(options.Error);
+		Assert.Equal(LaunchMode.Server, options.Mode);
+		Assert.Equal("box.dem", options.RecordDemo);
+	}
 }

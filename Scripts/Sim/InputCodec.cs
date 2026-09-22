@@ -47,17 +47,45 @@ public static class InputCodec
 		int offset = HeaderBytes;
 		for (int i = 0; i < count; i++)
 		{
-			ref readonly InputFrame frame = ref frames[i];
-			BinaryPrimitives.WriteUInt32LittleEndian(into[offset..], frame.Tick);
-			into[offset + 4] = (byte)frame.MoveX;
-			into[offset + 5] = (byte)frame.MoveZ;
-			BinaryPrimitives.WriteUInt16LittleEndian(into[(offset + 6)..], frame.Yaw);
-			BinaryPrimitives.WriteInt16LittleEndian(into[(offset + 8)..], frame.Pitch);
-			BinaryPrimitives.WriteUInt16LittleEndian(into[(offset + 10)..], frame.Buttons);
+			WriteFrame(frames[i], into[offset..]);
 			offset += InputFrame.SizeBytes;
 		}
 		return size;
 	}
+
+	/// <summary>
+	/// Writes one frame's <see cref="InputFrame.SizeBytes"/> bytes. Split out of
+	/// <see cref="Encode"/> so that the demo journal, which stores frames one at a
+	/// time rather than in a redundant batch, writes the same layout by
+	/// construction rather than by a comment asking it to
+	/// (<see cref="Demo.DemoRecordKind.Input"/>).
+	/// </summary>
+	public static void WriteFrame(in InputFrame frame, Span<byte> into)
+	{
+		BinaryPrimitives.WriteUInt32LittleEndian(into, frame.Tick);
+		into[4] = (byte)frame.MoveX;
+		into[5] = (byte)frame.MoveZ;
+		BinaryPrimitives.WriteUInt16LittleEndian(into[6..], frame.Yaw);
+		BinaryPrimitives.WriteInt16LittleEndian(into[8..], frame.Pitch);
+		BinaryPrimitives.WriteUInt16LittleEndian(into[10..], frame.Buttons);
+	}
+
+	/// <summary>
+	/// Reads one frame back, clamping every field into range. The counterpart to
+	/// <see cref="WriteFrame"/>; see <see cref="TryDecode"/> for why the clamping
+	/// is here rather than downstream.
+	/// </summary>
+	public static InputFrame ReadFrame(ReadOnlySpan<byte> from) => new()
+	{
+		Tick = BinaryPrimitives.ReadUInt32LittleEndian(from),
+		// -128 has no positive counterpart, so it is clamped away here rather
+		// than being left for the movement code to deal with.
+		MoveX = (sbyte)Math.Max((sbyte)from[4], (sbyte)(-127)),
+		MoveZ = (sbyte)Math.Max((sbyte)from[5], (sbyte)(-127)),
+		Yaw = BinaryPrimitives.ReadUInt16LittleEndian(from[6..]),
+		Pitch = BinaryPrimitives.ReadInt16LittleEndian(from[8..]),
+		Buttons = BinaryPrimitives.ReadUInt16LittleEndian(from[10..]),
+	};
 
 	public static bool TryDecode(ReadOnlySpan<byte> payload, Span<InputFrame> into, out int count)
 	{
@@ -76,17 +104,7 @@ public static class InputCodec
 		int offset = HeaderBytes;
 		for (int i = 0; i < frames; i++)
 		{
-			into[i] = new InputFrame
-			{
-				Tick = BinaryPrimitives.ReadUInt32LittleEndian(payload[offset..]),
-				// -128 has no positive counterpart, so it is clamped away here rather
-				// than being left for the movement code to deal with.
-				MoveX = (sbyte)Math.Max((sbyte)payload[offset + 4], (sbyte)(-127)),
-				MoveZ = (sbyte)Math.Max((sbyte)payload[offset + 5], (sbyte)(-127)),
-				Yaw = BinaryPrimitives.ReadUInt16LittleEndian(payload[(offset + 6)..]),
-				Pitch = BinaryPrimitives.ReadInt16LittleEndian(payload[(offset + 8)..]),
-				Buttons = BinaryPrimitives.ReadUInt16LittleEndian(payload[(offset + 10)..]),
-			};
+			into[i] = ReadFrame(payload[offset..]);
 			offset += InputFrame.SizeBytes;
 		}
 

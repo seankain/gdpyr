@@ -59,8 +59,18 @@ public partial class MainMenu : Control
 		// A command line that named a mode has already said what it wants, and a
 		// dedicated server has nobody to ask. Both skip the menu entirely — including
 		// building it, because a headless process should not be laying out widgets.
-		if (Bootstrap.IsDedicatedServer || Bootstrap.Options.Mode != LaunchMode.Offline)
+		// `--playdemo` names no mode and still skips it: a demo is watched in the map
+		// and there is no server to pick (docs/DEMOS.md §5.1).
+		if (Bootstrap.IsDedicatedServer || Bootstrap.Options.Mode != LaunchMode.Offline
+			|| Bootstrap.Options.PlayDemo != null)
 		{
+			// No peer, no packets: a replay is a file being read, and the transport
+			// would otherwise sit waiting for a menu that is not going to be built.
+			if (Bootstrap.Options.PlayDemo != null)
+			{
+				NetworkManager.Instance?.PlayOffline();
+			}
+
 			// Deferred, because a scene cannot be changed while the outgoing one is
 			// still being readied.
 			Callable.From(EnterWorld).CallDeferred();

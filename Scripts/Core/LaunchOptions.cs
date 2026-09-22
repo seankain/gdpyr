@@ -44,6 +44,7 @@ public sealed class LaunchOptions
 		"             [--name <text>] [--no-advertise]\n" +
 		"             [--agent-api [host:]port] [--agent-token <token>]\n" +
 		"             [--agent-unbounded] [--agent-omniscient]\n" +
+		"             [--record <name>] | [--playdemo <name>]\n" +
 		"  --server [port]         headless authority, no local player (default port 7777)\n" +
 		"  --client <host[:port]>  connect to a server\n" +
 		"  --listen [port]         authority plus a local player\n" +
@@ -55,6 +56,8 @@ public sealed class LaunchOptions
 		"  --agent-token <token>   required for a non-loopback agent bind\n" +
 		"  --agent-unbounded       lift the turn-rate and APM ceilings; research runs only\n" +
 		"  --agent-omniscient      drop the fog for attached seats; labelled as cheating\n" +
+		"  --record <name>         record a demo of the round from the first tick (docs/DEMOS.md)\n" +
+		"  --playdemo <name>       watch a demo instead of playing; implies no networking\n" +
 		"  (no flags)              the main menu: the servers on this network, or a round on your own\n" +
 		"Godot consumes its own arguments first, so these go after a bare `--`:\n" +
 		"  gdpyr --headless -- --server 7777 --bots 6:1 --agent-api 7900";
@@ -119,6 +122,19 @@ public sealed class LaunchOptions
 	/// <summary>Drops the fog for attached seats. Stamped into every observation and every trace.</summary>
 	public bool AgentOmniscient { get; private init; }
 
+	/// <summary>
+	/// A demo to record from the first tick, or null (docs/DEMOS.md §4.3). This is
+	/// how a dedicated server records: it has no console to type <c>record</c> into
+	/// and no window to open one in.
+	/// </summary>
+	public string RecordDemo { get; private init; }
+
+	/// <summary>
+	/// A demo to watch instead of playing a round, or null. Implies no networking:
+	/// a replay is a file being read, and there is nobody on the other end of it.
+	/// </summary>
+	public string PlayDemo { get; private init; }
+
 	public bool HasAgentApi => AgentPort.HasValue;
 
 	/// <summary>Null when parsing succeeded; a one-line diagnostic otherwise.</summary>
@@ -150,6 +166,16 @@ public sealed class LaunchOptions
 		if (!Advertise)
 		{
 			mode += " | not advertised";
+		}
+
+		if (RecordDemo != null)
+		{
+			mode += $" | recording {RecordDemo}";
+		}
+
+		if (PlayDemo != null)
+		{
+			mode += $" | playing {PlayDemo}";
 		}
 
 		if (AgentPort is { } agentPort)
@@ -192,6 +218,8 @@ public sealed class LaunchOptions
 		string agentToken = null;
 		bool agentUnbounded = false;
 		bool agentOmniscient = false;
+		string recordDemo = null;
+		string playDemo = null;
 
 		args ??= System.Array.Empty<string>();
 
@@ -286,6 +314,44 @@ public sealed class LaunchOptions
 					advertise = false;
 					break;
 
+				case "--record":
+				{
+					if (recordDemo != null)
+					{
+						return Failure("--record given twice");
+					}
+
+					if (!TryTakeValue(args, ref i, out string value))
+					{
+						return Failure("--record needs a name, e.g. --record game.demo");
+					}
+
+					if (!Gdpyr.Sim.Demo.DemoFormat.TryParseName(value, out recordDemo, out string error))
+					{
+						return Failure($"--record: {error}");
+					}
+					break;
+				}
+
+				case "--playdemo":
+				{
+					if (playDemo != null)
+					{
+						return Failure("--playdemo given twice");
+					}
+
+					if (!TryTakeValue(args, ref i, out string value))
+					{
+						return Failure("--playdemo needs a name, e.g. --playdemo game.demo");
+					}
+
+					if (!Gdpyr.Sim.Demo.DemoFormat.TryParseName(value, out playDemo, out string error))
+					{
+						return Failure($"--playdemo: {error}");
+					}
+					break;
+				}
+
 				case "--agent-api":
 				{
 					if (agentPort.HasValue)
@@ -342,6 +408,27 @@ public sealed class LaunchOptions
 			}
 		}
 
+		if (playDemo != null)
+		{
+			// Watching is not playing. A demo is read out of a file with no authority,
+			// no peers and nobody to be, so a mode flag alongside it is a contradiction
+			// rather than a combination (docs/DEMOS.md §5.1).
+			if (mode is { } playing)
+			{
+				return Failure($"--playdemo cannot be combined with {playing}: a demo is watched, not played");
+			}
+
+			if (recordDemo != null)
+			{
+				return Failure("--playdemo and --record are opposites");
+			}
+
+			if (dedicatedServer)
+			{
+				return Failure("--playdemo needs somewhere to draw; a dedicated server has no window");
+			}
+		}
+
 		mode ??= dedicatedServer ? LaunchMode.Server : LaunchMode.Offline;
 
 		if (agentPort.HasValue)
@@ -382,6 +469,8 @@ public sealed class LaunchOptions
 			AgentToken = agentToken,
 			AgentUnbounded = agentUnbounded,
 			AgentOmniscient = agentOmniscient,
+			RecordDemo = recordDemo,
+			PlayDemo = playDemo,
 		};
 	}
 

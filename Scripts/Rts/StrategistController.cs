@@ -234,6 +234,13 @@ public partial class StrategistController : Node3D
 
 	private void Pan(float dt)
 	{
+		if (Gdpyr.Core.InputFocus.TextEntry)
+		{
+			// Typing a demo's name into the console must not pan the map
+			// (Scripts/Core/InputFocus.cs).
+			return;
+		}
+
 		Vector2 axes = Input.GetVector("move_left", "move_right", "move_forward", "move_backward");
 		axes += EdgeScroll();
 
@@ -281,6 +288,11 @@ public partial class StrategistController : Node3D
 
 	private void Rotate(float dt)
 	{
+		if (Gdpyr.Core.InputFocus.TextEntry)
+		{
+			return;
+		}
+
 		if (Input.IsActionPressed("rts_rotate_left")) { _yaw += RotateSpeed * dt; }
 		if (Input.IsActionPressed("rts_rotate_right")) { _yaw -= RotateSpeed * dt; }
 	}
