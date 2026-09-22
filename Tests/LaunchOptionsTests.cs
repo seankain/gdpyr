@@ -341,6 +341,78 @@ public class LaunchOptionsTests
 		Assert.NotNull(LaunchOptions.Parse(new[] { "--server", "--agent-api" }).Error);
 	}
 
+	// ---- the server browser (docs/LAN.md §4) -------------------------------
+
+	[Fact]
+	public void NoName_MeansTheMachinesOwn()
+	{
+		// Resolved where the environment is, not here: a parse stays a pure function.
+		var options = LaunchOptions.Parse(new[] { "--server" });
+
+		Assert.Null(options.Error);
+		Assert.Null(options.ServerName);
+		Assert.True(options.Advertise);
+	}
+
+	[Fact]
+	public void Name_IsTakenAsGiven()
+	{
+		var options = LaunchOptions.Parse(new[] { "--server", "--name", "the kitchen box" });
+
+		Assert.Null(options.Error);
+		Assert.Equal("the kitchen box", options.ServerName);
+	}
+
+	[Fact]
+	public void Name_WithoutAName_Fails()
+	{
+		Assert.NotNull(LaunchOptions.Parse(new[] { "--server", "--name" }).Error);
+		Assert.NotNull(LaunchOptions.Parse(new[] { "--name", "--no-bots" }).Error);
+	}
+
+	[Fact]
+	public void Name_GivenTwice_Fails()
+	{
+		Assert.NotNull(LaunchOptions.Parse(new[] { "--server", "--name", "a", "--name", "b" }).Error);
+	}
+
+	[Fact]
+	public void NoAdvertise_IsAcceptedWithoutAModeFlag()
+	{
+		// A process with no mode flag picks one in the main menu and may end up
+		// hosting from there, so neither of these needs --server to make sense.
+		var options = LaunchOptions.Parse(new[] { "--no-advertise", "--name", "quiet" });
+
+		Assert.Null(options.Error);
+		Assert.Equal(LaunchMode.Offline, options.Mode);
+		Assert.False(options.Advertise);
+		Assert.Equal("quiet", options.ServerName);
+	}
+
+	[Theory]
+	[InlineData("192.168.1.20", "192.168.1.20", 7777)]
+	[InlineData("192.168.1.20:7778", "192.168.1.20", 7778)]
+	[InlineData("  hostbox.local:7777  ", "hostbox.local", 7777)]
+	[InlineData("[::1]:7779", "::1", 7779)]
+	public void TypedAddresses_ParseTheSameWayTheFlagDoes(string text, string host, int port)
+	{
+		Assert.True(LaunchOptions.TryParseAddress(text, out string parsedHost, out int parsedPort, out _));
+		Assert.Equal(host, parsedHost);
+		Assert.Equal(port, parsedPort);
+	}
+
+	[Theory]
+	[InlineData("")]
+	[InlineData("   ")]
+	[InlineData("192.168.1.20:70000")]
+	[InlineData("192.168.1.20:")]
+	[InlineData("[::1")]
+	public void TypedAddresses_ThatAreNotAddresses_ComeBackWithASentence(string text)
+	{
+		Assert.False(LaunchOptions.TryParseAddress(text, out _, out _, out string error));
+		Assert.False(string.IsNullOrWhiteSpace(error));
+	}
+
 	[Theory]
 	[InlineData("127.0.0.1", true)]
 	[InlineData("127.1.2.3", true)]

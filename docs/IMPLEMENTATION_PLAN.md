@@ -136,8 +136,8 @@ Scripts/
   Bots/        BotDirector (backfill), BotPilot (ground), BotStrategist (RTS) — decisions in Sim/
   Agent/       M6: the agent listener and the seat leases; M7: the strategist view and the planes.
                Codecs, observations and the command model live in Sim/Agent/
-  Ui/          Team select, loadout select, RTS HUD, net debug HUD
-Scenes/        Greybox map, player, units, props
+  Ui/          Main menu (server browser), role select, loadout select, RTS HUD, net debug HUD
+Scenes/        Main menu, greybox map, player, units, props
 Tests/         xUnit project over Scripts/Sim (no engine required)
 Tests/Scenarios/  M7: playtest scenario files — data, no engine needed to author one
 tools/         Gdpyr.AgentClient (protocol), Gdpyr.Trainer (RLMatrix), Gdpyr.Probe (divergence),
@@ -517,7 +517,7 @@ in §2 at that time — that corner of the ecosystem moves.
 |---|---|
 | **Builder units** in the first pass | Resource nodes captured by proximity test the same economy loop with far less code. Add builders in M5+ if capture-by-presence feels flat. |
 | **Dropships and troop carriers** | Transport/logistics is a second system (load/unload, pathing, drop physics). Defer until the base loop is proven fun. |
-| Server browser / matchmaking | Direct IP over Tailscale. |
+| Matchmaking, and any server list that is not a broadcast | Direct IP over Tailscale, and — since the main menu — LAN discovery on top of it: each server answers a broadcast query on UDP 7780–7783 with its name, port and roster ([`LAN.md`](LAN.md) §4). That is ~200 lines, one datagram each way, no registry and no service to run, and it covers the case the cut was really about: a room of people who should not have to be told an IP. It reaches the broadcast domain and stops there. Anything further away is still typed in, and matchmaking is still M9's problem. |
 | Animation, audio, VFX beyond placeholders | Greybox. |
 | Anti-cheat beyond server authority | Server authority is free and sufficient here. |
 | Multiple maps | One map, iterated on. Map layout is a top-3 fun variable — iterate the one map instead of building three. |
@@ -584,6 +584,16 @@ survives being shot at — and the ground force got heavy guns it can pick up, c
 feed. The round can now be lost from either side: at zero tickets, or when the strategist has no
 points, no units, nothing building and no ground, and it ends on a scoreboard and restarts itself.
 
+The front door came last: a main menu that lists the servers on this network and a panel that asks
+which side you want before a round puts you anywhere. Both are deliberately small. The browser is
+one datagram each way on its own UDP socket ([`LAN.md`](LAN.md) §4) and reaches the broadcast domain
+and no further — the matchmaking in §5 is still cut. The role menu needed no new team and no wire
+change: a person who has not answered is simply not alive, which the simulation has meant "keep the
+look angles and ignore the rest" since M1, and the answer rides the `ClientSelectTeam` M3 already
+had. `F1` / `F2` still work and mean the same thing. What the menu did cost is an entry point: the
+map is no longer the main scene, so `Session` gates the tick loop until the map is in the tree, and
+a command line that names a mode goes straight through before a widget is built.
+
 1. **Play a round and watch the three node numbers before anything else.** 25 points every five
    seconds, twice, plus 35 from the middle, is 510 points a minute with everything held — ten
    riflemen a minute, against `StrategistTickets = 1000` of starting capital. That is a guess made
@@ -622,7 +632,16 @@ points, no units, nothing building and no ground, and it ends on a scoreboard an
    `ScoreboardCodec`'s `RoundSummary` is already half the CSV's header row, and M6's event stream
    (`AGENT_API.md` §8) is most of the rest. It was renumbered from M6, not deferred: it still ends
    the project.
-8. Four smaller things earlier milestones left where they were: a unit hit is tested against its
+8. **Open the menu on two machines and watch the list fill.** The browser and the role menu were
+   written without a Godot binary, like the scenarios in item 6: they compile and their codec and
+   their team rules are unit-tested, but nothing has drawn a widget or put a datagram on a wire.
+   What to check, in order: a host appears in the other machine's list within a refresh or two
+   (§4.1 of [`LAN.md`](LAN.md)); a second host on the same machine takes 7781 and both rows show;
+   joining from the list lands in the same round joining by address does; the role panel is up
+   before anybody is on the field and again after the intermission; and answering it with the mouse
+   leaves the pointer where the side you picked wants it. Wi-Fi with client isolation and a machine
+   with a Docker bridge are the two environments most likely to embarrass the list.
+9. Four smaller things earlier milestones left where they were: a unit hit is tested against its
    *current* capsule rather than a rewound one (justified in `NETCODE.md` §5); the strategist HUD
    can only build from barracks 0 — the RPCs take an index, the three build keys still send zero,
    and the computer strategist already uses every barracks on the map, so the gap is only in the

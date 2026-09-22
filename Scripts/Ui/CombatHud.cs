@@ -89,8 +89,15 @@ public partial class CombatHud : CanvasLayer
 		}
 	}
 
-	/// <summary>Called once per simulation tick by the combat manager.</summary>
-	public void Refresh(PlayerCombat combat, MatchState match, uint tick)
+	/// <summary>
+	/// Called once per simulation tick by the combat manager.
+	///
+	/// <paramref name="awaitingRole"/> is the role menu being up
+	/// (<see cref="RoleSelect"/>). It occupies the middle of the screen, which is
+	/// where the loadout picker lives, and a player who has not picked a side has
+	/// nothing to pick a weapon for yet.
+	/// </summary>
+	public void Refresh(PlayerCombat combat, MatchState match, uint tick, bool awaitingRole)
 	{
 		if (combat == null)
 		{
@@ -141,8 +148,9 @@ public partial class CombatHud : CanvasLayer
 
 		bool dead = combat.IsDowned;
 		_notice.Text = dead ? "down — respawning" : string.Empty;
-		_prompt.Text = dead ? string.Empty : emplacements?.PromptFor(combat) ?? string.Empty;
-		_loadout.Refresh(dead || match.Phase == RoundPhase.Ended, combat.PendingLoadout.Large);
+		_prompt.Text = dead || awaitingRole ? string.Empty : emplacements?.PromptFor(combat) ?? string.Empty;
+		_loadout.Refresh(!awaitingRole && (dead || match.Phase == RoundPhase.Ended),
+			combat.PendingLoadout.Large);
 	}
 
 	public void FlashHitMarker(bool killed)

@@ -73,6 +73,7 @@ public partial class CombatManager : Node
 	private ProjectileView _view;
 	private CombatHud _hud;
 	private TeamSelect _teamSelect;
+	private RoleSelect _roleSelect;
 	private Scoreboard _scoreboard;
 	private StrategistController _strategist;
 
@@ -176,16 +177,37 @@ public partial class CombatManager : Node
 		_players[peerId] = combat;
 		_ordered.Add(combat);
 
-		if (NetworkManager.Instance is { IsServer: true })
-		{
-			// Everyone arrives on the ground; the strategist slot is opted into.
-			combat.Team = Teams.Assign(peerId, Team.GroundForce);
-		}
-
 		if (isLocal)
 		{
 			Local = combat;
 			EnsureLocalUi();
+
+			// The server asks a peer for its side while it is registering it, which on
+			// a client is before the spawn message it is about to send. Anything that
+			// arrived early is applied here, so a character is never briefly predicted
+			// as alive while the server is holding it (docs/NETCODE.md §3.2).
+			combat.AwaitingRole = LocalAwaitingRole;
+		}
+
+		// The authority, which offline is too: there is one there and it is this
+		// process. Only a client is told what its team is instead of deciding.
+		// Registered after Local, so that the local player's question is put to the
+		// menu in this process rather than sent to it as an RPC.
+		if (NetworkManager.Instance is { IsClient: false })
+		{
+			// A person is asked which side they want before they are put anywhere
+			// (docs/IMPLEMENTATION_PLAN.md §M3). A computer player is not: it has no
+			// menu to answer with, and the director assigns it a side on this tick.
+			if (Teams.RequireChoice(peerId))
+			{
+				combat.Team = Teams.TeamOf(peerId);
+				RequireRoleChoice(combat);
+			}
+			else
+			{
+				// Everyone arrives on the ground; the strategist slot is opted into.
+				combat.Team = Teams.Assign(peerId, Team.GroundForce);
+			}
 		}
 
 		return combat;
@@ -205,6 +227,7 @@ public partial class CombatManager : Node
 		if (Local == combat)
 		{
 			Local = null;
+			LocalAwaitingRole = false;
 			SyncLocalRole();
 		}
 	}
@@ -814,8 +837,11 @@ public partial class CombatManager : Node
 			PlayerCombat combat = _ordered[i];
 
 			// A strategist is never alive and never comes back: they have no body on
-			// the field to put anywhere (see PlayerCombat.IsAlive).
-			if (combat.Team == Team.Strategist || combat.IsAlive || tick < combat.RespawnTick)
+			// the field to put anywhere (see PlayerCombat.IsAlive). Neither does
+			// somebody who has not said which of the two they want yet — the clock
+			// that brings a body back is started by their answer, not by a timer.
+			if (combat.Team == Team.Strategist || combat.AwaitingRole || combat.IsAlive
+				|| tick < combat.RespawnTick)
 			{
 				continue;
 			}
@@ -850,8 +876,9 @@ public partial class CombatManager : Node
 		switch (Match.Phase)
 		{
 			// Nothing counts until somebody is on the field, so the round starts on the
-			// first player rather than on the server's first tick.
-			case RoundPhase.Warmup when _ordered.Count > 0:
+			// first player rather than on the server's first tick — and a player who
+			// is still looking at the role menu is not on it yet (docs/NETCODE.md §7).
+			case RoundPhase.Warmup when Teams.ReadyCount > 0:
 				Match.Start(tick, _gameMode.GroundForceTickets, _gameMode.StrategistTickets,
 					_gameMode.RoundDurationMinutes * 60 * SimConfig.TickRate);
 				AgentEventBus.Emit(AgentEventKind.RoundStart, tick, RoundSeed, Match.GroundTickets,
@@ -916,6 +943,13 @@ public partial class CombatManager : Node
 		SendNodeState(0);
 		EmplacementManager.Instance?.ResetAll();
 		UnitManager.Instance?.ClearUnits();
+
+		// A fresh round asks the people here which side they want to play it on,
+		// before anybody is put back on the field (docs/IMPLEMENTATION_PLAN.md §M3).
+		// The bots are not asked and are simply put back; the director will re-plan
+		// the seats around whatever the people choose.
+		Teams.RequireChoiceFromPeople();
+
 		for (int i = 0; i < _ordered.Count; i++)
 		{
 			// A fresh round is a fresh scoreboard. Without this the table published at
@@ -924,6 +958,13 @@ public partial class CombatManager : Node
 			// that is over — so no two rounds even start in the same places.
 			_ordered[i].Kills = 0;
 			_ordered[i].Deaths = 0;
+
+			if (Teams.AwaitingChoice(_ordered[i].PeerId))
+			{
+				RequireRoleChoice(_ordered[i]);
+				continue;
+			}
+
 			Respawn(_ordered[i], tick);
 		}
 	}
@@ -1110,14 +1151,88 @@ public partial class CombatManager : Node
 			return;
 		}
 
+		// The menu closes on the click rather than a round trip later. The answer it
+		// is closing on may still be corrected — a full strategist's chair lands on
+		// the ground — but that correction arrives as a team bit the HUD reads, not as
+		// a second menu (docs/NETCODE.md §7).
+		LocalAwaitingRole = false;
+
 		NetworkManager net = NetworkManager.Instance;
 		if (net != null && net.IsClient)
 		{
+			// The hold is the server's to lift, and it lifts it in the snapshot that
+			// brings the health back. Clearing the mirror here only stops the client
+			// from holding itself for a round trip longer than the server does.
+			Local.AwaitingRole = false;
 			RpcId(1, MethodName.ClientSelectTeam, (byte)team);
 			return;
 		}
 
 		AssignTeam(Local.PeerId, team);
+	}
+
+	/// <summary>
+	/// True while this process's own player owes an answer to the role menu
+	/// (<see cref="Ui.RoleSelect"/>).
+	///
+	/// A client's copy of a question the server asked, kept here rather than on
+	/// <see cref="PlayerCombat"/> because the question can arrive before the client
+	/// has a character to hang it on: the server registers a peer, and therefore asks
+	/// it, inside the same spawn it is about to announce.
+	/// </summary>
+	public bool LocalAwaitingRole { get; private set; }
+
+	/// <summary>
+	/// Server-side: takes a player off the field and asks which side they want
+	/// (docs/IMPLEMENTATION_PLAN.md §M3). Done when they join and again when a round
+	/// starts, so that the sides are picked per round rather than per connection.
+	///
+	/// A bot is never asked — <see cref="TeamService.RequireChoice"/> refuses to ask
+	/// one — so this is only ever reached for a person.
+	/// </summary>
+	private void RequireRoleChoice(PlayerCombat combat)
+	{
+		combat.HoldForRoleChoice();
+		combat.History.Clear();
+		combat.Character?.SetDeadPresentation(true);
+
+		if (combat == Local)
+		{
+			// A listen host or an offline round: the question and the menu are in the
+			// same process, so there is nothing to send.
+			LocalAwaitingRole = true;
+			return;
+		}
+
+		if (Multiplayer.HasMultiplayerPeer() && !BotRoster.IsBot(combat.PeerId))
+		{
+			RpcId(combat.PeerId, MethodName.ServerRequestRoleChoice);
+		}
+	}
+
+	/// <summary>
+	/// Server -> one peer: pick a side. Reliable, and the only message the role menu
+	/// needed — the answer comes back as the team request that already existed, and
+	/// the consequences of it ride the snapshot's health and team bits.
+	/// </summary>
+	[Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
+		TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+	private void ServerRequestRoleChoice()
+	{
+		if (NetworkManager.Instance is not { IsClient: true })
+		{
+			return;
+		}
+
+		LocalAwaitingRole = true;
+
+		// The character predicts nothing while it is being held, which is what the
+		// server is doing to it. Without this the client would predict a couple of
+		// ticks of walking before the first snapshot said otherwise.
+		if (Local != null)
+		{
+			Local.AwaitingRole = true;
+		}
 	}
 
 	[Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false,
@@ -1174,12 +1289,19 @@ public partial class CombatManager : Node
 			PlayerManager.Instance?.Bots?.YieldSeat(Team.Strategist);
 		}
 
+		// An answer to the role menu is an assignment like any other, but it is also
+		// the thing that puts a body back on the field — so it must not take the
+		// early-out below just because the side it picked is the side the player was
+		// already filed under (docs/IMPLEMENTATION_PLAN.md §M3).
+		bool wasAwaiting = combat.AwaitingRole;
+
 		Team granted = Teams.Assign(peerId, requested);
-		if (granted == combat.Team)
+		if (granted == combat.Team && !wasAwaiting)
 		{
 			return granted;
 		}
 
+		combat.AwaitingRole = false;
 		combat.Team = granted;
 		combat.History.Clear();
 
@@ -1306,6 +1428,15 @@ public partial class CombatManager : Node
 		bool wasAlive = combat.IsAlive;
 		combat.ApplyAuthoritative(snapshot.Health, snapshot.Ammo, snapshot.WeaponFlags, snapshot.LastInputTick,
 			combat == Local);
+
+		// A player the server has put back on the field is a player it has stopped
+		// waiting on, whatever became of the answer this client sent. Belt and braces:
+		// the client is never left holding a character the server is simulating.
+		if (combat == Local && combat.AwaitingRole && snapshot.Health > 0)
+		{
+			combat.AwaitingRole = false;
+			LocalAwaitingRole = false;
+		}
 
 		if (wasAlive != combat.IsAlive)
 		{
@@ -1820,6 +1951,9 @@ public partial class CombatManager : Node
 		_teamSelect = new TeamSelect { Name = "TeamSelect" };
 		AddChild(_teamSelect);
 
+		_roleSelect = new RoleSelect { Name = "RoleSelect" };
+		AddChild(_roleSelect);
+
 		_scoreboard = new Scoreboard { Name = "Scoreboard" };
 		AddChild(_scoreboard);
 	}
@@ -1829,9 +1963,14 @@ public partial class CombatManager : Node
 		SyncLocalRole();
 		Economy.Refresh();
 		_view?.Render(_projectiles);
-		_hud?.Refresh(Local, Match, tick);
+		_hud?.Refresh(Local, Match, tick, LocalAwaitingRole);
 		_strategist?.Refresh(tick);
 		_scoreboard?.Refresh(this);
+
+		// After SyncLocalRole, which is what puts the strategist's camera up or takes
+		// it down: closing this panel hands the mouse to whichever of the two games
+		// the player has just chosen.
+		_roleSelect?.Refresh(LocalAwaitingRole, Local?.Team ?? Team.GroundForce);
 	}
 
 	/// <summary>

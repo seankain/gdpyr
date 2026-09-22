@@ -15,7 +15,10 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 [application]
 
 config/name="gdpyr"
-run/main_scene="res://Scenes/Test.tscn"
+; The main menu, not the map: every launch passes through it, and one that named a
+; mode on the command line passes straight through to res://Scenes/Test.tscn
+; before a widget is built (Scripts/Ui/MainMenu.cs).
+run/main_scene="res://Scenes/MainMenu.tscn"
 config/features=PackedStringArray("4.6", "C#", "GL Compatibility")
 config/icon="res://icon.svg"
 

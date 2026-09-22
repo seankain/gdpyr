@@ -2,6 +2,7 @@
 
 [ext_resource type="Material" uid="uid://cgh5xjavqxrgv" path="res://Levels/materials/PrototypeMat1.tres" id="2_4viys"]
 [ext_resource type="Texture2D" uid="uid://cpd0vl6ggnxlq" path="res://Textures/kenney_prototype/PNG/Green/texture_01.png" id="3_ugpq5"]
+[ext_resource type="Script" uid="uid://dworldroot01" path="res://Scripts/Core/WorldRoot.cs" id="1_worldroot"]
 [ext_resource type="Script" path="res://Scripts/Rts/Barracks.cs" id="4_barracks"]
 [ext_resource type="Script" path="res://Scripts/Rts/ResourceNode.cs" id="5_resourcenode"]
 [ext_resource type="Script" path="res://Scripts/Fps/Emplacement.cs" id="6_emplacement"]
@@ -52,6 +53,7 @@ albedo_texture = ExtResource("3_ugpq5")
 uv1_triplanar = true
 
 [node name="Test" type="Node3D" unique_id=133298753]
+script = ExtResource("1_worldroot")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1358510103]
 transform = Transform3D(1, 0, 0, 0, -4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 27.6282, 0)

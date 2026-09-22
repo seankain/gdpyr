@@ -24,6 +24,11 @@
          without two machines. -->
     <Compile Include="../Scripts/Match/MatchState.cs" />
     <Compile Include="../Scripts/Match/TeamService.cs" />
+    <!-- LAN discovery's datagrams (docs/LAN.md §4). Engine-free for the reason
+         every other codec here is: the socket is open to whatever else is on the
+         Wi-Fi, and "what does this do with a malformed packet" is a question for
+         `dotnet test` rather than for two machines. -->
+    <Compile Include="../Scripts/Net/DiscoveryCodec.cs" />
     <!-- The external client's framing and action packing (tools/Gdpyr.AgentClient),
          compiled in so the two deliberately independent implementations of the
          agent wire format are tested against each other rather than only against

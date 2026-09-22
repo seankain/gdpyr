@@ -134,17 +134,70 @@ Either way bots only hold seats nobody wants and get up when a person takes one
 supposed to look idle.
 
 Latecomers need no lobby: a peer that connects mid-round is spawned and sent the existing roster
-(`PlayerManager.OnPeerJoined`), and walks in where it stands.
+(`PlayerManager.OnPeerJoined`), asked which side it wants, and walks in once it has answered.
+
+Nobody is put on the field before they have picked a side — on joining, and again at the start of
+every round (`TeamService.RequireChoice`). Somebody who leaves the panel open is simply not playing:
+they hold their ground-force slot in the roster and no bot backfills it, which is the behaviour a
+connected player has always had. The round itself does not wait for the last answer, only the
+first — with bots on, that is the tick they join.
 
 ---
 
 ## 4. Join from the other machines
 
+The short way, and the one to hand to whoever is not reading this page:
+
 ```bash
 dotnet build Gdpyr.csproj
+godot --path .            # the main menu; the host is in the list
+```
+
+The main menu lists what is on this network, with each row's name, address, roster and round state.
+Pick one and press **Join**, or double-click it. Nothing has to be typed and nobody has to be told
+an IP.
+
+### 4.1 How the list is filled
+
+Each server opens a second, tiny UDP socket beside the game's and answers one datagram with one
+datagram (`Scripts/Net/ServerAdvertiser.cs`). A menu broadcasts a query every 2.5 s; a row that
+stops answering ages out after six.
+
+| | |
+|---|---|
+| Discovery ports | UDP **7780–7783** — a server takes the first free one |
+| Query | broadcast to `255.255.255.255` and to `127.0.0.1`, on all four |
+| Reply | name, game port, players, bots, round phase, clock — 47 bytes at most |
+| Reach | the broadcast domain. One subnet, one Wi-Fi, one switch |
+
+The address in a row is the one the reply arrived *from*, never one the host claimed: a machine with
+Docker, WSL or a VM bridge has several and does not know which of them you can reach, and this one
+demonstrably works. A host on the same machine as the menu shows up twice — once on `127.0.0.1` and
+once on its LAN address — because both are true and both connect.
+
+Two flags change what a host looks like:
+
+| Flag | Effect |
+|---|---|
+| `--name <text>` | what the row says, instead of the machine's hostname |
+| `--no-advertise` | answer nothing; the server is unlisted and the address still works |
+
+**Discovery is a convenience, not the transport.** A host that cannot open a discovery port logs a
+warning and plays on; the game's own bind failing is still fatal (§7). Nothing about a round depends
+on it, and it is not matchmaking: a broadcast does not leave the subnet, so a server on EC2 or at
+the other end of Tailscale is typed into the address box and always will be
+([`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) §5).
+
+### 4.2 The long way, which still works
+
+```bash
 godot --path . -- --client 192.168.1.20         # port defaults to 7777
 godot --path . -- --client 192.168.1.20:7778    # or name one
 ```
+
+A command line that names a mode skips the menu entirely, which is what keeps the headless server,
+the playtest harness and the training runs on the path they have always been on. The menu's address
+box takes exactly what `--client` does, parsed by the same function.
 
 A hostname works wherever the machine can resolve it (`hostbox.local` on a network with mDNS); an IP
 removes the question. Don't make people type either one twice — drop a wrapper next to the checkout:
@@ -161,8 +214,12 @@ exec "${GODOT4:-godot}" --path . -- --client "${1:-192.168.1.20}"
 **Launch (Client -> localhost)**, all of which run `$GODOT4` after the `build` task; copying the
 client one and changing the address is the editor-side equivalent.
 
-In the round: `F1` ground, `F2` strategist, `` ` `` net HUD, `Esc` for pause and quit. The rest of
-the controls are in the README.
+The round opens by asking which side you want, and holds you off the field until you answer; `F1`
+ground and `F2` strategist are the same answer and keep working afterwards. `` ` `` is the net HUD,
+`Esc` pause and quit. The rest of the controls are in the README.
+
+Leaving a round is still quitting the process: the menu is the way in, not a lobby to come back to
+(§9).
 
 ---
 
@@ -240,6 +297,9 @@ watch the same HUD: [`DEPLOYMENT.md`](DEPLOYMENT.md) §4 has the `tc netem` line
 
 | Symptom | Cause | Fix |
 |---|---|---|
+| The host is running but its row never appears | discovery is blocked, or the machines are not on one broadcast domain | open UDP 7780–7783 the way §3.2 opens 7777, check for client isolation on the AP, and join by address meanwhile |
+| `[net] ... will not appear in anybody's browser` on the host | all four discovery ports are taken — usually a fifth server, or a previous run | `ss -ulnp \| grep 778`, kill it; the game is unaffected |
+| A row for a server that is no longer there | it has up to six seconds to age out | wait, or press Refresh |
 | `gdpyr: unrecognized argument '…'` then the usage block, exit 1 | a typo, or a game flag Godot already ate | every game flag goes after a bare `--` |
 | Godot's own "unknown command line argument" | the flag landed before the `--` | same |
 | `[net] could not listen on UDP 7777: …`, exit 1 | port already bound — usually a previous run | `ss -ulnp \| grep 7777`, kill it or pick another port |
@@ -291,5 +351,10 @@ on is not the server a training run steps, and it says so rather than quietly ru
   out.
 - **You want the numbers to mean something** → also `DEPLOYMENT.md`. Latency, jitter and loss bugs
   do not reproduce on a switch.
-- **Handing out an IP gets old** → Steam lobbies and the Steam Datagram Relay are M9, and the
-  transport sits behind `Scripts/Net/TransportFactory.cs` for that reason.
+- **Handing out an IP gets old** → on one network it already has: §4's browser fills the list by
+  broadcast. Off it, Steam lobbies and the Steam Datagram Relay are M9, and the transport sits
+  behind `Scripts/Net/TransportFactory.cs` for that reason.
+- **People want to come back to a menu rather than quit** → the menu is the way into a session and
+  not out of one. Tearing a round down in place means unwinding the roster, the clock, the
+  prediction ledger, the units and the economy on five autoloads, and it is worth doing when
+  somebody actually wants a rematch button rather than in the change that added the menu.

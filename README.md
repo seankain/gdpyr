@@ -25,8 +25,9 @@ Scripts/Rts/    Units, barracks, orders, the strategist camera and selection
 Scripts/Match/  CombatManager (the round), MatchState, TeamService
 Scripts/Bots/   Computer players: the roster director, the ground pilot, the strategist, the sensor
 Scripts/Agent/  The agent control channel: listener, sessions, seats, observations, feature planes
-Scripts/Ui/     Pause menu, reticle, combat HUD, RTS HUD, net debug HUD
-Scenes/         Greybox map, player, weapon, pause menu
+Scripts/Ui/     Main menu and server browser, role select, pause menu, reticle, combat HUD, RTS HUD,
+                net debug HUD
+Scenes/         Main menu, greybox map, player, weapon, pause menu
 Units/          UnitDefinition resources
 Tests/          xUnit over the engine-free sources — `dotnet test`, no Godot needed
 Tests/Scenarios/ Playtest scenario files: data, and authoring one needs no Godot install
@@ -47,13 +48,28 @@ Godot consumes its own arguments first, so the game's arguments go after a bare 
 
 | Command | Mode |
 |---|---|
-| `godot --path .` | offline, no networking (also what F5 in the editor does) |
+| `godot --path .` | the main menu (also what F5 in the editor does) |
 | `godot --path . -- --listen [port]` | authority plus a local player, for solo testing |
 | `godot --path . -- --client <host[:port]>` | connect to a server |
 | `godot --path . --headless -- --server [port]` | headless authority, no local player |
 
 Default port is 7777/UDP. A dedicated-server export with no mode flag defaults to
 `--server` rather than to offline.
+
+**The main menu** lists the servers on this network, takes an address for one anywhere else, and
+hosts or runs a round on its own. A launch that named a mode on the command line goes straight past
+it into the map, before a widget is built — so the headless server, the playtest harness and the
+training runs are on the path they always were.
+
+The list is LAN discovery and nothing else: each server answers a broadcast query on UDP 7780–7783
+with its name, its game port and its roster, and a row that stops answering ages out
+([`docs/LAN.md`](docs/LAN.md) §4). It reaches the room, not the internet — there is still no
+matchmaking and none is planned. Two flags change what a host looks like in it:
+
+| Flag | Effect |
+|---|---|
+| `--name <text>` | what this server calls itself in the list (default: the machine's hostname) |
+| `--no-advertise` | answer no discovery queries; the address still works |
 
 Hosting for other people on the same network — addresses, the one firewall rule, seats and bots,
 and what a LAN hides — is [`docs/LAN.md`](docs/LAN.md); no export needed.
@@ -88,8 +104,13 @@ predicts its own and interpolates everyone else.
 
 ## Playing either side
 
-`F1` puts you on the ground, `F2` in the strategist's chair. Two strategists at a time; a third
-request lands on the ground. A strategist's body leaves the field and the camera moves above the
+Every round opens on the same question: ground force, or strategist. The panel is up when you join
+and again when a round starts, and the server holds you off the field until you answer — nobody is
+spawned into a side they did not pick. Answering with `F1` / `F2` is the same answer as clicking;
+the two keys keep working mid-round for changing your mind.
+
+Two strategists at a time; a third request lands on the ground, and you find that out from the HUD
+rather than from a second menu. A strategist's body leaves the field and the camera moves above the
 map:
 
 | | |
@@ -111,10 +132,15 @@ Computer players fill both sides so that one person is enough for a round. They 
 anybody is connected and leave as people take their seats — a bot holds a slot only while nobody
 else wants it, and an empty server runs no bots at all.
 
+**Practice offline** in the main menu is the whole thing with no networking at all: the same
+authoritative path, the same bots, every broadcast skipped for want of a peer.
+
 A bot is a player: same peer id, same character, same loadout, same place in the snapshot, same
 ticket when it dies. The only difference is that the server takes its input from a brain rather than
 from a socket (`docs/NETCODE.md` §9), so a client cannot tell one from a person and no part of the
-netcode had to learn about them.
+netcode had to learn about them. The one thing they are never asked is which side they want — the
+director assigns that on the tick they join, so the role menu is a question for people only and a
+round full of bots starts without waiting for anybody.
 
 - **On the ground** they walk towards the enemy barracks, engage the nearest unit they can see,
   close to about 25 m and then strafe, and hold fire when somebody on their side is in the way.
