@@ -26,14 +26,42 @@ namespace Gdpyr.Rts;
 /// </summary>
 public partial class StrategistController : Node3D
 {
-	private const float MinDistance = 15f;
-	private const float MaxDistance = 140f;
+	/// <summary>Metres above the ground the camera is kept between, however it is flown there.</summary>
+	private const float MinHeight = 4f;
+	private const float MaxHeight = 120f;
+
+	/// <summary>Metres the wheel moves the camera along its view, per notch.</summary>
 	private const float ZoomStep = 8f;
 
-	/// <summary>Metres per second at the closest zoom. Panning scales with distance, or the far view crawls.</summary>
+	/// <summary>How far back along its view the camera starts from the map's anchor.</summary>
+	private const float StartDistance = 55f;
+
+	/// <summary>
+	/// Metres per second at <see cref="ReferenceHeight"/>. Panning and lifting scale
+	/// with height, or the high view crawls.
+	/// </summary>
 	private const float PanSpeed = 22f;
 
+	private const float LiftSpeed = 12f;
+
+	/// <summary>
+	/// The height the speeds are tuned at: where the old orbit rig's closest zoom
+	/// put the camera, so a pan covers the same ground per second it always did.
+	/// </summary>
+	private const float ReferenceHeight = 12f;
+
 	private const float RotateSpeed = 2.2f;
+
+	/// <summary>Radians per pixel while the right button is dragged. The demo camera's, near enough.</summary>
+	private const float LookSensitivity = 0.003f;
+
+	/// <summary>
+	/// How far below the horizon the view may be tipped: from nearly level to
+	/// straight down. Never above it — a strategist looking at the sky has no map
+	/// to click on.
+	/// </summary>
+	private static readonly float MinPitch = Mathf.DegToRad(5f);
+	private static readonly float MaxPitch = Mathf.DegToRad(89f);
 
 	/// <summary>Pixels from the window edge that start an edge scroll.</summary>
 	private const float EdgeScrollMargin = 12f;
@@ -52,17 +80,40 @@ public partial class StrategistController : Node3D
 	/// <summary>Rebuilt every simulation tick and handed to the overlay to draw.</summary>
 	private readonly List<SelectionOverlay.Contact> _contacts = new();
 
-	private Node3D _pivot;
-	private Node3D _arm;
 	private Camera3D _camera;
 	private StrategistHud _hud;
 
+	/// <summary>
+	/// Where the camera is. It flies: WASD across the map, Space and Ctrl up and
+	/// down, and the right button held turns it where it stands.
+	/// </summary>
+	private Vector3 _position;
+
+	/// <summary>What <see cref="MinHeight"/> and <see cref="MaxHeight"/> are measured from: the anchor's height.</summary>
+	private float _groundY;
+
 	private float _yaw;
+
+	/// <summary>Radians below the horizon. Larger looks further down.</summary>
 	private float _pitch = Mathf.DegToRad(55f);
-	private float _distance = 55f;
 
 	private Vector2 _dragFrom;
 	private bool _dragging;
+
+	/// <summary>The right button is down: an order if it comes back up where it went down, a turn if it is dragged.</summary>
+	private bool _rightHeld;
+
+	/// <summary>The right button has been dragged far enough to be turning the view rather than giving an order.</summary>
+	private bool _turning;
+
+	/// <summary>Where the right button went down. The pointer is put back here when a turn ends.</summary>
+	private Vector2 _rightFrom;
+
+	/// <summary>
+	/// The barracks the strategist clicked on, or -1. While one is selected the HUD
+	/// shows what it can train, and the build keys and the rally point mean it.
+	/// </summary>
+	private int _selectedBarracks = -1;
 
 	/// <summary>What the next right-click means. Reset to Move after each order is given.</summary>
 	private OrderKind _pendingOrder = OrderKind.Move;
@@ -94,6 +145,8 @@ public partial class StrategistController : Node3D
 		_hud = new StrategistHud { Name = "StrategistHud" };
 		AddChild(_hud);
 		_hud.Overlay.Attach(_camera);
+		_hud.BuildPressed += QueueUnit;
+		_hud.CancelPressed += CancelUnit;
 
 		// A strategist needs a pointer. The first-person rig takes the mouse back when
 		// this node goes away (fps_controller.EnterFirstPerson).
@@ -104,12 +157,11 @@ public partial class StrategistController : Node3D
 	{
 		float dt = (float)delta;
 
+		ReleasePointer();
 		Pan(dt);
 		Rotate(dt);
 
-		_pivot.Rotation = new Vector3(0f, _yaw, 0f);
-		_arm.Rotation = new Vector3(-_pitch, 0f, 0f);
-		_camera.Position = new Vector3(0f, 0f, _distance);
+		_camera.GlobalTransform = new Transform3D(Look, _position);
 
 		if (_dragging)
 		{
@@ -124,10 +176,16 @@ public partial class StrategistController : Node3D
 	{
 		PruneSelection();
 
+		if (_selectedBarracks >= 0 && UnitManager.Instance?.BarracksAt(_selectedBarracks) == null)
+		{
+			SelectBarracks(-1);
+		}
+
 		if (CombatManager.Instance is { } combat)
 		{
 			RefreshContacts(combat, tick);
-			_hud.Refresh(combat.Match, UnitManager.Instance, tick, _selected.Count, _pendingOrder, combat.Economy);
+			_hud.Refresh(combat.Match, UnitManager.Instance, tick, _selected.Count, _pendingOrder, combat.Economy,
+				BuildTarget, _selectedBarracks >= 0);
 			_hud.RefreshBuilders(UnitManager.Instance, combat.Local?.Team ?? Team.Strategist, _placing,
 				CountSelectedBuilders());
 		}
@@ -146,19 +204,50 @@ public partial class StrategistController : Node3D
 		else if (@event.IsActionPressed("rts_order_defend")) { Arm(OrderKind.Defend); }
 		else if (@event.IsActionPressed("rts_order_stop")) { _placing = NotPlacing; IssueOrder(OrderKind.Stop, Vector3.Zero, OwnerId.None); }
 		else if (@event.IsActionPressed("rts_select_all")) { SelectAll(); }
-		else if (@event.IsActionPressed("rts_build_infantry")) { UnitManager.Instance?.RequestBuild(0, UnitCatalog.Infantry); }
-		else if (@event.IsActionPressed("rts_build_technical")) { UnitManager.Instance?.RequestBuild(0, UnitCatalog.Technical); }
-		else if (@event.IsActionPressed("rts_build_tank")) { UnitManager.Instance?.RequestBuild(0, UnitCatalog.Tank); }
-		else if (@event.IsActionPressed("rts_build_builder")) { UnitManager.Instance?.RequestBuild(0, UnitCatalog.Builder); }
+		else if (@event.IsActionPressed("rts_build_infantry")) { QueueUnit(UnitCatalog.Infantry); }
+		else if (@event.IsActionPressed("rts_build_technical")) { QueueUnit(UnitCatalog.Technical); }
+		else if (@event.IsActionPressed("rts_build_tank")) { QueueUnit(UnitCatalog.Tank); }
+		else if (@event.IsActionPressed("rts_build_builder")) { QueueUnit(UnitCatalog.Builder); }
 		else if (@event.IsActionPressed("rts_place_pillbox")) { ArmPlacement(StructureKinds.Pillbox); }
 		else if (@event.IsActionPressed("rts_place_sandbags")) { ArmPlacement(StructureKinds.SandbagWall); }
 		else if (@event.IsActionPressed("rts_place_tower")) { ArmPlacement(StructureKinds.SniperTower); }
-		else if (@event.IsActionPressed("rts_cancel_build")) { UnitManager.Instance?.RequestCancelBuild(0); }
+		else if (@event.IsActionPressed("rts_cancel_build")) { CancelUnit(); }
 		else
 		{
 			return;
 		}
 
+		GetViewport().SetInputAsHandled();
+	}
+
+	/// <summary>
+	/// Mouse motion while the right button is held, which turns the view once it has
+	/// travelled far enough not to be a click.
+	///
+	/// Read here rather than in <c>_UnhandledInput</c> so the HUD cannot swallow a
+	/// turn that starts over it, and consumed, so the hidden character's look angles
+	/// do not follow the camera round (<see cref="LocalInputSampler"/> reads what
+	/// is left).
+	/// </summary>
+	public override void _Input(InputEvent @event)
+	{
+		if (!_rightHeld || @event is not InputEventMouseMotion motion)
+		{
+			return;
+		}
+
+		if (!_turning)
+		{
+			if (motion.Position.DistanceTo(_rightFrom) < ClickThresholdPixels)
+			{
+				return;
+			}
+
+			BeginTurn();
+		}
+
+		_yaw -= motion.Relative.X * LookSensitivity;
+		_pitch = Mathf.Clamp(_pitch + (motion.Relative.Y * LookSensitivity), MinPitch, MaxPitch);
 		GetViewport().SetInputAsHandled();
 	}
 
@@ -235,26 +324,31 @@ public partial class StrategistController : Node3D
 
 	private void BuildRig()
 	{
-		_pivot = new Node3D { Name = "Pivot" };
-		AddChild(_pivot);
-
-		_arm = new Node3D { Name = "Arm" };
-		_pivot.AddChild(_arm);
-
 		_camera = new Camera3D { Name = "StrategistCamera", Far = 2000f };
-		_arm.AddChild(_camera);
+		AddChild(_camera);
 		_camera.Current = true;
 
-		// Starts over the map's anchor if it has one, and over the origin otherwise.
+		// Starts looking down at the map's anchor if it has one, and at the origin
+		// otherwise, from where the old orbit rig put it.
+		Vector3 focus = Vector3.Zero;
 		foreach (Node node in GetTree().GetNodesInGroup("strategist_anchor"))
 		{
 			if (node is Node3D anchor)
 			{
-				_pivot.GlobalPosition = anchor.GlobalPosition;
+				focus = anchor.GlobalPosition;
 				break;
 			}
 		}
+
+		_groundY = focus.Y;
+		_position = focus - (Look * Vector3.Forward * StartDistance);
+		_camera.GlobalTransform = new Transform3D(Look, _position);
 	}
+
+	/// <summary>The camera's orientation: turned by the yaw, then tipped down by the pitch.</summary>
+	private Basis Look => Basis.FromEuler(new Vector3(-_pitch, _yaw, 0f));
+
+	private float Height => _position.Y - _groundY;
 
 	private void Pan(float dt)
 	{
@@ -268,24 +362,47 @@ public partial class StrategistController : Node3D
 		Vector2 axes = Input.GetVector("move_left", "move_right", "move_forward", "move_backward");
 		axes += EdgeScroll();
 
-		if (axes == Vector2.Zero)
+		// Space and Ctrl, as on the demo camera (Scripts/Ui/DemoCamera.cs). A
+		// strategist's character is never alive, so the jump and crouch it is also
+		// sent do nothing.
+		float lift = (Input.IsActionPressed("jump") ? 1f : 0f) - (Input.IsActionPressed("crouch") ? 1f : 0f);
+
+		if (axes == Vector2.Zero && lift == 0f)
 		{
 			return;
 		}
 
 		// Panning is relative to where the camera is pointed, not to the world: a
-		// rotated view whose WASD still walks north is unusable.
-		float speed = PanSpeed * (_distance / MinDistance) * dt;
+		// rotated view whose WASD still walks north is unusable. It stays level
+		// whatever the pitch — the map is flat and the camera's height is Space and
+		// Ctrl's to change.
+		float scale = Mathf.Max(Height, MinHeight) / ReferenceHeight * dt;
 		Vector3 forward = new Vector3(-Mathf.Sin(_yaw), 0f, -Mathf.Cos(_yaw));
 		Vector3 right = new Vector3(Mathf.Cos(_yaw), 0f, -Mathf.Sin(_yaw));
 
-		_pivot.GlobalPosition += ((right * axes.X) + (forward * -axes.Y)) * speed;
+		_position += ((right * axes.X) + (forward * -axes.Y)) * PanSpeed * scale;
+		_position.Y = Mathf.Clamp(_position.Y + (lift * LiftSpeed * scale), _groundY + MinHeight,
+			_groundY + MaxHeight);
 	}
 
-	/// <summary>Screen edges as a second pan axis. Ignored while dragging out a selection box.</summary>
+	/// <summary>
+	/// The wheel: moves the camera along its view, and stops at the height limits
+	/// rather than sliding along them, so a notch never moves the picture sideways.
+	/// </summary>
+	private void Zoom(float metres)
+	{
+		Vector3 forward = Look * Vector3.Forward;
+
+		// Never zero: the view is at least MinPitch below the horizon.
+		float height = Height;
+		float climb = Mathf.Clamp(height + (forward.Y * metres), MinHeight, MaxHeight) - height;
+		_position += forward * (climb / forward.Y);
+	}
+
+	/// <summary>Screen edges as a second pan axis. Ignored while dragging out a selection box or turning.</summary>
 	private Vector2 EdgeScroll()
 	{
-		if (_dragging)
+		if (_dragging || _turning)
 		{
 			return Vector2.Zero;
 		}
@@ -321,20 +438,72 @@ public partial class StrategistController : Node3D
 		if (Input.IsActionPressed("rts_rotate_right")) { _yaw -= RotateSpeed * dt; }
 	}
 
+	/// <summary>
+	/// The right button has been dragged: from here until it comes up it turns the
+	/// view, and the pointer is captured so the turn is not stopped by the edge of
+	/// the window.
+	/// </summary>
+	private void BeginTurn()
+	{
+		_turning = true;
+		Input.MouseMode = Input.MouseModeEnum.Captured;
+	}
+
+	/// <summary>Lets go of the right button, and puts the pointer back where it went down if it was turning.</summary>
+	private void EndTurn()
+	{
+		_rightHeld = false;
+		if (!_turning)
+		{
+			return;
+		}
+
+		_turning = false;
+		Input.MouseMode = Input.MouseModeEnum.Visible;
+		GetViewport().WarpMouse(_rightFrom);
+	}
+
+	/// <summary>
+	/// Keeps the pointer this view's. A turn whose release never arrived — the pause
+	/// menu or the console took it, or the window lost focus — is ended here. And
+	/// the pointer is freed whenever this is not turning, because the pause menu
+	/// hands it back captured, which is right for the first-person rig and wrong for
+	/// a map.
+	/// </summary>
+	private void ReleasePointer()
+	{
+		if (_rightHeld && (Gdpyr.Core.InputFocus.TextEntry || !Input.IsActionPressed("rts_command")))
+		{
+			EndTurn();
+		}
+
+		if (!_turning && Input.MouseMode == Input.MouseModeEnum.Captured)
+		{
+			Input.MouseMode = Input.MouseModeEnum.Visible;
+		}
+	}
+
+	/// <summary>
+	/// Where the pointer is for picking and placing. While the view turns the
+	/// pointer is captured and its position means nothing, so it is where the
+	/// button went down — which is where it will be put back.
+	/// </summary>
+	private Vector2 Cursor => _turning ? _rightFrom : GetViewport().GetMousePosition();
+
 	// ---- mouse -------------------------------------------------------------
 
 	private void HandleMouse(InputEventMouseButton button)
 	{
 		if (button.IsAction("rts_zoom_in") && button.Pressed)
 		{
-			_distance = Mathf.Clamp(_distance - ZoomStep, MinDistance, MaxDistance);
+			Zoom(ZoomStep);
 			GetViewport().SetInputAsHandled();
 			return;
 		}
 
 		if (button.IsAction("rts_zoom_out") && button.Pressed)
 		{
-			_distance = Mathf.Clamp(_distance + ZoomStep, MinDistance, MaxDistance);
+			Zoom(-ZoomStep);
 			GetViewport().SetInputAsHandled();
 			return;
 		}
@@ -357,9 +526,26 @@ public partial class StrategistController : Node3D
 			return;
 		}
 
-		if (button.IsAction("rts_command") && button.Pressed)
+		// The right button is both the order and the turn, told apart the way a click
+		// is told from a box select: by whether it moved. So the order goes on the
+		// release, not the press, or every turn would start by moving the selection.
+		if (button.IsAction("rts_command"))
 		{
-			CommandAtCursor();
+			if (button.Pressed)
+			{
+				_rightHeld = true;
+				_rightFrom = button.Position;
+			}
+			else if (_rightHeld)
+			{
+				bool clicked = !_turning;
+				EndTurn();
+				if (clicked)
+				{
+					CommandAtCursor();
+				}
+			}
+
 			GetViewport().SetInputAsHandled();
 		}
 	}
@@ -367,6 +553,7 @@ public partial class StrategistController : Node3D
 	private void FinishSelection(Vector2 from, Vector2 to)
 	{
 		_selected.Clear();
+		int barracks = -1;
 
 		UnitManager units = UnitManager.Instance;
 		Team team = CombatManager.Instance?.Local?.Team ?? Team.Strategist;
@@ -379,6 +566,12 @@ public partial class StrategistController : Node3D
 				if (single != null)
 				{
 					_selected.Add(single);
+				}
+				else
+				{
+					// Units first, because they stand in front of the door; the building
+					// behind them is what a click that finds none of them meant.
+					barracks = PickBarracks(to, team);
 				}
 			}
 			else
@@ -397,11 +590,13 @@ public partial class StrategistController : Node3D
 		}
 
 		_hud.Overlay.SetSelection(_selected);
+		SelectBarracks(barracks);
 	}
 
 	private void SelectAll()
 	{
 		_selected.Clear();
+		SelectBarracks(-1);
 
 		UnitManager units = UnitManager.Instance;
 		Team team = CombatManager.Instance?.Local?.Team ?? Team.Strategist;
@@ -446,7 +641,7 @@ public partial class StrategistController : Node3D
 		OrderKind kind = _pendingOrder;
 		int targetOwnerId = OwnerId.None;
 
-		PlayerCombat enemy = PickEnemyPlayer(GetViewport().GetMousePosition(), out Vector3 lastKnown);
+		PlayerCombat enemy = PickEnemyPlayer(Cursor, out Vector3 lastKnown);
 		if (enemy != null)
 		{
 			kind = OrderKind.Attack;
@@ -473,12 +668,13 @@ public partial class StrategistController : Node3D
 
 		if (_selected.Count == 0)
 		{
-			// Nothing selected: a right-click on the ground moves the rally point, so
+			// No units selected: a right-click on the ground moves the rally point, so
 			// that queueing twenty riflemen and pointing them somewhere is two clicks
-			// rather than two clicks per rifleman.
+			// rather than two clicks per rifleman. The selected barracks' if there is
+			// one, which is how every RTS sets a rally point.
 			if (kind != OrderKind.Stop)
 			{
-				units.RequestRally(0, point);
+				units.RequestRally(BuildTarget, point);
 				_hud.Overlay.FlashOrder(point, OrderKind.Move);
 			}
 			return;
@@ -496,6 +692,25 @@ public partial class StrategistController : Node3D
 		// One order per modifier press: leaving attack-move armed is how a retreat
 		// becomes a charge.
 		_pendingOrder = OrderKind.Move;
+	}
+
+	// ---- barracks ------------------------------------------------------------
+
+	/// <summary>
+	/// The barracks the build keys, the HUD's buttons and the rally point mean: the
+	/// selected one, or the first, which is what they meant before one could be
+	/// selected.
+	/// </summary>
+	private int BuildTarget => _selectedBarracks >= 0 ? _selectedBarracks : 0;
+
+	private void QueueUnit(byte definitionId) => UnitManager.Instance?.RequestBuild(BuildTarget, definitionId);
+
+	private void CancelUnit() => UnitManager.Instance?.RequestCancelBuild(BuildTarget);
+
+	private void SelectBarracks(int index)
+	{
+		_selectedBarracks = index;
+		_hud.Overlay.SetSelectedBarracks(UnitManager.Instance?.BarracksAt(index));
 	}
 
 	// ---- builders (docs/NETCODE.md §10.5) -------------------------------------
@@ -520,8 +735,8 @@ public partial class StrategistController : Node3D
 	/// <summary>
 	/// Sends the selected builders to put the armed structure up at
 	/// <paramref name="point"/>, facing the way the camera is turned: a wall lies
-	/// across the screen, so Q and E are how one is turned. Everything else about
-	/// whether it fits is the server's to say.
+	/// across the screen, so turning the view is how one is turned. Everything
+	/// else about whether it fits is the server's to say.
 	/// </summary>
 	private void PlaceAtCursor(Vector3 point)
 	{
@@ -547,7 +762,7 @@ public partial class StrategistController : Node3D
 			return false;
 		}
 
-		Structure structure = PickStructure(GetViewport().GetMousePosition(),
+		Structure structure = PickStructure(Cursor,
 			CombatManager.Instance?.Local?.Team ?? Team.Strategist);
 		if (structure == null || (structure.IsBuilt && structure.Health >= structure.MaxHealth))
 		{
@@ -661,6 +876,40 @@ public partial class StrategistController : Node3D
 	private static bool IsSelectable(Unit unit, Team team) =>
 		unit != null && IsInstanceValid(unit) && unit.IsAlive && unit.Team == team;
 
+	/// <summary>
+	/// The index of <paramref name="team"/>'s barracks under the cursor, or -1. A ray
+	/// against the world rather than a distance on screen, because a barracks is a
+	/// building that can be clicked anywhere on, not a point.
+	/// </summary>
+	private int PickBarracks(Vector2 screen, Team team)
+	{
+		UnitManager units = UnitManager.Instance;
+		if (units == null || !TryWorldHit(screen, out _, out Node collider))
+		{
+			return -1;
+		}
+
+		for (Node node = collider; node != null; node = node.GetParent())
+		{
+			if (node is not Barracks barracks)
+			{
+				continue;
+			}
+
+			for (int i = 0; barracks.Team == team && i < units.BarracksCount; i++)
+			{
+				if (units.BarracksAt(i) == barracks)
+				{
+					return i;
+				}
+			}
+
+			return -1;
+		}
+
+		return -1;
+	}
+
 	private Unit PickUnit(Vector2 screen, Team team)
 	{
 		UnitManager units = UnitManager.Instance;
@@ -757,23 +1006,14 @@ public partial class StrategistController : Node3D
 			return false;
 		}
 
-		Vector2 mouse = GetViewport().GetMousePosition();
-		Vector3 from = _camera.ProjectRayOrigin(mouse);
-		Vector3 direction = _camera.ProjectRayNormal(mouse);
-
-		PhysicsDirectSpaceState3D space = GetWorld3D()?.DirectSpaceState;
-		if (space != null)
+		Vector2 mouse = Cursor;
+		if (TryWorldHit(mouse, out point, out _))
 		{
-			var query = PhysicsRayQueryParameters3D.Create(from, from + (direction * CursorRayLength),
-				CollisionLayers.World);
-			Godot.Collections.Dictionary hit = space.IntersectRay(query);
-			if (hit.Count > 0)
-			{
-				point = hit["position"].AsVector3();
-				return true;
-			}
+			return true;
 		}
 
+		Vector3 from = _camera.ProjectRayOrigin(mouse);
+		Vector3 direction = _camera.ProjectRayNormal(mouse);
 		Vector3? plane = new Plane(Vector3.Up, 0f).IntersectsRay(from, direction);
 		if (plane is { } ground)
 		{
@@ -782,6 +1022,33 @@ public partial class StrategistController : Node3D
 		}
 
 		return false;
+	}
+
+	/// <summary>The world geometry under a point on the screen, and the body it belongs to.</summary>
+	private bool TryWorldHit(Vector2 screen, out Vector3 point, out Node collider)
+	{
+		point = Vector3.Zero;
+		collider = null;
+
+		PhysicsDirectSpaceState3D space = GetWorld3D()?.DirectSpaceState;
+		if (_camera == null || space == null)
+		{
+			return false;
+		}
+
+		Vector3 from = _camera.ProjectRayOrigin(screen);
+		Vector3 direction = _camera.ProjectRayNormal(screen);
+		var query = PhysicsRayQueryParameters3D.Create(from, from + (direction * CursorRayLength),
+			CollisionLayers.World);
+		Godot.Collections.Dictionary hit = space.IntersectRay(query);
+		if (hit.Count == 0)
+		{
+			return false;
+		}
+
+		point = hit["position"].AsVector3();
+		collider = hit["collider"].AsGodotObject() as Node;
+		return true;
 	}
 
 	/// <summary>
