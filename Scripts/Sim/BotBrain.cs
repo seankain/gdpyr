@@ -119,9 +119,24 @@ public readonly struct BotSituation
 	/// <summary>True when the magazine is worth topping up between fights.</summary>
 	public readonly bool NeedsReload;
 
+	/// <summary>
+	/// True for a weapon that fires once per pull of the trigger — the DMR and the
+	/// launcher (<see cref="FireMode.Semi"/>, <see cref="FireMode.Single"/>). A bot
+	/// holding one has to let go between shots, as a player does.
+	/// </summary>
+	public readonly bool SemiAutomatic;
+
+	/// <summary>
+	/// True when the shot is there but must not be taken: a launcher whose blast
+	/// would reach a teammate, or the bot itself. Unlike an unseen target, nothing
+	/// else changes — the bot holds its ground and strafes as it would anyway, rather
+	/// than walking into the thing it is too close to fire at.
+	/// </summary>
+	public readonly bool HoldFire;
+
 	public BotSituation(bool alive, float yaw, float pitch, float speed, bool hasTarget, Vector3 aimDirection,
 		float targetDistance, bool targetVisible, int ticksOnTarget, bool hasDestination, Vector3 moveDirection,
-		float destinationDistance, bool stuck, bool needsReload)
+		float destinationDistance, bool stuck, bool needsReload, bool semiAutomatic = false, bool holdFire = false)
 	{
 		Alive = alive;
 		Yaw = yaw;
@@ -137,6 +152,8 @@ public readonly struct BotSituation
 		DestinationDistance = destinationDistance;
 		Stuck = stuck;
 		NeedsReload = needsReload;
+		SemiAutomatic = semiAutomatic;
+		HoldFire = holdFire;
 	}
 }
 
@@ -314,7 +331,16 @@ public static class BotBrain
 
 		if (ShouldFire(situation, traits, yaw, pitch))
 		{
-			buttons |= InputButtons.Fire;
+			// A weapon that fires on the press needs the trigger let go of between
+			// rounds, or the first round is the only one: pressed on even ticks and
+			// released on odd ones is a press every other tick, which is faster than
+			// anything here cycles, so the weapon's own cadence is still what paces
+			// it. An empty launcher reloads on the next press (WeaponSim.Step), so this
+			// is also what gets its second grenade into the tube.
+			if (!situation.SemiAutomatic || (tick & 1u) == 0u)
+			{
+				buttons |= InputButtons.Fire;
+			}
 		}
 		else if (situation.NeedsReload && !situation.HasTarget)
 		{
@@ -350,7 +376,8 @@ public static class BotBrain
 	/// </summary>
 	public static bool ShouldFire(in BotSituation situation, in BotTraits traits, float yaw, float pitch)
 	{
-		if (!situation.HasTarget || !situation.TargetVisible || situation.AimDirection == Vector3.Zero)
+		if (!situation.HasTarget || !situation.TargetVisible || situation.HoldFire
+			|| situation.AimDirection == Vector3.Zero)
 		{
 			return false;
 		}

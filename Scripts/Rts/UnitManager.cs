@@ -610,15 +610,25 @@ public partial class UnitManager : Node
 	}
 
 	/// <summary>
-	/// Applies damage to a unit. Returns true when that killed it.
+	/// Applies a hit to a unit, scaled for what it was hit with
+	/// (<see cref="Armour.DamageTaken"/>), and reports what that came to. Returns
+	/// true when that killed it. A tank takes nothing from a bullet
+	/// (docs/NETCODE.md §10.6); everything else takes all of one.
 	///
 	/// <paramref name="attackerOwnerId"/> is carried only so that the agent API's
 	/// <c>unit_lost</c> record can name who did it (docs/AGENT_API.md §8); nothing
 	/// in the simulation reads it.
 	/// </summary>
-	public bool Damage(Unit unit, float amount, int attackerOwnerId, uint tick)
+	public bool Damage(Unit unit, float amount, bool explosive, int attackerOwnerId, uint tick, out float dealt)
 	{
-		if (unit == null || !unit.ApplyDamage(amount))
+		dealt = 0f;
+		if (unit == null || !unit.IsAlive)
+		{
+			return false;
+		}
+
+		dealt = Armour.DamageTaken(amount, explosive, unit.Definition?.BulletDamageScale ?? 1f);
+		if (!unit.ApplyDamage(dealt))
 		{
 			return false;
 		}

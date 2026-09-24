@@ -397,15 +397,6 @@ public class StructureTests
 	}
 
 	[Fact]
-	public void BulletsAreScaledAndExplosivesAreNot()
-	{
-		Assert.Equal(5f, Construction.DamageTaken(20f, explosive: false, bulletScale: 0.25f), 4);
-		Assert.Equal(20f, Construction.DamageTaken(20f, explosive: true, bulletScale: 0.25f), 4);
-		Assert.Equal(0f, Construction.DamageTaken(-3f, explosive: true, bulletScale: 1f));
-		Assert.Equal(0f, Construction.DamageTaken(20f, explosive: false, bulletScale: -1f));
-	}
-
-	[Fact]
 	public void ASiteShowsItsFoundationsFromTheStart()
 	{
 		Assert.Equal(Construction.MinRaisedFraction, Construction.RaisedFraction(0f));

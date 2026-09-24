@@ -1,0 +1,42 @@
+{
+  "name": "rifle and DMR rounds do nothing to a tank, a pillbox or a sniper tower; a launcher does",
+  "seeds": [4, 13],
+  "duration_ticks": 900,
+  "warmup_ticks": 60,
+  "roster": { "ground": 4, "strategists": 0 },
+
+  "seats": [
+    { "id": "rifle", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/pulse_fire.json" },
+    { "id": "dmr", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/pulse_fire.json" },
+    { "id": "grenadier", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/pulse_fire.json" },
+    { "id": "marksman", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/pulse_fire.json" }
+  ],
+
+  "spawns": [
+    { "structure": "pillbox", "team": "strategist", "at": [-30, 0.5, 0], "yaw": 0 },
+    { "structure": "sniper_tower", "team": "strategist", "at": [-60, 0.5, -45], "yaw": 0 },
+    { "structure": "pillbox", "team": "strategist", "at": [30, 0.5, 0], "yaw": 0 },
+    { "unit": "tank", "team": "strategist", "at": [-90, 1, 5], "order": "none" },
+    { "peer": "rifle", "at": [-90, 1, 55], "look": [0, 0] },
+    { "peer": "dmr", "at": [-60, 1, 55], "look": [0, 0] },
+    { "peer": "grenadier", "at": [-30, 1, 56], "look": [0, 0.05] },
+    { "peer": "marksman", "at": [30, 1, 60], "look": [0, 0] }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "observation.rifle.weapon.magazine.min", "op": "<", "value": 1 },
+    { "metric": "observation.dmr.weapon.magazine.min", "op": "<", "value": 1 },
+    { "metric": "observation.marksman.weapon.magazine.min", "op": "<", "value": 1 },
+    { "metric": "events.damage.count", "op": ">=", "value": 2 },
+    { "metric": "events.damage.weapon.min", "op": "==", "value": 4 },
+    { "metric": "events.damage.weapon.max", "op": "==", "value": 4 },
+    { "metric": "events.damage.victim.min", "op": "==", "value": -65552 },
+    { "metric": "events.damage.victim.max", "op": "==", "value": -65552 },
+    { "metric": "events.unit_lost.count", "op": "==", "value": 0 },
+    { "metric": "observation.rifle.self.alive.min", "op": "==", "value": 1 },
+    { "metric": "observation.dmr.self.alive.min", "op": "==", "value": 1 },
+    { "metric": "observation.grenadier.self.alive.min", "op": "==", "value": 1 },
+    { "metric": "observation.marksman.self.alive.min", "op": "==", "value": 1 }
+  ]
+}

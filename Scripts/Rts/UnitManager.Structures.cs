@@ -704,7 +704,7 @@ public partial class UnitManager
 
 	/// <summary>
 	/// Applies a hit to a structure, scaled for what it was hit with
-	/// (<see cref="Construction.DamageTaken"/>), and reports what that came to.
+	/// (<see cref="Armour.DamageTaken"/>), and reports what that came to.
 	/// Returns true when it brought the structure down.
 	/// </summary>
 	public bool DamageStructure(Structure structure, float amount, bool explosive, int attackerOwnerId, uint tick,
@@ -716,7 +716,7 @@ public partial class UnitManager
 			return false;
 		}
 
-		dealt = Construction.DamageTaken(amount, explosive, structure.Definition?.BulletDamageScale ?? 1f);
+		dealt = Armour.DamageTaken(amount, explosive, structure.Definition?.BulletDamageScale ?? 1f);
 		bool wasBuilt = structure.IsBuilt;
 		if (!structure.ApplyDamage(dealt))
 		{

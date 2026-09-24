@@ -62,6 +62,13 @@ public sealed class BotPilot
 	/// <summary>A friendly this close to the line of fire is close enough to be shot by mistake.</summary>
 	private const float FriendlySweepRadiusMeters = 0.3f;
 
+	/// <summary>
+	/// Added to a launcher's blast radius before a bot will fire it: at the target's
+	/// distance from itself, and at a teammate's from the target. A grenade does not
+	/// land exactly where it was aimed.
+	/// </summary>
+	private const float BlastMarginMeters = 2f;
+
 	/// <summary>Metres the destination must move before the navigation agent is asked to re-path.</summary>
 	private const float RepathThresholdMeters = 1.5f;
 
@@ -126,9 +133,15 @@ public sealed class BotPilot
 			return InputFrame.Neutral(tick, character.Yaw, character.Pitch);
 		}
 
+		// Whether what is in its hands can hurt armour decides what it may pick as a
+		// target at all (GroundSensor.NearestHostileTarget), and whether it has to
+		// mind the blast before it fires.
+		ProjectileStats round = EquippedRound(combat);
+		bool explosive = round.IsExplosive;
+
 		if (tick >= _nextScanTick)
 		{
-			AcquireTarget(character, combat.Team, tick);
+			AcquireTarget(character, combat.Team, explosive, tick);
 
 			// The first scan is offset by the bot's own id so that six of them do not
 			// re-scan on the same tick for the rest of the round.
@@ -147,6 +160,12 @@ public sealed class BotPilot
 
 		bool visible = hasTarget && TargetInSight(eye, targetPosition)
 			&& !FriendlyInLineOfFire(eye, targetPosition, combat.Team);
+
+		// A launcher's round goes off wherever it lands, and a blast spares nobody on
+		// the ground force: not a teammate standing by the target, and not the bot
+		// that fired it from too close.
+		bool holdFire = visible && explosive
+			&& BlastEndangersFriends(targetPosition, targetDistance, round.ExplosionRadiusMeters, combat.Team);
 
 		// A bot with something to shoot at walks towards it; the brain stops it and
 		// strafes once it is inside its preferred range.
@@ -190,7 +209,9 @@ public sealed class BotPilot
 			moveDirection: moveDirection,
 			destinationDistance: goalDistance,
 			stuck: tick < _stuckUntilTick,
-			needsReload: needsReload);
+			needsReload: needsReload,
+			semiAutomatic: stats.Mode != FireMode.Auto,
+			holdFire: holdFire);
 
 		_wantedToMove = hasGoal || (hasTarget && visible);
 
@@ -219,10 +240,10 @@ public sealed class BotPilot
 	/// has no body on the field, and friendly fire between players is on — a bot
 	/// that could acquire a player would eventually acquire a teammate.
 	/// </summary>
-	private void AcquireTarget(fps_controller character, Team team, uint tick)
+	private void AcquireTarget(fps_controller character, Team team, bool explosive, uint tick)
 	{
 		_contactCount = GroundSensor.Scan(character, _peerId, team, _traits.SensorRadiusMeters, _contacts);
-		int best = GroundSensor.NearestHostileTarget(_contacts.AsSpan(0, _contactCount), team);
+		int best = GroundSensor.NearestHostileTarget(_contacts.AsSpan(0, _contactCount), team, explosive);
 
 		if (best != _targetOwnerId)
 		{
@@ -595,6 +616,46 @@ public sealed class BotPilot
 	/// so without this check a bot will eventually shoot the person it is supposed to
 	/// be helping — the fastest way to make a playtester stop wanting bots.
 	/// </summary>
+	/// <summary>The round the bot's equipped weapon fires. Default for a swing, which is no round at all.</summary>
+	private static ProjectileStats EquippedRound(PlayerCombat combat)
+	{
+		byte weaponId = combat.EquippedDefinitionId;
+		return weaponId < WeaponCatalog.Projectiles.Length ? WeaponCatalog.Projectiles[weaponId] : default;
+	}
+
+	/// <summary>
+	/// Whether a blast at the target would reach the bot or a teammate
+	/// (<see cref="BlastMarginMeters"/> included). The launcher is why this exists:
+	/// <c>CombatManager.Explode</c> spares friendly *units* and nobody else, and a bot
+	/// that occasionally kills the person it spawned to help is worse than no bot.
+	/// </summary>
+	private bool BlastEndangersFriends(Vector3 target, float targetDistance, float blastRadius, Team team)
+	{
+		float reach = blastRadius + BlastMarginMeters;
+		if (targetDistance <= reach)
+		{
+			return true;
+		}
+
+		CombatManager combat = CombatManager.Instance;
+		for (int i = 0; combat != null && i < combat.PlayerCount; i++)
+		{
+			PlayerCombat other = combat.PlayerAt(i);
+			if (other == null || other.PeerId == _peerId || other.Team != team || !other.IsAlive
+				|| other.Character == null)
+			{
+				continue;
+			}
+
+			if (other.Character.Hitbox.Center.DistanceTo(target) <= reach)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	private bool FriendlyInLineOfFire(Vector3 from, Vector3 to, Team team)
 	{
 		CombatManager combat = CombatManager.Instance;

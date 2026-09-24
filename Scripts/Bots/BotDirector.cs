@@ -409,10 +409,17 @@ public sealed class BotDirector
 	}
 
 	/// <summary>
-	/// Arms a fresh bot. Rifles and DMRs only: the launcher's blast damages players
-	/// on both sides (<c>CombatManager.Explode</c>, which spares friendly *units*
-	/// and nobody else), and a bot that occasionally kills the person it spawned to
-	/// help is worse than no bot.
+	/// Arms a fresh bot: a rifle, a DMR or a launcher, by roster slot, so six bots
+	/// carry two of each.
+	///
+	/// Launchers were left out until armour arrived: the blast damages players on
+	/// both sides (<c>CombatManager.Explode</c>, which spares friendly *units* and
+	/// nobody else), and a bot that occasionally kills the person it spawned to help
+	/// is worse than no bot. Now a tank, a pillbox and a sniper tower take nothing
+	/// from a bullet (docs/NETCODE.md §10.6), and a ground force of bots with no
+	/// launcher could not touch any of them. What makes one safe to carry is the
+	/// pilot: it holds a launcher's fire while a teammate, or the bot itself, is
+	/// inside the blast (<c>BotPilot.BlastEndangersFriends</c>).
 	/// </summary>
 	private static void Equip(CombatManager combat, int peerId)
 	{
@@ -422,7 +429,10 @@ public sealed class BotDirector
 			return;
 		}
 
-		byte large = (BotRoster.SlotOf(peerId) & 1) == 0 ? WeaponCatalog.Rifle : WeaponCatalog.Dmr;
+		int slot = BotRoster.SlotOf(peerId);
+		byte large = slot % 3 == 2 ? WeaponCatalog.Launcher
+			: (slot & 1) == 0 ? WeaponCatalog.Rifle
+			: WeaponCatalog.Dmr;
 		player.PendingLoadout = new LoadoutSelection
 		{
 			Melee = WeaponCatalog.Hammer,

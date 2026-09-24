@@ -40,6 +40,18 @@ public partial class UnitDefinition : Resource
 	[Export]
 	public float MaxHealth = 100f;
 
+	/// <summary>
+	/// What fraction of a bullet's damage it takes; explosives always do the whole
+	/// (<see cref="Armour"/>). One for anything soft. Zero is armour — the tank's —
+	/// which small arms cannot hurt at all, so the launcher is the only answer to it
+	/// (docs/NETCODE.md §10.6).
+	/// </summary>
+	[Export]
+	public float BulletDamageScale = 1f;
+
+	/// <summary>True for a unit bullets do nothing to.</summary>
+	public bool IsBulletProof => Armour.IsBulletProof(BulletDamageScale);
+
 	/// <summary>Ground speed [m/s]. A rifleman jogs; nothing here sprints.</summary>
 	[Export]
 	public float MoveSpeed = 4.5f;

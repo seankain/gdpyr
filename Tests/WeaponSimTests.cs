@@ -286,6 +286,43 @@ public class WeaponSimTests
 		Assert.InRange(WeaponFlags.Slot(0xFF), 0, SimConfig.WeaponSlots - 1);
 	}
 
+	[Fact]
+	public void WeaponFlagsCarryTheLargeWeapon()
+	{
+		// The weapon locker's half of the byte (docs/NETCODE.md §10.6): which large
+		// weapon the player carries, alongside everything else it already said.
+		for (int choice = 0; choice < SimConfig.LargeWeaponChoices; choice++)
+		{
+			byte packed = WeaponFlags.Pack(1, reloading: true, Team.GroundForce, choice);
+			Assert.Equal(choice, WeaponFlags.LargeChoice(packed));
+			Assert.Equal(1, WeaponFlags.Slot(packed));
+			Assert.True(WeaponFlags.IsReloading(packed));
+			Assert.Equal(Team.GroundForce, WeaponFlags.TeamOf(packed));
+		}
+	}
+
+	[Fact]
+	public void WeaponFlagsThatDoNotSayWhichLargeWeaponSayNothing()
+	{
+		// Every byte written before the locker existed — every demo recorded before
+		// it — has zeros there, and must not be read as "the first choice".
+		Assert.Equal(-1, WeaponFlags.LargeChoice(WeaponFlags.Pack(2, reloading: false, Team.GroundForce)));
+		Assert.Equal(-1, WeaponFlags.LargeChoice(0));
+		Assert.Equal(-1, WeaponFlags.LargeChoice(WeaponFlags.Pack(2, false, Team.GroundForce, -1)));
+		Assert.Equal(-1, WeaponFlags.LargeChoice(
+			WeaponFlags.Pack(2, false, Team.GroundForce, SimConfig.LargeWeaponChoices)));
+	}
+
+	[Fact]
+	public void WeaponFlagsFromBeforeTheLockerStillReadTheSame()
+	{
+		// Bits 0-3 are where they always were, so an old byte decodes to the same slot,
+		// reload and side it always did.
+		byte old = WeaponFlags.Pack(2, reloading: true, Team.Strategist);
+		byte now = WeaponFlags.Pack(2, reloading: true, Team.Strategist, largeChoice: 2);
+		Assert.Equal(old, (byte)(now & 0x0F));
+	}
+
 	// ---- the accuracy cone's seed (docs/IMPLEMENTATION_PLAN.md §7) ---------
 
 	[Fact]

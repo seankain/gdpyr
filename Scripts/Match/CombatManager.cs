@@ -523,7 +523,8 @@ public partial class CombatManager : Node
 		}
 		else if (unitVictim != null)
 		{
-			flags |= DamageUnit(unitVictim, stats.Damage, attacker, OwnerId.ForPeer(attacker.PeerId), tick);
+			flags |= DamageUnit(unitVictim, stats.Damage, explosive: false, attacker, OwnerId.ForPeer(attacker.PeerId),
+				tick);
 		}
 		else if (!blocked)
 		{
@@ -649,7 +650,7 @@ public partial class CombatManager : Node
 		}
 		else if (unitVictim != null)
 		{
-			flags |= DamageUnit(unitVictim, stats.Damage, attacker, ownerId, tick);
+			flags |= DamageUnit(unitVictim, stats.Damage, stats.IsExplosive, attacker, ownerId, tick);
 		}
 		else if (structureVictim != null)
 		{
@@ -739,7 +740,7 @@ public partial class CombatManager : Node
 			float damage = stats.SplashDamageAt(UnitManager.DistanceToBlast(unit, point));
 			if (damage > 0f)
 			{
-				flags |= DamageUnit(unit, damage, attacker, attackerOwnerId, tick);
+				flags |= DamageUnit(unit, damage, explosive: true, attacker, attackerOwnerId, tick);
 			}
 		}
 
@@ -779,6 +780,15 @@ public partial class CombatManager : Node
 		}
 
 		bool killed = units.DamageStructure(structure, amount, explosive, attackerOwnerId, tick, out float dealt);
+		if (dealt <= 0f)
+		{
+			// Armour that took nothing (docs/NETCODE.md §10.6). No hit marker and no
+			// damage record: a marker would tell the rifleman they were doing
+			// something, and a stream of zero-damage records is noise a reward
+			// function would have to learn to ignore.
+			return HitFlags.None;
+		}
+
 		ConfirmHit(attacker, null, killed);
 
 		if (killed && attacker != null)
@@ -813,9 +823,11 @@ public partial class CombatManager : Node
 	/// <summary>
 	/// Applies damage to a unit. Unlike a player's death this costs no ticket — the
 	/// ground force's pool is theirs, and a unit is already paid for out of the
-	/// strategist's points.
+	/// strategist's points. What it takes depends on what it was hit with, as a
+	/// structure's does: a tank takes nothing from a bullet (docs/NETCODE.md §10.6).
 	/// </summary>
-	private HitFlags DamageUnit(Unit unit, float amount, PlayerCombat attacker, int attackerOwnerId, uint tick)
+	private HitFlags DamageUnit(Unit unit, float amount, bool explosive, PlayerCombat attacker, int attackerOwnerId,
+		uint tick)
 	{
 		UnitManager units = UnitManager.Instance;
 		if (units == null || unit == null || !unit.IsAlive || amount <= 0f)
@@ -823,7 +835,13 @@ public partial class CombatManager : Node
 			return HitFlags.None;
 		}
 
-		bool killed = units.Damage(unit, amount, attackerOwnerId, tick);
+		bool killed = units.Damage(unit, amount, explosive, attackerOwnerId, tick, out float dealt);
+		if (dealt <= 0f)
+		{
+			// Armour that took nothing, as for a structure above.
+			return HitFlags.None;
+		}
+
 		ConfirmHit(attacker, null, killed);
 
 		if (killed && attacker != null)
@@ -839,7 +857,7 @@ public partial class CombatManager : Node
 		{
 			byte weapon = attacker?.EquippedDefinitionId ?? (byte)0;
 			int victimId = OwnerId.ForUnit(unit.UnitId);
-			AgentEventBus.Emit(AgentEventKind.Damage, tick, attackerOwnerId, victimId, weapon, amount,
+			AgentEventBus.Emit(AgentEventKind.Damage, tick, attackerOwnerId, victimId, weapon, dealt,
 				unit.Health);
 			if (killed)
 			{
@@ -1579,6 +1597,15 @@ public partial class CombatManager : Node
 		{
 			combat.Character?.SetDeadPresentation(!combat.IsAlive);
 		}
+
+		// A respawn: the server armed the new life with full magazines in all three
+		// slots, and the owner predicts every one of them, so it arms the same life
+		// rather than carrying the last one's empty pistol into it. The large weapon
+		// is already the one the server named, above.
+		if (combat == Local && !wasAlive && combat.IsAlive)
+		{
+			combat.Equip(combat.Loadout);
+		}
 	}
 
 	private void ApplyPendingMessages(uint tick)
@@ -1684,6 +1711,14 @@ public partial class CombatManager : Node
 		if (attacker == Local)
 		{
 			_hud?.FlashHitMarker(killed);
+			return;
+		}
+
+		// A bot — or an agent seat, which is one — has no connection to be told on;
+		// its peer id is from the reserved band and an RPC to it is an error in the
+		// log for every hit it lands.
+		if (BotRoster.IsBot(attacker.PeerId))
+		{
 			return;
 		}
 

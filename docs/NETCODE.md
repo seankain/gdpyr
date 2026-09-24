@@ -444,6 +444,15 @@ anyway, the *answer* rides `ClientSelectTeam`, which has existed since M3, and t
 ends up on rides the flag byte's team bit. There is no third team and no wire change: `Team` is one
 bit and stays one bit.
 
+**The weapon locker is not a message either** (§10.6). What a player walked away from one with is
+the large weapon in their snapshot, in two bits of the same flag byte that were spare (bits 4–5: an
+index into `WeaponCatalog.LargeWeapons` plus one, zero meaning "not said"). The record stays 29 B.
+A swap is server-side and not predicted — one round trip, like a mount — and the owning client
+re-arms its large slot the first time a snapshot names a different weapon from the one it has been
+predicting with. The same two bits close a gap that predates the locker: before them a client was
+never told which large weapon a respawn had given it, so a remote player who picked the DMR drew and
+predicted a rifle for as long as they played.
+
 **LAN discovery is not on this wire at all.** The server browser answers "who is listening?" before
 there is a connection to ask it over, so it is its own datagram on its own UDP socket
 (`Scripts/Net/DiscoveryCodec.cs`, [`LAN.md`](LAN.md) §4) and the transport knows nothing about it.
@@ -526,7 +535,7 @@ exists to be.
 
 ---
 
-## 10. Economy, emplacements, the scoreboard, barracks defences and structures
+## 10. Economy, emplacements, the scoreboard, barracks defences, structures and armour
 
 M5 added three things that are neither a per-tick sample nor a projectile, and all three are on the
 wire as **state**: sent when it changes, reliable, and absent the rest of the time.
@@ -716,15 +725,15 @@ a rifleman, so the "points below the cheapest unit" half of the defeat condition
 | | Pillbox | Sandbag wall | Sniper tower |
 |---|---|---|---|
 | cost, build time (one builder) | 150, 15 s | 25, 5 s | 125, 14 s |
-| health; share of a bullet it takes | 700; 0.25 | 400; 0.3 | 450; 0.5 |
+| health; share of a bullet it takes | 700; **0** (§10.6) | 400; 0.3 | 450; **0** (§10.6) |
 | boxes (across × deep × high) | 3.6 × 3.6 × 2.2 m | 4.0 × 0.8 × 1.1 m | 2 × 2 × 7 m column, 3.2 × 3.2 × 0.9 m cabin on it |
 | gun | `turret` (catalog 8): 45 m, 0.6 s reaction, 120°/s, 2° cone | — | `marksman` (catalog 10): the DMR round every 2 s, bottomless; 90 m, 1.2 s, 60°/s, 0.35° |
 | eyes | 50 m, from just outside each wall | none | 90 m, from over the parapet |
 
-Explosives do their whole damage to a structure and bullets a share of it
-(`Construction.DamageTaken`), which is what makes the launcher the answer to a pillbox and a rifle a
-poor one. The sniper tower's cabin hides the ground within about 12 m of its foot from the marksman —
-dead ground, and the way in.
+Explosives do their whole damage to a structure and bullets a share of it (`Armour.DamageTaken`).
+The pillbox and the tower take **no** share — they are armour, and only the launcher hurts them
+(§10.6); the wall of sandbags still takes 0.3. The sniper tower's cabin hides the ground within
+about 12 m of its foot from the marksman — dead ground, and the way in.
 
 **Placing one.** With builders selected, `5`/`6`/`7` arm a pillbox, a wall or a tower the way `X`
 arms an attack-move, and the next right-click sends `ClientConstruct` (builders, kind, point, yaw).
@@ -788,9 +797,9 @@ across that line, then a tower 7 m behind (`StrategistBrain.TryPlanStructure`, `
 builder is idle with a structure planned that it cannot yet afford, the queue stops spending the
 structure's price (`StructureSavings`) — without that, the queue spends every point as it arrives
 and no pillbox is ever affordable. A refused placement is not asked for again for 30 s. **Ground bots**
-shoot the nearest hostile unit, and only when there is none the nearest structure with a gun — a
-rifle does a quarter of its damage to concrete, and a bot that preferred the pillbox would stand in
-front of it losing the argument.
+shoot the nearest hostile unit, and only when there is none the nearest structure with a gun — and
+since §10.6, only what their weapon can hurt: a bot with a rifle or a DMR passes over a pillbox, a
+tower and a tank, and leaves them to the bots carrying launchers.
 
 Measured on the Test map (`Tests/Scenarios/pillbox_fire.json`, `sniper_tower_reach.json`,
 `sandbag_cover.json`, `sandbag_absorbs.json`, `builder_fortifies.json`): a player standing 30 m from
@@ -809,6 +818,89 @@ messages are not journalled — [`DEMOS.md`](DEMOS.md) §6); the agent API's str
 no structure block, so the schema is unchanged (a policy may build through `construct` but cannot
 see what it built, [`AGENT_API.md`](AGENT_API.md) §6.2); a hammer does not damage a structure; and
 one navigation mesh still serves every unit (§M5 of the plan).
+
+### 10.6 Armour and the weapon locker
+
+**Three of the strategist's builds are armour: the tank, the pillbox and the sniper tower.** Small
+arms do nothing to them — not the rifle, not the DMR, not the pistol, and not the heavy gun's
+12.7 mm either — and only an explosive does: the launcher's grenade, by its impact or its blast.
+Everything else the strategist fields is soft and takes a bullet whole, and a wall of sandbags
+still takes 0.3 of one.
+
+It is one number on each definition: `BulletDamageScale`, which structures already had
+(`Structures/*.tres`) and units now have too (`Units/*.tres`, default 1). The tank, the pillbox and
+the tower are at 0. One rule applies it to both (`Armour.DamageTaken`, `Scripts/Sim/Armour.cs`):
+whether a hit is explosive is the *round's* (`ProjectileStats.IsExplosive`), so a grenade's direct
+impact counts as well as its blast, and a hammer — no round at all — is a bullet. A hit that deals
+nothing is **not confirmed**: no hit marker, and no `damage` record on the agent stream
+([`AGENT_API.md`](AGENT_API.md) §8), because a marker tells a rifleman they are doing something and a
+stream of zeros is noise a reward function would have to learn to ignore. The round still stops at
+the armour and still draws its impact, so what a player sees is sparks and no marker.
+
+| | Health | Share of a bullet | Grenade: direct / blast at the face |
+|---|---|---|---|
+| tank | 700 | 0 | 40 / up to 90 |
+| pillbox | 700 | 0 | 40 / up to 90 |
+| sniper tower | 450 | 0 | 40 / up to 90 |
+| sandbag wall | 400 | 0.3 | 40 / up to 90 |
+
+A grenade's direct victim takes the impact (40) and is left out of its own blast
+(`CombatManager.Explode`), so a grenade that lands at a tank's tracks does more than one that
+strikes its hull. That is M2's rule for everything, players included, and armour inherits it rather
+than changing it; which way it should go is a playtest question
+([`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) §7, item 2).
+
+**The weapon locker** is the answer to armour mid-life. Before it, the only way to a launcher was
+the loadout menu, and the menu only comes up while dead. A locker (`Scripts/Fps/WeaponLocker.cs`,
+group `weapon_locker`) stands at the ground force's spawn — the Test map has one at (8, 0.5, 11),
+three metres behind the spawn line and clear of the cans — and a **tap of the use key** within
+2.5 m of it swaps the large weapon in the player's hands for the next one it holds, with a full
+magazine: rifle → launcher → DMR → rifle (`LockerSim.Next`, over `WeaponCatalog.LargeWeapons`). The
+HUD prompt names both: `[E] weapon locker: swap the rifle for the launcher`.
+
+- **It is the use key's, not a menu's.** A menu would need keys, and the keys a living player
+  presses are the recorded input the simulation runs on — 1, 2 and 3 already switch slots. One
+  button, read from the frames by the same decision table as a gun and a can
+  (`EmplacementSim.Resolve`), is what lets a bot, a policy on the agent socket and a scripted
+  scenario use a locker exactly as a person does. A tap swaps; a hold does nothing, because a hold
+  is what carries things off. Something on your back comes first — a can is put down beside the
+  locker rather than kept — and a locker is used only when it is nearer than any gun or can in
+  reach.
+- **It is for this life.** What a player spawns with is still the loadout menu's to say. Carrying
+  a locker's weapon into the next life would make a round's starting loadout depend on how the
+  last one went, including for an agent seat, whose episodes are meant to start alike
+  ([`AGENT_API.md`](AGENT_API.md) §7.1).
+- **Nothing about it is on the wire** but the two bits of the snapshot's flag byte that name the
+  large weapon (§7). A locker has no state: every locker holds every large weapon for everybody,
+  always, so there is nothing to replicate and it is not named by index anywhere. It has no
+  collider either — it is furniture to walk up to, like a can.
+
+**Ground bots** carry two of each large weapon (`BotDirector.Equip`, by roster slot: rifle, DMR,
+launcher, DMR, rifle, launcher). Launchers were left off them until armour, because a blast
+spares friendly *units* and no players; a bot carrying one now holds its fire while a teammate is
+within the blast radius plus 2 m of the target, or the target is that close to the bot itself
+(`BotPilot.BlastEndangersFriends`, `BotSituation.HoldFire`) — it keeps its ground and strafes
+rather than walking into what it is too close to shoot. A bot without an explosive does not pick
+armour as a target at all (`GroundSensor.NearestHostileTarget`). And every bot now lets go of the
+trigger between shots with a weapon that fires on the press (`BotSituation.SemiAutomatic`): held,
+a DMR fires once per target and a launcher once per life, which is what DMR bots had been doing
+since M3.5.
+
+Measured on the Test map (`Tests/Scenarios/armour_small_arms.json`,
+`locker_launcher_vs_tank.json`): four lanes, one seat each — a rifle at a tank 50 m away, a DMR at a
+sniper tower 100 m away, a DMR at a pillbox 60 m away, and a launcher at a pillbox 56 m away. Over
+two seeds every rifle and DMR round that arrives deals nothing, and the only damage on the stream is
+the launcher's: three grenades of 40 into its pillbox. The same lanes with the old shares restored
+(tank 1, pillbox 0.25, tower 0.5) put 35 rifle rounds of 20 into the tank and kill it, and 15 and
+18 DMR rounds of 30 and 15 into the tower and the pillbox — so the rounds are arriving, and the
+armour is what stops them. A seat spawned at the locker with a rifle taps the use key once, a second in, and puts
+four grenades of 40 into a tank 45 m away, one every 4.3 s — the launcher's 1.5 s cycle and 2.5 s
+reload, rounded up to the script's next pull of the trigger.
+
+**Not in it:** the ground observation has no field for which large weapon a seat carries, so the
+agent schema is unchanged and a policy that uses a locker has to remember what it took
+([`AGENT_API.md`](AGENT_API.md) §6.1); and the strategist's units do not know what the ground force
+is carrying — a tank does not stand off from a grenadier.
 
 ---
 

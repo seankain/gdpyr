@@ -347,6 +347,18 @@ call. This makes one person enough to see a round.
   target, slew and fire now run over an `IGunPost` interface both implement, rather than a copy. The
   computer strategist keeps one builder and fortifies the nodes, and ground bots shoot a pillbox only
   when there is no unit to shoot.
+- **Armour and the weapon locker** *(added after builders)*. The tank, the pillbox and the sniper
+  tower are armour: small arms do nothing to them and only an explosive does
+  ([`NETCODE.md`](NETCODE.md) §10.6). It is one number per definition, `BulletDamageScale`, which
+  structures had and units now have, set to 0 on those three and applied by one rule
+  (`Armour.DamageTaken`) to both. The answer is a **weapon locker** at the ground force's spawn: a
+  tap of the use key beside it swaps the large weapon in hand for the next one — rifle, launcher,
+  DMR — for the rest of that life. It is the use key's rather than a menu's so that bots, policies
+  and scenarios use it as a person does, and it costs nothing on the wire but two spare bits of the
+  snapshot's flag byte, which also, at last, tell a client which large weapon a respawn gave it.
+  Ground bots now carry two launchers in six, hold their fire while the blast would reach a
+  teammate or themselves, leave armour alone when they have no explosive, and let go of the trigger
+  between shots with a weapon that fires on the press.
 
 ### M6 — Agent API: headless play for external policies (3–4 days) ✅ *shipped*
 
@@ -662,7 +674,11 @@ a command line that names a mode goes straight through before a widget is built.
    one until three riflemen are already out. A tank that six players cannot deal with makes the
    round a foregone conclusion; one they melt in ten seconds makes the tier a trap the strategist
    only falls into once. Both are findings; the fix in either direction is `Units/tank.tres` and
-   nothing else.
+   nothing else. Since armour ([`NETCODE.md`](NETCODE.md) §10.6) only grenades hurt it: 700 health
+   is eighteen direct hits of 40, or about eight that land at its tracks for up to 90, at one every
+   four seconds per launcher — so watch how many people walk back to the locker, and whether a
+   grenade striking the hull doing less than one at its feet reads as a bug to them (it is M2's
+   rule, `CombatManager.Explode`, and changing it changes a direct hit on a player too).
 3. **Watch whether anybody mounts a gun, and whether anybody ever carries a can.** The whole
    emplacement loop is two guns, four cans and a walk, and the debug HUD's `guns` row counts all of
    it. "0 cans spent" across a session means the belt is too big, the walk is too long, or a gun is
@@ -700,12 +716,13 @@ a command line that names a mode goes straight through before a widget is built.
    with a Docker bridge are the two environments most likely to embarrass the list.
 9. **Watch whether anybody builds, and what the ground force does about it.** Builders and
    structures ([`NETCODE.md`](NETCODE.md) §10.5) were written with every number authored rather
-   than played: a pillbox's 700 health against a quarter of a rifle round, a wall's 25 points, a
-   tower that kills at 80 m in 3.4 s. The debug HUD's `structures` row counts what is standing, what
-   was built, what was lost and how many navigation re-bakes that cost. "0 built" across a session
-   means the feature is unused; a pillbox that nobody can take without a launcher means the ground
-   force's loadout decides the round; and a re-bake count much higher than the built count means
-   sites are being knocked down as fast as they go up. `Structures/*.tres` is the whole dial.
+   than played: a pillbox's 700 health against nothing but grenades since armour, a wall's 25
+   points, a tower that kills at 80 m in 3.4 s. The debug HUD's `structures` row counts what is
+   standing, what was built, what was lost and how many navigation re-bakes that cost. "0 built"
+   across a session means the feature is unused; a pillbox nobody walks back to the weapon locker to
+   answer means the locker is too far or the launcher too weak against 700 health; and a re-bake
+   count much higher than the built count means sites are being knocked down as fast as they go up.
+   `Structures/*.tres` is the whole dial.
 10. Four smaller things earlier milestones left where they were: a unit hit is tested against its
    *current* capsule rather than a rewound one (justified in `NETCODE.md` §5); the strategist HUD
    can only build from barracks 0 — the RPCs take an index, the three build keys still send zero,

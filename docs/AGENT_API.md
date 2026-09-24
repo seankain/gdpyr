@@ -82,6 +82,12 @@ slot, a ticket when it dies, a row in the scoreboard — it keeps. `PlayerManage
 `CombatManager` is not touched; no client learns a new message. A round with four humans, two bots
 and one attached policy is, on the wire, a round with seven players.
 
+The loadout is the bot's, by roster slot: rifle, DMR, launcher, DMR, rifle, launcher
+(`BotDirector.Equip`). A scenario's first seat carries a rifle and its third a launcher — which
+`Tests/Scenarios/armour_small_arms.json` relies on — and a seat that wants something else can walk to
+a weapon locker and tap `use` ([`NETCODE.md`](NETCODE.md) §10.6). What it takes there is for that
+life only, so a `reset` puts the slot's weapon back in its hands.
+
 The same shape on the strategist side: an attached strategist seat skips `BotStrategist.ServerTick`
 and applies the agent's commands through `ServerIssueOrder` / `ServerQueueUnit` instead, so an
 agent's order goes through the identical ownership checks a person's does. Two small additions are
@@ -609,7 +615,9 @@ everything the strategist's side fires with is negative — `-1` to `-65535` a u
 to `-65551` a barracks' own gun or mortar ([`NETCODE.md`](NETCODE.md) §10.4), and `-65552` down to
 `-65583` a structure a builder put up, by its slot ([`NETCODE.md`](NETCODE.md) §10.5). A defence
 is never a victim, because nothing can damage one; a structure is, and its `damage` records carry
-what it actually took after its armour, not what the round would have done to a body. Either one's
+what it actually took after its armour, not what the round would have done to a body. So does a
+unit's. A hit that took nothing — any bullet into a tank, a pillbox or a sniper tower, which only
+explosives hurt ([`NETCODE.md`](NETCODE.md) §10.6) — is no record at all. Either one's
 `weapon` field reads 0, as a unit's does.
 
 **This event stream is most of M8's per-round CSV.** The columns that milestone names — round

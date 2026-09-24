@@ -1,3 +1,4 @@
+using System;
 using Godot;
 
 namespace Gdpyr.Sim;
@@ -38,6 +39,9 @@ public enum UseAction : byte
 	PickUpCan,
 	DropCan,
 	Resupply,
+
+	/// <summary>Swap the large weapon for the next one in a weapon locker (docs/NETCODE.md §10.6).</summary>
+	SwapWeapon,
 }
 
 /// <summary>A press of the use key, as the two ends of the prediction both read it.</summary>
@@ -137,8 +141,14 @@ public readonly struct UseSituation
 	/// <summary>False in the air. A gun put down in mid-air would land wherever the physics felt like.</summary>
 	public readonly bool OnGround;
 
+	/// <summary>
+	/// A weapon locker is within <see cref="SimConfig.LockerReachMeters"/>, and nearer
+	/// than any gun or can that is.
+	/// </summary>
+	public readonly bool LockerInReach;
+
 	public UseSituation(UseIntent intent, CarryKind carrying, bool mounted, bool gunInReach, bool canInReach,
-		bool onGround)
+		bool onGround, bool lockerInReach = false)
 	{
 		Intent = intent;
 		Carrying = carrying;
@@ -146,6 +156,7 @@ public readonly struct UseSituation
 		GunInReach = gunInReach;
 		CanInReach = canInReach;
 		OnGround = onGround;
+		LockerInReach = lockerInReach;
 	}
 }
 
@@ -195,6 +206,15 @@ public static class EmplacementSim
 					return UseAction.Resupply;
 				}
 				return situation.OnGround ? UseAction.DropCan : UseAction.None;
+		}
+
+		// Empty-handed at a locker, a tap swaps the large weapon. Only empty-handed:
+		// a gun or a can on your back is put down by the key, wherever you are
+		// standing, and a hold is what picks things up — there is nothing here to
+		// carry off.
+		if (situation.LockerInReach)
+		{
+			return hold ? UseAction.None : UseAction.SwapWeapon;
 		}
 
 		if (situation.CanInReach)
@@ -254,4 +274,54 @@ public static class EmplacementSim
 
 	/// <summary>Whether a can is worth spending on this gun at all.</summary>
 	public static bool NeedsAmmo(short ammo, int magazineSize) => ammo < magazineSize;
+}
+
+/// <summary>
+/// What a weapon locker hands over (docs/NETCODE.md §10.6), as a pure function.
+///
+/// A locker holds every large weapon, and one tap of the use key swaps the one in
+/// the player's hands for the next in the list — rifle, launcher, DMR, and round
+/// again. A cycle rather than a menu because a menu would need keys, and the keys a
+/// living player presses are the recorded input the simulation runs on: 1, 2 and 3
+/// already switch slots. One button, from the frames, is what lets a bot, a policy
+/// on the agent socket and a demo all use it the way a person does.
+/// </summary>
+public static class LockerSim
+{
+	/// <summary>
+	/// The weapon after <paramref name="current"/> in <paramref name="choices"/>,
+	/// wrapping. Something not in the list — which a sanitized loadout never holds —
+	/// gets the first choice, so the answer is always a weapon the locker has.
+	/// </summary>
+	public static byte Next(byte current, ReadOnlySpan<byte> choices)
+	{
+		if (choices.Length == 0)
+		{
+			return current;
+		}
+
+		for (int i = 0; i < choices.Length; i++)
+		{
+			if (choices[i] == current)
+			{
+				return choices[(i + 1) % choices.Length];
+			}
+		}
+
+		return choices[0];
+	}
+
+	/// <summary>Where <paramref name="id"/> is in <paramref name="choices"/>, or -1.</summary>
+	public static int IndexOf(byte id, ReadOnlySpan<byte> choices)
+	{
+		for (int i = 0; i < choices.Length; i++)
+		{
+			if (choices[i] == id)
+			{
+				return i;
+			}
+		}
+
+		return -1;
+	}
 }

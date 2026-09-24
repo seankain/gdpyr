@@ -37,6 +37,12 @@ public struct GroundContact
 	public float HealthFraction;
 
 	public float DistanceMeters;
+
+	/// <summary>
+	/// True for a unit or structure bullets do nothing to — a tank, a pillbox, a
+	/// sniper tower (docs/NETCODE.md §10.6). Only explosives hurt it.
+	/// </summary>
+	public bool BulletProof;
 }
 
 /// <summary>
@@ -136,6 +142,7 @@ public static class GroundSensor
 				Velocity = unit.Velocity,
 				HealthFraction = unit.HealthPercent / 255f,
 				DistanceMeters = distance,
+				BulletProof = unit.Definition?.IsBulletProof ?? false,
 			});
 		}
 
@@ -164,6 +171,7 @@ public static class GroundSensor
 				Position = at,
 				Velocity = Vector3.Zero,
 				HealthFraction = Mathf.Clamp(structure.Health / Mathf.Max(structure.MaxHealth, 1f), 0f, 1f),
+				BulletProof = structure.Definition?.IsBulletProof ?? false,
 				DistanceMeters = distance,
 			});
 		}
@@ -192,13 +200,17 @@ public static class GroundSensor
 	/// <summary>
 	/// What a ground bot shoots at, as an owner id: the nearest hostile unit in the
 	/// scan, and only when there is none, the nearest hostile structure with a gun.
-	/// Units first because they move and a pillbox does not — and because a rifle
-	/// does a quarter of its damage to concrete, a bot that preferred the pillbox
-	/// would stand in front of it losing the argument.
+	/// Units first because they move and a pillbox does not.
+	///
+	/// Only what its weapon can hurt: a bot without an explosive passes over a tank,
+	/// a pillbox and a tower (docs/NETCODE.md §10.6), because a rifleman who stands
+	/// in front of armour emptying magazines into it is losing the argument by
+	/// choice. They are the launcher's (<see cref="BotDirector"/> arms one bot in
+	/// three with one).
 	/// </summary>
-	public static int NearestHostileTarget(ReadOnlySpan<GroundContact> contacts, Team team)
+	public static int NearestHostileTarget(ReadOnlySpan<GroundContact> contacts, Team team, bool explosive)
 	{
-		ushort unit = NearestHostileUnit(contacts, team);
+		ushort unit = NearestHostileUnit(contacts, team, explosive);
 		if (unit != 0)
 		{
 			return OwnerId.ForUnit(unit);
@@ -206,7 +218,7 @@ public static class GroundSensor
 
 		for (int i = 0; i < contacts.Length; i++)
 		{
-			if (contacts[i].IsStructure && contacts[i].Team != team)
+			if (contacts[i].IsStructure && contacts[i].Team != team && CanHurt(contacts[i], explosive))
 			{
 				return contacts[i].StructureOwnerId;
 			}
@@ -216,18 +228,20 @@ public static class GroundSensor
 	}
 
 	/// <summary>
-	/// The nearest hostile *unit* in a scan, which is what a ground bot shoots at.
+	/// The nearest hostile *unit* in a scan that a weapon of this kind can hurt,
+	/// which is what a ground bot shoots at.
 	///
 	/// Enemy players are never candidates. There are only two sides, a strategist
 	/// has no body on the field, and friendly fire between players is on — a bot
 	/// that could acquire a player would eventually acquire a teammate
 	/// (see <see cref="BotPilot"/>).
 	/// </summary>
-	public static ushort NearestHostileUnit(ReadOnlySpan<GroundContact> contacts, Team team)
+	public static ushort NearestHostileUnit(ReadOnlySpan<GroundContact> contacts, Team team, bool explosive)
 	{
 		for (int i = 0; i < contacts.Length; i++)
 		{
-			if (!contacts[i].IsPlayer && !contacts[i].IsStructure && contacts[i].Team != team)
+			if (!contacts[i].IsPlayer && !contacts[i].IsStructure && contacts[i].Team != team
+				&& CanHurt(contacts[i], explosive))
 			{
 				return contacts[i].UnitId;
 			}
@@ -235,6 +249,8 @@ public static class GroundSensor
 
 		return 0;
 	}
+
+	private static bool CanHurt(in GroundContact contact, bool explosive) => explosive || !contact.BulletProof;
 
 	/// <summary>Whether the level lets these two points see each other.</summary>
 	public static bool HasLineOfSight(Node3D viewer, Vector3 from, Vector3 to) =>

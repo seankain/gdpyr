@@ -74,7 +74,12 @@ public sealed class PlayerCombat
 	/// <summary>Equipped slot: 0 melee, 1 sidearm, 2 large.</summary>
 	public int Slot { get; set; }
 
-	/// <summary>The loadout this life was spawned with.</summary>
+	/// <summary>
+	/// What this life is carrying: the loadout it was spawned with, and since the
+	/// weapon locker, whatever large weapon was swapped in at one since
+	/// (docs/NETCODE.md §10.6). The next life starts from <see cref="PendingLoadout"/>
+	/// again.
+	/// </summary>
 	public LoadoutSelection Loadout { get; private set; }
 
 	/// <summary>The loadout the next spawn will use, as the player has asked for it.</summary>
@@ -147,7 +152,32 @@ public sealed class PlayerCombat
 
 		// Spawning with the large weapon up is what a player wants every time; the
 		// alternative is a keypress at the start of every life.
-		Slot = SimConfig.WeaponSlots - 1;
+		Slot = SimConfig.LargeSlot;
+	}
+
+	/// <summary>
+	/// Puts a different large weapon in the large slot, with a full magazine — what a
+	/// weapon locker does (docs/NETCODE.md §10.6). The other two slots, and which
+	/// slot is in the player's hands, are left alone: a player who walked up with the
+	/// pistol out is still holding it.
+	///
+	/// Server-side when it is a locker's doing; a client calls it too, when the
+	/// snapshot says the large weapon is not the one it has been predicting with.
+	/// </summary>
+	public void SwapLarge(byte largeWeaponId)
+	{
+		LoadoutSelection loadout = Loadout;
+		loadout.Large = largeWeaponId;
+		Loadout = WeaponCatalog.Sanitize(loadout);
+
+		byte id = Loadout.Large;
+		Weapons[SimConfig.LargeSlot] = WeaponState.Ready(id, WeaponCatalog.StatsFor(id));
+
+		if (Slot == SimConfig.LargeSlot)
+		{
+			// The sights come down with the weapon they were on, as at a respawn.
+			Aim = default;
+		}
 	}
 
 	/// <summary>Returns true when this damage was the killing blow.</summary>
@@ -190,11 +220,21 @@ public sealed class PlayerCombat
 		Equip(PendingLoadout);
 	}
 
-	/// <summary>Client-side: takes the server's word for health, ammunition and side.</summary>
+	/// <summary>Client-side: takes the server's word for health, ammunition, side and large weapon.</summary>
 	public void ApplyAuthoritative(byte health, byte ammo, byte flags, uint ackTick, bool isLocal)
 	{
 		Health = health;
 		Team = WeaponFlags.TeamOf(flags);
+
+		// Which large weapon is the server's to say, and it is said in every snapshot,
+		// so a swap at a locker — or a respawn with a different choice — reaches the
+		// owner's prediction however many packets were lost on the way. Applied before
+		// the ammunition below, so the count lands in the weapon it belongs to.
+		if (WeaponCatalog.TryLargeWeaponAt(WeaponFlags.LargeChoice(flags), out byte large)
+			&& Weapons[SimConfig.LargeSlot].DefinitionId != large)
+		{
+			SwapLarge(large);
+		}
 
 		int slot = WeaponFlags.Slot(flags);
 		if (!isLocal)
@@ -216,7 +256,8 @@ public sealed class PlayerCombat
 		}
 	}
 
-	public byte SnapshotFlags => WeaponFlags.Pack(Slot, Weapons[Slot].IsReloading, Team);
+	public byte SnapshotFlags => WeaponFlags.Pack(Slot, Weapons[Slot].IsReloading, Team,
+		WeaponCatalog.LargeChoiceOf(Weapons[SimConfig.LargeSlot].DefinitionId));
 
 	public byte SnapshotAmmo => (byte)Mathf.Clamp(Weapons[Slot].Ammo, 0, byte.MaxValue);
 
