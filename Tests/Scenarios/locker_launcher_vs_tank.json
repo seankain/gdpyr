@@ -1,0 +1,25 @@
+{
+  "name": "a rifleman who taps the weapon locker walks away with a launcher, and a launcher hurts a tank",
+  "seeds": [2, 11],
+  "duration_ticks": 960,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 0 },
+
+  "seats": [
+    { "id": "grenadier", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/locker_then_fire.json" }
+  ],
+
+  "spawns": [
+    { "peer": "grenadier", "at": [8, 1, 9.5], "look": [0, 0.03] },
+    { "unit": "tank", "team": "strategist", "at": [8, 1, -35.5], "order": "none" }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.damage.count", "op": ">=", "value": 3 },
+    { "metric": "events.damage.weapon.min", "op": "==", "value": 4 },
+    { "metric": "events.damage.weapon.max", "op": "==", "value": 4 },
+    { "metric": "events.damage.victim.max", "op": "between", "value": [-65535, -1] },
+    { "metric": "observation.grenadier.self.alive.min", "op": "==", "value": 1 }
+  ]
+}

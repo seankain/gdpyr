@@ -28,9 +28,9 @@ public class BotBrainTests
 		bool hasTarget = false, Vector3 aimDirection = default, float targetDistance = 999f,
 		bool targetVisible = false, int ticksOnTarget = 0, bool hasDestination = false,
 		Vector3 moveDirection = default, float destinationDistance = 0f, bool stuck = false,
-		bool needsReload = false) =>
+		bool needsReload = false, bool semiAutomatic = false) =>
 		new(alive, yaw, pitch, speed, hasTarget, aimDirection, targetDistance, targetVisible, ticksOnTarget,
-			hasDestination, moveDirection, destinationDistance, stuck, needsReload);
+			hasDestination, moveDirection, destinationDistance, stuck, needsReload, semiAutomatic);
 
 	// ---- movement axes -----------------------------------------------------
 
@@ -304,6 +304,72 @@ public class BotBrainTests
 
 		Assert.NotEqual(Vector3.Zero, world);
 		Assert.Equal(0f, world.Dot(Vector3.Right), precision: 1);
+	}
+
+	// ---- one round per pull ------------------------------------------------
+
+	private static readonly WeaponStats Dmr = new(FireMode.Semi, WeaponStats.TicksPerShot(120f), 10,
+		WeaponStats.SecondsToTicks(2.4f), 0f);
+
+	private static readonly WeaponStats Launcher = new(FireMode.Single, WeaponStats.TicksPerShot(40f), 1,
+		WeaponStats.SecondsToTicks(2.5f), 0f);
+
+	private static readonly WeaponStats Rifle = new(FireMode.Auto, WeaponStats.TicksPerShot(600f), 30,
+		WeaponStats.SecondsToTicks(2.2f), 0f);
+
+	/// <summary>
+	/// Rounds a bot sitting on a target fires over <paramref name="ticks"/>, through
+	/// the weapon step a player's frames go through.
+	/// </summary>
+	private static int ShotsOnTarget(in WeaponStats stats, int ticks)
+	{
+		BotSituation onTarget = Situation(yaw: YawTowards(Vector3.Right), hasTarget: true,
+			aimDirection: Vector3.Right, targetDistance: 30f, targetVisible: true, ticksOnTarget: 30,
+			semiAutomatic: stats.Mode != FireMode.Auto);
+
+		WeaponState weapon = WeaponState.Ready(0, stats);
+		ushort previous = 0;
+		int shots = 0;
+
+		for (uint tick = 0; tick < ticks; tick++)
+		{
+			InputFrame frame = BotBrain.Frame(tick, BotPeerId, onTarget, Steady);
+			var input = new InputContext(frame, previous, SimConfig.TickDelta);
+			if (WeaponSim.Step(ref weapon, stats, input, tick) == WeaponAction.Fire)
+			{
+				shots++;
+			}
+			previous = frame.Buttons;
+		}
+
+		return shots;
+	}
+
+	[Fact]
+	public void ADmrIsFiredAtItsCadenceNotOncePerTarget()
+	{
+		// A semi-automatic weapon fires on the press. A trigger held down for as long
+		// as the bot is on target is one press, and one round — which is what every
+		// DMR bot did before it learned to let go.
+		Assert.Equal(3, ShotsOnTarget(Dmr, SimConfig.TickRate * 3 / 2));
+	}
+
+	[Fact]
+	public void ALauncherIsReloadedAndFiredAgain()
+	{
+		// One round at tick 0; the first pull after its 90-tick cycle starts the
+		// reload (WeaponSim: an empty magazine reloads itself on the trigger), which
+		// is 150 ticks; the pull after that fires, at 242; and again at 484. Held
+		// down, the first round is the only one.
+		Assert.Equal(3, ShotsOnTarget(Launcher, 500));
+	}
+
+	[Fact]
+	public void AnAutomaticIsStillHeldDown()
+	{
+		// Letting go of an automatic every other tick would halve a rifle's rate of
+		// fire at 600 rpm and above.
+		Assert.Equal(10, ShotsOnTarget(Rifle, SimConfig.TickRate));
 	}
 
 	private static float YawTowards(Vector3 direction)

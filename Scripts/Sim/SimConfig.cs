@@ -177,6 +177,17 @@ public static class SimConfig
 	/// <summary>Weapon slots a ground-force loadout carries: melee, sidearm, large.</summary>
 	public const int WeaponSlots = 3;
 
+	/// <summary>The slot the large weapon — rifle, DMR or launcher — is carried in.</summary>
+	public const int LargeSlot = WeaponSlots - 1;
+
+	/// <summary>
+	/// How many large weapons a player can choose between, at the loadout menu or a
+	/// weapon locker. Bounded by the two bits of the snapshot's weapon byte that say
+	/// which one a player is carrying (<see cref="WeaponFlags"/>): a fourth needs
+	/// another bit, and there are two left.
+	/// </summary>
+	public const int LargeWeaponChoices = 3;
+
 	// ---- units (docs/NETCODE.md §6.1) --------------------------------------
 
 	/// <summary>
@@ -324,6 +335,13 @@ public static class SimConfig
 	/// against, and two answers would be a prediction that never reconciles.
 	/// </summary>
 	public const float EmplacementReachMeters = 2.5f;
+
+	/// <summary>
+	/// How close a player has to be to a weapon locker to swap their large weapon
+	/// at it (docs/NETCODE.md §10.6). The use key's reach, as for a gun: one key,
+	/// one distance.
+	/// </summary>
+	public const float LockerReachMeters = EmplacementReachMeters;
 
 	/// <summary>
 	/// What carrying a heavy gun does to a player's speed. Every movement state

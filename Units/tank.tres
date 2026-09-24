@@ -8,6 +8,7 @@ Name = &"tank"
 Cost = 400
 BuildSeconds = 22.0
 MaxHealth = 700.0
+BulletDamageScale = 0.0
 MoveSpeed = 5.0
 HeightMeters = 3.0
 RadiusMeters = 1.3

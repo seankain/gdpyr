@@ -142,9 +142,9 @@ them. Units are server-simulated and never predicted; the order marker appears i
 units move a round trip later, which is what an RTS feels like anyway.
 
 **Builders** put up three structures ([`docs/NETCODE.md`](docs/NETCODE.md) §10.5). A **pillbox**
-(150 points) is a concrete box with a gun in it that takes a quarter of a bullet's damage and all of
-an explosive's; a **sandbag wall** (25) is waist-high cover and nothing else; a **sniper tower** (125)
-puts a marksman eight metres up who sees and shoots to 90 m. A structure faces the way the camera
+(150 points) is a concrete box with a gun in it that bullets do nothing to; a **sandbag wall** (25) is
+waist-high cover and nothing else; a **sniper tower** (125) puts a marksman eight metres up who sees
+and shoots to 90 m, and is as bullet-proof as the pillbox. A structure faces the way the camera
 does, so a wall lies across the screen and `Q`/`E` turn it. It is paid for when it is placed, goes up
 while builders stand beside it — two build twice as fast — and cannot finish while somebody from the
 ground force is standing where it goes. Right-clicking builders onto one of your own sites or damaged
@@ -164,6 +164,14 @@ same distance on screen at every power — a four-power scope at the hip's sensi
 times as much of what you can see. The sights are a client's own: they are raised from the same
 recorded input frame the rest of the simulation runs on, and nothing about them goes on the wire
 ([`docs/NETCODE.md`](docs/NETCODE.md) §4.7).
+
+**Armour, and the weapon locker.** The tank, the pillbox and the sniper tower are armour: rifle, DMR,
+pistol and heavy-gun rounds stop against them and do nothing, and only the launcher's grenade — by its
+impact or its blast — hurts them. The answer when one turns up is the **weapon locker** at the spawn:
+stand at it and tap `E` to swap the large weapon in your hands for the next one, with a full
+magazine — rifle, launcher, DMR, and round again. The swap is for that life; what you spawn with is
+still the loadout menu's (`1`/`2`/`3` while dead). A hit on armour that did nothing shows no hit
+marker ([`docs/NETCODE.md`](docs/NETCODE.md) §10.6).
 
 ## Playing on your own
 
@@ -186,6 +194,8 @@ round full of bots starts without waiting for anybody.
   somebody on their side is in the way.
   They are deliberately mediocre shots — a 3° aim error held for a third of a second at a time, and
   a 200 ms reaction. `BotTraits.Default` in `Scripts/Sim/BotBrain.cs` is the whole difficulty dial.
+  Six carry two rifles, two DMRs and two launchers. Only the launchers take on a tank, a pillbox or a
+  tower, and they hold fire while the blast would reach a teammate or themselves.
 - **In the strategist's chair** one queues infantry at every barracks while the points last, keeps
   four units home defending, and attack-moves the rest at whatever its units have actually seen —
   it gets no free knowledge of where anybody is. Once it has four fighting units it buys a builder,

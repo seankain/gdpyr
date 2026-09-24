@@ -76,7 +76,13 @@ public static class WeaponCatalog
 	/// </summary>
 	public const byte Marksman = 10;
 
-	/// <summary>The large-weapon choice a ground-force player makes before each spawn.</summary>
+	/// <summary>
+	/// The large-weapon choice a ground-force player makes before each spawn, and
+	/// what a weapon locker holds (docs/NETCODE.md §10.6). The order is the locker's
+	/// cycle and, like the catalog's, a protocol constant: the snapshot names the
+	/// large weapon a player carries by its index here (<see cref="WeaponFlags"/>).
+	/// Appending is safe up to <see cref="SimConfig.LargeWeaponChoices"/>.
+	/// </summary>
 	public static readonly byte[] LargeWeapons = { Dmr, Rifle, Launcher };
 
 	public static WeaponDefinition[] Definitions { get; private set; } = System.Array.Empty<WeaponDefinition>();
@@ -110,6 +116,14 @@ public static class WeaponCatalog
 		if (IsLoaded)
 		{
 			return;
+		}
+
+		if (LargeWeapons.Length > SimConfig.LargeWeaponChoices)
+		{
+			// The snapshot has two bits for which one a player carries; a choice past
+			// them would be carried and never reported.
+			GD.PushError($"[combat] {LargeWeapons.Length} large weapons; the snapshot can name"
+				+ $" {SimConfig.LargeWeaponChoices}");
 		}
 
 		var definitions = new WeaponDefinition[Paths.Length];
@@ -168,17 +182,24 @@ public static class WeaponCatalog
 		Large = IsLargeWeapon(loadout.Large) ? loadout.Large : Rifle,
 	};
 
-	public static bool IsLargeWeapon(byte id)
+	public static bool IsLargeWeapon(byte id) => LargeChoiceOf(id) >= 0;
+
+	/// <summary>Where a large weapon is in <see cref="LargeWeapons"/>, or -1 for anything else.</summary>
+	public static int LargeChoiceOf(byte id) => LockerSim.IndexOf(id, LargeWeapons);
+
+	/// <summary>
+	/// The large weapon at an index in <see cref="LargeWeapons"/>, as a snapshot
+	/// names it. False for an index this build has no weapon at.
+	/// </summary>
+	public static bool TryLargeWeaponAt(int choice, out byte id)
 	{
-		foreach (byte large in LargeWeapons)
-		{
-			if (large == id)
-			{
-				return true;
-			}
-		}
-		return false;
+		bool known = choice >= 0 && choice < LargeWeapons.Length;
+		id = known ? LargeWeapons[choice] : Rifle;
+		return known;
 	}
+
+	/// <summary>What a weapon locker swaps <paramref name="current"/> for: the next large weapon, wrapping.</summary>
+	public static byte LockerSwap(byte current) => LockerSim.Next(current, LargeWeapons);
 
 	/// <summary>The loadout a player who has not chosen one spawns with.</summary>
 	public static LoadoutSelection DefaultLoadout => new()

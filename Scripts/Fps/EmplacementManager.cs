@@ -9,7 +9,8 @@ namespace Gdpyr.Fps;
 
 /// <summary>
 /// Fifth autoload: the ground force's heavy guns and the cans that feed them
-/// (docs/IMPLEMENTATION_PLAN.md §M5).
+/// (docs/IMPLEMENTATION_PLAN.md §M5), and the weapon lockers at their spawn
+/// (docs/NETCODE.md §10.6) — everything the use key does.
 ///
 /// The guns and the cans are map nodes; this owns what is happening to them. The
 /// server is the only authority, as everywhere else: it reads the use bit out of
@@ -42,6 +43,7 @@ public partial class EmplacementManager : Node
 
 	private readonly List<Emplacement> _guns = new();
 	private readonly List<AmmoCan> _cans = new();
+	private readonly List<WeaponLocker> _lockers = new();
 
 	/// <summary>peer -> index, maintained on every transition so a lookup is not a scan.</summary>
 	private readonly Dictionary<int, int> _carriedGun = new();
@@ -55,6 +57,12 @@ public partial class EmplacementManager : Node
 
 	/// <summary>Cans on the map, spent or not.</summary>
 	public int CanCount => _cans.Count;
+
+	/// <summary>Weapon lockers on the map.</summary>
+	public int LockerCount => _lockers.Count;
+
+	/// <summary>Large weapons swapped at a locker this round. For the log and M8's CSV.</summary>
+	public int LockerSwaps { get; private set; }
 
 	/// <summary>Guns with somebody behind them right now.</summary>
 	public int MountedGuns => _mounted.Count;
@@ -184,7 +192,8 @@ public partial class EmplacementManager : Node
 			_mounted.ContainsKey(combat.PeerId),
 			gunIndex >= 0,
 			canIndex >= 0 && canDistance <= gunDistance,
-			combat.Character.IsOnFloor());
+			combat.Character.IsOnFloor(),
+			LockerInReach(at, Mathf.Min(gunDistance, canDistance)));
 
 		Act(combat, EmplacementSim.Resolve(situation), gunIndex, canIndex, tick);
 	}
@@ -221,7 +230,33 @@ public partial class EmplacementManager : Node
 			case UseAction.Resupply:
 				Resupply(combat.PeerId, gunIndex, tick);
 				break;
+
+			case UseAction.SwapWeapon:
+				SwapWeapon(combat);
+				break;
 		}
+	}
+
+	/// <summary>
+	/// Swaps the large weapon in this player's hands for the next one the locker
+	/// holds (docs/NETCODE.md §10.6). For this life only: what a player spawns with
+	/// is still the loadout menu's to say, which is up while they are dead. Carrying
+	/// a locker's weapon into the next life would make a round's starting loadout
+	/// depend on how the last one went — including for an agent seat, whose episodes
+	/// are meant to start alike (docs/AGENT_API.md §7.1).
+	///
+	/// No message: the snapshot's weapon byte names the large weapon, so every
+	/// client — the owner's prediction included — learns about it from the packet it
+	/// was going to get anyway.
+	/// </summary>
+	private void SwapWeapon(PlayerCombat combat)
+	{
+		byte was = combat.Loadout.Large;
+		combat.SwapLarge(WeaponCatalog.LockerSwap(was));
+
+		LockerSwaps++;
+		GD.Print($"[locker] peer {combat.PeerId} swapped the {WeaponCatalog.NameOf(was)}"
+			+ $" for the {WeaponCatalog.NameOf(combat.Loadout.Large)}");
 	}
 
 	// ---- transitions -------------------------------------------------------
@@ -483,6 +518,13 @@ public partial class EmplacementManager : Node
 		int gun = NearestGun(at, combat.PeerId, out float gunDistance);
 		int can = NearestCan(at, out float canDistance);
 
+		if (LockerInReach(at, Mathf.Min(gunDistance, canDistance)))
+		{
+			byte large = combat.Loadout.Large;
+			return $"[E] weapon locker: swap the {WeaponCatalog.NameOf(large)}"
+				+ $" for the {WeaponCatalog.NameOf(WeaponCatalog.LockerSwap(large))}";
+		}
+
 		if (can >= 0 && (gun < 0 || canDistance <= gunDistance))
 		{
 			return "[E] take the ammunition can";
@@ -527,8 +569,20 @@ public partial class EmplacementManager : Node
 			}
 		}
 
+		// A locker is never named on the wire, so it needs neither the sort nor the
+		// cap; sorted anyway, so a tie between two is broken the same way on every
+		// peer and the prompt agrees with the server.
+		foreach (Node node in GetTree().GetNodesInGroup(WeaponLocker.Group))
+		{
+			if (node is WeaponLocker locker)
+			{
+				_lockers.Add(locker);
+			}
+		}
+
 		_guns.Sort((a, b) => string.CompareOrdinal(a.Name, b.Name));
 		_cans.Sort((a, b) => string.CompareOrdinal(a.Name, b.Name));
+		_lockers.Sort((a, b) => string.CompareOrdinal(a.Name, b.Name));
 
 		Trim(_guns, SimConfig.MaxEmplacements, "heavy guns");
 		Trim(_cans, SimConfig.MaxAmmoCans, "ammunition cans");
@@ -553,6 +607,7 @@ public partial class EmplacementManager : Node
 		_mounted.Clear();
 		CansSpent = 0;
 		RoundsResupplied = 0;
+		LockerSwaps = 0;
 
 		for (int i = 0; i < _guns.Count; i++)
 		{
@@ -617,6 +672,25 @@ public partial class EmplacementManager : Node
 		}
 
 		return best;
+	}
+
+	/// <summary>
+	/// Whether a weapon locker is within reach of <paramref name="at"/> and nearer
+	/// than <paramref name="nearestOther"/>, the nearest gun or can in reach — so a
+	/// can set down beside a locker is still picked up by walking up to the can.
+	/// </summary>
+	private bool LockerInReach(Vector3 at, float nearestOther)
+	{
+		for (int i = 0; i < _lockers.Count; i++)
+		{
+			float d = at.DistanceTo(_lockers[i].GlobalPosition);
+			if (d <= SimConfig.LockerReachMeters && d < nearestOther)
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/// <summary>Whether this peer is still someone who could be holding something.</summary>

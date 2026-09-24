@@ -36,11 +36,16 @@ public partial class StructureDefinition : Resource
 	public float MaxHealth = 500f;
 
 	/// <summary>
-	/// What fraction of a bullet's damage it takes; explosives always do the whole.
-	/// The number that decides whether rifles or launchers are the answer to it.
+	/// What fraction of a bullet's damage it takes; explosives always do the whole
+	/// (<see cref="Armour"/>). The number that decides whether rifles or launchers
+	/// are the answer to it: the pillbox and the tower are at zero, which small arms
+	/// cannot hurt at all, and a wall of sandbags takes a share (docs/NETCODE.md §10.6).
 	/// </summary>
 	[Export]
 	public float BulletDamageScale = 0.25f;
+
+	/// <summary>True for a structure bullets do nothing to.</summary>
+	public bool IsBulletProof => Armour.IsBulletProof(BulletDamageScale);
 
 	/// <summary>The main box: across the front, front to back, and up.</summary>
 	[Export]

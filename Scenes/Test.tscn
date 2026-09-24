@@ -8,6 +8,7 @@
 [ext_resource type="Script" path="res://Scripts/Fps/Emplacement.cs" id="6_emplacement"]
 [ext_resource type="Script" path="res://Scripts/Fps/AmmoCan.cs" id="7_ammocan"]
 [ext_resource type="Script" path="res://Scripts/Rts/DefenseMount.cs" id="8_defense"]
+[ext_resource type="Script" path="res://Scripts/Fps/WeaponLocker.cs" id="9_locker"]
 
 [sub_resource type="NavigationMesh" id="NavigationMesh_ground"]
 
@@ -282,3 +283,7 @@ script = ExtResource("7_ammocan")
 [node name="AmmoCan4" type="Node3D" parent="." groups=["ammo_can"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0.5, 10)
 script = ExtResource("7_ammocan")
+
+[node name="WeaponLocker1" type="Node3D" parent="." groups=["weapon_locker"]]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 8, 0.5, 11)
+script = ExtResource("9_locker")

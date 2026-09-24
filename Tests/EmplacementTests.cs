@@ -16,8 +16,11 @@ public class EmplacementTests
 {
 	private static UseSituation Situation(UseIntent intent = UseIntent.Tap,
 		CarryKind carrying = CarryKind.None, bool mounted = false, bool gun = false, bool can = false,
-		bool onGround = true) =>
-		new(intent, carrying, mounted, gun, can, onGround);
+		bool onGround = true, bool locker = false) =>
+		new(intent, carrying, mounted, gun, can, onGround, locker);
+
+	/// <summary>What a weapon locker holds, in the catalog's order: DMR, rifle, launcher.</summary>
+	private static readonly byte[] LargeWeapons = { 2, 3, 4 };
 
 	// ---- the use key -------------------------------------------------------
 
@@ -84,6 +87,82 @@ public class EmplacementTests
 		// this is the tie-break arriving already made.
 		Assert.Equal(UseAction.PickUpCan,
 			EmplacementSim.Resolve(Situation(UseIntent.Tap, gun: true, can: true)));
+	}
+
+	// ---- the weapon locker (docs/NETCODE.md §10.6) ------------------------
+
+	[Fact]
+	public void ATapAtALockerSwapsTheLargeWeapon()
+	{
+		Assert.Equal(UseAction.SwapWeapon, EmplacementSim.Resolve(Situation(UseIntent.Tap, locker: true)));
+	}
+
+	[Fact]
+	public void AHoldAtALockerDoesNothing()
+	{
+		// A hold is what carries things off, and there is nothing at a locker to carry.
+		Assert.Equal(UseAction.None, EmplacementSim.Resolve(Situation(UseIntent.Hold, locker: true)));
+	}
+
+	[Fact]
+	public void ALockerIsUsedBeforeAGunOrACanItIsNearerThan()
+	{
+		// The caller only sets LockerInReach when the locker is the nearest thing in
+		// reach, so this is that tie-break arriving already made.
+		Assert.Equal(UseAction.SwapWeapon,
+			EmplacementSim.Resolve(Situation(UseIntent.Tap, gun: true, can: true, locker: true)));
+	}
+
+	[Fact]
+	public void NothingIsSwappedWithSomethingOnYourBackOrYourHandsOnAGun()
+	{
+		// Whatever is being carried is what the key is about, wherever it is pressed:
+		// a can is put down beside the locker rather than kept while a weapon is taken.
+		Assert.Equal(UseAction.DropCan,
+			EmplacementSim.Resolve(Situation(UseIntent.Tap, CarryKind.AmmoCan, locker: true)));
+		Assert.Equal(UseAction.Deploy,
+			EmplacementSim.Resolve(Situation(UseIntent.Tap, CarryKind.Gun, locker: true)));
+		Assert.Equal(UseAction.Dismount,
+			EmplacementSim.Resolve(Situation(UseIntent.Tap, mounted: true, locker: true)));
+	}
+
+	[Theory]
+	[InlineData(3, 4)] // rifle -> launcher: the answer to armour is one tap away
+	[InlineData(4, 2)] // launcher -> DMR
+	[InlineData(2, 3)] // DMR -> rifle, and round again
+	public void ALockerHandsOverTheNextLargeWeapon(byte current, byte next)
+	{
+		Assert.Equal(next, LockerSim.Next(current, LargeWeapons));
+	}
+
+	[Fact]
+	public void ThreeTapsAtALockerAreWhereYouStarted()
+	{
+		byte weapon = 3;
+		for (int i = 0; i < LargeWeapons.Length; i++)
+		{
+			weapon = LockerSim.Next(weapon, LargeWeapons);
+		}
+
+		Assert.Equal(3, weapon);
+	}
+
+	[Fact]
+	public void ALockerNeverHandsOverSomethingItDoesNotHold()
+	{
+		// A hammer or a pistol id in the large slot is not something a sanitized
+		// loadout holds, but a locker answers with a large weapon regardless.
+		Assert.Equal(2, LockerSim.Next(0, LargeWeapons));
+		Assert.Equal(2, LockerSim.Next(200, LargeWeapons));
+		Assert.Equal(7, LockerSim.Next(7, System.ReadOnlySpan<byte>.Empty));
+	}
+
+	[Fact]
+	public void ALargeWeaponIsFoundByItsPlaceInTheLocker()
+	{
+		Assert.Equal(0, LockerSim.IndexOf(2, LargeWeapons));
+		Assert.Equal(2, LockerSim.IndexOf(4, LargeWeapons));
+		Assert.Equal(-1, LockerSim.IndexOf(1, LargeWeapons));
 	}
 
 	[Fact]

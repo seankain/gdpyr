@@ -245,8 +245,10 @@ public static class WeaponSim
 
 /// <summary>
 /// A ground-force player's three weapons, as catalog ids. Chosen before a spawn
-/// and fixed until the next one (docs/IMPLEMENTATION_PLAN.md §M2) — swapping mid-life
-/// would make every respawn a loadout screen and every firefight a menu.
+/// (docs/IMPLEMENTATION_PLAN.md §M2) — a menu mid-life would make every firefight a
+/// menu. The one exception is the large weapon, which a weapon locker at the spawn
+/// swaps (docs/NETCODE.md §10.6): a walk back, not a keypress, and so not something
+/// done in a firefight.
 /// </summary>
 public struct LoadoutSelection
 {

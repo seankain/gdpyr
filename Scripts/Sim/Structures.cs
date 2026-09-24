@@ -366,8 +366,9 @@ public readonly struct Footprint
 /// every builder in reach adds one tick of work a tick, and a site's health rises
 /// with its work, so a site shot at while it is going up finishes as hurt as it
 /// was made. Nothing here knows who the builders are or where they stand — that
-/// is the unit manager's — and so what "twice the builders" buys, and what a
-/// pillbox shrugs off, are tests rather than rounds.
+/// is the unit manager's — and so what "twice the builders" buys is a test rather
+/// than a round. What a hit does to one is <see cref="Armour"/>'s, because a tank is
+/// armoured the same way.
 /// </summary>
 public static class Construction
 {
@@ -448,14 +449,6 @@ public static class Construction
 
 		return health >= max;
 	}
-
-	/// <summary>
-	/// What a hit does to a structure. Explosives do everything they would do to
-	/// anything else; bullets do <paramref name="bulletScale"/> of it, which is what
-	/// makes a launcher the answer to a pillbox and a rifle a poor one.
-	/// </summary>
-	public static float DamageTaken(float amount, bool explosive, float bulletScale) =>
-		amount <= 0f ? 0f : explosive ? amount : amount * MathF.Max(bulletScale, 0f);
 
 	public static bool InReach(in Footprint footprint, Vector3 builder, float reach = ReachMeters) =>
 		footprint.DistanceTo(builder) <= reach;
