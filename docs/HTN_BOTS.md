@@ -1,6 +1,6 @@
 # HTN bots — research and implementation plan
 
-Status: **H3 built; the engine-side checks of H2 and H3 are outstanding** (§6). FluidHTN is vendored at
+Status: **H4 built and checked headless; the display checks of H2–H4 are outstanding** (§6). FluidHTN is vendored at
 `ThirdParty/FluidHTN` and compiled into the game and the tests; `PooledHtnFactory` is in
 `Scripts/Sim/Htn`; `--bot-ai legacy|htn` and `GameModeDefinition.BotAi` are parsed;
 `HtnPlannerTests` holds probes P1–P8 in `dotnet test`. H1 put the four boards of §4.3 in
@@ -11,8 +11,12 @@ the ground domain of §5.1 and its coordinator (`GroundDomain.cs`, `GroundCoordi
 survey on its own scan and a `ZoneBoard` of the nodes. H3 wrote the unit domain of §5.2 and a
 squad census (`UnitDomain.cs`, `SquadCensus.cs`): under `--bot-ai htn` every unit plans with it,
 whoever ordered it — keeping pace with its squad, focusing its squad's target, standing on a post
-round a defended anchor — and the strategist still runs legacy until H4. H0 found one FluidHTN defect the probes had not reached, a queue dropped when a
-paused partial plan is replaced (§3.4, D6). `tools/Gdpyr.HtnBench` — §5.1's domain written against
+round a defended anchor. H4 wrote the strategist's commander of §5.3 (`CommanderDomain.cs`,
+`Commander.cs`): under `--bot-ai htn` a computer strategist forms squads, sends one to a threatened
+zone, stages and strikes at a node or a contact, scouts, pulls a losing squad back and refills a
+depleted one, and leaves a person's units alone. H0 found one FluidHTN defect the probes had not
+reached, a queue dropped when a paused partial plan is replaced (§3.4); the vendored copy carries
+the fix from H4 (D6). `tools/Gdpyr.HtnBench` — §5.1's domain written against
 FluidHTN, the behaviour probes of §3.4 and the cost measurement of §3.5 — and
 `scripts/htn-bench.sh`, which runs them, run against the vendored copy.
 
@@ -112,7 +116,7 @@ The other .NET options are in §3.9; none is close.
 | `allowImmediateReplanAndExecute` (default on) | After a task succeeds or fails, replan and start the next task in the same tick | No idle tick between tasks. An operator can therefore run twice in one tick (#21), so operators must be idempotent; writing an intent is |
 | `IPlannerState` callbacks (`OnNewPlan`, `OnReplacePlan`, `OnNewTask`, `OnCurrentTaskFailed`, `OnCurrentTaskExecutingConditionFailed`, …) | Hooks into every planner event | The debug HUD's plan row, `bot_plan <n>`, and H6's `AgentEventBus` events |
 | Decomposition log, `DebugMTR` | Human-readable traces of decomposition | Development builds only: both build strings |
-| `IFactory` (`CreateArray` / `FreeArray`, `CreateQueue` / `FreeQueue`, …) | Every collection the planner borrows goes through it and is handed back — all but one (D6) | A pooled factory; with it the planner allocates nothing (P8, §3.5), except where a paused partial plan is replaced (D6) |
+| `IFactory` (`CreateArray` / `FreeArray`, `CreateQueue` / `FreeQueue`, …) | Every collection the planner borrows goes through it and is handed back — all but one upstream, which the vendored copy patches (D6) | A pooled factory; with it the planner allocates nothing (P8, §3.5) |
 
 ### 3.3 What a domain looks like in it
 
@@ -225,9 +229,10 @@ What the probes change in the plan:
   Only domains with `PausePlan` reach it — here, the commander's stage → strike (§5.3, H4) — and
   only at the rate squads are pulled out of staging, not per tick. Freeing the queue in
   `TryFindNewPlan`'s found-a-plan branch (one line) makes it 0 B with P1–P8 still passing (checked
-  by applying it and reverting it; the vendored copy is unmodified). Two `HtnPlannerTests` facts
-  pin both halves; the one that asserts the drop fails the day it is fixed. What to do about it is
-  D6.
+  by applying it and reverting it). Two `HtnPlannerTests` facts pinned both halves until H4, which
+  took D6's recommendation: the vendored copy carries that line, recorded in
+  `ThirdParty/FluidHTN/README`, and the second fact now asserts the queue is returned and 0 B
+  (removing the line fails it: checked, then restored).
 
 ### 3.5 Cost
 
@@ -283,7 +288,7 @@ passes; the selector around it stays an ordinary, MTR-tracked `Select` (§5.3).
 | Slots (`Slot` / `TrySetSlotDomain`) belong to the domain, not the agent. | Per-unit-type behaviour (builder, tank, technical) is a separate domain built once, with shared parts spliced in; never a slot swapped per agent at run time. |
 | No random selector in the core; planning reads only the world state and the MTR. | Deterministic (P7). Any variety (which loiter point, which flank) comes from `Spread.Seed`, as `BotBrain` does today. |
 | `DefaultFactory` allocates on every replan. | A pooled `IFactory` is mandatory, and an xUnit test holds it at zero (H0). |
-| A replan that replaces a paused partial plan drops the queue it set the remainder aside in (§3.4, P8). | 128 B per such pre-emption even pooled, in `PausePlan` domains only; pinned by a test, decided in D6 before H4. |
+| A replan that replaces a paused partial plan drops the queue it set the remainder aside in (§3.4, P8). | 128 B per such pre-emption even pooled, in `PausePlan` domains only. Patched in the vendored copy from H4 (D6); a test fails if a bump loses the patch. |
 | The builder's `Do` takes `start` and `forceStop` but not the operator's `abort` callback. | A task that must clean up when aborted gets a builder verb that calls `SetOperator(new FuncOperator<T>(…, funcAborted: …))` directly. |
 | `Build()` throws on a malformed domain; `FindPlan` throws on an uninitialised context. | Both surface at start-up, not mid-round; a test builds every domain. |
 | Task names are strings; the decomposition log and `DebugMTR` build more. | Names are made once at build time. Logging and `DebugMTR` stay off outside development builds. |
@@ -293,11 +298,12 @@ passes; the selector around it stays an ordinary, MTR-tracked `Select` (§5.3).
 Done in H0.
 
 - **`Fluid-HTN/` at `e67af26` is vendored into `ThirdParty/FluidHTN/`**: the library folder's 32
-  `.cs` files (3,340 lines), byte-identical to upstream, without `Properties/AssemblyInfo.cs`, the
-  old-style `.csproj` or the Unity package metadata (`Fluid.HTN.asmdef`, its `.meta`,
-  `package.json`), with upstream's `LICENSE` beside them and the commit in a one-line `README`. Not
-  upstream's `Fluid-HTN.UnitTests/`: it is MSTest, and the glob in §3.5 would compile it into the
-  game. `ThirdParty/.gdignore` keeps the editor from writing `.uid` files into it.
+  `.cs` files (3,340 lines), byte-identical to upstream but for D6's one line (from H4), without
+  `Properties/AssemblyInfo.cs`, the old-style `.csproj` or the Unity package metadata
+  (`Fluid.HTN.asmdef`, its `.meta`, `package.json`), with upstream's `LICENSE` beside them and the
+  commit in a one-line `README`. Not upstream's `Fluid-HTN.UnitTests/`: it is MSTest, and the glob
+  in §3.5 would compile it into the game. `ThirdParty/.gdignore` keeps the editor from writing
+  `.uid` files into it.
 - `Gdpyr.csproj` picks the library up through the SDK's default glob, unchanged (`dotnet build
   Gdpyr.csproj`: 0 warnings, 0 errors); `Tests/Gdpyr.Tests.csproj` has one
   `<Compile Include="../ThirdParty/FluidHTN/**/*.cs" />`, plus the bench's `GroundSketch.cs` and
@@ -306,8 +312,9 @@ Done in H0.
   Bumping the pinned commit is: replace the folder, run `dotnet test` and `./scripts/htn-bench.sh`;
   a change in MTR behaviour fails a test rather than a playtest (checked: disabling
   `Selector.BeatsLastMTR`'s rejection, then reverting it, fails P3).
-- No upstream changes are needed for H0–H3. One defect matters from H4 (D6). If upstream stops, the
-  code is MIT and ours to maintain.
+- No upstream changes were needed for H0–H3. One defect matters from H4 (D6); upstream's head was
+  still `e67af26` when H4 was built, so the vendored copy carries the fix, and a bump either brings
+  it or re-applies it. If upstream stops, the code is MIT and ours to maintain.
 
 ### 3.9 Alternatives considered
 
@@ -392,7 +399,7 @@ human's units alone (D1).
 | `ContactMemory` | Strategist: `VisibilityService.Contacts`. Ground: `BotDirector.GroundContacts`. | A contact is **live** while an observer has reported it within one scan interval (8 ticks for the fog refresh, 10 for a bot's scan), inclusive, so a contact every scan finds never flickers; a **ghost** after that; forgotten 8 s after it was last seen. Seen-by counts distinct observers within that interval: ground bots by roster slot; the fog is one observer, because it stops at the first sensor with a clear line. The strategist records live ground-force players only; the ground side, hostile units and armed structures, and forgets one the tick-10 prune finds dead — the unit snapshot is not fogged for the ground force, so that is parity. Full: a new contact takes the stalest ghost's entry, and is refused if every entry is live; both are counted and both are 0 when sized right. |
 | `Neighbourhood` | The caller, per scan (H2, H3). | Bodies, not strengths, as §5.1 defines outnumbered, with the surveyor counted on its own side. Hostiles are live and ghost contacts within 40 m. Bands enter at 2 : 1 and are held down to 1.5 : 1 (§9). From H3 it also gives the nearest friend's position and the nearest friend in a fight within 40 m, a radius of its own (§5.2's "a friend within 40 m is engaging"). |
 | `ZoneBoard` | The commander and the ground coordinator (H2, H4). | Strength is `ForceRatio.Strength`: cost × health fraction. Bullet-proof contacts are answered by the side's explosives in proportion; the unanswered share counts at `UnansweredArmourScale` times. Observation is range-only against a `VisionField`. `Stalest(kind)` is the least-recently-observed zone, never-seen first. |
-| `SquadBoard` | `UnitManager.Squads`. | One order is one squad; the same issuer, kind and focus within 2 m of a squad's target joins it — which keeps a bot's garrison, reinforced a unit at a time, one squad. A stop, a build order or a death takes a unit out; the last one out closes the squad. Full: the least recently ordered squad is recycled. Membership lives only on the board, and the unit carries its order's issuer and tick. From H3 the unit census moves a squad between moving and engaged; `Stage` (a staging point, and gathering) and `SetPhase` wait for the commander, which sets them from H4, as it will the target zone. |
+| `SquadBoard` | `UnitManager.Squads`. | One order is one squad; the same issuer, kind and focus within 2 m of a squad's target joins it — which keeps a bot's garrison, reinforced a unit at a time, one squad. A stop, a build order or a death takes a unit out; the last one out closes the squad. Full: the least recently ordered squad is recycled. Membership lives only on the board, and the unit carries its order's issuer and tick. From H3 the unit census moves a squad between moving and engaged. From H4 a computer strategist's commander writes, onto the board squads its orders form, the mission (`SetMission`), the staging point and gathering (`Stage`) and falling back (`SetPhase`); its own squads, and their target zones, it keeps itself (§5.3, "as built"). |
 
 ### 4.4 Where it plugs in
 
@@ -576,6 +583,24 @@ commander
 Garrison stays as today's first `GarrisonUnits` defending the first barracks, now a standing
 `Defend Zone` squad. Units a human ordered in the last 30 s are not re-ordered (D1).
 
+**As built in H4** (`Scripts/Sim/Htn/CommanderDomain.cs`, `Commander.cs`; the engine half in
+`BotStrategist`). The tree above is the commander, with these differences, each found by a test or
+by the probe rounds in §6:
+
+| Where | Built | Why |
+|---|---|---|
+| Shape | The tree is per squad. An assignment — a plain function, as the ground coordinator is — gives each squad a task (defend a zone, attack a target, scout) once a decision, and each squad plans over one shared domain: Retreat › Defend Zone › Attack (stage → `PausePlan` → strike) › Recon › Resupply › Hold. Retreat and Resupply are the squad's own facts, not tasks. Economy is not in the tree: `Build` and `Fortify` run every decision, as legacy's do. | One planner runs one plan, and a commander has several squads doing different things at once. Which zone or target a squad takes is scored in the assignment rather than in a condition (§3.6), so that two squads never take the same one. |
+| Squads | The commander keeps its own, up to 8: the garrison (the first `GarrisonUnits` riflemen, legacy's 4), one scout, and assault squads that form from production and are given targets once they reach 4. Strength at formation is the most a squad has been, so units that refill it make up its losses rather than raising the bar. On the `SquadBoard`, the squads its orders form get the mission, the staging point and the phase. | One order is one board squad (§4.3), and stage → strike or a retreat is a new order, which would start a new board squad with a new strength at formation. |
+| Retreat | Below 40 % of strength at formation, with the enemy remembered within 40 m of its centroid at least 1.5 times what is left. Latched until the centroid is within 10 m of the fall-back point, fixed when it starts: the nearest held node or barracks with friends at it (the squad itself not counted) that are not outmatched themselves, else home. A move order. On arrival the squad is merged: its units go back to the pool, which routes them to a squad refilling, else the one forming. Never the garrison. | A retreat that ended once contact was broken would turn round at the next decision (§9, plan thrash). A move rather than an attack-move, so it does not stop for every contact. |
+| Defend Zone | Held nodes and barracks that are contested or have a remembered contact within 60 m, most threatened first. The garrison counts as the defence of its barracks. The nearest idle assault squad at least 1.2 times the threat; with none, the squad still forming goes, and `Fortify` puts that node first ("buy time"). A squad keeps its zone while the threat lasts; one already attacking is not recalled. | §5.3's "nearest idle or reserve squad". |
+| Attack | For an idle, ready squad that is not depleted: the nearest live contact it is at least 1.5 times (the enemy within 25 m of it), named in the order; else the nearest node the ground force holds, then a neutral one; one squad per target. With nothing known it sweeps the ground spawns 25 s each, as legacy does. A squad too weak for everything known holds, and gets the next units produced. It stages 60 m short of the target on its own side, or where it stands if it is nearer: the attack order goes out at once and the board says gathering at the staging point, so its units' "wait for squad" (§5.2) holds them there. It strikes when 80 % are within 12 m of the point, or after 30 s. A new target stages again. | D4: ghosts count in estimates and never name a target. Ground bots see 45 m. A stage that waited for ever on a stuck unit would be P4's lesson again. |
+| Escort armour | A tank never joins the garrison, and neither does a technical, whose sensor is the scout's. A tank joins the assault squad with infantry and the fewest tanks, and forms a squad of its own only when there is none. | "Tanks go only with an infantry squad." |
+| Recon | Wanted after 20 s with no live contact, counted from the first decision, or while a node has gone 60 s unseen. The scout is a technical in no squad, else one in an idle squad out of a fight, else a rifleman in no squad, else one from the squad forming. It patrols to the stalest node, else to the stalest zone the side does not hold, and is disbanded when recon is no longer wanted. | |
+| Resupply | Below 60 % of strength at formation and not in a fight; it ends above 70 %. A move to home's rally point, and the next units produced join it on the way; once home it is merged into the squad forming there, as a retreat is on arrival. No healing (D2). | In the first probe rounds a depleted squad sat at home for the rest of the round: with the ground force holding every node there was no income, and nothing came to refill it. |
+| D1 | A unit is left alone for 30 s after a person or a policy's seat orders it, and for as long as another computer strategist is the last to have ordered it. | Two bots sharing an army otherwise re-order each other's units every decision, as legacy's do. |
+| Orders | Once a decision, the members of a squad not already under its order get it in one batch through `ServerIssueOrder`. A member needs it when the order kind differs, the target is more than 12 m off, or a different contact is named (legacy's `NeedsOrder`). | The reason `NeedsOrder` gives. |
+| Estimates | A ground player is worth two riflemen (100), from the side's `ContactMemory`, live and ghost. | |
+
 ### 5.4 The five tasks at each layer
 
 | Task | Ground bot | RTS unit | Strategist commander |
@@ -732,7 +757,7 @@ Estimates in solo-dev days, as IMPLEMENTATION_PLAN.md §4 counts them. Each phas
   Scenario-placed units have no issuer and no squad, so under `htn` they obey, and a lone defender's
   post is its anchor: the scenarios should play as they do under legacy, but that is a prediction.
 
-### H4 — Strategist commander (3 days)
+### H4 — Strategist commander (3 days) — built; the display check is outstanding
 
 - Commander domain (§5.3) over the boards; `Build` / `Fortify` as primitives; human-claim rule.
 - `CommanderHtnTests`: contested node + idle squad → `Defend Zone` on that node; no contact for 20 s +
@@ -740,6 +765,68 @@ Estimates in solo-dev days, as IMPLEMENTATION_PLAN.md §4 counts them. Each phas
   unchanged.
 - **Done when:** in a bot-only round the strategist retakes a denied node, a technical scouts, and a
   losing squad withdraws rather than dying in place.
+- **Result:** `dotnet test` 1236 passed, 0 failed (1184 before; 52 new: 51 in `CommanderHtnTests`, 1
+  in `SquadBoardTests`), 0 warnings; `StrategistBrainTests` unchanged; `dotnet build Gdpyr.csproj`
+  0 warnings, 0 errors; `./scripts/htn-bench.sh --probe` passes all nine. `CommanderHtnTests` has
+  the three cases above as facts. It also covers every row of the squad domain; stage → strike
+  through `PausePlan`, and the stage's time limit; a taken node ending the attack; a live contact
+  named and a ghost never named (D4); the weak squad that waits and is sent production; buy time;
+  the garrison as the defence of home; recon by stale node and by quiet; where a retreat goes, and
+  its merge on arrival; refill and its merge at home; escort armour; D1; every operator ending
+  when its premise goes (a theory over seven operator and premise pairs); and the P3 case on the
+  real domain. On a round in miniature over 64 units it checks determinism across 2,000 decisions
+  that reach every goal, and 0 B over 4,000 decisions after 800 of warm-up with the pooled factory
+  (the same run with `DefaultFactory` must allocate). Checked to fail, then reverted: without
+  Scout's executing condition, 2 fail; with a stage that never ends, 5; without D6's line, 1.
+- **D6** is done (§8): the vendored `Planner.cs` carries the one line and the pinning test asserts
+  0 B.
+- **Cost, the engine-free half.** A scratch program, not committed, running `Commander.Decide` for
+  64 units with 6 live contacts: 11.2, 11.3 and 45.7 µs per decision over three runs of 3,600
+  decisions (the slow one the first, still compiling), one decision every 30 ticks: at most
+  1.5 µs a tick; 4-core Intel Xeon @ 2.80 GHz, .NET SDK 8.0.131. The squad contexts are walked through every branch when they are
+  made, because a slot that first fell back late in a round allocated then; after that a round
+  allocates nothing.
+- **What the checks showed.** Godot 4.6 .NET was available this time; everything ran headless
+  through the harness.
+  - All twelve scenarios in `Tests/Scenarios` pass under `legacy` and under `htn`, H3's
+    outstanding scenario check included. `builder_fortifies` and `strategist_economy` have a
+    computer strategist, so under `htn` they now play the commander.
+  - A temporary probe, not committed, logged the commander's squads, their tasks and the node
+    holders every 600 ticks, and each fall-back, strike and reinforcement as it happened. It ran
+    over a scenario, not committed either: six ground seats (five bots, one idle scripted seat so
+    that the bots fill), one computer strategist, and a technical placed at its barracks. For a
+    like-for-like comparison, a temporary switch, also not committed, kept the strategist on
+    legacy while the ground bots and units stayed on `htn`. Two seeds of six minutes each:
+
+    | | Strategist legacy | Strategist `htn` |
+    |---|---|---|
+    | Node samples (3 nodes, once a decision) held by the strategist | 0 of 3,705 | 490 of 3,654 |
+    | Denied nodes retaken | 0 | 1 |
+    | Neutral nodes taken | 0 | 2 |
+    | Seed 2 | holds no node | holds all three from tick ≈ 34,800 until the round resets at 36,816 |
+
+  - **Retakes a denied node:** yes, in every `htn` run long enough to have a squad ready: a 3-minute
+    round (node 1 at tick 5,771, after a staged strike), the six-minute seed 2 above, and a
+    six-minute run without the placed technical (node 1 at tick 28,101).
+  - **A technical scouts:** yes, once technicals were kept out of the garrison: in a 2-minute round
+    all 46 decisions with a scout out had the technical as the scout. Before that change, the
+    technical placed first on the field joined the garrison and a rifleman scouted.
+  - **A losing squad withdraws:** the one squad that met Retreat's condition, in the 3-minute round
+    (tick 8,501: 1 unit left, 259 of 650), fell back and arrived alive. No unit died while falling
+    back in any round. Most squads shrank by attrition without meeting the condition, which needs
+    the enemy remembered within 40 m of the squad at 1.5 times what is left: the fog saw the
+    ground bots only intermittently. Those squads went home depleted through Resupply instead.
+  - Two changes came out of the probe rounds, both in §5.3's table: a depleted squad that reaches
+    home is merged, where the first rounds had one sit there for the rest of the round with
+    nothing to refill it; and technicals stay out of the garrison.
+- **Found, not caused by H4, not changed here.** With the ground bots on `htn`, the ground force
+  held the nodes for most of each round (ground-held in 2,455 and 2,281 of the samples above), and
+  while it held them all the strategist had no income: the legacy arm built 9 units in each seed,
+  the `htn` arm 9 in seed 1 and 38 in seed 2, the one where it took the nodes. With so few units
+  `TryChooseTier`'s infantry-per-heavy screen never buys a technical, which is why the scenario
+  places one. Economy balance is H6's playtest question.
+- **Left for a display check:** a `--listen` round with the HUD's `commander` row on screen, and
+  H2's and H3's display checks (§6 above).
 
 ### H5 — Unit resupply (0.5–1 day, only if D2 is adopted)
 
@@ -784,7 +871,7 @@ Total: about 10–12 days before playtesting.
 | D3 | May a ground bot know what a **teammate** has seen? | Yes, as a team `ContactMemory` — the equivalent of voice callouts, and less than a human client already draws (the unit snapshot is not fogged for the ground force, IMPLEMENTATION_PLAN.md §M4). Today a bot knows only its own eyes (`BotTraits.SensorRadiusMeters`). |
 | D4 | May the computer strategist act on **ghosts** (last-known positions)? `BotStrategist.TryObjective` deliberately does not. | Yes, for Recon and for staging only, and never to name a target: a human strategist can click a ghost (M4), so the bot doing so is parity, not cheating. |
 | D5 | The scripted bots are the RL baseline ("beats the bot" should stay true, RL_ARCHITECTURE.md). | Keep `legacy` selectable for ever; `scripts/evaluate.sh` and the trainer pin `--bot-ai legacy` until a deliberate re-baseline, and training output records which one was used. |
-| D6 | FluidHTN drops a borrowed queue when a plan replaces a paused partial plan: 128 B per pre-emption, pooled or not (§3.4, P8). Needed only from H4, whose stage → strike is the one `PausePlan`. | Before H4: offer the one-line fix upstream; if it has not landed by then, patch the vendored copy with that line, record the patch in `ThirdParty/FluidHTN/README`, and flip the pinning test to assert 0 B. Accepting the allocation is the fallback: it is per event, not per tick. |
+| D6 | FluidHTN drops a borrowed queue when a plan replaces a paused partial plan: 128 B per pre-emption, pooled or not (§3.4, P8). Needed only from H4, whose stage → strike is the one `PausePlan`. | Before H4: offer the one-line fix upstream; if it has not landed by then, patch the vendored copy with that line, record the patch in `ThirdParty/FluidHTN/README`, and flip the pinning test to assert 0 B. Accepting the allocation is the fallback: it is per event, not per tick. **Done in H4:** upstream's head was still `e67af26`; the vendored copy is patched, the README records it, and the test asserts 0 B. Offering the fix upstream is left to the maintainer. |
 
 ---
 

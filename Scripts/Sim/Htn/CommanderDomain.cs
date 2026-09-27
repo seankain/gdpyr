@@ -268,8 +268,9 @@ public sealed class CommandContext : BaseContext
 	public Vector3 FallbackPoint;
 	public bool AtFallback;
 
-	/// <summary>Where a depleted squad refills: home.</summary>
+	/// <summary>Where a depleted squad refills: home; and whether the squad is there.</summary>
 	public Vector3 HomePoint;
+	public bool AtHome;
 
 	/// <summary>Where a squad with nothing to do waits.</summary>
 	public Vector3 ReservePoint;
@@ -277,7 +278,7 @@ public sealed class CommandContext : BaseContext
 	/// <summary>The tick the running operator started on.</summary>
 	public uint GoalStartTick;
 
-	/// <summary>A retreat arrived: the commander returns the squad's units to its pool, which merges them.</summary>
+	/// <summary>A retreat or a refill arrived: the commander returns the squad's units to its pool, which merges them.</summary>
 	public bool Arrived;
 
 	public byte Get(CommandFact fact) => GetState((int)fact);
@@ -305,6 +306,7 @@ public sealed class CommandContext : BaseContext
 		Assembled = false;
 		FallbackPoint = default;
 		AtFallback = false;
+		AtHome = false;
 		GoalStartTick = 0;
 		Arrived = false;
 	}
@@ -363,6 +365,14 @@ public sealed class CommandContext : BaseContext
 				return Order(OrderKind.Patrol, TaskPoint, OwnerId.None, SquadMission.Recon, SquadPhase.Moving);
 
 			case CommandGoal.Refill:
+				if (AtHome)
+				{
+					// Home: merged into whatever is forming there, which production fills
+					// whether or not any comes (§5.3, "route the next produced units into it").
+					Arrived = true;
+					return TaskStatus.Success;
+				}
+
 				return Order(OrderKind.Move, HomePoint, OwnerId.None, SquadMission.Resupply, SquadPhase.Moving);
 
 			case CommandGoal.Hold:

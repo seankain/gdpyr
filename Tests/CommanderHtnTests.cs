@@ -453,6 +453,20 @@ public class CommanderHtnTests
 	}
 
 	[Fact]
+	public void TheFirstUnitOnTheField_BeingATechnical_IsNotTheGarrison_AndScouts()
+	{
+		var rig = new Rig();
+		ushort technical = rig.Add(Vector3.Zero, Technical, scout: true);
+		rig.AddRiflemen(4);
+		rig.Decide();
+		Assert.NotEqual(Commander.GarrisonSlot, rig.Commander.SquadOf(technical));
+		Assert.Equal(4, rig.Squad(Commander.GarrisonSlot).Members);
+
+		rig.Decide(times: SimConfig.TickRate * 20 / 30);
+		Assert.Equal(CommandRole.Scout, rig.Squad(rig.Commander.SquadOf(technical)).Role);
+	}
+
+	[Fact]
 	public void WithNoTechnical_ARiflemanScouts()
 	{
 		var rig = new Rig(traits: With(reconQuietTicks: 0));
@@ -660,6 +674,34 @@ public class CommanderHtnTests
 	}
 
 	[Fact]
+	public void ADepletedSquadThatReachesHome_IsMergedIntoTheSquadForming()
+	{
+		Vector3 far = FarNode + new Vector3(0f, 0f, -20f);
+		(Rig rig, int assault) = Attacking(far);
+		ushort[] members = rig.Members(assault);
+		rig.Kill(members[0]);
+		rig.Kill(members[1]);
+		rig.Decide();
+		Assert.Equal(CommandGoal.Refill, rig.Intent(assault).Goal);
+
+		// Nothing produced: it walks home, and there it stops being a squad of its own.
+		rig.Move(assault, Home);
+		rig.Decide();
+		rig.Decide();
+
+		int forming = rig.Commander.SquadOf(members[2]);
+		Assert.Equal(forming, rig.Commander.SquadOf(members[3]));
+		Assert.False(rig.Squad(forming).Ready);
+		Assert.Equal(CommandGoal.Hold, rig.Intent(forming).Goal);
+
+		// Two more and it is four again, and ready.
+		rig.Add(Home);
+		rig.Add(Home);
+		rig.Decide();
+		Assert.True(rig.Squad(forming).Ready);
+	}
+
+	[Fact]
 	public void ADepletedSquadInAFight_KeepsFighting()
 	{
 		Vector3 far = FarNode + new Vector3(0f, 0f, -20f);
@@ -781,6 +823,20 @@ public class CommanderHtnTests
 		squad.C.Sense(CommandFact.Task, (byte)CommandTask.Defend);
 		squad.Tick();
 		Assert.Equal(CommandGoal.Reinforce, squad.Goal);
+	}
+
+	[Fact]
+	public void ARefillAtHome_SaysItHasArrived()
+	{
+		var squad = new Squad();
+		squad.C.Sense(CommandFact.Depleted, true);
+		squad.Tick();
+		Assert.Equal(CommandGoal.Refill, squad.Goal);
+		Assert.False(squad.C.Arrived);
+
+		squad.C.AtHome = true;
+		squad.Tick();
+		Assert.True(squad.C.Arrived);
 	}
 
 	[Fact]
@@ -944,8 +1000,8 @@ public class CommanderHtnTests
 	{
 		var first = new List<string>();
 		var second = new List<string>();
-		Churn(new Rig(), 800, first);
-		Churn(new Rig(), 800, second);
+		Churn(new Rig(), 2000, first);
+		Churn(new Rig(), 2000, second);
 
 		Assert.Equal(first, second);
 
@@ -967,12 +1023,12 @@ public class CommanderHtnTests
 	public void P8_ACommanderDecides_WithoutAllocating()
 	{
 		// Warmed first: the pooled factory makes an array or a queue the first time a
-		// plan needs one of a new size, and a round in miniature takes a while to
-		// reach every size.
+		// plan needs one of a new size. Contexts are walked through every branch when
+		// they are made (CommanderPlanning.CreateContext), so this is short.
 		var rig = new Rig();
-		Churn(rig, 1600);
+		Churn(rig, 800);
 
-		Assert.Equal(0, Churn(rig, 2400));
+		Assert.Equal(0, Churn(rig, 4000));
 		Assert.Equal(0, rig.Commander.Overflows);
 	}
 

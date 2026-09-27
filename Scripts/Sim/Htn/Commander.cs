@@ -143,10 +143,42 @@ public sealed class CommanderPlanning
 
 	public Planner<CommandContext> Planner { get; } = new();
 
+	/// <summary>
+	/// A context, walked once through every branch of the domain and cleared again: a
+	/// context grows its plan queue, traversal record and change stacks the first
+	/// time a plan needs them, and a squad slot that first falls back or strikes an
+	/// hour into a round would otherwise allocate then (§4.2 rule 3).
+	/// </summary>
 	public CommandContext CreateContext()
 	{
 		var context = new CommandContext(Factory, Traits);
 		context.Init();
+
+		for (int branch = 0; branch < 6; branch++)
+		{
+			context.Clear();
+			context.Sense(CommandFact.FallingBack, branch == 0);
+			context.Sense(CommandFact.Task, (byte)(branch switch
+			{
+				1 => CommandTask.Defend,
+				2 or 3 => CommandTask.Attack,
+				4 => CommandTask.Recon,
+				_ => CommandTask.None,
+			}));
+			context.Sense(CommandFact.Depleted, branch == 5);
+			context.Assembled = branch == 3;
+
+			// Twice: a staged attack strikes on its second decision.
+			Planner.Tick(Domain, context);
+			Planner.Tick(Domain, context);
+
+			// And a pre-emption of whatever is running.
+			context.Sense(CommandFact.FallingBack, true);
+			Planner.Tick(Domain, context);
+			Planner.Reset(context);
+		}
+
+		context.Clear();
 		return context;
 	}
 }
@@ -417,15 +449,16 @@ public sealed class Commander
 
 	/// <summary>
 	/// Puts every unit in no squad into one, in the unit manager's order: the garrison
-	/// while it is short, one scout when recon is wanted, then a depleted squad that
-	/// is refilling, then — for a tank — an infantry squad to escort it, then an idle
-	/// squad too weak for its target, then the squad forming from production.
+	/// while it is short, riflemen only — a tank goes with infantry, and a technical's
+	/// 70 m sensor is wasted at home; one scout when recon is wanted; then a depleted
+	/// squad that is refilling; then, for a tank, an infantry squad to escort it; then
+	/// an idle squad too weak for its target; then the squad forming from production.
 	/// </summary>
 	private void Route(uint tick, ReadOnlySpan<CommandUnit> units)
 	{
 		for (int i = 0; i < units.Length; i++)
 		{
-			if (Free(units, i) && !units[i].Armour && _squads[GarrisonSlot].Members < _traits.GarrisonUnits)
+			if (Free(units, i) && !units[i].Armour && !units[i].Scout && _squads[GarrisonSlot].Members < _traits.GarrisonUnits)
 			{
 				Join(Ensure(GarrisonSlot, CommandRole.Garrison, tick), units, i);
 			}
@@ -1292,6 +1325,7 @@ public sealed class Commander
 		context.FallbackPoint = squad.FallbackPoint;
 		context.AtFallback = Flat(squad.Centroid, squad.FallbackPoint) <= _traits.ArriveMeters;
 		context.HomePoint = world.Home;
+		context.AtHome = Flat(squad.Centroid, world.Home) <= _traits.ArriveMeters;
 		context.ReservePoint = Reserve(world);
 		context.Arrived = false;
 
@@ -1305,7 +1339,9 @@ public sealed class Commander
 		if (context.Arrived)
 		{
 			// Merged on arrival (§5.3): its units go back to the pool, and the next
-			// decision routes them — to a squad refilling, else the one forming.
+			// decision routes them — to a squad refilling, else the one forming. A
+			// depleted squad that has reached home is merged the same way, rather than
+			// holding a slot until production that may never come refills it.
 			Dissolve(s, units);
 		}
 	}
