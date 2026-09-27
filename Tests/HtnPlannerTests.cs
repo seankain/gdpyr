@@ -7,12 +7,13 @@ using FluidHTN.Debug;
 using FluidHTN.Factory;
 using Gdpyr.HtnBench;
 using Gdpyr.Sim;
-using Gdpyr.Sim.Htn;
 using Xunit;
 
-// The sketch's own fact, which the game's Gdpyr.Sim.Htn.OddsBand mirrors; the probes
-// drive the sketch until H2 writes the real domain.
+// The probes pin the library, on the bench's sketch of the ground domain — the one
+// ./scripts/htn-bench.sh runs — so the sketch's names win here over the real
+// domain's in Gdpyr.Sim.Htn, which GroundHtnTests covers.
 using OddsBand = Gdpyr.HtnBench.OddsBand;
+using PooledHtnFactory = Gdpyr.Sim.Htn.PooledHtnFactory;
 
 namespace Gdpyr.Tests;
 

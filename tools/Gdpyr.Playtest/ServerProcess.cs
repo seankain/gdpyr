@@ -34,7 +34,8 @@ public sealed class ServerProcess : IDisposable
 	public string LogPath { get; private init; } = string.Empty;
 
 	public static async Task<ServerProcess> StartAsync(string godot, string projectDirectory, int agentPort,
-		int gamePort, int groundBots, int strategistBots, string logPath, CancellationToken cancel = default)
+		int gamePort, int groundBots, int strategistBots, string logPath, string botAi = null,
+		CancellationToken cancel = default)
 	{
 		var start = new ProcessStartInfo(godot)
 		{
@@ -54,6 +55,14 @@ public sealed class ServerProcess : IDisposable
 		start.ArgumentList.Add($"127.0.0.1:{agentPort}");
 		start.ArgumentList.Add("--bots");
 		start.ArgumentList.Add($"{groundBots}:{strategistBots}");
+
+		// Left to the server's own default — legacy, the RL baseline (docs/HTN_BOTS.md
+		// §8, D5) — unless a run asks for the HTN bots by name.
+		if (!string.IsNullOrEmpty(botAi))
+		{
+			start.ArgumentList.Add("--bot-ai");
+			start.ArgumentList.Add(botAi);
+		}
 
 		Process process;
 		try

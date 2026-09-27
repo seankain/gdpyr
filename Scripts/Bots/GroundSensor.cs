@@ -250,7 +250,8 @@ public static class GroundSensor
 		return 0;
 	}
 
-	private static bool CanHurt(in GroundContact contact, bool explosive) => explosive || !contact.BulletProof;
+	/// <summary>Whether a weapon of this kind does anything to it: an explosive hurts everything, a bullet only what is not bullet-proof.</summary>
+	public static bool CanHurt(in GroundContact contact, bool explosive) => explosive || !contact.BulletProof;
 
 	/// <summary>Whether the level lets these two points see each other.</summary>
 	public static bool HasLineOfSight(Node3D viewer, Vector3 from, Vector3 to) =>

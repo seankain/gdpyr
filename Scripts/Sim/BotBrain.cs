@@ -134,9 +134,20 @@ public readonly struct BotSituation
 	/// </summary>
 	public readonly bool HoldFire;
 
+	/// <summary>
+	/// True when getting to the destination matters more than holding a range: a bot
+	/// leaving a barracks' guns, falling back or running to the weapon locker shoots on
+	/// the move instead of stopping to strafe (docs/HTN_BOTS.md §5.1).
+	/// </summary>
+	public readonly bool KeepMoving;
+
+	/// <summary>Press the use key this tick. The pilot releases it on the next, which makes it a tap (<see cref="UseTracker"/>).</summary>
+	public readonly bool Use;
+
 	public BotSituation(bool alive, float yaw, float pitch, float speed, bool hasTarget, Vector3 aimDirection,
 		float targetDistance, bool targetVisible, int ticksOnTarget, bool hasDestination, Vector3 moveDirection,
-		float destinationDistance, bool stuck, bool needsReload, bool semiAutomatic = false, bool holdFire = false)
+		float destinationDistance, bool stuck, bool needsReload, bool semiAutomatic = false, bool holdFire = false,
+		bool keepMoving = false, bool use = false)
 	{
 		Alive = alive;
 		Yaw = yaw;
@@ -154,6 +165,8 @@ public readonly struct BotSituation
 		NeedsReload = needsReload;
 		SemiAutomatic = semiAutomatic;
 		HoldFire = holdFire;
+		KeepMoving = keepMoving;
+		Use = use;
 	}
 }
 
@@ -256,7 +269,7 @@ public static class BotBrain
 	/// </summary>
 	private static Vector3 WalkDirection(uint tick, int peerId, in BotSituation situation, in BotTraits traits)
 	{
-		if (situation.HasTarget && situation.TargetVisible
+		if (situation.HasTarget && situation.TargetVisible && !situation.KeepMoving
 			&& situation.TargetDistance <= traits.PreferredRangeMeters)
 		{
 			Vector3 forward = situation.AimDirection;
@@ -348,6 +361,12 @@ public static class BotBrain
 			// a bot dies holding an empty rifle. An empty magazine under fire reloads
 			// itself through WeaponSim, which is the behaviour a player would get.
 			buttons |= InputButtons.Reload;
+		}
+
+		if (situation.Use)
+		{
+			// A weapon locker's tap: pressed for this tick, released on the next.
+			buttons |= InputButtons.Use;
 		}
 
 		if (situation.Stuck)

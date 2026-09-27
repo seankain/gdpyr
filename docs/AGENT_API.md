@@ -691,7 +691,8 @@ machine-readable summary on `--json`, and a trace file to re-run.
 **The harness starts the server itself**, one per scenario file, because the roster a scenario wants
 is in the scenario file: `--bots 6:1` is a launch option, and a wrapper that had to read the JSON to
 build a command line would be a JSON parser written in bash. `--attach` uses a server somebody
-already started instead. Everything binds loopback, and `deploy/gdpyr-server.service` still never
+already started instead. `--bot-ai htn` starts it with the HTN bots of docs/HTN_BOTS.md; without
+it the server's default, legacy, is what a scenario plays against (§8 of that document, D5). Everything binds loopback, and `deploy/gdpyr-server.service` still never
 passes `--agent-api` (§4.1).
 
 **The metric vocabulary**, which is what an assertion's `metric` names:

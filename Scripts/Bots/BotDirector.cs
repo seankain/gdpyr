@@ -43,6 +43,20 @@ public sealed class BotDirector
 
 	private uint _nextReconcileTick;
 	private uint _nextPruneTick;
+	private uint _nextCoordinateTick;
+
+	/// <summary>
+	/// The ground domain every ground bot shares under <c>--bot-ai htn</c>, and the
+	/// team layer above it (docs/HTN_BOTS.md §4.1, §5.1). Both null for legacy.
+	/// </summary>
+	private readonly GroundPlanning _groundPlanning;
+	private readonly GroundCoordinator _coordinator;
+
+	// The coordinator's inputs and outputs, reused every assignment.
+	private readonly GroundMember[] _members = new GroundMember[SnapshotCodec.MaxPlayers];
+	private readonly BotPilot[] _memberPilots = new BotPilot[SnapshotCodec.MaxPlayers];
+	private readonly GroundOrders[] _orders = new GroundOrders[SnapshotCodec.MaxPlayers];
+	private readonly GroundNode[] _nodes = new GroundNode[SimConfig.MaxResourceNodes];
 
 	public BotDirector(GameModeDefinition gameMode, LaunchOptions options)
 	{
@@ -58,9 +72,16 @@ public sealed class BotDirector
 				+ $" while anyone is connected, bot ai {BotAiNames.Name(Ai)}"
 			: "[bots] disabled");
 
-		if (Enabled && Ai == BotAi.Htn)
+		if (Ai == BotAi.Htn)
 		{
-			GD.Print("[bots] no HTN domain is written yet (docs/HTN_BOTS.md §6, H2-H4): every bot runs legacy");
+			_groundPlanning = new GroundPlanning(GroundPlanTraits.Default);
+			_coordinator = new GroundCoordinator(BotRoster.MaxBots, GroundCoordinatorTraits.Default);
+
+			if (Enabled)
+			{
+				GD.Print("[bots] ground bots plan with the HTN (docs/HTN_BOTS.md §5.1);"
+					+ " units and the strategist still run legacy until H3-H4");
+			}
 		}
 	}
 
@@ -71,8 +92,9 @@ public sealed class BotDirector
 	public int StrategistTarget { get; }
 
 	/// <summary>
-	/// What the bots decide with: <c>--bot-ai</c>, else the game mode's. Nothing
-	/// reads it yet; the HTN deciders land in H2-H4 (docs/HTN_BOTS.md §6).
+	/// What the bots decide with: <c>--bot-ai</c>, else the game mode's. From H2 the
+	/// ground bots follow it; units and the strategist do from H3 and H4
+	/// (docs/HTN_BOTS.md §6).
 	/// </summary>
 	public BotAi Ai { get; }
 
@@ -83,7 +105,7 @@ public sealed class BotDirector
 	/// bot's own scan has found — enemy units and armed structures — pooled for the
 	/// team, as callouts would pool it. Sized for everything the strategist can field
 	/// at once, with one observer per roster slot, live for one scan interval.
-	/// Nothing reads it to decide yet; the ground domain does from H2.
+	/// Under <c>--bot-ai htn</c> the ground domain plans on it (§5.1).
 	/// </summary>
 	public ContactMemory GroundContacts { get; } = new(SimConfig.MaxUnits + SimConfig.MaxStructures,
 		BotRoster.MaxBots, BotPilot.ScanIntervalTicks);
@@ -111,6 +133,12 @@ public sealed class BotDirector
 		{
 			_nextPruneTick = tick + (uint)BotPilot.ScanIntervalTicks;
 			PruneGroundContacts(tick);
+		}
+
+		if (_coordinator != null && _pilots.Count > 0 && tick >= _nextCoordinateTick)
+		{
+			_nextCoordinateTick = tick + (uint)GroundCoordinator.IntervalTicks;
+			CoordinateGround(tick);
 		}
 
 		AgentServer agents = AgentServer.Instance;
@@ -226,6 +254,118 @@ public sealed class BotDirector
 				memory.Forget(ownerId);
 			}
 		}
+	}
+
+	/// <summary>
+	/// The ground coordinator's assignment (docs/HTN_BOTS.md §5.1): every ground-force
+	/// player counted, people and seats a policy drives included, and the orders
+	/// handed to the bots this director drives. A seat an external policy holds is
+	/// counted as a person: its pilot is not the one deciding.
+	/// </summary>
+	private void CoordinateGround(uint tick)
+	{
+		CombatManager combat = CombatManager.Instance;
+		if (combat == null)
+		{
+			return;
+		}
+
+		AgentServer agents = AgentServer.Instance;
+		int count = 0;
+		for (int i = 0; i < combat.PlayerCount && count < _members.Length; i++)
+		{
+			PlayerCombat player = combat.PlayerAt(i);
+			if (player == null || player.Team != Team.GroundForce || player.AwaitingRole || player.Character == null)
+			{
+				continue;
+			}
+
+			BotPilot pilot = _pilots.TryGetValue(player.PeerId, out BotPilot found) && found.Plans
+				&& !(agents?.IsAttached(player.PeerId) ?? false)
+					? found
+					: null;
+
+			_memberPilots[count] = pilot;
+			_members[count++] = new GroundMember
+			{
+				Id = player.PeerId,
+				Slot = pilot != null ? BotRoster.SlotOf(player.PeerId) : -1,
+				Alive = player.IsAlive,
+				Position = player.Character.SimPosition,
+				Explosive = player.Loadout.Large == WeaponCatalog.Launcher,
+				SensorRadiusMeters = pilot?.SensorRadiusMeters ?? BotTraits.Default.SensorRadiusMeters,
+				FailedLockerTrips = pilot?.FailedLockerTrips ?? 0,
+			};
+		}
+
+		EconomyService economy = combat.Economy;
+		int nodes = 0;
+		for (int i = 0; i < economy.NodeCount && nodes < _nodes.Length; i++)
+		{
+			ResourceNode node = economy.NodeAt(i);
+			_nodes[nodes++] = node == null
+				? default
+				: new GroundNode
+				{
+					Position = node.GlobalPosition,
+					RadiusMeters = node.CaptureRadiusMeters,
+					Holder = node.Capture.Owner,
+				};
+		}
+
+		Vector3 spawn = PlayerManager.Instance?.SpawnCentroid ?? Vector3.Zero;
+		Vector3 locker = Vector3.Zero;
+		bool hasLocker = EmplacementManager.Instance?.TryNearestLocker(spawn, out locker) ?? false;
+
+		_coordinator.Assign(tick, _members.AsSpan(0, count), _nodes.AsSpan(0, nodes), GroundContacts, spawn,
+			hasLocker, locker, _orders);
+
+		for (int i = 0; i < count; i++)
+		{
+			_memberPilots[i]?.Apply(_orders[i]);
+			_memberPilots[i] = null;
+		}
+	}
+
+	/// <summary>
+	/// What the planning ground bots are doing, for the debug HUD: how many run each
+	/// task, and the roles the coordinator handed out. Empty under legacy.
+	/// </summary>
+	public string DescribeGroundPlans()
+	{
+		if (_groundPlanning == null)
+		{
+			return string.Empty;
+		}
+
+		Span<int> goals = stackalloc int[(int)GroundGoal.Standoff + 1];
+		int deniers = 0;
+		int runners = 0;
+		int sweepers = 0;
+		foreach (BotPilot pilot in _pilots.Values)
+		{
+			goals[(int)pilot.Goal]++;
+			deniers += pilot.Role == GroundRole.Denier ? 1 : 0;
+			runners += pilot.Role == GroundRole.LockerRunner ? 1 : 0;
+			sweepers += pilot.Sweeping ? 1 : 0;
+		}
+
+		var text = new System.Text.StringBuilder();
+		for (int g = 1; g < goals.Length; g++)
+		{
+			if (goals[g] > 0)
+			{
+				text.Append(goals[g]).Append(' ').Append((GroundGoal)g).Append("  ");
+			}
+		}
+
+		if (goals[0] > 0)
+		{
+			text.Append(goals[0]).Append(" idle  ");
+		}
+
+		text.Append($"| {deniers} denier {runners} runner {sweepers} sweep");
+		return text.ToString();
 	}
 
 	// ---- roster ------------------------------------------------------------
@@ -400,7 +540,7 @@ public sealed class BotDirector
 		else
 		{
 			Equip(combat, peerId);
-			_pilots[peerId] = new BotPilot(peerId, character, BotTraits.Default, GroundContacts);
+			_pilots[peerId] = new BotPilot(peerId, character, BotTraits.Default, GroundContacts, _groundPlanning);
 		}
 
 		GD.Print($"[bots] {BotRoster.NameOf(peerId)} joined as {team}");
