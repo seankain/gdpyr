@@ -1,8 +1,13 @@
 # HTN bots — research and implementation plan
 
-Status: **proposal**. Nothing in the game plans with an HTN yet. The only code this document adds is
-`tools/Gdpyr.HtnBench` — §5.1's domain written against FluidHTN, the behaviour probes of §3.4 and the
-cost measurement of §3.5 — and `scripts/htn-bench.sh`, which runs them.
+Status: **H0 done** (§6). FluidHTN is vendored at `ThirdParty/FluidHTN` and compiled into the game
+and the tests; `PooledHtnFactory` is in `Scripts/Sim/Htn`; `--bot-ai legacy|htn` and
+`GameModeDefinition.BotAi` are parsed, and `htn` still runs legacy; `HtnPlannerTests` holds probes
+P1–P8 in `dotnet test`. Nothing in the game plans with an HTN yet: that starts at H2. H0 found one
+FluidHTN defect the probes had not reached, a queue dropped when a paused partial plan is replaced
+(§3.4, D6). `tools/Gdpyr.HtnBench` — §5.1's domain written against FluidHTN, the behaviour probes of
+§3.4 and the cost measurement of §3.5 — and `scripts/htn-bench.sh`, which runs them, now run against
+the vendored copy.
 
 Scope: replace the goal selection of the three computer-controlled deciders — the ground bot
 (`BotPilot`), the RTS unit (`UnitManager.SimulateUnit` over `UnitBrain`) and the computer strategist
@@ -100,7 +105,7 @@ The other .NET options are in §3.9; none is close.
 | `allowImmediateReplanAndExecute` (default on) | After a task succeeds or fails, replan and start the next task in the same tick | No idle tick between tasks. An operator can therefore run twice in one tick (#21), so operators must be idempotent; writing an intent is |
 | `IPlannerState` callbacks (`OnNewPlan`, `OnReplacePlan`, `OnNewTask`, `OnCurrentTaskFailed`, `OnCurrentTaskExecutingConditionFailed`, …) | Hooks into every planner event | The debug HUD's plan row, `bot_plan <n>`, and H6's `AgentEventBus` events |
 | Decomposition log, `DebugMTR` | Human-readable traces of decomposition | Development builds only: both build strings |
-| `IFactory` (`CreateArray` / `FreeArray`, `CreateQueue` / `FreeQueue`, …) | Every collection the planner borrows goes through it and is handed back | A pooled factory; with it the planner allocates nothing (P8, §3.5) |
+| `IFactory` (`CreateArray` / `FreeArray`, `CreateQueue` / `FreeQueue`, …) | Every collection the planner borrows goes through it and is handed back — all but one (D6) | A pooled factory; with it the planner allocates nothing (P8, §3.5), except where a paused partial plan is replaced (D6) |
 
 ### 3.3 What a domain looks like in it
 
@@ -179,7 +184,9 @@ and asks a scripted world whether it has finished.
 ### 3.4 Verified behaviour
 
 `./scripts/htn-bench.sh --probe` runs each against the sketch domain and exits non-zero on any
-failure. Result at `v0.4.1` / `e67af26`, all nine passing:
+failure; since H0, P1–P8 are also `Tests/HtnPlannerTests.cs`, so `dotnet test` fails on them too.
+Result at `v0.4.1` / `e67af26`, all nine passing — re-run in H0 against the vendored copy and
+`PooledHtnFactory`, with the same results but P9's domain figure (the factory's per-instance pools):
 
 | Probe | What it establishes | Observed |
 |---|---|---|
@@ -190,8 +197,8 @@ failure. Result at `v0.4.1` / `e67af26`, all nine passing:
 | P5 partial plan | `PausePlan` defers the rest of a sequence until the first part finishes | Squad sketch: `[stage]` while assembling, then `[strike]` |
 | P6 shared domain | One `Domain` and one `Planner` for every agent gives each agent the trace it gets with its own | 16 agents × 3,000 ticks of pseudo-random facts: per-agent trace hashes identical |
 | P7 determinism | Same facts, same trace | Two runs identical |
-| P8 zero allocation | With a pooled `IFactory` the planner allocates nothing on the tick | 64 agents, 7,200 ticks, 253,425 dirtying fact changes: **0 bytes** |
-| P9 memory | One-off costs | Building the §5.1 domain: 17,752 B, once. One agent's context: 856 B before its first plan (64 units ≈ 55 KB) |
+| P8 zero allocation | With a pooled `IFactory` the planner allocates nothing on the tick | 64 agents, 7,200 ticks, 253,425 dirtying fact changes: **0 bytes**. Found in H0, outside the sketch (it has no `PausePlan`): a plan that replaces a *paused* partial plan allocates, pooled or not — below |
+| P9 memory | One-off costs | Building the §5.1 domain: 18,216 B, once (17,752 B with the bench's original static-pool factory). One agent's context: 856 B before its first plan (64 units ≈ 55 KB) |
 
 What the probes change in the plan:
 
@@ -202,6 +209,18 @@ What the probes change in the plan:
   drops the locker-runner role after a trip that produced no explosive.
 - **P6:** sharing is safe *because* the server tick is single-threaded. Planning never moves to a
   worker thread without a domain per thread.
+- **P8, partial plans (H0):** when a fact changes while a partial plan is paused,
+  `Planner.PrepareDirtyWorldStateForReplan` sets the paused remainder aside in a
+  `Queue<PartialPlanEntry>` borrowed from the factory, and `Planner.TryFindNewPlan` returns it only
+  when no new plan is found. A plan that *replaces* the paused one drops the queue: each such
+  pre-emption allocates one, pooled or not. Measured over 100 stage → retreat → strike rounds:
+  100 queues borrowed, 0 returned, 128 B a pre-emption; the same rounds without the retreat, 0 B.
+  Only domains with `PausePlan` reach it — here, the commander's stage → strike (§5.3, H4) — and
+  only at the rate squads are pulled out of staging, not per tick. Freeing the queue in
+  `TryFindNewPlan`'s found-a-plan branch (one line) makes it 0 B with P1–P8 still passing (checked
+  by applying it and reverting it; the vendored copy is unmodified). Two `HtnPlannerTests` facts
+  pin both halves; the one that asserts the drop fails the day it is fixed. What to do about it is
+  D6.
 
 ### 3.5 Cost
 
@@ -220,9 +239,12 @@ code. Three runs each, 4-core Intel Xeon @ 2.10 GHz, .NET SDK 8.0.131:
 | pooled | every tick | 92.8–125.8 µs (0.56–0.75%) | **0 B** | **0** |
 
 Byte counts were identical on every run; times moved by up to a third between runs on this shared
-VM. Conclusions: time is not the constraint — the real cost will be the conditions and sensors the
-game supplies, which is why facts are encoded on the existing scans (§4.2) — and **the default
-factory is not acceptable** on a path that must not allocate, while a pooled one costs nothing.
+VM. Re-run in H0 against the vendored copy and `PooledHtnFactory`, same machine type and SDK, three
+runs each: pooled 42.6–53.9 µs (every 10 ticks) and 68.6–75.0 µs (every tick), **0 B** on every row;
+`DefaultFactory` 2,918.4 B and 3,583.9 B per tick, identical to the table. Conclusions: time is not
+the constraint — the real cost will be the conditions and sensors the game supplies, which is why
+facts are encoded on the existing scans (§4.2) — and **the default factory is not acceptable** on a
+path that must not allocate, while a pooled one costs nothing.
 
 It builds on net8.0 with 0 warnings and 0 errors, unchanged, with `Nullable` off as this repo's
 projects have it — once `Properties/AssemblyInfo.cs` is left out. Left in, the game assembly fails
@@ -254,22 +276,31 @@ passes; the selector around it stays an ordinary, MTR-tracked `Select` (§5.3).
 | Slots (`Slot` / `TrySetSlotDomain`) belong to the domain, not the agent. | Per-unit-type behaviour (builder, tank, technical) is a separate domain built once, with shared parts spliced in; never a slot swapped per agent at run time. |
 | No random selector in the core; planning reads only the world state and the MTR. | Deterministic (P7). Any variety (which loiter point, which flank) comes from `Spread.Seed`, as `BotBrain` does today. |
 | `DefaultFactory` allocates on every replan. | A pooled `IFactory` is mandatory, and an xUnit test holds it at zero (H0). |
+| A replan that replaces a paused partial plan drops the queue it set the remainder aside in (§3.4, P8). | 128 B per such pre-emption even pooled, in `PausePlan` domains only; pinned by a test, decided in D6 before H4. |
 | The builder's `Do` takes `start` and `forceStop` but not the operator's `abort` callback. | A task that must clean up when aborted gets a builder verb that calls `SetOperator(new FuncOperator<T>(…, funcAborted: …))` directly. |
 | `Build()` throws on a malformed domain; `FindPlan` throws on an uninitialised context. | Both surface at start-up, not mid-round; a test builds every domain. |
 | Task names are strings; the decomposition log and `DebugMTR` build more. | Names are made once at build time. Logging and `DebugMTR` stay off outside development builds. |
 
 ### 3.8 How it is taken in
 
-- **Vendor `Fluid-HTN/` at `e67af26` into `ThirdParty/FluidHTN/`**: the library folder only, without
-  `Properties/AssemblyInfo.cs` or the old-style `.csproj`, with upstream's `LICENSE` beside it and
-  the commit in a one-line `README`. Not upstream's `Fluid-HTN.UnitTests/`: it is MSTest, and the
-  glob in §3.5 would compile it into the game.
-- `Gdpyr.csproj` picks the library up through the SDK's default glob; `Tests/Gdpyr.Tests.csproj`
-  needs one `<Compile Include="../ThirdParty/FluidHTN/**/*.cs" />`.
-- The probes move into xUnit (`HtnPlannerTests`) in H0, over the real domains as they are written.
-  Bumping the pinned commit is then: replace the folder, run `dotnet test` and
-  `./scripts/htn-bench.sh`; a change in MTR behaviour fails a test rather than a playtest.
-- No upstream changes are needed. If upstream stops, the code is MIT and ours to maintain.
+Done in H0.
+
+- **`Fluid-HTN/` at `e67af26` is vendored into `ThirdParty/FluidHTN/`**: the library folder's 32
+  `.cs` files (3,340 lines), byte-identical to upstream, without `Properties/AssemblyInfo.cs`, the
+  old-style `.csproj` or the Unity package metadata (`Fluid.HTN.asmdef`, its `.meta`,
+  `package.json`), with upstream's `LICENSE` beside them and the commit in a one-line `README`. Not
+  upstream's `Fluid-HTN.UnitTests/`: it is MSTest, and the glob in §3.5 would compile it into the
+  game. `ThirdParty/.gdignore` keeps the editor from writing `.uid` files into it.
+- `Gdpyr.csproj` picks the library up through the SDK's default glob, unchanged (`dotnet build
+  Gdpyr.csproj`: 0 warnings, 0 errors); `Tests/Gdpyr.Tests.csproj` has one
+  `<Compile Include="../ThirdParty/FluidHTN/**/*.cs" />`, plus the bench's `GroundSketch.cs` and
+  `Population.cs` for the probes.
+- The probes are in xUnit (`HtnPlannerTests`), on the sketch domain until H2–H4 write the real ones.
+  Bumping the pinned commit is: replace the folder, run `dotnet test` and `./scripts/htn-bench.sh`;
+  a change in MTR behaviour fails a test rather than a playtest (checked: disabling
+  `Selector.BeatsLastMTR`'s rejection, then reverting it, fails P3).
+- No upstream changes are needed for H0–H3. One defect matters from H4 (D6). If upstream stops, the
+  code is MIT and ours to maintain.
 
 ### 3.9 Alternatives considered
 
@@ -515,7 +546,7 @@ Garrison stays as today's first `GarrisonUnits` defending the first barracks, no
 Estimates in solo-dev days, as IMPLEMENTATION_PLAN.md §4 counts them. Each phase ships behind
 `--bot-ai htn` and leaves `legacy` untouched.
 
-### H0 — Planner in the tree (0.5 day)
+### H0 — Planner in the tree (0.5 day) — done
 
 - Vendor FluidHTN at `e67af26` (§3.8); `Tests` include line; `PooledHtnFactory` in `Scripts/Sim/Htn`,
   from the bench's `PooledFactory`.
@@ -525,6 +556,14 @@ Estimates in solo-dev days, as IMPLEMENTATION_PLAN.md §4 counts them. Each phas
   `dotnet test`. They start on the sketch domain and move to the real ones as H2–H4 write them.
 - **Done when:** `dotnet test` passes with FluidHTN compiled in, and `./scripts/htn-bench.sh --probe`
   uses the vendored copy and still passes all nine.
+- **Result:** `dotnet test` 942 passed, 0 failed (908 before; 34 new: 16 in `HtnPlannerTests`, 6 in
+  `PooledHtnFactoryTests`, 12 in `LaunchOptionsTests`), 0 warnings. `./scripts/htn-bench.sh --probe`
+  runs on `ThirdParty/FluidHTN` with the game's `PooledHtnFactory`: all nine pass; the pooled cost
+  rows read 0 B (§3.5). `dotnet build Gdpyr.csproj`: 0 warnings, 0 errors. The guards were checked
+  to fail: no MTR rejection fails P3; unpooled arrays fail both P8 zero-allocation facts; unpooled
+  queues fail the factory tests. Beyond the plan: the partial-plan finding and D6 (§3.4), and
+  `BotDirector` resolving `--bot-ai` over the game mode and logging, for `htn`, that every bot
+  still runs legacy.
 
 ### H1 — Shared knowledge (1.5 days)
 
@@ -605,6 +644,7 @@ Total: about 10–12 days before playtesting.
 | D3 | May a ground bot know what a **teammate** has seen? | Yes, as a team `ContactMemory` — the equivalent of voice callouts, and less than a human client already draws (the unit snapshot is not fogged for the ground force, IMPLEMENTATION_PLAN.md §M4). Today a bot knows only its own eyes (`BotTraits.SensorRadiusMeters`). |
 | D4 | May the computer strategist act on **ghosts** (last-known positions)? `BotStrategist.TryObjective` deliberately does not. | Yes, for Recon and for staging only, and never to name a target: a human strategist can click a ghost (M4), so the bot doing so is parity, not cheating. |
 | D5 | The scripted bots are the RL baseline ("beats the bot" should stay true, RL_ARCHITECTURE.md). | Keep `legacy` selectable for ever; `scripts/evaluate.sh` and the trainer pin `--bot-ai legacy` until a deliberate re-baseline, and training output records which one was used. |
+| D6 | FluidHTN drops a borrowed queue when a plan replaces a paused partial plan: 128 B per pre-emption, pooled or not (§3.4, P8). Needed only from H4, whose stage → strike is the one `PausePlan`. | Before H4: offer the one-line fix upstream; if it has not landed by then, patch the vendored copy with that line, record the patch in `ThirdParty/FluidHTN/README`, and flip the pinning test to assert 0 B. Accepting the allocation is the fallback: it is per event, not per tick. |
 
 ---
 

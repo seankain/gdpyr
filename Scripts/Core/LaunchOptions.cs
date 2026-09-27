@@ -41,6 +41,7 @@ public sealed class LaunchOptions
 	public const string Usage =
 		"usage: gdpyr [--server [port]] | [--client <host[:port]>] | [--listen [port]]\n" +
 		"             [--bots <ground>[:<strategists>]] | [--no-bots]\n" +
+		"             [--bot-ai legacy|htn]\n" +
 		"             [--name <text>] [--no-advertise]\n" +
 		"             [--agent-api [host:]port] [--agent-token <token>]\n" +
 		"             [--agent-unbounded] [--agent-omniscient]\n" +
@@ -50,6 +51,7 @@ public sealed class LaunchOptions
 		"  --listen [port]         authority plus a local player\n" +
 		"  --bots <n>[:<m>]        fill each side to n ground and m strategists with bots\n" +
 		"  --no-bots               no computer players, whatever the game mode says\n" +
+		"  --bot-ai legacy|htn     what computer players decide with (docs/HTN_BOTS.md)\n" +
 		"  --name <text>           what this server calls itself in the browser (default: the hostname)\n" +
 		"  --no-advertise          do not answer LAN discovery; the address still works\n" +
 		"  --agent-api [host:]port listen for external policies (docs/AGENT_API.md); loopback by default\n" +
@@ -82,6 +84,12 @@ public sealed class LaunchOptions
 
 	/// <summary>Strategists to keep filled. See <see cref="GroundBots"/>.</summary>
 	public int? StrategistBots { get; private init; }
+
+	/// <summary>
+	/// What the computer players decide with (docs/HTN_BOTS.md §4.2 rule 6). Null
+	/// means "whatever the game mode says", as with <see cref="GroundBots"/>.
+	/// </summary>
+	public Gdpyr.Sim.BotAi? BotAi { get; private init; }
 
 	/// <summary>
 	/// What this server calls itself in another machine's server browser
@@ -158,6 +166,11 @@ public sealed class LaunchOptions
 			mode += $" | bots {Describe(GroundBots)} ground, {Describe(StrategistBots)} strategist";
 		}
 
+		if (BotAi is { } ai)
+		{
+			mode += $" | bot ai {Gdpyr.Sim.BotAiNames.Name(ai)}";
+		}
+
 		if (ServerName != null)
 		{
 			mode += $" | name '{ServerName}'";
@@ -211,6 +224,7 @@ public sealed class LaunchOptions
 		int? groundBots = null;
 		int? strategistBots = null;
 		bool botsRefused = false;
+		Gdpyr.Sim.BotAi? botAi = null;
 		string serverName = null;
 		bool advertise = true;
 		int? agentPort = null;
@@ -291,6 +305,27 @@ public sealed class LaunchOptions
 					{
 						return Failure($"--bots: {error}");
 					}
+					break;
+				}
+
+				case "--bot-ai":
+				{
+					if (botAi.HasValue)
+					{
+						return Failure("--bot-ai given twice");
+					}
+
+					if (!TryTakeValue(args, ref i, out string value))
+					{
+						return Failure("--bot-ai needs legacy or htn, e.g. --bot-ai htn");
+					}
+
+					if (!Gdpyr.Sim.BotAiNames.TryParse(value, out Gdpyr.Sim.BotAi parsed))
+					{
+						return Failure($"--bot-ai: '{value}' is not legacy or htn");
+					}
+
+					botAi = parsed;
 					break;
 				}
 
@@ -462,6 +497,7 @@ public sealed class LaunchOptions
 			Port = port,
 			GroundBots = groundBots,
 			StrategistBots = strategistBots,
+			BotAi = botAi,
 			ServerName = serverName,
 			Advertise = advertise,
 			AgentPort = agentPort,

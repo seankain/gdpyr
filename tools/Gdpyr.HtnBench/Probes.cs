@@ -5,6 +5,7 @@ using FluidHTN;
 using FluidHTN.Contexts;
 using FluidHTN.Debug;
 using FluidHTN.Factory;
+using Gdpyr.Sim.Htn;
 
 namespace Gdpyr.HtnBench;
 
@@ -67,7 +68,7 @@ public static class Probes
 
 		public Agent(bool executingConditions = true, Func<GroundContext, GroundGoal, TaskStatus> world = null)
 		{
-			IFactory factory = new PooledFactory();
+			IFactory factory = new PooledHtnFactory();
 			Domain = GroundDomain.Build(factory, executingConditions);
 			Context = new GroundContext(factory) { World = world };
 			Context.Init();
@@ -234,7 +235,7 @@ public static class Probes
 	{
 		private readonly byte[] _facts = new byte[1];
 
-		public SquadContext() => Factory = new PooledFactory();
+		public SquadContext() => Factory = new PooledHtnFactory();
 
 		public override IFactory Factory { get; protected set; }
 		public override IPlannerState PlannerState { get; protected set; } = new DefaultPlannerState();
@@ -255,7 +256,7 @@ public static class Probes
 	/// </summary>
 	private static string PartialPlan()
 	{
-		Domain<SquadContext> domain = new DomainBuilder<SquadContext>("squad", new PooledFactory())
+		Domain<SquadContext> domain = new DomainBuilder<SquadContext>("squad", new PooledHtnFactory())
 			.Sequence("attack")
 				.Action("stage").Do(c =>
 				{
@@ -330,7 +331,7 @@ public static class Probes
 	/// </summary>
 	private static ulong[] Traces(int agents, int ticks, bool sharedDomain)
 	{
-		IFactory factory = new PooledFactory();
+		IFactory factory = new PooledHtnFactory();
 		Domain<GroundContext> one = GroundDomain.Build(factory);
 		var planner = new Planner<GroundContext>();
 
@@ -368,7 +369,7 @@ public static class Probes
 
 	private static string ZeroAllocation()
 	{
-		IFactory factory = new PooledFactory();
+		IFactory factory = new PooledHtnFactory();
 		Domain<GroundContext> domain = GroundDomain.Build(factory);
 		var planner = new Planner<GroundContext>();
 		GroundContext[] agents = Population.Create(Program.Agents, factory);
@@ -399,7 +400,7 @@ public static class Probes
 	/// <summary>What a domain and one agent cost to create. Reported, not judged.</summary>
 	private static string Memory()
 	{
-		IFactory factory = new PooledFactory();
+		IFactory factory = new PooledHtnFactory();
 
 		long before = GC.GetAllocatedBytesForCurrentThread();
 		GroundDomain.Build(factory);

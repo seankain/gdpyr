@@ -1,3 +1,4 @@
+using Gdpyr.Sim;
 using Godot;
 
 namespace Gdpyr.Match;
@@ -57,4 +58,12 @@ public partial class GameModeDefinition : Resource
 	/// </summary>
 	[Export]
 	public int BotStrategists = 1;
+
+	/// <summary>
+	/// What the computer players decide with (docs/HTN_BOTS.md §4.2 rule 6);
+	/// <c>--bot-ai</c> overrides it. Legacy until H6: the scripted bots are what
+	/// trained policies are measured against (§8, D5).
+	/// </summary>
+	[Export]
+	public BotAi BotAi = BotAi.Legacy;
 }

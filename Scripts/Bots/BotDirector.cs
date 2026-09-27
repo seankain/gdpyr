@@ -48,11 +48,17 @@ public sealed class BotDirector
 
 		GroundTarget = Math.Clamp(ground, 0, BotRoster.MaxBots);
 		StrategistTarget = Math.Clamp(strategists, 0, TeamService.MaxStrategists);
+		Ai = options?.BotAi ?? gameMode?.BotAi ?? BotAi.Legacy;
 
 		GD.Print(Enabled
 			? $"[bots] backfilling to {GroundTarget} ground force and {StrategistTarget} strategist(s)"
-				+ " while anyone is connected"
+				+ $" while anyone is connected, bot ai {BotAiNames.Name(Ai)}"
 			: "[bots] disabled");
+
+		if (Enabled && Ai == BotAi.Htn)
+		{
+			GD.Print("[bots] no HTN domain is written yet (docs/HTN_BOTS.md §6, H2-H4): every bot runs legacy");
+		}
 	}
 
 	/// <summary>Ground-force players wanted in total, humans included.</summary>
@@ -60,6 +66,12 @@ public sealed class BotDirector
 
 	/// <summary>Strategists wanted in total, humans included.</summary>
 	public int StrategistTarget { get; }
+
+	/// <summary>
+	/// What the bots decide with: <c>--bot-ai</c>, else the game mode's. Nothing
+	/// reads it yet; the HTN deciders land in H2-H4 (docs/HTN_BOTS.md §6).
+	/// </summary>
+	public BotAi Ai { get; }
 
 	public bool Enabled => GroundTarget > 0 || StrategistTarget > 0;
 
