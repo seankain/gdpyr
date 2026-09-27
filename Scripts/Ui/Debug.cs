@@ -358,6 +358,13 @@ public partial class Debug : PanelContainer
 		{
 			SetProperty("bots", $"{bots.GroundBots}/{bots.GroundTarget} ground"
 				+ $"  {bots.StrategistBots}/{bots.StrategistTarget} strategist");
+
+			// Under --bot-ai htn: how many ground bots run each task, and the roles the
+			// coordinator handed out (docs/HTN_BOTS.md §5.1). Nothing under legacy.
+			if (bots.Ai == BotAi.Htn)
+			{
+				SetProperty("ground plan", bots.DescribeGroundPlans());
+			}
 		}
 
 		NetworkManager net = NetworkManager.Instance;

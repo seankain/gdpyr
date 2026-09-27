@@ -41,6 +41,7 @@ public static class Program
 		int gamePort = 7777;
 		bool attach = false;
 		bool json = false;
+		string botAi = null;
 
 		for (int i = 0; i < args.Length; i++)
 		{
@@ -53,6 +54,7 @@ public static class Program
 				case "--port" when i + 1 < args.Length: port = int.Parse(args[++i]); break;
 				case "--game-port" when i + 1 < args.Length: gamePort = int.Parse(args[++i]); break;
 				case "--token" when i + 1 < args.Length: token = args[++i]; break;
+				case "--bot-ai" when i + 1 < args.Length: botAi = args[++i]; break;
 				case "--attach": attach = true; break;
 				case "--json": json = true; break;
 				case "--help":
@@ -89,7 +91,7 @@ public static class Program
 			{
 				Scenario scenario = Scenario.Load(path);
 				result = await RunAsync(scenario, godot, project, host, port, gamePort, token, attach,
-					traceDirectory).ConfigureAwait(false);
+					traceDirectory, botAi).ConfigureAwait(false);
 			}
 			catch (ScenarioException error)
 			{
@@ -128,7 +130,7 @@ public static class Program
 	}
 
 	private static async Task<ScenarioResult> RunAsync(Scenario scenario, string godot, string project,
-		string host, int port, int gamePort, string token, bool attach, string traceDirectory)
+		string host, int port, int gamePort, string token, bool attach, string traceDirectory, string botAi)
 	{
 		ServerProcess server = null;
 		try
@@ -138,7 +140,7 @@ public static class Program
 				Directory.CreateDirectory(traceDirectory);
 				server = await ServerProcess.StartAsync(godot, project, port, gamePort, scenario.GroundBots,
 					scenario.StrategistBots,
-					Path.Combine(traceDirectory, $"server-{port}.log")).ConfigureAwait(false);
+					Path.Combine(traceDirectory, $"server-{port}.log"), botAi).ConfigureAwait(false);
 			}
 
 			using GdpyrConnection connection = await GdpyrConnection.ConnectAsync(host, port, token)
@@ -266,6 +268,7 @@ public static class Program
 		  --port <port>        agent channel port (default 7900)
 		  --game-port <port>   the server's own UDP port (default 7777)
 		  --token <token>      agent token, when the server was started with one
+		  --bot-ai <ai>        what the server's bots decide with: legacy (the server's default) or htn
 		  --trace-dir <dir>    where traces and server logs go (default build/playtest)
 		  --json               print a machine-readable summary instead of the human one
 

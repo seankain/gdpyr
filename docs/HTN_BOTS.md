@@ -1,14 +1,16 @@
 # HTN bots — research and implementation plan
 
-Status: **H1 done** (§6). FluidHTN is vendored at `ThirdParty/FluidHTN` and compiled into the game
-and the tests; `PooledHtnFactory` is in `Scripts/Sim/Htn`; `--bot-ai legacy|htn` and
-`GameModeDefinition.BotAi` are parsed, and `htn` still runs legacy; `HtnPlannerTests` holds probes
-P1–P8 in `dotnet test`. H1 put the four boards of §4.3 in `Scripts/Sim/Htn` and fed three of them in
-the running game: each side's `ContactMemory` and the strategist's `SquadBoard`, with the order
-issuer on every unit; the debug HUD shows them. `Neighbourhood` and `ZoneBoard` are built and tested
-and wait for the scans that will run them (H2–H4). Nothing in the game plans with an HTN yet: that
-starts at H2. H0 found one FluidHTN defect the probes had not reached, a queue dropped when a paused
-partial plan is replaced (§3.4, D6). `tools/Gdpyr.HtnBench` — §5.1's domain written against
+Status: **H2 built; its `--listen` check with the HUD is outstanding** (§6). FluidHTN is vendored at
+`ThirdParty/FluidHTN` and compiled into the game and the tests; `PooledHtnFactory` is in
+`Scripts/Sim/Htn`; `--bot-ai legacy|htn` and `GameModeDefinition.BotAi` are parsed;
+`HtnPlannerTests` holds probes P1–P8 in `dotnet test`. H1 put the four boards of §4.3 in
+`Scripts/Sim/Htn` and fed three of them in the running game: each side's `ContactMemory` and the
+strategist's `SquadBoard`, with the order issuer on every unit; the debug HUD shows them. H2 wrote
+the ground domain of §5.1 and its coordinator (`GroundDomain.cs`, `GroundCoordinator.cs`): under
+`--bot-ai htn` every ground bot plans with it, on the team's `ContactMemory`, a `Neighbourhood`
+survey on its own scan and a `ZoneBoard` of the nodes; units and the strategist still run legacy
+until H3 and H4. H0 found one FluidHTN defect the probes had not reached, a queue dropped when a
+paused partial plan is replaced (§3.4, D6). `tools/Gdpyr.HtnBench` — §5.1's domain written against
 FluidHTN, the behaviour probes of §3.4 and the cost measurement of §3.5 — and
 `scripts/htn-bench.sh`, which runs them, run against the vendored copy.
 
@@ -395,7 +397,7 @@ human's units alone (D1).
 | File | Change |
 |---|---|
 | `ThirdParty/FluidHTN/` | Vendored library (§3.8). |
-| `Scripts/Sim/Htn/` (new) | `PooledHtnFactory`, fact enums, `GroundContext` / `UnitContext` / `CommanderContext`, the three domain builders, `ContactMemory`, `Neighbourhood`, `ZoneBoard`, `SquadBoard`, `GroundIntent` / `UnitIntent`. |
+| `Scripts/Sim/Htn/` (new) | `PooledHtnFactory`, fact enums, `GroundContext` / `UnitContext` / `CommanderContext`, the three domain builders, `GroundCoordinator`, `ContactMemory`, `Neighbourhood`, `ZoneBoard`, `SquadBoard`, `GroundIntent` / `UnitIntent`. |
 | `Scripts/Bots/BotPilot.cs` | `Sample` asks the ground domain for a `GroundIntent` instead of calling `Objective`; `AcquireTarget` prefers the intent's target. `OutsideDefences`, `Reachable`, stuck recovery, the friendly-fire and blast checks stay. `BotBrain` gains a `Use` press (a locker tap). |
 | `Scripts/Bots/BotDirector.cs` | Owns the ground coordinator and the team `ContactMemory`; builds pilots and commanders with the selected `BotAi`. Agent fallback branches unchanged. |
 | `Scripts/Rts/UnitManager.cs` | In `SimulateUnit`, after acquisition and before `UnitBrain.Destination`, run the unit's planner and apply its `UnitIntent` (destination override, target preference, hold). `ApplyOrder` records the order batch as a squad and the issuer on the unit. |
@@ -473,6 +475,20 @@ a third of the team; at most one locker runner while armour is in `ContactMemory
 bots hold an explosive, and the role is taken away after a trip that produced no explosive (the
 give-up fact P4 showed the domain needs); a focus target per contact cluster (lowest health first,
 then nearest); buddy pairs by proximity. Humans are counted for strength but never given roles.
+
+**As built in H2** (`Scripts/Sim/Htn/GroundDomain.cs`, `GroundCoordinator.cs`). The tree above is
+the domain, with these differences, each found by a test or by the probe round in §6:
+
+| Where | Built | Why |
+|---|---|---|
+| Facts | An eleventh fact, `Sweep`: the coordinator has given this bot a stale node. `Contact=ghost` means the team remembers a contact within 100 m that this bot's own scan did not find. `ThreatKind=armour` means nothing in the contact is soft: a rifleman facing a tank and the infantry beside it has a fight. | Recon's sweep needs a fact to pre-empt Standoff with. A tank must not stop a rifleman shooting the riflemen next to it. |
+| Bands | Health: ok ≥ 60 %, critical < 30 %, each held 5 points past its edge once entered. `AlliesNear`: entered at 15 m, held to 18 m. `Odds` is `Neighbourhood`'s band. `Armed` is written every tick, the rest on the scan. | §9, plan thrash. A locker swap lands between scans and the next task is planned on what it produced. |
+| Resupply | `PathToLocker` and `UseLocker` hold only while the bot is still the runner; `UseLocker` taps use every quarter-second while the weapon in hand is not a launcher (a rifle needs one swap, a DMR two) and gives up after 2 s; `PathToLocker` after 30 s. A give-up is counted on the context, and the coordinator takes the role away for 30 s. `Reload` also ends when something comes into view. | P3 and P4. Resupply is above Attack, so only an executing condition ends a reload that a contact interrupts. |
+| Attack | "press with allies" needs `Contact=visible` as well — with a ghost it would plan `AdvanceWithBuddy` and abort it on the same tick, every tick. "investigate ghost" is infantry only — a rifleman has nothing to do at a tank's last-known position, and a launcher has "engage armour", which walks to the nearest known armour when none is in sight — and not for a denier, whose job is its node. `EngageArmour` holds while there is a contact and it is armour; `AdvanceWithBuddy` while not outnumbered. | P3: every long-running operator ends when its premise does. |
+| Defend Zone | A denier stands 40 % of the capture radius off the node's centre on the side facing the ground spawn, swung per bot by up to 60°. | The first probe round sent a denier to a point on the barracks side of the middle node, inside the barracks' defended ring (it reaches ~117 m); `OutsideDefences` held it on the ring's edge for good. |
+| Movement | Each intent says how to get there: `Target` (at the target, else the intent's point), `Point` (to the point, strafing a target inside preferred range as the brain does), `Run` (to the point, shooting on the move: `BotSituation.KeepMoving`), `Stay`, `Standoff` (today's `Objective()`). Leave defences, fall back, the walk to the locker and take node run. | A bot falling back that stopped to strafe would not be falling back. |
+| Targets | The pilot still acquires on its own scan; it prefers the intent's target — the coordinator's focus — when the scan can see it and the weapon can hurt it. | The micro is unchanged (§4.2); the plan only biases it. |
+| Coordinator | Deniers go to strategist-held nodes nearest the spawn, then to neutral ones, never to ground-held ones, and keep their node while it still wants one. The runner is the living small-arms bot nearest the locker; people's launchers count towards the two. One sweeper, to the node no ground player has been within 40 m of for 30 s. The focus is, per bot, the weakest live contact it could see and hurt (then the nearest, then the lowest id) — bots in one place share it, which is a cluster without clustering. Buddies are the closest pairs, people included. A seat an external policy drives counts as a person. | Sticky roles keep a denier from being swapped for whoever walks past. |
 
 ### 5.2 RTS unit
 
@@ -609,7 +625,7 @@ Estimates in solo-dev days, as IMPLEMENTATION_PLAN.md §4 counts them. Each phas
   the ground memory forgets dead units and destroyed structures on a 10-tick prune, which the unit
   snapshot already shows every ground client.
 
-### H2 — Ground bot HTN (2–3 days)
+### H2 — Ground bot HTN (2–3 days) — built; the `--listen` check is outstanding
 
 - Ground facts, domain (§5.1), coordinator; `BotPilot` consumes `GroundIntent`; `BotBrain` taps `Use`.
 - `GroundHtnTests`: for each row of the domain, a fact vector and the task chain it must produce —
@@ -618,6 +634,50 @@ Estimates in solo-dev days, as IMPLEMENTATION_PLAN.md §4 counts them. Each phas
 - **Done when:** in a `--listen` round with `--bot-ai htn`, bots stand on strategist nodes (the HUD's
   `nodes` row shows contested nodes), a bot fetches a launcher after a tank is seen, and the
   `locker_launcher_vs_tank` scenario still passes.
+- **Result so far:** `dotnet test` 1080 passed, 0 failed (1004 before; 76 new: 59 in
+  `GroundHtnTests`, 17 in `GroundCoordinatorTests`), 0 warnings; `dotnet build Gdpyr.csproj` 0
+  warnings, 0 errors. `GroundHtnTests` covers every row of §5.1, Retreat pre-empting a running
+  Attack, the P3 case on the real domain, every long-running operator ending when its premise goes
+  (a theory over all ten), the locker trip, both give-ups, the fact bands and their hysteresis,
+  determinism, and zero bytes over 64 bots × 7,200 ticks with the pooled factory (the same run with
+  `DefaultFactory` must allocate, so the guard can fail). Removing `Sweep`'s executing condition and
+  the give-up count fails five of them (checked, then reverted). `HtnPlannerTests` stays on the
+  bench's sketch: it pins the library, and the bench still runs that sketch. The playtest harness
+  takes `--bot-ai` and passes it to the server it starts; without it a scenario plays legacy, as
+  before.
+- **What the checks showed.** Headless, through the harness rather than `--listen` (Godot 4.6 .NET):
+  - All twelve scenarios in `Tests/Scenarios` pass under `legacy` and under `htn`, and
+    `./scripts/htn-bench.sh --probe` still passes all nine. `locker_launcher_vs_tank` is among them;
+    its one ground seat is policy-driven, so under `htn` it passes without the planner deciding
+    anything.
+  - A temporary probe, not committed, logged every bot's task, role and position and every node's
+    holder every 300 ticks, over a scenario not committed either: five ground bots, the computer
+    strategist (legacy), one idle ground seat so that the bots fill, a tank on the middle node; two
+    seeds of three minutes. **A bot fetched a launcher after the tank was seen**: at tick 1500 of a
+    90 s run the coordinator made a rifleman the runner once one of the two launcher bots had died,
+    and the log has `peer …830 swapped the rifle for the launcher`, 300 ticks before it was
+    advancing with it. In the three-minute rounds two launchers were in hand nearly all the time, so
+    no runner was needed. **Denial**: ticks with a node the ground force holds, 17,835 of 21,600
+    under `htn` against 2,097 under `legacy`; ticks with a node contested, 492 against 484; ground
+    deaths 59 against 65. Deniers took and held the two near nodes; the far one, the only one the
+    strategist held for long, was never retaken — its deniers were pulled into fights on the way, as
+    Attack's place above Defend Zone says they should be.
+  - Two changes came out of the probe rounds, both in the "as built" table of §5.1: a denier's hold
+    point is on the spawn side of its node (the first round parked a denier on the barracks' ring
+    for good), and a denier does not investigate ghosts (before that, 0 contested ticks: deniers
+    chased remembered contacts instead of walking to their node). A third is in the pilot: a jump
+    of more than 5 m in one tick is a new life — a death's respawn, or a round reset, which
+    respawns without a death — and the plan is dropped and the next scan taken at once.
+- **Found, not caused by H2, not fixed here.** At a round reset `PlayerManager.TeleportToSpawn` puts
+  spawn indices *i* and *i* + 4 on the same point of the test map's four, and two coincident
+  character capsules push each other upward about 2 m a tick and out of the world; nothing kills a
+  body that leaves it, so it stays alive with no position worth the name. Reproduced under `legacy`
+  and `htn` alike with seven ground players. Separately, the barracks' defended ring reaches about
+  117 m, over the far half of the middle node; `OutsideDefences` keeps every bot out of it.
+- **Left for the `--listen` check and later:** the round with a display and the HUD's `nodes` and
+  `ground plan` rows (the probe counted contested nodes, it did not read the HUD); `bot_plan <n>` on
+  the console (§4.4), not written; friends' `Engaging` is not fed to the survey, which the ground
+  domain does not read.
 
 ### H3 — Unit HTN (2 days)
 

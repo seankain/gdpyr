@@ -2,6 +2,7 @@ using System;
 using Gdpyr.Core;
 using Gdpyr.Fps;
 using Gdpyr.Match;
+using Gdpyr.Net;
 using Gdpyr.Rts;
 using Gdpyr.Sim;
 using Gdpyr.Sim.Htn;
@@ -86,6 +87,33 @@ public sealed class BotPilot
 	/// <summary>Reused by every scan so acquisition allocates nothing on the tick.</summary>
 	private readonly GroundContact[] _contacts = new GroundContact[GroundSensor.MaxContacts];
 
+	/// <summary>
+	/// The ground domain every bot shares, under <c>--bot-ai htn</c>; null for legacy
+	/// (docs/HTN_BOTS.md §4.2 rule 6), which leaves every legacy line as it was.
+	/// </summary>
+	private readonly GroundPlanning _planning;
+
+	/// <summary>This bot's planning context: its facts, what the coordinator gave it, and the intent.</summary>
+	private readonly GroundContext _plan;
+
+	/// <summary>Friends for the <see cref="Neighbourhood"/> survey, reused by every scan.</summary>
+	private readonly Neighbour[] _friends;
+
+	/// <summary>The node the coordinator gave it, by economy index; -1 for none.</summary>
+	private int _zone = -1;
+	private int _sweepZone = -1;
+
+	private uint _nextUseTick;
+	private bool _planWasAlive;
+	private Vector3 _lastPlannedPosition;
+	private bool _rescan;
+
+	/// <summary>
+	/// Further than this in one tick is not a walk: the character was put back at a
+	/// spawn, by a death or by a round reset, and the plan belongs to the life before.
+	/// </summary>
+	private const float TeleportMeters = 5f;
+
 	private int _contactCount;
 
 	private NavigationAgent3D _agent;
@@ -104,15 +132,40 @@ public sealed class BotPilot
 	private uint _stuckUntilTick;
 	private bool _wantedToMove;
 
-	public BotPilot(int peerId, fps_controller character, in BotTraits traits, ContactMemory teamContacts)
+	public BotPilot(int peerId, fps_controller character, in BotTraits traits, ContactMemory teamContacts,
+		GroundPlanning planning = null)
 	{
 		_peerId = peerId;
 		_character = character;
 		_traits = traits;
 		_teamContacts = teamContacts;
+		_planning = planning;
+
+		if (planning != null)
+		{
+			_plan = planning.CreateContext();
+			_friends = new Neighbour[SnapshotCodec.MaxPlayers];
+		}
 	}
 
 	public int PeerId => _peerId;
+
+	/// <summary>How far it notices things. The coordinator picks focus targets inside it.</summary>
+	public float SensorRadiusMeters => _traits.SensorRadiusMeters;
+
+	/// <summary>True when it plans with the ground HTN (docs/HTN_BOTS.md §5.1).</summary>
+	public bool Plans => _plan != null;
+
+	/// <summary>What its running task asks for; <see cref="GroundGoal.None"/> for legacy. For the debug HUD.</summary>
+	public GroundGoal Goal => _plan?.Intent.Goal ?? GroundGoal.None;
+
+	/// <summary>What the coordinator last gave it.</summary>
+	public GroundRole Role => _plan?.Role ?? GroundRole.Assault;
+
+	public bool Sweeping => _plan != null && _plan.Is(GroundFact.Sweep);
+
+	/// <summary>Trips to the locker it gave up on, for the coordinator (§3.4, P4).</summary>
+	public int FailedLockerTrips => _plan?.FailedLockerTrips ?? 0;
 
 	/// <summary>What it is shooting at, as a unit id. 0 for nothing, or for a structure. For the debug HUD.</summary>
 	public ushort TargetUnitId => OwnerId.UnitOf(_targetOwnerId);
@@ -135,6 +188,15 @@ public sealed class BotPilot
 			// A dead bot holds its angles and does nothing else, which is precisely
 			// what PlayerManager does to a dead human's recorded frame.
 			_targetOwnerId = OwnerId.None;
+			if (_plan != null && _planWasAlive)
+			{
+				// A new life plans from nothing, on a scan of its own: whatever the last
+				// one was doing ended with it.
+				_planning.Reset(_plan);
+				_planWasAlive = false;
+				_rescan = true;
+			}
+
 			return InputFrame.Neutral(tick, character.Yaw, character.Pitch);
 		}
 
@@ -144,14 +206,37 @@ public sealed class BotPilot
 		ProjectileStats round = EquippedRound(combat);
 		bool explosive = round.IsExplosive;
 
-		if (tick >= _nextScanTick)
+		if (_plan != null && _planWasAlive
+			&& character.SimPosition.DistanceSquaredTo(_lastPlannedPosition) > TeleportMeters * TeleportMeters)
 		{
+			// A round reset respawns without a death, so the check above never saw
+			// this life end, and the last life's task — a node, a buddy, a ghost from
+			// a round that is over — would carry on from the spawn (docs/HTN_BOTS.md
+			// §6, H2).
+			_planning.Reset(_plan);
+			_planWasAlive = false;
+			_rescan = true;
+		}
+
+		bool scheduled = tick >= _nextScanTick;
+		if (scheduled || _rescan)
+		{
+			_rescan = false;
 			AcquireTarget(character, combat.Team, explosive, tick);
+			if (_plan != null)
+			{
+				Encode(character, combat, explosive, tick);
+			}
 
 			// The first scan is offset by the bot's own id so that six of them do not
-			// re-scan on the same tick for the rest of the round.
-			uint stagger = _nextScanTick == 0 ? (uint)(_peerId % ScanIntervalTicks) : 0u;
-			_nextScanTick = tick + (uint)ScanIntervalTicks + stagger;
+			// re-scan on the same tick for the rest of the round. A scan forced by a
+			// respawn leaves the schedule where it was, or every bot put back by a round
+			// reset would scan on one tick from then on.
+			if (scheduled)
+			{
+				uint stagger = _nextScanTick == 0 ? (uint)(_peerId % ScanIntervalTicks) : 0u;
+				_nextScanTick = tick + (uint)ScanIntervalTicks + stagger;
+			}
 		}
 
 		Vector3 eye = character.EyePosition;
@@ -176,7 +261,13 @@ public sealed class BotPilot
 		// strafes once it is inside its preferred range.
 		Vector3 goal;
 		bool hasGoal;
-		if (hasTarget)
+		bool keepMoving = false;
+		bool use = false;
+		if (_plan != null)
+		{
+			hasGoal = Planned(character, explosive, tick, hasTarget, targetPosition, out goal, out keepMoving, out use);
+		}
+		else if (hasTarget)
 		{
 			goal = targetPosition;
 			hasGoal = true;
@@ -216,7 +307,9 @@ public sealed class BotPilot
 			stuck: tick < _stuckUntilTick,
 			needsReload: needsReload,
 			semiAutomatic: stats.Mode != FireMode.Auto,
-			holdFire: holdFire);
+			holdFire: holdFire,
+			keepMoving: keepMoving,
+			use: use);
 
 		_wantedToMove = hasGoal || (hasTarget && visible);
 
@@ -251,6 +344,14 @@ public sealed class BotPilot
 		Report(team, tick);
 		int best = GroundSensor.NearestHostileTarget(_contacts.AsSpan(0, _contactCount), team, explosive);
 
+		// The plan's choice, when this scan can see it and the weapon can hurt it: the
+		// coordinator's focus target (docs/HTN_BOTS.md §5.1). The nearest otherwise.
+		int preferred = _plan?.Intent.TargetOwnerId ?? OwnerId.None;
+		if (preferred != OwnerId.None && preferred != best && CanTarget(preferred, team, explosive))
+		{
+			best = preferred;
+		}
+
 		if (best != _targetOwnerId)
 		{
 			// The reaction delay is measured from the switch, not from the scan: a bot
@@ -258,6 +359,27 @@ public sealed class BotPilot
 			_targetOwnerId = best;
 			_targetSinceTick = tick;
 		}
+	}
+
+	/// <summary>Whether this scan can see <paramref name="ownerId"/> as a hostile the weapon in hand hurts.</summary>
+	private bool CanTarget(int ownerId, Team team, bool explosive)
+	{
+		for (int i = 0; i < _contactCount; i++)
+		{
+			GroundContact seen = _contacts[i];
+			if (seen.IsPlayer || seen.Team == team || !GroundSensor.CanHurt(seen, explosive))
+			{
+				continue;
+			}
+
+			int id = seen.IsStructure ? seen.StructureOwnerId : OwnerId.ForUnit(seen.UnitId);
+			if (id == ownerId)
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/// <summary>
@@ -391,6 +513,261 @@ public sealed class BotPilot
 		}
 
 		return HasLineOfSight(eye, targetPosition);
+	}
+
+	// ---- planning (--bot-ai htn) -------------------------------------------
+
+	/// <summary>
+	/// One tick of the ground domain (docs/HTN_BOTS.md §5.1): the bot's position and
+	/// hands into the context, the planner ticked, and the intent it leaves turned
+	/// into where to walk, whether to keep walking, and whether to tap use.
+	/// </summary>
+	private bool Planned(fps_controller character, bool explosive, uint tick, bool hasTarget, Vector3 targetPosition,
+		out Vector3 goal, out bool keepMoving, out bool use)
+	{
+		GroundContext plan = _plan;
+		plan.Tick = tick;
+		plan.Position = character.SimPosition;
+		plan.Explosive = explosive;
+		_lastPlannedPosition = plan.Position;
+
+		// The hands are known every tick, not only on a scan: a locker swap lands
+		// between scans, and the task after it is planned on what it produced.
+		plan.Sense(GroundFact.Armed, (byte)(explosive ? Arms.Explosive : Arms.SmallArms));
+		_planning.Tick(plan);
+		_planWasAlive = true;
+
+		GroundIntent intent = plan.Intent;
+		keepMoving = intent.Move == GroundMove.Run;
+
+		// A tap is a press and a release. Pressed on one tick and a quarter-second
+		// apart, which is long enough for the swap to be in hand before the next
+		// press is decided — so a bot never cycles past the launcher.
+		use = intent.UseLocker && !explosive && tick >= _nextUseTick;
+		if (use)
+		{
+			_nextUseTick = tick + (uint)plan.Traits.UseTapIntervalTicks;
+		}
+
+		goal = intent.Point;
+		switch (intent.Move)
+		{
+			case GroundMove.Stay:
+				return false;
+
+			case GroundMove.Point:
+			case GroundMove.Run:
+				return intent.HasPoint;
+
+			case GroundMove.Target:
+				if (hasTarget)
+				{
+					goal = targetPosition;
+					return true;
+				}
+
+				return intent.HasPoint;
+
+			default:
+				// Standoff, and the tick before anything was planned: today's behaviour.
+				if (hasTarget)
+				{
+					goal = targetPosition;
+					return true;
+				}
+
+				return Objective(tick, character, out goal);
+		}
+	}
+
+	/// <summary>
+	/// Bands what this scan found, what the team remembers, who is around and the
+	/// bot's own body into the ground facts. On the scan the bot already runs, over
+	/// what it already paid for: no ray here that the scan did not cast.
+	/// </summary>
+	private void Encode(fps_controller character, PlayerCombat combat, bool explosive, uint tick)
+	{
+		GroundContext plan = _plan;
+		Team team = combat.Team;
+		Vector3 at = character.SimPosition;
+
+		WeaponStats stats = combat.EquippedStats;
+		var sense = new GroundSense
+		{
+			Explosive = explosive,
+			HealthFraction = combat.Health / (float)SimConfig.MaxHealth,
+			MagazineLow = !stats.HasUnlimitedAmmo && !combat.Equipped.IsReloading
+				&& combat.Equipped.Ammo <= stats.MagazineSize / 2,
+		};
+
+		bool armour = false;
+		float armourDistance = float.MaxValue;
+		for (int i = 0; i < _contactCount; i++)
+		{
+			GroundContact seen = _contacts[i];
+			if (seen.IsPlayer || seen.Team == team)
+			{
+				continue;
+			}
+
+			sense.VisibleHostiles++;
+			if (!seen.BulletProof)
+			{
+				sense.VisibleSoft++;
+			}
+			else if (seen.DistanceMeters < armourDistance)
+			{
+				armour = true;
+				armourDistance = seen.DistanceMeters;
+				plan.ArmourPoint = seen.Position;
+			}
+		}
+
+		// What the team remembers nearby that this bot's own scan did not find: the
+		// nearest soft one is the ghost worth walking to.
+		float radius = plan.Traits.InvestigateRadiusMeters;
+		float soft = float.MaxValue;
+		float any = float.MaxValue;
+		Vector3 softPoint = Vector3.Zero;
+		Vector3 anyPoint = Vector3.Zero;
+		for (int i = 0; _teamContacts != null && i < _teamContacts.Count; i++)
+		{
+			if (!_teamContacts.IsRemembered(i, tick))
+			{
+				continue;
+			}
+
+			KnownContact known = _teamContacts.At(i);
+			float distance = at.DistanceTo(known.Position);
+			if (distance > radius || InScan(known.OwnerId))
+			{
+				continue;
+			}
+
+			sense.Remembered = true;
+			if (known.BulletProof)
+			{
+				if (!armour || distance < armourDistance)
+				{
+					armour = true;
+					armourDistance = distance;
+					plan.ArmourPoint = known.Position;
+				}
+			}
+			else
+			{
+				sense.RememberedSoft = true;
+				if (distance < soft)
+				{
+					soft = distance;
+					softPoint = known.Position;
+				}
+			}
+
+			if (distance < any)
+			{
+				any = distance;
+				anyPoint = known.Position;
+			}
+		}
+
+		plan.HasArmourPoint = armour;
+		plan.GhostPoint = sense.RememberedSoft ? softPoint : anyPoint;
+
+		int friends = FillFriends(team);
+		Neighbourhood around = Neighbourhood.Survey(_peerId, at, _friends.AsSpan(0, friends), _teamContacts, tick,
+			(OddsBand)plan.Get(GroundFact.Odds));
+		sense.Odds = around.Odds;
+		sense.NearestFriendMeters = around.NearestFriendMeters;
+		plan.FallbackPoint = around.Friends > 0 ? around.Centroid
+			: plan.HasBuddy ? plan.BuddyPoint
+			: PlayerManager.Instance?.SpawnCentroid ?? at;
+
+		Vector3 exit = OutsideDefences(character, team, at);
+		sense.InsideDefences = exit != at;
+		plan.ExitPoint = exit;
+
+		sense.AtZone = _zone >= 0 && CombatManager.Instance?.Economy.NodeAt(_zone) is { } node && node.Covers(at);
+
+		if (EmplacementManager.Instance is { } emplacements && emplacements.TryNearestLocker(at, out Vector3 locker))
+		{
+			plan.HasLocker = true;
+			plan.LockerPoint = locker;
+		}
+		else
+		{
+			plan.HasLocker = false;
+		}
+
+		plan.Encode(sense);
+	}
+
+	/// <summary>
+	/// What the ground coordinator gave this bot (docs/HTN_BOTS.md §5.1). Points are
+	/// snapped to the navigation mesh once, when the assignment changes, not every tick.
+	/// </summary>
+	public void Apply(in GroundOrders orders)
+	{
+		GroundContext plan = _plan;
+		if (plan == null)
+		{
+			return;
+		}
+
+		plan.SetRole(orders.Role);
+
+		if (orders.Zone != _zone)
+		{
+			_zone = orders.Zone;
+			plan.HasZone = orders.Zone >= 0;
+			plan.ZonePoint = plan.HasZone ? Reachable(orders.ZonePoint) : Vector3.Zero;
+		}
+
+		if (orders.SweepZone != _sweepZone)
+		{
+			_sweepZone = orders.SweepZone;
+			plan.SweepPoint = orders.SweepZone >= 0 ? Reachable(orders.SweepPoint) : Vector3.Zero;
+		}
+
+		plan.Sense(GroundFact.Sweep, orders.SweepZone >= 0);
+		plan.FocusOwnerId = orders.FocusOwnerId;
+		plan.HasBuddy = orders.BuddyId != 0;
+		plan.BuddyPoint = orders.BuddyPosition;
+	}
+
+	/// <summary>Whether this scan saw <paramref name="ownerId"/>.</summary>
+	private bool InScan(int ownerId)
+	{
+		for (int i = 0; i < _contactCount; i++)
+		{
+			GroundContact seen = _contacts[i];
+			if (!seen.IsPlayer && (seen.IsStructure ? seen.StructureOwnerId : OwnerId.ForUnit(seen.UnitId)) == ownerId)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/// <summary>Every living teammate, people and bots, for the survey. The bot itself is skipped by id.</summary>
+	private int FillFriends(Team team)
+	{
+		int count = 0;
+		CombatManager combat = CombatManager.Instance;
+		for (int i = 0; combat != null && i < combat.PlayerCount && count < _friends.Length; i++)
+		{
+			PlayerCombat other = combat.PlayerAt(i);
+			if (other == null || other.Team != team || !other.IsAlive || other.Character == null)
+			{
+				continue;
+			}
+
+			_friends[count++] = new Neighbour(other.PeerId, other.Character.SimPosition,
+				other.Health / (float)SimConfig.MaxHealth, engaging: false);
+		}
+
+		return count;
 	}
 
 	// ---- where to stand ----------------------------------------------------

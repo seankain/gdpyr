@@ -61,6 +61,28 @@ public partial class EmplacementManager : Node
 	/// <summary>Weapon lockers on the map.</summary>
 	public int LockerCount => _lockers.Count;
 
+	/// <summary>
+	/// The weapon locker nearest <paramref name="at"/>, for a ground bot sent to fetch
+	/// a launcher (docs/HTN_BOTS.md §5.1). False on a map without one.
+	/// </summary>
+	public bool TryNearestLocker(Vector3 at, out Vector3 position)
+	{
+		position = Vector3.Zero;
+		float best = float.MaxValue;
+		for (int i = 0; i < _lockers.Count; i++)
+		{
+			Vector3 locker = _lockers[i].GlobalPosition;
+			float d = at.DistanceSquaredTo(locker);
+			if (d < best)
+			{
+				best = d;
+				position = locker;
+			}
+		}
+
+		return _lockers.Count > 0;
+	}
+
 	/// <summary>Large weapons swapped at a locker this round. For the log and M8's CSV.</summary>
 	public int LockerSwaps { get; private set; }
 

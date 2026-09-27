@@ -158,6 +158,25 @@ public partial class PlayerManager : Node
 	/// <summary>Spawn points the map supplied, for whoever needs somewhere to go.</summary>
 	public int SpawnPointCount => _spawnPoints.Count;
 
+	/// <summary>
+	/// The middle of the map's player spawns: where the ground force comes in, for the
+	/// ground bots' coordinator and their fall-back point (docs/HTN_BOTS.md §5.1). The
+	/// origin on a map with none.
+	/// </summary>
+	public Vector3 SpawnCentroid
+	{
+		get
+		{
+			Vector3 sum = Vector3.Zero;
+			for (int i = 0; i < _spawnPoints.Count; i++)
+			{
+				sum += _spawnPoints[i].Origin;
+			}
+
+			return _spawnPoints.Count > 0 ? sum / _spawnPoints.Count : Vector3.Zero;
+		}
+	}
+
 	/// <summary>Where the <paramref name="index"/>-th spawn point is. Wraps, like <see cref="SpawnTransform"/>.</summary>
 	public Vector3 SpawnPositionAt(int index) => SpawnTransform(index).Origin;
 
