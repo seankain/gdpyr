@@ -53,6 +53,11 @@ public struct Squad
 
 	public SquadPhase Phase;
 
+	/// <summary>Where it assembles before it strikes, and falls back to (§5.2, §5.3). Only with <see cref="HasStaging"/>.</summary>
+	public Vector3 StagingPoint;
+
+	public bool HasStaging;
+
 	/// <summary>Units in it now.</summary>
 	public int Members;
 
@@ -225,6 +230,40 @@ public sealed class SquadBoard
 
 		_squads[squad].OrderedTick = tick;
 		return squad;
+	}
+
+	/// <summary>
+	/// Sets where a squad is in its mission. The unit census moves a squad between
+	/// <see cref="SquadPhase.Moving"/> and <see cref="SquadPhase.Engaged"/> from what
+	/// its units are doing (H3); gathering and falling back are the commander's (H4).
+	/// Returns false for a squad that is not on the board.
+	/// </summary>
+	public bool SetPhase(int squad, SquadPhase phase)
+	{
+		if (squad < 0 || squad >= _squads.Length || !_squads[squad].Active)
+		{
+			return false;
+		}
+
+		_squads[squad].Phase = phase;
+		return true;
+	}
+
+	/// <summary>
+	/// Gives a squad a staging point and sets it gathering there: its units wait for
+	/// each other at the point (§5.2, "wait for squad"). Returns false for a squad
+	/// that is not on the board.
+	/// </summary>
+	public bool Stage(int squad, Vector3 point)
+	{
+		if (!SetPhase(squad, SquadPhase.Gathering))
+		{
+			return false;
+		}
+
+		_squads[squad].StagingPoint = point;
+		_squads[squad].HasStaging = true;
+		return true;
 	}
 
 	/// <summary>Takes a unit out of its squad. Returns false when it was in none.</summary>

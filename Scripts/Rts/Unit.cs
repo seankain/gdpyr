@@ -1,5 +1,6 @@
 using Gdpyr.Core;
 using Gdpyr.Sim;
+using Gdpyr.Sim.Htn;
 using Godot;
 
 namespace Gdpyr.Rts;
@@ -65,6 +66,16 @@ public partial class Unit : CharacterBody3D
 
 	/// <summary>Server-side: the tick that order was given on.</summary>
 	public uint OrderTick { get; set; }
+
+	/// <summary>
+	/// Server-side, under <c>--bot-ai htn</c>: what this unit plans with — its facts,
+	/// its squad's census and the intent its running task leaves
+	/// (docs/HTN_BOTS.md §5.2). Null under legacy and on clients. Never replicated.
+	/// </summary>
+	public UnitContext Plan { get; set; }
+
+	/// <summary>Server-side: the last tick something hurt it; 0 for never. What tells a builder it is under fire (§5.2).</summary>
+	public uint LastDamagedTick { get; set; }
 
 	/// <summary>What this unit is shooting at, as an <see cref="OwnerId"/>. 0 for nothing.</summary>
 	public int TargetOwnerId { get; set; }

@@ -28,9 +28,10 @@ public readonly struct Neighbour
 /// <summary>
 /// What is around one unit or one ground bot (docs/HTN_BOTS.md §4.3): the friends
 /// within <see cref="FriendRadiusMeters"/> — how many, how healthy, how many are in
-/// a fight, the nearest one and where they are gathered — and the remembered
-/// hostiles within <see cref="HostileRadiusMeters"/>. Out of the two comes the
-/// local force ratio, as an <see cref="OddsBand"/>.
+/// a fight, the nearest one and where they are gathered — the nearest friend in a
+/// fight within <see cref="EngagedRadiusMeters"/>, and the remembered hostiles
+/// within <see cref="HostileRadiusMeters"/>. Out of the friends and the hostiles
+/// comes the local force ratio, as an <see cref="OddsBand"/>.
 ///
 /// Counted in bodies, as §5.1 defines "outnumbered", with the one surveying
 /// counted on its own side: a bot alone against one rifleman is even, not
@@ -49,6 +50,9 @@ public struct Neighbourhood
 
 	public const float HostileRadiusMeters = 40f;
 
+	/// <summary>How far a friend in a fight is still one to answer (§5.2, "a friend within 40 m is engaging").</summary>
+	public const float EngagedRadiusMeters = 40f;
+
 	/// <summary>Friends in range, not counting the one surveying.</summary>
 	public int Friends;
 
@@ -62,6 +66,18 @@ public struct Neighbourhood
 
 	/// <summary><see cref="float.MaxValue"/> when there is none in range.</summary>
 	public float NearestFriendMeters;
+
+	/// <summary>Where the nearest friend is; the surveyor's own position when there is none.</summary>
+	public Vector3 NearestFriendPosition;
+
+	/// <summary>
+	/// The nearest friend within <c>engagedRadiusMeters</c> that is shooting at
+	/// something, or 0: the fight a unit answers (§5.2). Its own radius, wider than
+	/// the one the odds are counted in.
+	/// </summary>
+	public int EngagedFriendId;
+
+	public Vector3 EngagedFriendPosition;
 
 	/// <summary>Where the friends in range are gathered; the surveyor's own position when there are none.</summary>
 	public Vector3 Centroid;
@@ -83,10 +99,17 @@ public struct Neighbourhood
 	/// </summary>
 	public static Neighbourhood Survey(int selfId, Vector3 self, ReadOnlySpan<Neighbour> friends,
 		ContactMemory hostiles, uint tick, OddsBand previous, float friendRadiusMeters = FriendRadiusMeters,
-		float hostileRadiusMeters = HostileRadiusMeters)
+		float hostileRadiusMeters = HostileRadiusMeters, float engagedRadiusMeters = EngagedRadiusMeters)
 	{
-		var around = new Neighbourhood { NearestFriendMeters = float.MaxValue };
+		var around = new Neighbourhood
+		{
+			NearestFriendMeters = float.MaxValue,
+			NearestFriendPosition = self,
+			EngagedFriendPosition = self,
+		};
 		float friendRadius = friendRadiusMeters * friendRadiusMeters;
+		float engagedRadius = engagedRadiusMeters * engagedRadiusMeters;
+		float engagedNearest = float.MaxValue;
 		Vector3 sum = Vector3.Zero;
 
 		for (int i = 0; i < friends.Length; i++)
@@ -98,6 +121,16 @@ public struct Neighbourhood
 			}
 
 			float distance = self.DistanceSquaredTo(friend.Position);
+
+			// Ties go to the lower id here too.
+			if (friend.Engaging && distance <= engagedRadius
+				&& (distance < engagedNearest || (distance == engagedNearest && friend.Id < around.EngagedFriendId)))
+			{
+				engagedNearest = distance;
+				around.EngagedFriendId = friend.Id;
+				around.EngagedFriendPosition = friend.Position;
+			}
+
 			if (distance > friendRadius)
 			{
 				continue;
@@ -119,6 +152,7 @@ public struct Neighbourhood
 			{
 				around.NearestFriendMeters = meters;
 				around.NearestFriendId = friend.Id;
+				around.NearestFriendPosition = friend.Position;
 			}
 		}
 

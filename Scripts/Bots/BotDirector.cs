@@ -79,8 +79,8 @@ public sealed class BotDirector
 
 			if (Enabled)
 			{
-				GD.Print("[bots] ground bots plan with the HTN (docs/HTN_BOTS.md §5.1);"
-					+ " units and the strategist still run legacy until H3-H4");
+				GD.Print("[bots] ground bots and units plan with the HTN (docs/HTN_BOTS.md §5.1, §5.2);"
+					+ " the strategist still runs legacy until H4");
 			}
 		}
 	}
@@ -92,9 +92,9 @@ public sealed class BotDirector
 	public int StrategistTarget { get; }
 
 	/// <summary>
-	/// What the bots decide with: <c>--bot-ai</c>, else the game mode's. From H2 the
-	/// ground bots follow it; units and the strategist do from H3 and H4
-	/// (docs/HTN_BOTS.md §6).
+	/// What the bots decide with: <c>--bot-ai</c>, else the game mode's. The ground
+	/// bots follow it from H2 and the units — <c>UnitManager</c> reads it here — from
+	/// H3; the strategist does from H4 (docs/HTN_BOTS.md §6).
 	/// </summary>
 	public BotAi Ai { get; }
 

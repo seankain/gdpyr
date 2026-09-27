@@ -529,6 +529,7 @@ public partial class UnitManager
 			builder.OrderIssuer = issuer;
 			builder.OrderTick = tick;
 			builder.NextScanTick = 0;
+			ResetPlan(builder);
 			Squads.Leave(builder.UnitId);
 			_builders[i] = null;
 		}

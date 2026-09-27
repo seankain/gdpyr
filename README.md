@@ -14,7 +14,7 @@ dedicated-server authoritative.
 - [`docs/HTN_BOTS.md`](docs/HTN_BOTS.md) — hierarchical task network planners for the ground
   bots, the RTS units and the computer strategist, on FluidHTN — what it is, what it was checked to
   do, what it costs, and the phases; H0 (the planner in the tree) and H1 (what each side knows) are
-  done
+  done, H2 (ground bots) and H3 (units) are built
 - [`docs/DEMOS.md`](docs/DEMOS.md) — recording a round and watching it back: the console, the
   journal, and what playback does with it
 - [`docs/LAN.md`](docs/LAN.md) — hosting a room of machines from a checkout, with a dev build
@@ -28,8 +28,8 @@ Scripts/Net/    TransportFactory, NetworkManager (transport + clocks), PlayerMan
 Scripts/Sim/    Engine-free simulation code; unit-tested without Godot
 Scripts/Sim/Demo/ The demo container: header, records, writer, reader — a codec like the others
 Scripts/Sim/Htn/ HTN planning: the pooled FluidHTN factory, the contact memories, squad and zone
-                boards and force ratio, the ground bot's domain and its coordinator (H2);
-                the unit and commander domains as H3-H4 land
+                boards and force ratio, the ground bot's domain and its coordinator (H2),
+                the unit domain and its squad census (H3); the commander's as H4 lands
 Scripts/Fps/    Character controller, movement FSM, input sampler, weapons, viewmodel
 Scripts/Rts/    Units, barracks, orders, the strategist camera and selection
 Scripts/Match/  CombatManager (the round), MatchState, TeamService
@@ -102,9 +102,10 @@ Three more flags change the computer players the authority keeps around:
 None is needed to get bots: the numbers default to `BotGroundForce` and `BotStrategists` in
 `Match/default_gamemode.tres` (6 and 1), and the AI to its `BotAi` (legacy). `--bots 4` overrides
 only the ground force and leaves the strategists to the game mode. Under `htn` the ground bots plan
-with the HTN of [`docs/HTN_BOTS.md`](docs/HTN_BOTS.md) §5.1 (H2); units and the computer strategist
-run legacy until H3 and H4, and the server log says so. The debug HUD's `ground plan` row counts
-the ground bots on each task and the roles their coordinator handed out.
+with the HTN of [`docs/HTN_BOTS.md`](docs/HTN_BOTS.md) §5.1 (H2) and the units with §5.2's (H3),
+whoever ordered them; the computer strategist runs legacy until H4, and the server log says so. The
+debug HUD's `ground plan` row counts the ground bots on each task and the roles their coordinator
+handed out, `unit plan` the units on each task, and `unit ms` what the unit pass costs a tick.
 
 Two more record a round or watch one back ([`docs/DEMOS.md`](docs/DEMOS.md)):
 

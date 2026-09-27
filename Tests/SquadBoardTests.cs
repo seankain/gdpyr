@@ -232,6 +232,52 @@ public class SquadBoardTests
 	}
 
 	[Fact]
+	public void APhaseIsSet_OnASquadOnTheBoard_AndOnNoOther()
+	{
+		var board = new SquadBoard();
+		int squad = Order(board, 100, Bot, OrderKind.Attack, There, 11, 12);
+
+		Assert.True(board.SetPhase(squad, SquadPhase.Engaged));
+		Assert.Equal(SquadPhase.Engaged, board.At(squad).Phase);
+
+		Assert.False(board.SetPhase(squad + 1, SquadPhase.Engaged));
+		Assert.False(board.SetPhase(-1, SquadPhase.Engaged));
+		Assert.False(board.SetPhase(board.Capacity, SquadPhase.Engaged));
+		Assert.False(board.At(squad + 1).Active);
+		Assert.Equal(1, board.Count);
+	}
+
+	[Fact]
+	public void Staging_SetsTheSquadGatheringAtThePoint()
+	{
+		var board = new SquadBoard();
+		int squad = Order(board, 100, Bot, OrderKind.Attack, There, 11, 12);
+		var staging = new Vector3(20f, 0f, 5f);
+
+		Assert.True(board.Stage(squad, staging));
+
+		Squad staged = board.At(squad);
+		Assert.Equal(SquadPhase.Gathering, staged.Phase);
+		Assert.True(staged.HasStaging);
+		Assert.Equal(staging, staged.StagingPoint);
+		Assert.False(board.Stage(squad + 1, staging));
+	}
+
+	[Fact]
+	public void ANewSquadInARecycledSlot_HasNoStagingPoint()
+	{
+		var board = new SquadBoard(squads: 1);
+		int squad = Order(board, 100, Bot, OrderKind.Attack, There, 11);
+		board.Stage(squad, There);
+
+		board.Leave(11);
+		squad = Order(board, 200, Human, OrderKind.Move, Vector3.Zero, 12);
+
+		Assert.False(board.At(squad).HasStaging);
+		Assert.Equal(SquadPhase.Moving, board.At(squad).Phase);
+	}
+
+	[Fact]
 	public void OrdersAndDeaths_AllocateNothing()
 	{
 		var board = new SquadBoard();

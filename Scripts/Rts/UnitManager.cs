@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using Gdpyr.Agent;
 using Gdpyr.Core;
 using Gdpyr.Fps;
 using Gdpyr.Match;
@@ -72,6 +74,25 @@ public partial class UnitManager : Node
 	/// <summary>The units one order named, and what each was worth, for <see cref="Squads"/>. Pre-sized.</summary>
 	private readonly ushort[] _orderedUnits = new ushort[SimConfig.MaxUnits];
 	private readonly float[] _orderedStrengths = new float[SimConfig.MaxUnits];
+
+	/// <summary>
+	/// The unit domain every unit shares under <c>--bot-ai htn</c> (docs/HTN_BOTS.md
+	/// §5.2); null for legacy, which leaves every legacy line as it was. Resolved once
+	/// the bot director has read <c>--bot-ai</c>.
+	/// </summary>
+	private UnitPlanning _planning;
+	private bool _aiResolved;
+
+	/// <summary>Every squad counted once a tick, and every living unit as a neighbour, for the unit domain. Pre-sized.</summary>
+	private readonly SquadCensus _census = new(SquadBoard.DefaultSquads, SimConfig.MaxUnits);
+	private readonly Neighbour[] _neighbours = new Neighbour[SimConfig.MaxUnits];
+	private readonly ushort[] _squadMembers = new ushort[SimConfig.MaxUnits];
+	private int _neighbourCount;
+
+	/// <summary>The unit pass's cost, summed over <see cref="UnitTimeWindowTicks"/> and reported as a mean.</summary>
+	private const int UnitTimeWindowTicks = SimConfig.TickRate;
+	private long _unitTimeSum;
+	private int _unitTimeSamples;
 
 	private BarracksStatus[] _barracksStatus = Array.Empty<BarracksStatus>();
 
@@ -151,10 +172,22 @@ public partial class UnitManager : Node
 	/// <summary>
 	/// The strategist side's squads (docs/HTN_BOTS.md §4.3). Server-side, and never
 	/// replicated: every order forms or joins one (<see cref="ApplyOrder"/>), and a
-	/// unit leaves its squad when it is re-ordered, sent to build, or killed. Nothing
-	/// reads it to decide yet; the unit domain does from H3, the commander from H4.
+	/// unit leaves its squad when it is re-ordered, sent to build, or killed. Under
+	/// <c>--bot-ai htn</c> the unit domain reads it, and the squad census moves each
+	/// squad between moving and engaged (§5.2); the commander writes it from H4.
 	/// </summary>
 	public SquadBoard Squads { get; } = new();
+
+	/// <summary>True when units plan with the unit HTN (docs/HTN_BOTS.md §5.2): <c>--bot-ai htn</c>, on the authority.</summary>
+	public bool Plans => _planning != null;
+
+	/// <summary>
+	/// What the server spends on the units per tick — the squad count, then every
+	/// unit's scan, plan, walk and shot — as a mean over the last second, in
+	/// milliseconds. Authority only. The number to set against legacy at the unit
+	/// ceiling (docs/HTN_BOTS.md §6, H3).
+	/// </summary>
+	public float UnitMilliseconds { get; private set; }
 
 	public override void _Ready()
 	{
@@ -195,11 +228,20 @@ public partial class UnitManager : Node
 		EnsureStarted(server: true);
 
 		ServerBuild(tick);
+		ResolveAi();
+
+		long started = Stopwatch.GetTimestamp();
+		if (_planning != null)
+		{
+			CountSquads();
+		}
 
 		for (int i = 0; i < _ordered.Count; i++)
 		{
 			SimulateUnit(_ordered[i], tick);
 		}
+
+		TimeUnits(Stopwatch.GetTimestamp() - started);
 
 		// After the units, which counted the builders standing at each site, and
 		// before combat, so that a pillbox's round flies on the tick it was fired.
@@ -370,9 +412,15 @@ public partial class UnitManager : Node
 			return;
 		}
 
+		UnitContext plan = PlanOf(unit);
+
 		if (tick >= unit.NextScanTick)
 		{
 			AcquireTarget(unit);
+			if (plan != null)
+			{
+				Encode(unit, plan, tick);
+			}
 
 			// Staggered by the unit's own id, so fifty units do not all re-scan on the
 			// same tick (docs/IMPLEMENTATION_PLAN.md §6). The offset is taken once, on
@@ -389,17 +437,37 @@ public partial class UnitManager : Node
 			unit.TargetOwnerId = OwnerId.None;
 		}
 
-		// A builder with a site to work on works on it whenever it is in reach, and
-		// stands still to do it (docs/NETCODE.md §10.5). The structure counts it.
+		// Resolved before the plan looks at the order: a finished site stands the
+		// builder down this tick.
 		Structure site = unit.Order.Kind == OrderKind.Build ? ResolveBuildOrder(unit) : null;
-		bool working = site != null && Construction.InReach(site.Footprint, unit.GlobalPosition);
+
+		// Where to go, and whether to stand to fight: the order's answer under legacy,
+		// the running task's under --bot-ai htn (docs/HTN_BOTS.md §5.2). A patrol turns
+		// round only on reaching an end its order sent it to.
+		Vector3 destination;
+		bool hasDestination;
+		bool holdsWhileEngaging;
+		bool followsOrder = true;
+		if (plan != null)
+		{
+			destination = Planned(unit, plan, tick, hasTarget, targetPoint, out hasDestination, out holdsWhileEngaging,
+				out followsOrder);
+		}
+		else
+		{
+			destination = UnitBrain.Destination(unit.Order, unit.GlobalPosition, hasTarget, targetPoint,
+				unit.Traits, out hasDestination);
+			holdsWhileEngaging = UnitBrain.HoldsWhileEngaging(unit.Order.Kind);
+		}
+
+		// A builder with a site to work on works on it whenever it is in reach, and
+		// stands still to do it (docs/NETCODE.md §10.5). The structure counts it. One
+		// whose plan has sent it to cover is not working, or it would stand there.
+		bool working = site != null && followsOrder && Construction.InReach(site.Footprint, unit.GlobalPosition);
 		if (working)
 		{
 			site.Workers++;
 		}
-
-		Vector3 destination = UnitBrain.Destination(unit.Order, unit.GlobalPosition, hasTarget, targetPoint,
-			unit.Traits, out bool hasDestination);
 
 		float destinationDistance = hasDestination && !working ? unit.GlobalPosition.DistanceTo(destination) : 0f;
 
@@ -408,11 +476,10 @@ public partial class UnitManager : Node
 		unit.State = UnitBrain.Next(situation, unit.Traits);
 
 		bool arrived = hasDestination && destinationDistance <= unit.Traits.ArrivalRadiusMeters;
-		UnitBrain.AdvancePatrol(ref unit.Order, arrived);
+		UnitBrain.AdvancePatrol(ref unit.Order, arrived && followsOrder);
 
 		// A unit that stops to fight stops; one on a move order shoots on the walk.
-		bool holding = working
-			|| (unit.State == UnitStateId.Engaging && UnitBrain.HoldsWhileEngaging(unit.Order.Kind));
+		bool holding = working || (unit.State == UnitStateId.Engaging && holdsWhileEngaging);
 		unit.Steer(destination, hasDestination && !holding, SimConfig.TickDelta);
 		unit.FaceTowards(hasTarget ? targetPoint : working ? site.Pose.Base : destination, SimConfig.TickDelta);
 
@@ -494,13 +561,33 @@ public partial class UnitManager : Node
 			}
 		}
 
+		// Under --bot-ai htn, the squad's focus next (docs/HTN_BOTS.md §5.2): a target
+		// a squad-mate holds, taken when this unit's sensor has it with a clear line.
+		// Its one ray replaces the search's when it is clear; when it is not, the search
+		// skips that player rather than paying for the same ray twice.
+		int focused = PeerId(unit.Plan?.Intent.TargetOwnerId ?? OwnerId.None);
+		int blocked = 0;
+		if (focused != 0 && combat.Find(focused) is { Character: not null, IsAlive: true } focus
+			&& focus.Team != unit.Team
+			&& UnitBrain.CanAcquire(eye.DistanceTo(focus.Character.EyePosition), unit.Traits))
+		{
+			if (HasLineOfSight(eye, focus.Character.EyePosition))
+			{
+				unit.TargetOwnerId = OwnerId.ForPeer(focused);
+				return;
+			}
+
+			blocked = focused;
+		}
+
 		PlayerCombat best = null;
 		float bestDistance = float.MaxValue;
 
 		for (int i = 0; i < combat.PlayerCount; i++)
 		{
 			PlayerCombat player = combat.PlayerAt(i);
-			if (player?.Character == null || !player.IsAlive || player.Team == unit.Team)
+			if (player?.Character == null || !player.IsAlive || player.Team == unit.Team
+				|| (blocked != 0 && player.PeerId == blocked))
 			{
 				continue;
 			}
@@ -557,6 +644,351 @@ public partial class UnitManager : Node
 		distance = unit.EyePosition.DistanceTo(point);
 
 		return !UnitBrain.ShouldDropTarget(distance, unit.Traits);
+	}
+
+	// ---- server: planning (--bot-ai htn) ------------------------------------
+
+	/// <summary>
+	/// Decides, once, whether units plan: when the bot director has resolved
+	/// <c>--bot-ai</c> over the game mode. The director is made on the first server
+	/// frame, so this waits for it rather than reading the flag a second way.
+	/// </summary>
+	private void ResolveAi()
+	{
+		if (_aiResolved || PlayerManager.Instance?.Bots is not { } bots)
+		{
+			return;
+		}
+
+		_aiResolved = true;
+		if (bots.Ai == BotAi.Htn)
+		{
+			_planning = new UnitPlanning(UnitPlanTraits.Default);
+			GD.Print("[rts] units plan with the HTN (docs/HTN_BOTS.md §5.2)");
+		}
+	}
+
+	/// <summary>A unit's planning context, made the first time it is simulated; null under legacy.</summary>
+	private UnitContext PlanOf(Unit unit)
+	{
+		if (_planning == null || unit.Team != Team.Strategist)
+		{
+			return null;
+		}
+
+		return unit.Plan ??= _planning.CreateContext(unit.Traits);
+	}
+
+	/// <summary>Drops a unit's plan: it has a new order, or it is dead. Its pooled queues go back to the pool.</summary>
+	private void ResetPlan(Unit unit)
+	{
+		if (unit.Plan != null)
+		{
+			_planning?.Reset(unit.Plan);
+		}
+	}
+
+	/// <summary>
+	/// The squad census and the neighbour list, once a tick, before any unit moves
+	/// (docs/HTN_BOTS.md §5.2): every squad's living units, centroid, fight and
+	/// focus, and every living unit as a friend to be surveyed. One pass over the
+	/// units and one over the board's members; no rays.
+	/// </summary>
+	private void CountSquads()
+	{
+		_neighbourCount = 0;
+		for (int i = 0; i < _ordered.Count && _neighbourCount < _neighbours.Length; i++)
+		{
+			Unit unit = _ordered[i];
+			if (unit.IsAlive && unit.Team == Team.Strategist)
+			{
+				_neighbours[_neighbourCount++] = new Neighbour(unit.UnitId, unit.GlobalPosition, HealthFraction(unit),
+					unit.State == UnitStateId.Engaging);
+			}
+		}
+
+		_census.Begin();
+		for (int s = 0; s < Squads.Capacity; s++)
+		{
+			if (!Squads.At(s).Active)
+			{
+				continue;
+			}
+
+			int members = Squads.MembersOf(s, _squadMembers);
+			for (int m = 0; m < members; m++)
+			{
+				Unit unit = Find(_squadMembers[m]);
+				if (unit != null && unit.IsAlive)
+				{
+					_census.Add(s, unit.UnitId, unit.GlobalPosition, unit.State == UnitStateId.Engaging,
+						unit.TargetOwnerId);
+				}
+			}
+		}
+
+		_census.End(Squads, CombatManager.Instance?.Visibility?.Contacts);
+	}
+
+	/// <summary>
+	/// Bands what the side remembers, who is around, the unit's squad and its own
+	/// body into the unit facts, and fills in the places its operators steer by
+	/// (docs/HTN_BOTS.md §5.2). On the unit's own scan, over what the side already
+	/// knows: no ray here.
+	/// </summary>
+	private void Encode(Unit unit, UnitContext plan, uint tick)
+	{
+		Vector3 at = unit.GlobalPosition;
+		UnitOrder order = unit.Order;
+		UnitPlanTraits traits = plan.Traits;
+		ContactMemory memory = CombatManager.Instance?.Visibility?.Contacts;
+		float sensor = unit.Traits.SensorRadiusMeters;
+		bool attackNamed = order.Kind == OrderKind.Attack && order.TargetOwnerId != OwnerId.None;
+
+		// What the side remembers: anything within this unit's sensor range of it or
+		// of its anchor; where the target an attack order named was last seen; and
+		// the contact nearest the anchor, which a defended ring turns to face.
+		bool sideKnown = false;
+		bool named = false;
+		Vector3 namedPoint = Vector3.Zero;
+		bool threat = false;
+		float threatMeters = traits.ThreatBearingMeters;
+		Vector3 threatPoint = Vector3.Zero;
+		for (int i = 0; memory != null && i < memory.Count; i++)
+		{
+			if (!memory.IsRemembered(i, tick))
+			{
+				continue;
+			}
+
+			KnownContact known = memory.At(i);
+			float fromAnchor = order.Anchor.DistanceTo(known.Position);
+			sideKnown |= fromAnchor <= sensor || at.DistanceTo(known.Position) <= sensor;
+
+			if (attackNamed && known.OwnerId == order.TargetOwnerId)
+			{
+				named = true;
+				namedPoint = known.Position;
+			}
+
+			if (fromAnchor <= threatMeters)
+			{
+				threat = true;
+				threatMeters = fromAnchor;
+				threatPoint = known.Position;
+			}
+		}
+
+		plan.HasNamedTargetPoint = named;
+		plan.NamedTargetPoint = namedPoint;
+
+		Neighbourhood around = Neighbourhood.Survey(unit.UnitId, at, _neighbours.AsSpan(0, _neighbourCount), memory,
+			tick, (OddsBand)plan.Get(UnitFact.Odds), engagedRadiusMeters: traits.EngagedFriendMeters);
+		plan.FriendPoint = around.NearestFriendPosition;
+
+		int squad = Squads.SquadOf(unit.UnitId);
+		Squad board = Squads.At(squad);
+		bool hasSquad = squad >= 0 && _census.AliveIn(squad) > 0;
+		plan.HasSquad = hasSquad;
+		plan.SquadAlive = hasSquad ? _census.AliveIn(squad) : 0;
+		plan.SquadCentroid = hasSquad ? _census.CentroidOf(squad) : at;
+		plan.FocusOwnerId = hasSquad ? _census.FocusOf(squad) : OwnerId.None;
+		plan.HasStaging = hasSquad && board.HasStaging;
+		plan.StagingPoint = board.StagingPoint;
+
+		// A fight to go to. A squad-mate's first: at the squad's focus, where the side
+		// last saw it, else where its units in the fight stand. Else the nearest friend
+		// in a fight nearby: at its target, else where it stands.
+		int matesEngaging = hasSquad
+			? _census.EngagingIn(squad) - (unit.State == UnitStateId.Engaging ? 1 : 0)
+			: 0;
+		bool support = false;
+		Vector3 supportPoint = Vector3.Zero;
+		if (matesEngaging > 0)
+		{
+			support = true;
+			supportPoint = TryRemembered(memory, plan.FocusOwnerId, tick, out Vector3 focusPoint)
+				? focusPoint
+				: _census.EngagedCentroidOf(squad);
+		}
+		else if (around.EngagedFriendId != 0)
+		{
+			support = true;
+			Unit friend = Find((ushort)around.EngagedFriendId);
+			supportPoint = friend != null && TryRemembered(memory, friend.TargetOwnerId, tick, out Vector3 friendTarget)
+				? friendTarget
+				: around.EngagedFriendPosition;
+		}
+
+		plan.HasSupport = support;
+		plan.SupportPoint = supportPoint;
+
+		// Post k of n on a ring round the anchor, the first facing the threat: the
+		// nearest remembered contact, else the ground force's spawns.
+		plan.HasPost = order.Kind == OrderKind.Defend;
+		if (plan.HasPost)
+		{
+			int count = hasSquad ? _census.AliveIn(squad) : 1;
+			int rank = hasSquad ? Math.Max(_census.Rank(squad, unit.UnitId), 0) : 0;
+			Vector3 towards = threat ? threatPoint : PlayerManager.Instance?.SpawnCentroid ?? order.Anchor;
+			float radius = DefendPosts.Radius(count, traits.PostSpacingMeters, traits.PostMinRadiusMeters,
+				unit.Traits.LeashRadiusMeters * traits.PostLeashShare);
+			plan.PostPoint = DefendPosts.Post(order.Anchor, rank, count, DefendPosts.Bearing(order.Anchor, towards),
+				radius);
+		}
+
+		plan.FallbackPoint = plan.HasStaging ? plan.StagingPoint
+			: TryNearestRally(unit.Team, at, out Vector3 rally) ? rally
+			: order.Anchor;
+
+		plan.Encode(new UnitSense
+		{
+			SideKnown = sideKnown,
+			HealthFraction = HealthFraction(unit),
+			Odds = around.Odds,
+			FriendEngaged = support,
+			HasSquad = hasSquad,
+			SquadPhase = board.Phase,
+			Autonomous = IsBotOrder(unit.OrderIssuer),
+			UnderFire = unit.LastDamagedTick != 0 && tick - unit.LastDamagedTick <= (uint)traits.UnderFireTicks,
+			FriendNear = around.Friends > 0,
+		});
+	}
+
+	/// <summary>
+	/// One tick of the unit domain: the order, position and target into the context,
+	/// the planner ticked, and the intent it leaves turned into where to walk and
+	/// whether to stand to fight. An intent that follows the order asks
+	/// <see cref="UnitBrain.Destination"/>, as legacy does.
+	/// </summary>
+	private Vector3 Planned(Unit unit, UnitContext plan, uint tick, bool hasTarget, Vector3 targetPoint,
+		out bool hasDestination, out bool holdsWhileEngaging, out bool followsOrder)
+	{
+		plan.Tick = tick;
+		plan.Track(unit.GlobalPosition, unit.Order, hasTarget, targetPoint);
+		_planning.Tick(plan);
+
+		UnitIntent intent = plan.Intent;
+		followsOrder = intent.Goal == UnitGoal.None || intent.Move == UnitMove.Order;
+		holdsWhileEngaging = intent.Goal == UnitGoal.None
+			? UnitBrain.HoldsWhileEngaging(unit.Order.Kind)
+			: intent.StopToFight;
+
+		if (followsOrder)
+		{
+			return UnitBrain.Destination(unit.Order, unit.GlobalPosition, hasTarget, targetPoint, unit.Traits,
+				out hasDestination);
+		}
+
+		hasDestination = true;
+		switch (intent.Move)
+		{
+			case UnitMove.Target:
+				return hasTarget ? targetPoint : intent.Point;
+
+			case UnitMove.Point:
+				return intent.Point;
+
+			default:
+				hasDestination = false;
+				return unit.GlobalPosition;
+		}
+	}
+
+	/// <summary>
+	/// Whether the order came from a computer strategist, which is what lets a unit
+	/// retreat on its own (docs/HTN_BOTS.md §8, D1). A person's order, a seat an
+	/// external policy drives, and no order at all are carried out as given.
+	/// </summary>
+	private static bool IsBotOrder(int issuer) =>
+		issuer != 0 && (PlayerManager.Instance?.Bots?.IsBot(issuer) ?? false)
+		&& !(AgentServer.Instance?.IsAttached(issuer) ?? false);
+
+	/// <summary>Where the side last saw <paramref name="ownerId"/>, if it remembers it.</summary>
+	private static bool TryRemembered(ContactMemory memory, int ownerId, uint tick, out Vector3 position)
+	{
+		int index = ownerId == OwnerId.None ? -1 : memory?.IndexOf(ownerId) ?? -1;
+		bool remembered = index >= 0 && memory.IsRemembered(index, tick);
+		position = remembered ? memory.At(index).Position : Vector3.Zero;
+		return remembered;
+	}
+
+	/// <summary>The rally point of the nearest barracks on <paramref name="team"/>'s side.</summary>
+	private bool TryNearestRally(Team team, Vector3 from, out Vector3 rally)
+	{
+		rally = Vector3.Zero;
+		float best = float.MaxValue;
+		for (int i = 0; i < _barracks.Count; i++)
+		{
+			Barracks barracks = _barracks[i];
+			float distance = barracks.Team == team ? from.DistanceSquaredTo(barracks.RallyPoint) : float.MaxValue;
+			if (distance < best)
+			{
+				best = distance;
+				rally = barracks.RallyPoint;
+			}
+		}
+
+		return best < float.MaxValue;
+	}
+
+	private static float HealthFraction(Unit unit) => unit.Health / (unit.Definition?.MaxHealth ?? 100f);
+
+	private static int PeerId(int ownerId) => OwnerId.IsPeer(ownerId) ? OwnerId.PeerOf(ownerId) : 0;
+
+	/// <summary>Adds one tick's unit pass to the running mean on the HUD.</summary>
+	private void TimeUnits(long elapsed)
+	{
+		_unitTimeSum += elapsed;
+		if (++_unitTimeSamples < UnitTimeWindowTicks)
+		{
+			return;
+		}
+
+		UnitMilliseconds = (float)(_unitTimeSum * 1000.0 / Stopwatch.Frequency / _unitTimeSamples);
+		_unitTimeSum = 0;
+		_unitTimeSamples = 0;
+	}
+
+	/// <summary>
+	/// What the planning units are doing, for the debug HUD: how many run each task,
+	/// and how many are waiting for their squad. Empty under legacy.
+	/// </summary>
+	public string DescribeUnitPlans()
+	{
+		if (_planning == null)
+		{
+			return string.Empty;
+		}
+
+		Span<int> goals = stackalloc int[(int)UnitGoal.Obey + 1];
+		int waiting = 0;
+		for (int i = 0; i < _ordered.Count; i++)
+		{
+			Unit unit = _ordered[i];
+			if (unit.IsAlive && unit.Plan != null)
+			{
+				goals[(int)unit.Plan.Intent.Goal]++;
+				waiting += unit.Plan.Intent.Goal == UnitGoal.Advance && unit.Plan.Waiting ? 1 : 0;
+			}
+		}
+
+		var text = new System.Text.StringBuilder();
+		for (int g = 1; g < goals.Length; g++)
+		{
+			if (goals[g] > 0)
+			{
+				text.Append(goals[g]).Append(' ').Append((UnitGoal)g).Append("  ");
+			}
+		}
+
+		if (goals[0] > 0)
+		{
+			text.Append(goals[0]).Append(" idle  ");
+		}
+
+		text.Append($"| {waiting} waiting for squad");
+		return text.ToString();
 	}
 
 	/// <summary>
@@ -641,6 +1073,11 @@ public partial class UnitManager : Node
 		}
 
 		dealt = Armour.DamageTaken(amount, explosive, unit.Definition?.BulletDamageScale ?? 1f);
+		if (dealt > 0f)
+		{
+			unit.LastDamagedTick = tick;
+		}
+
 		if (!unit.ApplyDamage(dealt))
 		{
 			return false;
@@ -648,6 +1085,7 @@ public partial class UnitManager : Node
 
 		UnitsLost++;
 		unit.DespawnTick = tick + CorpseTicks;
+		ResetPlan(unit);
 		Squads.Leave(unit.UnitId);
 		AgentEventBus.Emit(AgentEventKind.UnitLost, tick, unit.UnitId, unit.DefinitionId, attackerOwnerId,
 			unit.GlobalPosition.X, unit.GlobalPosition.Z);
@@ -853,8 +1291,9 @@ public partial class UnitManager : Node
 
 			// Re-evaluate on the next tick rather than at the end of the current scan
 			// interval: an order the units do not react to for a sixth of a second
-			// reads as an order that was dropped.
+			// reads as an order that was dropped. A new order is a new plan, too.
 			unit.NextScanTick = 0;
+			ResetPlan(unit);
 
 			// A client chooses the list, so the same unit may be in it any number of
 			// times. Recorded once, every unit the order reached fits the scratch: there
@@ -1297,6 +1736,7 @@ public partial class UnitManager : Node
 
 		_ordered.Remove(unit);
 		_interpolators.Remove(unitId);
+		ResetPlan(unit);
 		Squads.Leave(unitId);
 		unit.QueueFree();
 	}
