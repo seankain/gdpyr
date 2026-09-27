@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 #
-# Measure what FluidHTN costs on the server tick (docs/HTN_BOTS.md §3.2).
+# Check what FluidHTN does, and measure what it costs on the server tick
+# (docs/HTN_BOTS.md §3.4, §3.5).
 #
-#   ./scripts/htn-bench.sh                     # pooled factory: must allocate 0 bytes
+#   ./scripts/htn-bench.sh --probe             # the planner behaviours the plan relies on; exit 1 on a failure
+#   ./scripts/htn-bench.sh                     # cost with the pooled factory: must allocate 0 bytes
 #   ./scripts/htn-bench.sh --default-factory   # FluidHTN's own factory, for comparison
 #
 # Uses the vendored copy at ThirdParty/FluidHTN when it exists. Until it does, the

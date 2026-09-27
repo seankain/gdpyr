@@ -13,7 +13,7 @@
          measurement runs first is partly timed at tier 0 and the two rows cannot
          be compared; a server twenty minutes into a round is long past tiering. -->
     <TieredCompilation>false</TieredCompilation>
-    <!-- FluidHTN's library folder (docs/HTN_BOTS.md §3). The plan vendors it at
+    <!-- FluidHTN's library folder (docs/HTN_BOTS.md §3.8). The plan vendors it at
          ThirdParty/FluidHTN; until that lands, scripts/htn-bench.sh fetches the
          pinned commit into the user's cache and passes it here. -->
     <FluidHtnSource Condition="'$(FluidHtnSource)' == ''">$(MSBuildThisFileDirectory)../../ThirdParty/FluidHTN</FluidHtnSource>

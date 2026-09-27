@@ -1,7 +1,8 @@
 # HTN bots — research and implementation plan
 
 Status: **proposal**. Nothing in the game plans with an HTN yet. The only code this document adds is
-the measurement in §3.2 (`tools/Gdpyr.HtnBench`, `scripts/htn-bench.sh`).
+`tools/Gdpyr.HtnBench` — §5.1's domain written against FluidHTN, the behaviour probes of §3.4 and the
+cost measurement of §3.5 — and `scripts/htn-bench.sh`, which runs them.
 
 Scope: replace the goal selection of the three computer-controlled deciders — the ground bot
 (`BotPilot`), the RTS unit (`UnitManager.SimulateUnit` over `UnitBrain`) and the computer strategist
@@ -49,7 +50,7 @@ Example*). What that buys over the alternatives, for this codebase:
 | Behaviour tree | Reactive only: no effects, so no "go to the locker, *then* the tank is attackable" lookahead. Re-evaluates from the root every tick unless hand-cached. |
 | GOAP | Plans by search over actions; cost grows with action count and designer control over *which* plan comes out is indirect (action costs). |
 | Utility | Good at scoring "which node / which target", poor at sequencing. Used *inside* HTN conditions and operators here, not instead of them. |
-| **HTN** | Author-ordered priorities are explicit (method order), plans are short and readable, a higher-priority method can pre-empt a running plan (§3.3), and the same planner serves every layer — which is how Killzone 3's bots were built: commander, squad and individual layers on an HTN planner, orders down, information up, individuals still autonomous in combat (Straatman et al., *Hierarchical AI for Multiplayer Bots in Killzone 3*). |
+| **HTN** | Author-ordered priorities are explicit (method order), plans are short and readable, a higher-priority method can pre-empt a running plan (§3.4, P2), and the same planner serves every layer — which is how Killzone 3's bots were built: commander, squad and individual layers on an HTN planner, orders down, information up, individuals still autonomous in combat (Straatman et al., *Hierarchical AI for Multiplayer Bots in Killzone 3*). |
 
 The RL policies of M6–M7.5 are not replaced by this. They take a seat through the agent API and the
 seat falls back to the bot when the policy goes quiet (`BotDirector.ServerTick`, l. 92;
@@ -58,90 +59,232 @@ policies are trained and evaluated against — see D5 in §8.
 
 ---
 
-## 3. .NET HTN libraries
+## 3. FluidHTN
 
-### 3.1 Survey
+**Recommendation: FluidHTN v0.4.1 (commit `e67af26`), vendored as source.** It is MIT, pure C# with
+no dependencies beyond the BCL, maintained since 2019, and small enough (3,340 lines) to own
+outright. Everything this section claims about it was checked against its source, a compiled
+sketch of §5.1's domain, nine behaviour probes and a cost measurement, all in
+`tools/Gdpyr.HtnBench` and re-runnable with `./scripts/htn-bench.sh [--probe | --default-factory]`.
+The other .NET options are in §3.9; none is close.
 
-| Library | Licence | Runtime | Last activity | Engine dependency | Verdict |
-|---|---|---|---|---|---|
-| **[FluidHTN](https://github.com/ptrefall/fluid-hierarchical-task-network)** (Pål Trefall) | MIT | C#, ~3,400 lines, no dependencies beyond the BCL | Commit `e67af26`, 2026-03-18 | None (checked: no `UnityEngine` reference in the library folder) | **Use.** Total-order forward decomposition after Humphreys; Select/Sequence compound tasks, conditions, executing conditions, three effect types, partial planning (`PausePlan`), domain splicing and run-time slots, a method traversal record (MTR) for plan priority, an `IFactory` seam for pooling, 159 upstream unit tests. |
-| FluidHTN on NuGet (`Fluid-HTN`) | MIT | .NET Standard 2.0 | Only version is `0.0.0`, published 2021-09-01 | None | **Do not use.** Predates four and a half years of upstream fixes; vendor the source instead (§3.3). |
-| [CHP — C# HTN-Planner](https://sourceforge.net/projects/chpplanner/) (P. van Gastel) | GPL-3.0 | C#, plus a Unity variant | 2013 (CHP 1.0.1 / CUHP 1.1.0); SourceForge is file hosting only | None / Unity | **Reject.** GPL-3.0 cannot be combined into this MIT repository without relicensing it; dormant since 2013. |
-| [Tencent/behaviac](https://github.com/Tencent/behaviac) | BSD-3-Clause | C++ core, C# runtime | 2023 | Designer is Windows-only; behaviours are authored in it and exported | **Reject.** A BT/FSM/HTN framework whose workflow is its editor; a second toolchain for a greybox with no designers. |
-| [SandboxAI](https://github.com/OneManMonkeySquad/SandboxAI) | MIT with a no-resale clause | C# | Archived 2025-05-04 | `UnityEngine` | **Reject.** Unity-bound and archived. |
-| [UnityHTN](https://github.com/konbraphat51/UnityHTN) | — | C# | 2024-07 | Unity | **Reject.** Unity-bound, 3 stars. |
-| [godot-fluid-hierarchical-task-network](https://github.com/fnaith/godot-fluid-hierarchical-task-network) | MIT | C++ GDExtension port of FluidHTN | — | Godot | **Reject.** Every condition and operator would cross the C#/C++ boundary, and `Scripts/Sim` may not depend on engine nodes (IMPLEMENTATION_PLAN.md §3). |
-| Write our own | — | C# | — | None | **Fallback.** A struct-based planner fits the house style, but re-deriving MTR pre-emption, partial plans and their tests is days of work FluidHTN has done. Worth it only if §3.2's numbers were bad; they are not. |
+### 3.1 Provenance and maintenance
 
-Reference-only, not libraries to embed: SHOP / JSHOP2 (Lisp / Java, academic), Pyhop / GTPyhop
-(Python), PANDA and HDDL (academic hierarchical planning systems and their domain language). None
-targets per-tick replanning inside a game server.
+| | |
+|---|---|
+| Repository | <https://github.com/ptrefall/fluid-hierarchical-task-network>, MIT, © 2019 Pål Trefall |
+| Origin | Written by Pål Trefall out of his work on the tactical combat AI of *Rust* (GameDev.net announcement); a total-order forward-decomposition planner after Humphreys' Game AI Pro chapter; builder API modelled on Fluid Behaviour Tree (README) |
+| Size and dependencies | 32 source files, 3,340 lines (without `Properties/AssemblyInfo.cs`); `System` and `System.Collections.Generic` are the only namespaces it imports; no `UnityEngine` reference anywhere in the library (checked) — the Unity support is package metadata |
+| History | 264 commits: 209 in 2019, then 1 (2020), 10 (2021), 20 (2022), 17 (2024), 4 (2025), 3 (2026). 255 by the author, 9 by four contributors |
+| Releases | Tags `v0.1` … `v0.4`, `v0.4.1`. `v0.4.1` is `ca9eee3`, 2026-02-16. `e67af26` (2026-03-18) is `v0.4.1` plus comments only: `git diff v0.4.1 e67af26 -- Fluid-HTN` is 14 inserted comment lines |
+| API changes that matter | 2024-05: all planner state moved into an `IPlannerState` on the context, so `Planner<T>` is stateless — "easier to multi-thread" (commit `1981fcf`). 2025-11 (`v0.4`): `Aborted` renamed `Abort`, `Start` added to `IOperator` (`d1cc031`). Pinning a commit is what insulates the game from the next one |
+| Issues | 8 ever filed, 2 open: #19, a request for a graphical view of a domain, and #20. Closed: #8 (2021) and #12 (2022), both **method traversal record priority bugs**; #21 (2026), an operator ticked twice in one planner tick — closed by renaming the flag that causes it to `allowImmediateReplanAndExecute` and adding a test that documents it (`ca9eee3`), so it is intended behaviour. MTR is the part with a bug history, so it is the part the probes exercise hardest (P2, P3, P6) |
+| Tests | 159 upstream MSTest tests, each commented as documentation since 2025-11 |
+| Distribution | NuGet `Fluid-HTN` has one version, `0.0.0`, published 2021-09-01 — four and a half years stale. Source it is |
+| Ports | JavaScript, C++, Lua and a Godot 4 GDExtension, all third-party. Not needed here, but four independent re-implementations of one design is evidence the design is understood |
 
-### 3.2 Measurement: FluidHTN on net8.0
+### 3.2 Its concepts, and what each is for here
 
-Question: does FluidHTN build on the game's target framework, and does it break the rule every unit
-path keeps — no per-tick allocation (IMPLEMENTATION_PLAN.md §3)?
+| FluidHTN concept | What it does | Used here for |
+|---|---|---|
+| Context (`BaseContext`) with a `byte[] WorldState` indexed by an enum | The planner's blackboard. `SetState` marks the context dirty only when a value changes, and a dirty context replans on its next tick | One context per agent. Facts are discretised bands written by the existing sensor scans (§4.2, §5) |
+| Domain builder, extensible by subclassing `BaseDomainBuilder<DB, T>` | Fluent domain definition; the README's own "Extending the Domain Builder" pattern | `GroundDomainBuilder` adds `If`, `IfNot`, `While`, `Act`, `Predict`, so a domain reads like §5's trees (§3.3) |
+| `Select`, `Sequence` | Compound tasks: first valid sub-task; all sub-tasks in order | Priorities are selector order; methods with several steps are sequences |
+| `Condition` | Guards decomposition | Fact tests |
+| `ExecutingCondition` | Re-checked before every operator update; failing it aborts the task and replans | Ends a long-running task the tick its premise goes (P3) |
+| Operator: `Start` / `Update` / `Stop` / `Abort`, returning `Continue` / `Success` / `Failure` | The per-tick behaviour of a primitive task | Writes an intent (goal, target, stance) for the engine half to carry out; `Stop` clears it |
+| Effects: `PlanOnly`, `PlanAndExecute`, `Permanent` | World-state changes during planning, optionally re-applied on success | `PlanOnly` predictions that a later sensor scan must confirm — "the locker will give me a launcher" (P4) |
+| `PausePlan` | Plans up to the pause, continues from it once that part is done | A squad stages, then strikes against the world as it is when it has assembled (P5) |
+| `Splice` / `Slot` | Reuse a sub-domain at build time / swap one at run time | `Splice` for sub-trees shared between domains (Retreat for every unit type). `Slot` is per domain, not per agent, so it is not used (§3.7) |
+| Method traversal record (MTR) | The branch indices a plan was decomposed through. A dirty replan may replace the running plan only with one that decomposes through a strictly earlier branch | Pre-emption: Retreat interrupts Attack (P2). The corollary: nothing lower-priority interrupts anything (P3) |
+| `allowImmediateReplanAndExecute` (default on) | After a task succeeds or fails, replan and start the next task in the same tick | No idle tick between tasks. An operator can therefore run twice in one tick (#21), so operators must be idempotent; writing an intent is |
+| `IPlannerState` callbacks (`OnNewPlan`, `OnReplacePlan`, `OnNewTask`, `OnCurrentTaskFailed`, `OnCurrentTaskExecutingConditionFailed`, …) | Hooks into every planner event | The debug HUD's plan row, `bot_plan <n>`, and H6's `AgentEventBus` events |
+| Decomposition log, `DebugMTR` | Human-readable traces of decomposition | Development builds only: both build strings |
+| `IFactory` (`CreateArray` / `FreeArray`, `CreateQueue` / `FreeQueue`, …) | Every collection the planner borrows goes through it and is handed back | A pooled factory; with it the planner allocates nothing (P8, §3.5) |
 
-Method (`tools/Gdpyr.HtnBench/Program.cs`): FluidHTN's library sources at `e67af26`, compiled into a
-net8.0 console app with `Nullable` off, as this repo's projects are. One domain shaped like §5.1's
-(five goals, three levels, ~20 primitives), shared by 64 agents — `SimConfig.MaxUnits`, the largest
-population anything here plans for. Each agent's planner ticks every server tick; its facts change
-on a 10-tick stagger (the unit target refresh), and in a second run on every tick for every agent.
-Operators only count, so the planner is measured and not the game. 3,600 ticks (one minute at
-60 Hz) after a 2,000-tick warm-up, `TieredCompilation` off so both rows run optimised code.
-Allocation is `GC.GetAllocatedBytesForCurrentThread`.
+### 3.3 What a domain looks like in it
 
+`tools/Gdpyr.HtnBench/GroundSketch.cs` is §5.1 written against FluidHTN and compiled. The builder
+extension is a few lines per verb; every lambda is created once, when the domain is built:
+
+```csharp
+public sealed class GroundDomainBuilder : BaseDomainBuilder<GroundDomainBuilder, GroundContext>
+{
+	public GroundDomainBuilder If<TValue>(Fact fact, TValue value) where TValue : struct, Enum
+	{
+		byte wanted = Convert.ToByte(value);
+		return Condition($"{fact}={value}", c => c.Get(fact) == wanted);
+	}
+
+	public GroundDomainBuilder While<TValue>(Fact fact, TValue value) where TValue : struct, Enum
+	{
+		byte wanted = Convert.ToByte(value);
+		return ExecutingCondition($"while {fact}={value}", c => c.Get(fact) == wanted);
+	}
+
+	public GroundDomainBuilder Act(GroundGoal goal)
+	{
+		Action(goal.ToString());
+		return Do(c => c.Perform(goal), forceStopAction: c => c.Intent = GroundGoal.None);
+	}
+
+	public GroundDomainBuilder Predict<TValue>(Fact fact, TValue value) where TValue : struct, Enum
+	{
+		byte predicted = Convert.ToByte(value);
+		return Effect($"{fact}:={value}", EffectType.PlanOnly,
+			(c, type) => c.SetState((int)fact, predicted, false, type));
+	}
+	// IfNot, and bool overloads of If / While / Predict, alike. The sketch's While also has a
+	// switch that leaves it out, which is how probe P3 builds the domain without one.
+}
 ```
-./scripts/htn-bench.sh                     # pooled IFactory
-./scripts/htn-bench.sh --default-factory   # FluidHTN's DefaultFactory
+
+and the domain then reads as the plan does (excerpt; §5.1 has the whole tree):
+
+```csharp
+.Select("resupply")
+	.Sequence("rearm for armour")
+		.If(Fact.Role, GroundRole.LockerRunner)
+		.If(Fact.ThreatKind, Threat.Armour)
+		.If(Fact.Armed, Arms.SmallArms)
+		.IfNot(Fact.Contact, ContactLevel.None)
+		.Act(GroundGoal.PathToLocker).End()
+		.Act(GroundGoal.UseLocker).Predict(Fact.Armed, Arms.Explosive).End()
+		// Only plannable through the prediction above.
+		.Act(GroundGoal.EngageArmour).If(Fact.Armed, Arms.Explosive)
+			.While(Fact.Armed, Arms.Explosive).End()
+	.End()
+	.Sequence("reload")
+		.IfNot(Fact.Contact, ContactLevel.Visible)
+		.If(Fact.MagazineLow)
+		.Act(GroundGoal.Reload).While(Fact.MagazineLow).End()
+	.End()
+.End()
+.Select("attack")
+	.IfNot(Fact.Contact, ContactLevel.None)
+	.Sequence("press with allies")
+		.If(Fact.ThreatKind, Threat.Infantry)
+		.If(Fact.AlliesNear)
+		.IfNot(Fact.Odds, OddsBand.Outnumbered)
+		.Act(GroundGoal.TakeFocusTarget).End()
+		.Act(GroundGoal.AdvanceWithBuddy)
+			.While(Fact.AlliesNear).While(Fact.Contact, ContactLevel.Visible).End()
+	.End()
+	// …
 ```
 
-Result, 4-core Intel Xeon @ 2.10 GHz, .NET SDK 8.0.131:
+In the game, `Perform` writes a `GroundIntent` for `BotPilot`; in the sketch it records the goal
+and asks a scripted world whether it has finished.
 
-| Factory | Facts change | Replans / minute | Planner time per server tick, 64 agents | Allocated | gen0 GCs |
-|---|---|---|---|---|---|
-| `DefaultFactory` | every 10 ticks | 23,040 | 27.4 µs (0.16% of a tick) | 2,371,320 B (658.7 B per tick) | 0 |
-| `DefaultFactory` | every tick | 230,391 | 65.4 µs (0.39%) | 6,452,544 B (1,792.4 B per tick) | 0 |
-| pooled (`PooledFactory` in the bench) | every 10 ticks | 23,040 | 21.4 µs (0.13%) | **0 B** | 0 |
-| pooled | every tick | 230,391 | 59.7 µs (0.36%) | **0 B** | 0 |
+### 3.4 Verified behaviour
 
-Timings moved by up to ~35% between runs on this shared VM (the pooled steady row was 21.4 µs in
-one run and 29.1 µs in the next); the byte counts are exact and repeated identically on every run.
+`./scripts/htn-bench.sh --probe` runs each against the sketch domain and exits non-zero on any
+failure. Result at `v0.4.1` / `e67af26`, all nine passing:
 
-Findings:
+| Probe | What it establishes | Observed |
+|---|---|---|
+| P1 priority | Selector order is priority: with a visible infantry contact, an ally near and the denier role, Attack wins over Defend Zone and "press with allies" over "engage" | Plan `[TakeFocusTarget, AdvanceWithBuddy]` |
+| P2 pre-emption | A higher-priority method replaces a running plan the tick its facts appear | `AdvanceWithBuddy` running; health critical and outnumbered sensed → `[FallBack]` on the next tick, one `OnReplacePlan` |
+| P3 no downgrade | MTR never lets a lower-priority method replace a running one. A stance task with no executing condition outlives its premise | Contact lost while engaging, denier role set: 30 ticks later, **without** executing conditions the bot is still on `Engage`; **with** them it is on `TakeNode` |
+| P4 lookahead | A `PlanOnly` effect lets the planner chain "fetch a launcher" into "engage the tank"; the prediction is dropped before execution, so the scan must confirm it | Locker runner vs armour with small arms → `[PathToLocker, UseLocker, EngageArmour]`, ending on `EngageArmour` once the scan reports an explosive. A rifleman without the role → `[Standoff]`. Locker never delivers → it never engages unarmed; it **plans the same trip again** |
+| P5 partial plan | `PausePlan` defers the rest of a sequence until the first part finishes | Squad sketch: `[stage]` while assembling, then `[strike]` |
+| P6 shared domain | One `Domain` and one `Planner` for every agent gives each agent the trace it gets with its own | 16 agents × 3,000 ticks of pseudo-random facts: per-agent trace hashes identical |
+| P7 determinism | Same facts, same trace | Two runs identical |
+| P8 zero allocation | With a pooled `IFactory` the planner allocates nothing on the tick | 64 agents, 7,200 ticks, 253,425 dirtying fact changes: **0 bytes** |
+| P9 memory | One-off costs | Building the §5.1 domain: 17,752 B, once. One agent's context: 856 B before its first plan (64 units ≈ 55 KB) |
 
-1. It builds on net8.0 with **0 warnings, 0 errors**, unchanged, once `Properties/AssemblyInfo.cs`
-   is left out. Left in, `Gdpyr.csproj` fails with `CS0579: Duplicate 'AssemblyVersionAttribute'`
-   — observed when a checkout sat inside the project directory, which the Godot SDK's default glob
-   compiles whether or not git ignores it.
-2. **FluidHTN allocates on every replan by default** — about 100 B per replan at the realistic
-   cadence (`Sequence` borrows an `int[]` of world-state depths per decomposition,
-   `BaseContext.GetWorldStateChangeDepth`). Over a 20-minute round that is ~47 MB of garbage.
-3. **It allocates nothing with a pooled `IFactory`.** Every borrowed array and queue is returned
-   through `Free*`, so a per-type free list is enough. The pooled factory is part of H0.
-4. Time is not the constraint: even replanning every agent every tick is under 0.4% of the tick
-   budget. The real cost will be the conditions and sensors the game supplies, which is why facts
-   are refreshed on the existing scan cadence (§4.2) rather than every tick.
+What the probes change in the plan:
 
-### 3.3 Recommendation and the constraints that come with it
+- **P3:** every long-running operator in every domain gets an executing condition for its premise,
+  and each domain test includes "premise gone → plan ends" for each such operator.
+- **P4:** a prediction that does not come true replans the same method, for ever. Every method whose
+  success depends on the world confirming a prediction needs a give-up fact — here the coordinator
+  drops the locker-runner role after a trip that produced no explosive.
+- **P6:** sharing is safe *because* the server tick is single-threaded. Planning never moves to a
+  worker thread without a domain per thread.
 
-**Vendor FluidHTN at `e67af26` into `ThirdParty/FluidHTN/`**: the `Fluid-HTN/` library folder only,
-without `Properties/AssemblyInfo.cs` or its old-style `.csproj`, with upstream's `LICENSE` beside it
-and the commit hash in a `README` line. Not upstream's `Fluid-HTN.UnitTests/`: it is MSTest, and the
-same glob as §3.2's finding 1 would compile it into the game. `Gdpyr.csproj` picks the library up
-through the SDK's default glob; `Tests/Gdpyr.Tests.csproj` needs one
-`<Compile Include="../ThirdParty/FluidHTN/**/*.cs" />`. It is MIT and small enough to own outright
-if upstream stops.
+### 3.5 Cost
 
-What reading its source says the integration must respect:
+`./scripts/htn-bench.sh`: the §5.1 domain shared by 64 agents (`SimConfig.MaxUnits`), each planner
+ticked every server tick for 3,600 ticks (one minute at 60 Hz) after a 2,000-tick warm-up. Facts
+walk through eight situations, one per branch of the domain, changing on a 10-tick stagger (the unit
+target refresh) and, in the worst case, on every tick for every agent. Walks finish after three
+ticks; stances run until a fact ends them. `TieredCompilation` is off so both rows run optimised
+code. Three runs each, 4-core Intel Xeon @ 2.10 GHz, .NET SDK 8.0.131:
+
+| Factory | Facts change | Planner time per server tick, 64 agents | Allocated per tick | Per 20-minute round |
+|---|---|---|---|---|
+| `DefaultFactory` | every 10 ticks | 57.6–66.6 µs (0.35–0.40% of a tick) | 2,918.4 B | ~210 MB |
+| `DefaultFactory` | every tick | 98.9–114.9 µs (0.59–0.69%) | 3,583.9 B | ~258 MB |
+| pooled | every 10 ticks | 53.3–67.0 µs (0.32–0.40%) | **0 B** | **0** |
+| pooled | every tick | 92.8–125.8 µs (0.56–0.75%) | **0 B** | **0** |
+
+Byte counts were identical on every run; times moved by up to a third between runs on this shared
+VM. Conclusions: time is not the constraint — the real cost will be the conditions and sensors the
+game supplies, which is why facts are encoded on the existing scans (§4.2) — and **the default
+factory is not acceptable** on a path that must not allocate, while a pooled one costs nothing.
+
+It builds on net8.0 with 0 warnings and 0 errors, unchanged, with `Nullable` off as this repo's
+projects have it — once `Properties/AssemblyInfo.cs` is left out. Left in, the game assembly fails
+with `CS0579: Duplicate 'AssemblyVersionAttribute'`; observed when a checkout sat inside the
+project directory, which the Godot SDK's default glob compiles whether or not git ignores it.
+
+### 3.6 The extension library
+
+[fluid-hierarchical-task-network-ext](https://github.com/ptrefall/fluid-hierarchical-task-network-ext)
+(MIT, same author) adds `RandomSelector`, `UtilitySelector` (sub-tasks implement `IUtilityTask.Score`),
+`AlwaysSucceedSelector`, `InvertStatusSelector`, `RepeatSequence` and a `GOAPSequence`. Last updated
+2024-05-24 "to Fluid HTN v0.3 compatibility"; it still compiles against `v0.4.1` with 0 errors
+(checked).
+
+**Not vendored.** `UtilitySelector` does no MTR tracking — its own comment says so — so a utility
+choice cannot take part in pre-emption, which is the property the Retreat design rests on.
+`RandomSelector` draws from an unseeded `System.Random`, which `Scripts/Sim` forbids. The one idea
+worth having from it, utility scoring, goes *inside* a condition instead: the condition scores the
+candidates (which node to defend, which contact to strike), binds the winner to the context, and
+passes; the selector around it stays an ordinary, MTR-tracked `Select` (§5.3).
+
+### 3.7 Integration constraints
 
 | FluidHTN property | Consequence here |
 |---|---|
 | World state is a `byte[]` indexed by an enum; `SetState` marks the context dirty only when a value *changes*. | Facts are **discretised** (health bands, force-ratio bands, contact kinds). Positions, target ids and distances live on the context as ordinary fields that conditions read. Only a change worth replanning for goes in the world state — that is the anti-thrash lever. |
-| A dirty replan replaces the running plan only if the new decomposition is strictly higher priority by MTR (`Selector.BeatsLastMTR`). | Retreat can pre-empt Attack mid-plan, which is the point. The converse needs care: a running Attack is *not* replaced by a lower-priority Defend when the contact disappears. **Every long-running operator gets an executing condition** (`ExecutingCondition`) that fails when its premise goes, or the bot finishes an obsolete plan. |
-| `Selector` and `Sequence` hold a per-instance `Plan` queue. | One domain instance is shared by every agent of a kind, which is safe only because the server tick is single-threaded. Planning must never move to a worker thread without per-thread domains. |
-| Slots (`Slot` / `TrySetSlotDomain`) belong to the domain, not the agent. | Per-unit-type behaviour (builder, tank, technical) is a separate domain built once, not a slot swapped per agent at run time. |
-| No random selector in the core. | Planning is a pure function of facts and MTR, as `Scripts/Sim` requires. Any variety (which loiter point, which flank) comes from `Spread.Seed`, as `BotBrain` does today. |
+| A dirty replan replaces the running plan only if the new decomposition is strictly higher priority by MTR (`Selector.BeatsLastMTR`). | Retreat pre-empts Attack mid-plan (P2). Nothing lower-priority ever interrupts: **every long-running operator gets an executing condition** that fails when its premise goes, or the bot finishes an obsolete plan (P3). |
+| `Selector` and `Sequence` hold a per-instance `Plan` queue. | One domain instance per agent kind, shared, which is safe only because the server tick is single-threaded (P6). |
+| Slots (`Slot` / `TrySetSlotDomain`) belong to the domain, not the agent. | Per-unit-type behaviour (builder, tank, technical) is a separate domain built once, with shared parts spliced in; never a slot swapped per agent at run time. |
+| No random selector in the core; planning reads only the world state and the MTR. | Deterministic (P7). Any variety (which loiter point, which flank) comes from `Spread.Seed`, as `BotBrain` does today. |
+| `DefaultFactory` allocates on every replan. | A pooled `IFactory` is mandatory, and an xUnit test holds it at zero (H0). |
+| The builder's `Do` takes `start` and `forceStop` but not the operator's `abort` callback. | A task that must clean up when aborted gets a builder verb that calls `SetOperator(new FuncOperator<T>(…, funcAborted: …))` directly. |
+| `Build()` throws on a malformed domain; `FindPlan` throws on an uninitialised context. | Both surface at start-up, not mid-round; a test builds every domain. |
+| Task names are strings; the decomposition log and `DebugMTR` build more. | Names are made once at build time. Logging and `DebugMTR` stay off outside development builds. |
+
+### 3.8 How it is taken in
+
+- **Vendor `Fluid-HTN/` at `e67af26` into `ThirdParty/FluidHTN/`**: the library folder only, without
+  `Properties/AssemblyInfo.cs` or the old-style `.csproj`, with upstream's `LICENSE` beside it and
+  the commit in a one-line `README`. Not upstream's `Fluid-HTN.UnitTests/`: it is MSTest, and the
+  glob in §3.5 would compile it into the game.
+- `Gdpyr.csproj` picks the library up through the SDK's default glob; `Tests/Gdpyr.Tests.csproj`
+  needs one `<Compile Include="../ThirdParty/FluidHTN/**/*.cs" />`.
+- The probes move into xUnit (`HtnPlannerTests`) in H0, over the real domains as they are written.
+  Bumping the pinned commit is then: replace the folder, run `dotnet test` and
+  `./scripts/htn-bench.sh`; a change in MTR behaviour fails a test rather than a playtest.
+- No upstream changes are needed. If upstream stops, the code is MIT and ours to maintain.
+
+### 3.9 Alternatives considered
+
+| Library | Why not |
+|---|---|
+| FluidHTN from NuGet (`Fluid-HTN` 0.0.0, 2021) | Four and a half years behind the source: it predates the #12 MTR fix, the `IPlannerState` split and the `v0.4` operator API |
+| [CHP — C# HTN-Planner](https://sourceforge.net/projects/chpplanner/) | GPL-3.0, which cannot go into this MIT repository without relicensing it; dormant since 2013 |
+| [Tencent/behaviac](https://github.com/Tencent/behaviac) | BSD-3-Clause BT/FSM/HTN framework whose workflow is a Windows-only designer; last updated 2023 |
+| [SandboxAI](https://github.com/OneManMonkeySquad/SandboxAI) | Depends on `UnityEngine`; archived 2025-05-04 |
+| [UnityHTN](https://github.com/konbraphat51/UnityHTN) | Unity-bound, 3 stars |
+| [godot-fluid-hierarchical-task-network](https://github.com/fnaith/godot-fluid-hierarchical-task-network) | FluidHTN ported to a C++ GDExtension: every condition and operator would cross the C#/C++ boundary, and `Scripts/Sim` may not depend on the engine |
+| Writing our own | Re-deriving MTR pre-emption, partial plans and their tests, in the area where FluidHTN's own bug history is; only worth it if FluidHTN had failed §3.4 or §3.5. It did not |
+
+Reference-only, not libraries to embed: SHOP / JSHOP2 (Lisp / Java, academic), Pyhop / GTPyhop
+(Python), PANDA and HDDL (academic hierarchical planning systems and their domain language).
 
 ---
 
@@ -208,7 +351,7 @@ human's units alone (D1).
 
 | File | Change |
 |---|---|
-| `ThirdParty/FluidHTN/` | Vendored library (§3.3). |
+| `ThirdParty/FluidHTN/` | Vendored library (§3.8). |
 | `Scripts/Sim/Htn/` (new) | `PooledHtnFactory`, fact enums, `GroundContext` / `UnitContext` / `CommanderContext`, the three domain builders, `ContactMemory`, `Neighbourhood`, `ZoneBoard`, `SquadBoard`, `GroundIntent` / `UnitIntent`. |
 | `Scripts/Bots/BotPilot.cs` | `Sample` asks the ground domain for a `GroundIntent` instead of calling `Objective`; `AcquireTarget` prefers the intent's target. `OutsideDefences`, `Reachable`, stuck recovery, the friendly-fire and blast checks stay. `BotBrain` gains a `Use` press (a locker tap). |
 | `Scripts/Bots/BotDirector.cs` | Owns the ground coordinator and the team `ContactMemory`; builds pilots and commanders with the selected `BotAi`. Agent fallback branches unchanged. |
@@ -226,7 +369,8 @@ thinks" during playback (DEMOS.md), so demos are unaffected.
 ## 5. Domains
 
 Selectors are in priority order: first valid method wins, and a higher one can pre-empt a running
-plan (§3.3). `[…]` is a condition. Operators marked *existing* wrap code that exists today.
+plan (§3.4, P2) while a lower one never can (P3). `[…]` is a condition. Operators marked *existing*
+wrap code that exists today.
 
 ### 5.1 Ground bot
 
@@ -245,37 +389,47 @@ Facts (one byte each, encoded on the pilot's scan):
 | `InsideDefences` | inside an enemy barracks' ring (today's `OutsideDefences` test) |
 | `MagazineLow` | today's `needsReload` |
 
+`tools/Gdpyr.HtnBench/GroundSketch.cs` is this tree in FluidHTN code, compiled and probed (§3.3,
+§3.4); the sweep branch of Recon is left out of the sketch. `{…}` is an executing condition, `→ X`
+a `PlanOnly` prediction.
+
 ```
 ground
 ├─ Retreat
-│   ├─ leave defences         [InsideDefences]                          existing OutsideDefences as an operator
-│   └─ fall back to allies    [Health=critical ∧ Odds=outnumbered]      move to the nearest teammate cluster, else the spawn;
-│                                                                       executing condition: still outnumbered
-├─ Resupply                   [Contact≠visible]
-│   ├─ swap at locker         [Role=locker runner ∧ ThreatKind=armour ∧ Armed=small arms]
-│   │                           path to locker → tap Use until an explosive is in hand (≤ 2 taps: the locker cycles
-│   │                           rifle → launcher → DMR → rifle)
-│   └─ reload                 [MagazineLow]                             existing BotBrain reload
+│   ├─ leave defences         [InsideDefences]                             LeaveDefences {InsideDefences}
+│   │                                                                        existing OutsideDefences as the operator
+│   └─ fall back to allies    [Health=critical ∧ Odds=outnumbered]         FallBack {Odds=outnumbered}
+│                                                                            nearest teammate cluster, else the spawn
+├─ Resupply
+│   ├─ rearm for armour       [Role=locker runner ∧ ThreatKind=armour ∧ Armed=small arms ∧ Contact≠none]
+│   │                           PathToLocker → UseLocker (→ Armed=explosive) → EngageArmour [Armed=explosive] {Armed=explosive}
+│   │                           UseLocker taps Use until an explosive is in hand (≤ 2 taps: rifle → launcher → DMR → rifle)
+│   └─ reload                 [Contact≠visible ∧ MagazineLow]              Reload {MagazineLow}; existing BotBrain reload
 ├─ Attack                     [Contact≠none]
-│   ├─ engage armour          [ThreatKind=armour ∧ Armed=explosive]     existing blast-safe hold-fire applies
-│   ├─ press with allies      [AlliesNear ∧ Odds≠outnumbered]           coordinator's focus target; advance to preferred range
-│   │                                                                   keeping the buddy within 15 m
-│   ├─ engage                 [Contact=visible]                         existing BotBrain range-hold and strafe
-│   └─ investigate ghost      [Contact=ghost]                           move to last-known position, sweep, give up at 8 s
+│   ├─ engage armour          [ThreatKind=armour]                          EngageArmour [Armed=explosive] {Armed=explosive}
+│   │                                                                        existing blast-safe hold-fire applies
+│   ├─ press with allies      [ThreatKind=infantry ∧ AlliesNear ∧ Odds≠outnumbered]
+│   │                           TakeFocusTarget → AdvanceWithBuddy {AlliesNear, Contact=visible}
+│   │                           coordinator's focus target; preferred range with the buddy within 15 m
+│   ├─ engage                 [ThreatKind=infantry ∧ Contact=visible]      Engage {Contact=visible}
+│   │                                                                        existing BotBrain range-hold and strafe
+│   └─ investigate ghost      [Contact=ghost]                              InvestigateGhost {Contact=ghost}
+│                                                                            last-known position; the ghost ages out at 8 s
 ├─ Defend Zone                [Role=denier]
-│   ├─ hold node              [AtZone]                                  stand in the capture radius facing the nearest barracks;
-│   │                                                                   one body stops the node paying (M5)
-│   └─ take node              move into the capture radius              effect AtZone
+│   ├─ hold node              [AtZone]                                     HoldNode {AtZone}
+│   │                                                                        in the capture radius: one body stops the node paying (M5)
+│   └─ take node                                                           TakeNode (→ AtZone) → HoldNode [AtZone] {AtZone}
 └─ Recon
     ├─ sweep stalest zone     coordinator's least-recently-observed node
-    └─ standoff               existing Objective(): loiter at the enemy barracks' ring
+    └─ standoff                                                            Standoff: existing Objective(), the enemy barracks' ring
 ```
 
 **Ground coordinator** (team level, every 30 ticks, a plain function rather than a planner — it
 assigns, it does not sequence): one denier per strategist-held node nearest the ground spawn, up to
 a third of the team; at most one locker runner while armour is in `ContactMemory` and fewer than two
-bots hold an explosive; a focus target per contact cluster (lowest health first, then nearest);
-buddy pairs by proximity. Humans are counted for strength but never given roles.
+bots hold an explosive, and the role is taken away after a trip that produced no explosive (the
+give-up fact P4 showed the domain needs); a focus target per contact cluster (lowest health first,
+then nearest); buddy pairs by proximity. Humans are counted for strength but never given roles.
 
 ### 5.2 RTS unit
 
@@ -319,7 +473,7 @@ and a strategist flanking with it has already decided the risk.
 
 Every 30 ticks, over `ZoneBoard`, `ContactMemory` (live contacts *and* ghosts — D4), the economy and
 `SquadBoard`. Facts are per decision; which zone or squad a method binds to is chosen by scoring in
-its condition (utility inside HTN, §2).
+its condition, which binds the winner to the context (utility inside HTN, §3.6).
 
 ```
 commander
@@ -363,12 +517,14 @@ Estimates in solo-dev days, as IMPLEMENTATION_PLAN.md §4 counts them. Each phas
 
 ### H0 — Planner in the tree (0.5 day)
 
-- Vendor FluidHTN at `e67af26` (§3.3); `Tests` include line; `PooledHtnFactory` in `Scripts/Sim/Htn`.
+- Vendor FluidHTN at `e67af26` (§3.8); `Tests` include line; `PooledHtnFactory` in `Scripts/Sim/Htn`,
+  from the bench's `PooledFactory`.
 - `--bot-ai legacy|htn` and `GameModeDefinition.BotAi`, parsed and tested in `LaunchOptionsTests`.
-- `HtnAllocationTests`: plan and tick a representative domain 1,000 times after warm-up; assert zero
-  bytes allocated.
-- **Done when:** `dotnet test` passes with FluidHTN compiled in, and `./scripts/htn-bench.sh` uses the
-  vendored copy and still reports 0 B.
+- `HtnPlannerTests`: probes P1–P8 of §3.4 as xUnit facts, so that a bump of the pinned commit that
+  changes priority, pre-emption, lookahead, partial planning, sharing or allocation fails
+  `dotnet test`. They start on the sketch domain and move to the real ones as H2–H4 write them.
+- **Done when:** `dotnet test` passes with FluidHTN compiled in, and `./scripts/htn-bench.sh --probe`
+  uses the vendored copy and still passes all nine.
 
 ### H1 — Shared knowledge (1.5 days)
 
@@ -431,7 +587,8 @@ Total: about 10–12 days before playtesting.
 
 | Claim | Proof |
 |---|---|
-| The planner allocates nothing on the tick | `HtnAllocationTests` (H0) in `dotnet test`; `./scripts/htn-bench.sh` |
+| FluidHTN behaves as §3 says it does | `./scripts/htn-bench.sh --probe` today (§3.4, nine passing); `HtnPlannerTests` in `dotnet test` from H0 |
+| The planner allocates nothing on the tick | P8, in both of the above; `./scripts/htn-bench.sh` for the per-tick figure |
 | A given situation produces a given plan | Fact-vector → task-chain tests per domain (H2–H4); no engine needed |
 | Legacy behaviour is intact | Existing `BotBrainTests`, `UnitBrainTests`, `StrategistBrainTests` unchanged; `--bot-ai legacy` default until H6 |
 | The bots behave as described in a real round | Scenarios in H6, run by `./scripts/playtest.sh` |
@@ -456,19 +613,25 @@ Total: about 10–12 days before playtesting.
 | Risk | Signal | Mitigation |
 |---|---|---|
 | Plan thrash: facts flicker across a band edge and plans churn | Debug HUD plan row changes every scan | Hysteresis on every band (the 1.25 × sensor drop rule `UnitBrain.ShouldDropTarget` uses); only banded facts in the world state |
-| Obsolete plans run to completion | Units attack a contact that left | Executing conditions on every long-running operator (§3.3); a test per operator that its premise failing fails the plan |
+| Obsolete plans run to completion | Units attack a contact that left | Executing conditions on every long-running operator (§3.7, shown necessary by P3); a test per operator that its premise failing fails the plan |
 | Bots become too good | Ground force loses every round with bots on | Every threshold (force ratios, strength fractions, radii) on `BotTraits` / `StrategistTraits`; coordinator caps (one locker runner, a third as deniers) |
 | Order semantics drift for human strategists | Players report units "not doing what they were told" | §5.2's rule: the order is the top-level task; `Move` is never second-guessed; autonomous Retreat only on bot-ordered units |
 | Coordination costs rays | Fog or scan time grows on the HUD | Boards reuse existing scans and `VisibilityService`'s rays; no new line-of-sight queries in H1–H4 |
-| Vendored library diverges from upstream | Upstream fixes a bug we hit | Pinned commit in `ThirdParty/FluidHTN/README`; `./scripts/htn-bench.sh` and the allocation test re-run on any bump |
+| Vendored library diverges from upstream, or a bump changes behaviour | Upstream fixes a bug we hit; MTR changes again (#8, #12) | Pinned commit in `ThirdParty/FluidHTN/README`; `HtnPlannerTests` and `./scripts/htn-bench.sh` gate every bump (§3.8) |
+| Single maintainer | Upstream goes quiet | MIT, 3,340 lines, no dependencies: it becomes ours, with its 159 upstream tests' behaviour already pinned by the probes |
 
 ---
 
 ## Sources
 
 - FluidHTN — <https://github.com/ptrefall/fluid-hierarchical-task-network> (read at `e67af26`,
-  2026-03-18: `Planners/Planner.cs`, `Contexts/BaseContext.cs`, `Factory/DefaultFactory.cs`,
-  `Tasks/CompoundTasks/Selector.cs`, `README.md`)
+  2026-03-18: `Planners/Planner.cs`, `Planners/IPlannerState.cs`, `Contexts/BaseContext.cs`,
+  `Factory/DefaultFactory.cs`, `BaseDomainBuilder.cs`, `Operators/`, `Tasks/CompoundTasks/Selector.cs`,
+  `README.md`; `git log` for history, tags and authorship)
+- FluidHTN issues — <https://github.com/ptrefall/fluid-hierarchical-task-network/issues?q=is%3Aissue>
+- FluidHTN announcement — <https://gamedev.net/news/fluid-hierarchical-task-network-planner-source-r853/>
+- FluidHTN extension library — <https://github.com/ptrefall/fluid-hierarchical-task-network-ext>
+  (read at its 2024-05-24 head: `UtilitySelector.cs`, `RandomSelector.cs`)
 - `Fluid-HTN` on NuGet — <https://www.nuget.org/packages/Fluid-HTN> (registration API: one version,
   `0.0.0`, 2021-09-01)
 - CHP: C# HTN-Planner — <https://sourceforge.net/projects/chpplanner/>
