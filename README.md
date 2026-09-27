@@ -11,6 +11,8 @@ dedicated-server authoritative.
   server, in C#, with [RLMatrix](https://github.com/asieradzk/RL_Matrix)
 - [`docs/RL_ARCHITECTURE.md`](docs/RL_ARCHITECTURE.md) — which algorithm to reach for in 2026, what
   changed since PPO, and the order to run things in here
+- [`docs/HTN_BOTS.md`](docs/HTN_BOTS.md) — proposal: hierarchical task network planners for the
+  ground bots, the RTS units and the computer strategist; the .NET library survey and its measurement
 - [`docs/DEMOS.md`](docs/DEMOS.md) — recording a round and watching it back: the console, the
   journal, and what playback does with it
 - [`docs/LAN.md`](docs/LAN.md) — hosting a room of machines from a checkout, with a dev build
@@ -37,7 +39,8 @@ Tests/          xUnit over the engine-free sources — `dotnet test`, no Godot n
 Tests/Scenarios/ Playtest scenario files: data, and authoring one needs no Godot install
 tools/          External processes that talk to a server over a socket: the agent client (both
                 seats' action spaces, rewards and environments), the RLMatrix trainer, the
-                divergence probe, the playtest harness, and a Python client. Never part of the
+                divergence probe, the playtest harness, a Python client, and the HTN planner
+                benchmark (docs/HTN_BOTS.md §3.2). Never part of the
                 game assembly (docs/TRAINING.md)
 ```
 
