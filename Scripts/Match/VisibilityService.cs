@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Gdpyr.Fps;
 using Gdpyr.Rts;
 using Gdpyr.Sim;
+using Gdpyr.Sim.Htn;
 using Godot;
 
 namespace Gdpyr.Match;
@@ -81,6 +82,19 @@ public sealed class VisibilityService
 	public uint LastRefreshTick { get; private set; }
 
 	/// <summary>
+	/// The strategist side's contact memory (docs/HTN_BOTS.md §4.3): every
+	/// ground-force player a refresh has found alive and visible, where, and how long
+	/// ago, until it has been out of sight for <see cref="SimConfig.GhostLifetimeTicks"/>.
+	/// Written after each refresh from the answer the refresh has just paid for, so
+	/// the planners know exactly what a human strategist's ghost markers show and
+	/// nothing more (§4.2 rule 2). One observer, the refresh: it stops at the first
+	/// sensor with a clear line, so it cannot say how many more there were without
+	/// spending the rays it exists to save.
+	/// </summary>
+	public ContactMemory Contacts { get; } = new(SnapshotCodec.MaxPlayers, observers: 1,
+		liveWindowTicks: SimConfig.FogRefreshIntervalTicks);
+
+	/// <summary>
 	/// Recomputes the field when one is due. Called every server tick by
 	/// <see cref="CombatManager.ServerPostTick"/>, after the units have moved and
 	/// before the snapshot that carries the result goes out.
@@ -153,13 +167,18 @@ public sealed class VisibilityService
 	public void CountWithheld(int messages) => WithheldRecords += messages;
 
 	/// <summary>Drops a peer's contact. Called when they leave, so a rejoin is not born visible.</summary>
-	public void Forget(int peerId) => _contacts.Remove(peerId);
+	public void Forget(int peerId)
+	{
+		_contacts.Remove(peerId);
+		Contacts.Forget(OwnerId.ForPeer(peerId));
+	}
 
 	/// <summary>Clears the field between rounds.</summary>
 	public void Clear()
 	{
 		_contacts.Clear();
 		_sensors.Clear();
+		Contacts.Clear();
 		VisibleContacts = 0;
 		TrackedContacts = 0;
 		WithheldRecords = 0;
@@ -204,9 +223,24 @@ public sealed class VisibilityService
 				// strategist's marker is drawn from, and a client — which has only the
 				// position the snapshot carried — has the feet too.
 				contact.LastKnown = player.Character.SimPosition;
+
+				// A body waiting out its respawn is not a contact to plan against.
+				if (player.IsAlive)
+				{
+					Contacts.Observe(tick, 0, new KnownContact
+					{
+						OwnerId = OwnerId.ForPeer(player.PeerId),
+						Kind = ContactKind.Player,
+						Position = contact.LastKnown,
+						Velocity = player.Character.Velocity,
+						HealthFraction = player.Health / (float)SimConfig.MaxHealth,
+					});
+				}
 			}
 			_contacts[player.PeerId] = contact;
 		}
+
+		Contacts.Age(tick);
 
 		VisibleContacts = visible;
 		TrackedContacts = tracked;

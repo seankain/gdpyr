@@ -5,6 +5,7 @@ using Gdpyr.Match;
 using Gdpyr.Net;
 using Gdpyr.Rts;
 using Gdpyr.Sim;
+using Gdpyr.Sim.Htn;
 using Godot;
 
 namespace Gdpyr.Ui;
@@ -45,6 +46,7 @@ public partial class Debug : PanelContainer
 		FillCombat();
 		FillUnits();
 		FillFog();
+		FillBoards();
 		FillEconomy();
 		FillEmplacements();
 	}
@@ -230,6 +232,45 @@ public partial class Debug : PanelContainer
 			+ $"  {fog.SensorCount} sensors  {fog.WithheldRecords} withheld"
 			+ $"  {fog.LineOfSightRays} rays");
 	}
+
+	/// <summary>
+	/// What the planners will know (docs/HTN_BOTS.md §4.3): each side's contact
+	/// memory, live and ghost, and the strategist side's squads. Authority only — the
+	/// boards are server-side and never replicated.
+	///
+	/// The strategist's live count is the fog's "seen" less anybody dead, so the two
+	/// rows disagreeing otherwise is the feed broken. The ground side's is what any
+	/// ground bot's scan found in its last interval, so with no ground bots it is 0.
+	/// Squads are orders: one per group of units given one order, gone when the last
+	/// of them is re-ordered or dies.
+	/// </summary>
+	private void FillBoards()
+	{
+		if (NetworkManager.Instance is not { IsServer: true } net)
+		{
+			return;
+		}
+
+		uint tick = net.Tick;
+		ContactMemory strategist = CombatManager.Instance?.Visibility?.Contacts;
+		ContactMemory ground = PlayerManager.Instance?.Bots?.GroundContacts;
+		SetProperty("contacts", $"strategist {Describe(strategist, tick)}  ground {Describe(ground, tick)}");
+
+		if (UnitManager.Instance?.Squads is { } squads)
+		{
+			SetProperty("squads", $"{squads.Count}/{squads.Capacity}  {squads.MemberCount} units"
+				+ (squads.Evictions > 0 ? $"  {squads.Evictions} recycled" : string.Empty)
+				+ (squads.Overflows > 0 ? $"  {squads.Overflows} dropped" : string.Empty));
+		}
+	}
+
+	private static string Describe(ContactMemory memory, uint tick) =>
+		memory == null
+			? "-"
+			: $"{memory.LiveCount(tick)} live {memory.GhostCount(tick)} ghosts"
+				+ (memory.Overflows + memory.Evictions > 0
+					? $" ({memory.Overflows} dropped {memory.Evictions} evicted)"
+					: string.Empty);
 
 	/// <summary>
 	/// The economy (docs/IMPLEMENTATION_PLAN.md §M5). "held" against the node count

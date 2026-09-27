@@ -4,6 +4,7 @@ using Gdpyr.Fps;
 using Gdpyr.Match;
 using Gdpyr.Rts;
 using Gdpyr.Sim;
+using Gdpyr.Sim.Htn;
 using Godot;
 
 namespace Gdpyr.Bots;
@@ -31,7 +32,7 @@ public sealed class BotPilot
 	/// expensive part of the tick and staleness is invisible next to how long it
 	/// takes anything to walk anywhere (docs/IMPLEMENTATION_PLAN.md §6).
 	/// </summary>
-	private const int ScanIntervalTicks = SimConfig.UnitTargetRefreshTicks;
+	public const int ScanIntervalTicks = SimConfig.UnitTargetRefreshTicks;
 
 	/// <summary>How often progress is checked, and how far it has to have got in that time.</summary>
 	private const int StuckWindowTicks = 30;
@@ -79,6 +80,9 @@ public sealed class BotPilot
 	private readonly BotTraits _traits;
 	private readonly fps_controller _character;
 
+	/// <summary>The team's memory, which every scan reports into (<see cref="BotDirector.GroundContacts"/>).</summary>
+	private readonly ContactMemory _teamContacts;
+
 	/// <summary>Reused by every scan so acquisition allocates nothing on the tick.</summary>
 	private readonly GroundContact[] _contacts = new GroundContact[GroundSensor.MaxContacts];
 
@@ -100,11 +104,12 @@ public sealed class BotPilot
 	private uint _stuckUntilTick;
 	private bool _wantedToMove;
 
-	public BotPilot(int peerId, fps_controller character, in BotTraits traits)
+	public BotPilot(int peerId, fps_controller character, in BotTraits traits, ContactMemory teamContacts)
 	{
 		_peerId = peerId;
 		_character = character;
 		_traits = traits;
+		_teamContacts = teamContacts;
 	}
 
 	public int PeerId => _peerId;
@@ -243,6 +248,7 @@ public sealed class BotPilot
 	private void AcquireTarget(fps_controller character, Team team, bool explosive, uint tick)
 	{
 		_contactCount = GroundSensor.Scan(character, _peerId, team, _traits.SensorRadiusMeters, _contacts);
+		Report(team, tick);
 		int best = GroundSensor.NearestHostileTarget(_contacts.AsSpan(0, _contactCount), team, explosive);
 
 		if (best != _targetOwnerId)
@@ -251,6 +257,42 @@ public sealed class BotPilot
 			// that swaps targets has to re-acquire the new one before it may fire.
 			_targetOwnerId = best;
 			_targetSinceTick = tick;
+		}
+	}
+
+	/// <summary>
+	/// Tells the team what this scan found: every hostile unit and armed structure,
+	/// as this bot's own eyes saw it (docs/HTN_BOTS.md §4.3, D3). Friends are not
+	/// contacts, and an enemy player never shows up in a ground scan — a strategist
+	/// has no body on the field.
+	/// </summary>
+	private void Report(Team team, uint tick)
+	{
+		if (_teamContacts == null)
+		{
+			return;
+		}
+
+		int observer = BotRoster.SlotOf(_peerId);
+		for (int i = 0; i < _contactCount; i++)
+		{
+			GroundContact seen = _contacts[i];
+			if (seen.IsPlayer || seen.Team == team)
+			{
+				continue;
+			}
+
+			_teamContacts.Observe(tick, observer, new KnownContact
+			{
+				OwnerId = seen.IsStructure ? seen.StructureOwnerId : OwnerId.ForUnit(seen.UnitId),
+				Kind = seen.IsStructure ? ContactKind.ArmedStructure
+					: seen.BulletProof ? ContactKind.Armour
+					: ContactKind.Infantry,
+				BulletProof = seen.BulletProof,
+				Position = seen.Position,
+				Velocity = seen.Velocity,
+				HealthFraction = seen.HealthFraction,
+			});
 		}
 	}
 

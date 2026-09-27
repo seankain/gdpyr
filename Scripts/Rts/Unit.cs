@@ -55,6 +55,17 @@ public partial class Unit : CharacterBody3D
 
 	public WeaponState Weapon;
 
+	/// <summary>
+	/// Server-side: the peer whose order it is carrying out — a person, a computer
+	/// strategist or an agent's seat — or 0 for one nobody gave: a fresh unit walking
+	/// to its rally point, one a scenario placed. What tells a human's unit from a
+	/// bot's (docs/HTN_BOTS.md §4.3, D1). Never replicated.
+	/// </summary>
+	public int OrderIssuer { get; set; }
+
+	/// <summary>Server-side: the tick that order was given on.</summary>
+	public uint OrderTick { get; set; }
+
 	/// <summary>What this unit is shooting at, as an <see cref="OwnerId"/>. 0 for nothing.</summary>
 	public int TargetOwnerId { get; set; }
 

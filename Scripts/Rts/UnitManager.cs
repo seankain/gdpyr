@@ -6,6 +6,7 @@ using Gdpyr.Match;
 using Gdpyr.Net;
 using Gdpyr.Sim;
 using Gdpyr.Sim.Agent;
+using Gdpyr.Sim.Htn;
 using Godot;
 
 namespace Gdpyr.Rts;
@@ -67,6 +68,10 @@ public partial class UnitManager : Node
 
 	/// <summary>Scratch for <see cref="ApplyRecordedSnapshot"/>; a field so playback allocates nothing per tick.</summary>
 	private readonly HashSet<ushort> _recordedIds = new();
+
+	/// <summary>The units one order named, and what each was worth, for <see cref="Squads"/>. Pre-sized.</summary>
+	private readonly ushort[] _orderedUnits = new ushort[SimConfig.MaxUnits];
+	private readonly float[] _orderedStrengths = new float[SimConfig.MaxUnits];
 
 	private BarracksStatus[] _barracksStatus = Array.Empty<BarracksStatus>();
 
@@ -142,6 +147,14 @@ public partial class UnitManager : Node
 	/// after the units for the reason the units are ticked before combat.
 	/// </summary>
 	public DefenseBattery Defenses { get; } = new();
+
+	/// <summary>
+	/// The strategist side's squads (docs/HTN_BOTS.md §4.3). Server-side, and never
+	/// replicated: every order forms or joins one (<see cref="ApplyOrder"/>), and a
+	/// unit leaves its squad when it is re-ordered, sent to build, or killed. Nothing
+	/// reads it to decide yet; the unit domain does from H3, the commander from H4.
+	/// </summary>
+	public SquadBoard Squads { get; } = new();
 
 	public override void _Ready()
 	{
@@ -635,6 +648,7 @@ public partial class UnitManager : Node
 
 		UnitsLost++;
 		unit.DespawnTick = tick + CorpseTicks;
+		Squads.Leave(unit.UnitId);
 		AgentEventBus.Emit(AgentEventKind.UnitLost, tick, unit.UnitId, unit.DefinitionId, attackerOwnerId,
 			unit.GlobalPosition.X, unit.GlobalPosition.Z);
 		return true;
@@ -803,6 +817,8 @@ public partial class UnitManager : Node
 		}
 
 		var ordered = (OrderKind)kind;
+		uint tick = NetworkManager.Instance?.Tick ?? 0;
+		int accepted = 0;
 
 		for (int i = 0; i < unitIds.Length; i++)
 		{
@@ -832,11 +848,40 @@ public partial class UnitManager : Node
 					TargetOwnerId = ordered == OrderKind.Attack ? targetOwnerId : OwnerId.None,
 					Returning = false,
 				};
+			unit.OrderIssuer = senderPeerId;
+			unit.OrderTick = tick;
 
 			// Re-evaluate on the next tick rather than at the end of the current scan
 			// interval: an order the units do not react to for a sixth of a second
 			// reads as an order that was dropped.
 			unit.NextScanTick = 0;
+
+			// A client chooses the list, so the same unit may be in it any number of
+			// times. Recorded once, every unit the order reached fits the scratch: there
+			// are never more of them alive than it holds.
+			if (accepted < _orderedUnits.Length
+				&& _orderedUnits.AsSpan(0, accepted).IndexOf(unit.UnitId) < 0)
+			{
+				_orderedUnits[accepted] = unit.UnitId;
+				_orderedStrengths[accepted] = ForceRatio.Strength(UnitCatalog.CostOf(unit.DefinitionId),
+					unit.HealthPercent / (float)byte.MaxValue);
+				accepted++;
+			}
+		}
+
+		// The units of one order are one squad, whoever gave it (docs/HTN_BOTS.md §4.3).
+		// A stop is the absence of an order, so it only takes them out of theirs.
+		if (ordered == OrderKind.Stop)
+		{
+			for (int i = 0; i < accepted; i++)
+			{
+				Squads.Leave(_orderedUnits[i]);
+			}
+		}
+		else
+		{
+			Squads.Form(tick, senderPeerId, ordered, target, ordered == OrderKind.Attack ? targetOwnerId : OwnerId.None,
+				_orderedUnits.AsSpan(0, accepted), _orderedStrengths.AsSpan(0, accepted));
 		}
 	}
 
@@ -1252,6 +1297,7 @@ public partial class UnitManager : Node
 
 		_ordered.Remove(unit);
 		_interpolators.Remove(unitId);
+		Squads.Leave(unitId);
 		unit.QueueFree();
 	}
 
@@ -1275,6 +1321,7 @@ public partial class UnitManager : Node
 
 		Defenses.Reset();
 		ClearStructures();
+		Squads.Clear();
 
 		UnitsProduced = 0;
 		UnitsLost = 0;
