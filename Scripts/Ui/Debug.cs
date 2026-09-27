@@ -370,9 +370,12 @@ public partial class Debug : PanelContainer
 
 			// Under --bot-ai htn: how many ground bots run each task, and the roles the
 			// coordinator handed out (docs/HTN_BOTS.md §5.1). Nothing under legacy.
+			// And per computer strategist, its squads: role and size (g garrison, s scout,
+			// a assault, f forming) and each one's running task (§5.3).
 			if (bots.Ai == BotAi.Htn)
 			{
 				SetProperty("ground plan", bots.DescribeGroundPlans());
+				SetProperty("commander", bots.DescribeCommanders());
 			}
 		}
 

@@ -312,7 +312,7 @@ public sealed class UnitContext : BaseContext
 	public bool HasPost;
 	public Vector3 PostPoint;
 
-	/// <summary>The squad's staging point, set by the commander (H4).</summary>
+	/// <summary>The squad's staging point, set by a computer strategist's commander (§5.3).</summary>
 	public bool HasStaging;
 	public Vector3 StagingPoint;
 

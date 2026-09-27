@@ -25,8 +25,8 @@ namespace Gdpyr.Tests;
 /// allocation fails here (§3.8).
 ///
 /// The domain is §5.1's sketch (tools/Gdpyr.HtnBench/GroundSketch.cs), the one
-/// <c>./scripts/htn-bench.sh --probe</c> runs; these move onto the real domains as
-/// H2–H4 write them.
+/// <c>./scripts/htn-bench.sh --probe</c> runs: these pin the library, and each real
+/// domain has its own tests (GroundHtnTests, UnitHtnTests, CommanderHtnTests).
 /// </summary>
 public class HtnPlannerTests
 {
@@ -525,16 +525,17 @@ public class HtnPlannerTests
 	}
 
 	[Fact]
-	public void P8_APlanThatReplacesAPausedOne_LeavesThePausedRemaindersQueueUnreturned()
+	public void P8_APlanThatReplacesAPausedOne_ReturnsThePausedRemaindersQueue()
 	{
-		// FluidHTN at the pinned commit. When this starts failing, the leak has been
-		// fixed (upstream or here): flip it to assert 0 bytes and update §3.4 and D6.
+		// Upstream at the pinned commit drops the queue; the vendored copy carries the
+		// one-line fix D6 recommended (ThirdParty/FluidHTN/README). If this fails after
+		// a bump, the bump lost the patch: re-apply it.
 		long bytes = AllocatedOverRounds(new CountingFactory(), retreatWhileStaging: true, rounds: 100,
 			out int preEmptions, out int borrowed, out int returned);
 
 		Assert.Equal(100, preEmptions);
 		Assert.Equal(100, borrowed);
-		Assert.Equal(0, returned);
-		Assert.True(bytes > 0);
+		Assert.Equal(100, returned);
+		Assert.Equal(0, bytes);
 	}
 }

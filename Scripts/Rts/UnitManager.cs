@@ -174,7 +174,8 @@ public partial class UnitManager : Node
 	/// replicated: every order forms or joins one (<see cref="ApplyOrder"/>), and a
 	/// unit leaves its squad when it is re-ordered, sent to build, or killed. Under
 	/// <c>--bot-ai htn</c> the unit domain reads it, and the squad census moves each
-	/// squad between moving and engaged (§5.2); the commander writes it from H4.
+	/// squad between moving and engaged (§5.2); a computer strategist's commander
+	/// writes its squads' missions, staging points and phases (§5.3).
 	/// </summary>
 	public SquadBoard Squads { get; } = new();
 

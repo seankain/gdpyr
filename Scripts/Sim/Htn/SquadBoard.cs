@@ -76,8 +76,8 @@ public struct Squad
 /// <summary>
 /// The strategist side's squads (docs/HTN_BOTS.md §4.3): which units are in which,
 /// what each is for, where it is going and what it focuses on. Read by the unit
-/// HTNs from H3, written by the commander from H4 — and, from H1, by every order:
-/// the units one order names are one squad, whoever gave it, so a human's
+/// HTNs from H3, written by a computer strategist's commander from H4 — and, from
+/// H1, by every order: the units one order names are one squad, whoever gave it, so a human's
 /// selection gets the same cohesion and focus fire a bot's does, and the commander
 /// can tell a human's units from its own (D1).
 ///
@@ -246,6 +246,22 @@ public sealed class SquadBoard
 		}
 
 		_squads[squad].Phase = phase;
+		return true;
+	}
+
+	/// <summary>
+	/// Says what a squad is for, where the order alone does not: a commander's move
+	/// order is a retreat or a refill, its defend order a reinforcement (H4). Returns
+	/// false for a squad that is not on the board.
+	/// </summary>
+	public bool SetMission(int squad, SquadMission mission)
+	{
+		if (squad < 0 || squad >= _squads.Length || !_squads[squad].Active)
+		{
+			return false;
+		}
+
+		_squads[squad].Mission = mission;
 		return true;
 	}
 

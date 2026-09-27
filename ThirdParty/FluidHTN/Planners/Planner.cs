@@ -96,6 +96,7 @@ namespace FluidHTN
             if (HasFoundNewPlan(decompositionStatus))
             {
                 OnFoundNewPlan(ctx, newPlan);
+                if (lastPartialPlanQueue != null) ctx.Factory.FreeQueue(ref lastPartialPlanQueue);
             }
             else if (lastPartialPlanQueue != null)
             {

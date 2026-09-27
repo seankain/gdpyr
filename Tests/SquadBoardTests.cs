@@ -264,6 +264,20 @@ public class SquadBoardTests
 	}
 
 	[Fact]
+	public void AMissionIsSet_OnASquadOnTheBoard_AndOnNoOther()
+	{
+		var board = new SquadBoard();
+		int squad = Order(board, 100, Bot, OrderKind.Move, There, 11, 12);
+		Assert.Equal(SquadMission.None, board.At(squad).Mission);
+
+		// A commander's move order is a retreat; the order alone cannot say so (H4).
+		Assert.True(board.SetMission(squad, SquadMission.Retreat));
+		Assert.Equal(SquadMission.Retreat, board.At(squad).Mission);
+		Assert.False(board.SetMission(squad + 1, SquadMission.Retreat));
+		Assert.False(board.SetMission(-1, SquadMission.Retreat));
+	}
+
+	[Fact]
 	public void ANewSquadInARecycledSlot_HasNoStagingPoint()
 	{
 		var board = new SquadBoard(squads: 1);
