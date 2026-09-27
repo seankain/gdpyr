@@ -155,8 +155,7 @@ public static class UnitBrain
 			case OrderKind.Defend:
 				// Chases only as far as the leash, then goes home. Without this a probe
 				// at the edge of the sensor drags the whole garrison off the point.
-				if (hasTarget && self.DistanceTo(order.Anchor) <= traits.LeashRadiusMeters
-					&& target.DistanceTo(order.Anchor) <= traits.LeashRadiusMeters)
+				if (hasTarget && InLeash(self, order.Anchor, target, traits))
 				{
 					return target;
 				}
@@ -167,6 +166,13 @@ public static class UnitBrain
 				return self;
 		}
 	}
+
+	/// <summary>
+	/// Whether a defending unit may go after <paramref name="target"/>: it and the
+	/// target are both inside the leash round <paramref name="anchor"/>.
+	/// </summary>
+	public static bool InLeash(Vector3 self, Vector3 anchor, Vector3 target, in UnitTraits traits) =>
+		self.DistanceTo(anchor) <= traits.LeashRadiusMeters && target.DistanceTo(anchor) <= traits.LeashRadiusMeters;
 
 	/// <summary>
 	/// Turns a patrol around when it reaches an end. Called with the result of

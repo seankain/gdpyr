@@ -1,6 +1,6 @@
 # HTN bots — research and implementation plan
 
-Status: **H2 built; its `--listen` check with the HUD is outstanding** (§6). FluidHTN is vendored at
+Status: **H3 built; the engine-side checks of H2 and H3 are outstanding** (§6). FluidHTN is vendored at
 `ThirdParty/FluidHTN` and compiled into the game and the tests; `PooledHtnFactory` is in
 `Scripts/Sim/Htn`; `--bot-ai legacy|htn` and `GameModeDefinition.BotAi` are parsed;
 `HtnPlannerTests` holds probes P1–P8 in `dotnet test`. H1 put the four boards of §4.3 in
@@ -8,8 +8,10 @@ Status: **H2 built; its `--listen` check with the HUD is outstanding** (§6). Fl
 strategist's `SquadBoard`, with the order issuer on every unit; the debug HUD shows them. H2 wrote
 the ground domain of §5.1 and its coordinator (`GroundDomain.cs`, `GroundCoordinator.cs`): under
 `--bot-ai htn` every ground bot plans with it, on the team's `ContactMemory`, a `Neighbourhood`
-survey on its own scan and a `ZoneBoard` of the nodes; units and the strategist still run legacy
-until H3 and H4. H0 found one FluidHTN defect the probes had not reached, a queue dropped when a
+survey on its own scan and a `ZoneBoard` of the nodes. H3 wrote the unit domain of §5.2 and a
+squad census (`UnitDomain.cs`, `SquadCensus.cs`): under `--bot-ai htn` every unit plans with it,
+whoever ordered it — keeping pace with its squad, focusing its squad's target, standing on a post
+round a defended anchor — and the strategist still runs legacy until H4. H0 found one FluidHTN defect the probes had not reached, a queue dropped when a
 paused partial plan is replaced (§3.4, D6). `tools/Gdpyr.HtnBench` — §5.1's domain written against
 FluidHTN, the behaviour probes of §3.4 and the cost measurement of §3.5 — and
 `scripts/htn-bench.sh`, which runs them, run against the vendored copy.
@@ -388,9 +390,9 @@ human's units alone (D1).
 | Board | Owner | Rules the table above leaves open |
 |---|---|---|
 | `ContactMemory` | Strategist: `VisibilityService.Contacts`. Ground: `BotDirector.GroundContacts`. | A contact is **live** while an observer has reported it within one scan interval (8 ticks for the fog refresh, 10 for a bot's scan), inclusive, so a contact every scan finds never flickers; a **ghost** after that; forgotten 8 s after it was last seen. Seen-by counts distinct observers within that interval: ground bots by roster slot; the fog is one observer, because it stops at the first sensor with a clear line. The strategist records live ground-force players only; the ground side, hostile units and armed structures, and forgets one the tick-10 prune finds dead — the unit snapshot is not fogged for the ground force, so that is parity. Full: a new contact takes the stalest ghost's entry, and is refused if every entry is live; both are counted and both are 0 when sized right. |
-| `Neighbourhood` | The caller, per scan (H2, H3). | Bodies, not strengths, as §5.1 defines outnumbered, with the surveyor counted on its own side. Hostiles are live and ghost contacts within 40 m. Bands enter at 2 : 1 and are held down to 1.5 : 1 (§9). |
+| `Neighbourhood` | The caller, per scan (H2, H3). | Bodies, not strengths, as §5.1 defines outnumbered, with the surveyor counted on its own side. Hostiles are live and ghost contacts within 40 m. Bands enter at 2 : 1 and are held down to 1.5 : 1 (§9). From H3 it also gives the nearest friend's position and the nearest friend in a fight within 40 m, a radius of its own (§5.2's "a friend within 40 m is engaging"). |
 | `ZoneBoard` | The commander and the ground coordinator (H2, H4). | Strength is `ForceRatio.Strength`: cost × health fraction. Bullet-proof contacts are answered by the side's explosives in proportion; the unanswered share counts at `UnansweredArmourScale` times. Observation is range-only against a `VisionField`. `Stalest(kind)` is the least-recently-observed zone, never-seen first. |
-| `SquadBoard` | `UnitManager.Squads`. | One order is one squad; the same issuer, kind and focus within 2 m of a squad's target joins it — which keeps a bot's garrison, reinforced a unit at a time, one squad. A stop, a build order or a death takes a unit out; the last one out closes the squad. Full: the least recently ordered squad is recycled. Membership lives only on the board, and the unit carries its order's issuer and tick. Target zone and staging point wait for the commander that sets them (H4). |
+| `SquadBoard` | `UnitManager.Squads`. | One order is one squad; the same issuer, kind and focus within 2 m of a squad's target joins it — which keeps a bot's garrison, reinforced a unit at a time, one squad. A stop, a build order or a death takes a unit out; the last one out closes the squad. Full: the least recently ordered squad is recycled. Membership lives only on the board, and the unit carries its order's issuer and tick. From H3 the unit census moves a squad between moving and engaged; `Stage` (a staging point, and gathering) and `SetPhase` wait for the commander, which sets them from H4, as it will the target zone. |
 
 ### 4.4 Where it plugs in
 
@@ -527,6 +529,23 @@ unit
 
 A `Move` order is never second-guessed: `UnitOrder` documents it as "go there … does not chase",
 and a strategist flanking with it has already decided the risk.
+
+**As built in H3** (`Scripts/Sim/Htn/UnitDomain.cs`, `SquadCensus.cs`; the engine half in
+`UnitManager`). The tree above is the domain, with these differences, each found by a test or in
+review:
+
+| Where | Built | Why |
+|---|---|---|
+| Facts | Two more: `UnderFire` (hit within 2 s) and `FriendNear` (a friendly unit within 30 m), for Build's "steps to its nearest friend when shot at". `Order`, `Contact` and `InLeash` are written every tick, the rest on the unit's 10-tick scan. `InLeash` is today's test, now `UnitBrain.InLeash`, which `Destination` calls; defending and idle units only, on the unit's target, else on the fight a friend is in. `FriendEngaged` is true only with a point to go to. A unit in no squad reads `SquadPhase=moving`. | A target that dies ends "engage focus" on the tick it goes, as today's code stops engaging on that tick. `Gathering` is phase 0, so no squad must not read as 0. Without `FriendNear`, a builder under fire with nobody near would "take cover" where it stands — the survey's nearest friend is then itself — instead of building. |
+| Order | Every operator holds only while its order does, and a new order — `ApplyOrder`, or a builder's assignment — resets the plan. The intent says how to move: `Order` (today's `UnitBrain.Destination`), `Target`, `Point` or `Hold`, and whether to stand to fight; an operator that follows the order stands to fight exactly when `HoldsWhileEngaging` says. A patrol turns round only at an end its order sent it to. | Four of the five top-level branches are below Attack, so an attack plan would outlive the defend order that replaced it (P3). A patrol that retreated would otherwise count the fall-back point as an end. |
+| Retreat | For a computer strategist's order only (`Stance=autonomous`: the issuer is a bot the director drives, with no policy attached to its seat). Issuer 0 — a fresh unit walking to its rally point, a unit a scenario placed — obeys. It falls back to the squad's staging point once the commander sets one (H4), else the nearest friendly barracks' rally point. | D1. For a unit that is outnumbered, "the nearest friendly cluster" within reach is the fight it is losing; the barracks is where the defences are, and where D2 would heal it. |
+| Resupply | Not built. | D2 is undecided: with no healing a unit has nothing to resupply (H5). |
+| Build | "take cover" [UnderFire ∧ FriendNear] walks to the nearest friendly unit and does not work while it does; "work" is today's build. | A builder in reach of its site stands still to work, so the plan has to say it is not working for it to move. |
+| Attack | "engage focus": at the target, standing to fight, the squad's focus preferred. "support": to the squad's focus where the side last saw it, else to where its squad-mates in the fight stand; with none of those, to the target of the nearest friend in a fight within 40 m, else to that friend. "advance": to the named target's last-known position when the side remembers it, else the order's point, **keeping pace** — a unit more than 8 m nearer the objective than its squad's centroid holds until it is within 3 m again, and one wait that lasts 8 s ends the pacing for that advance. "wait for squad": at the staging point, else where it stands. | Keeping pace is what makes one attack order arrive together (§6, H3): over 150 m a technical at 8 m/s arrives 14 s before riflemen at 4.5. A slow squad closes up again and again and is waited for each time; one that does not close in 8 s has a unit that is stuck, and is left. |
+| Focus | `SquadCensus`, once a tick before any unit moves: a target a member holds — the target the order named while a member holds it, else the one already chosen while any member holds it, else the one most members hold, then the weakest the side remembers, then the lowest id. Acquisition takes it before the nearest when the unit's sensor has it with a clear line. | A focus worth having is one that is kept. One ray: it replaces the search's rays when the line is clear, and when it is not the search skips that player, so a scan casts at most one ray more than legacy's — against §9's "no new line-of-sight queries", and only while the focus is behind a wall. |
+| Defend Zone | "hold post": post k of n on a ring round the anchor — k the unit's place by id among its squad's living units, 4 m apart, the radius at least 4 m and at most half the unit's leash — post 0 towards the nearest contact the side remembers within 80 m of the anchor, else towards the ground force's spawns, rounded to 45°. A squad of one stands on the anchor. "engage in leash" is today's destination. "answer a call" is for a defend order only. | A bearing that moved with every step a contact took would send the ring round every scan. The strategist's `ZoneBoard` is not fed until H4 and has no bearing. A unit told to stop holds where it is, as `OrderKind.None` says. |
+| Recon, Obey | Today's destinations, the squad's focus preferred. | §5.2. |
+| Phase | The census writes `Engaged` while any member is engaging and `Moving` when none is; `Gathering` and `FallingBack` it leaves as they are. | Information up (§4.1): H4's Resupply reads "not engaged". |
 
 ### 5.3 Strategist commander
 
@@ -679,13 +698,39 @@ Estimates in solo-dev days, as IMPLEMENTATION_PLAN.md §4 counts them. Each phas
   the console (§4.4), not written; friends' `Engaging` is not fed to the survey, which the ground
   domain does not read.
 
-### H3 — Unit HTN (2 days)
+### H3 — Unit HTN (2 days) — built; the engine-side check is outstanding
 
 - Unit facts, domain (§5.2), `UnitIntent` applied in `SimulateUnit`; defend posts; squad focus.
 - `UnitHtnTests` over fact vectors; existing `UnitBrainTests` unchanged and passing.
 - **Done when:** a human's selection given one attack order arrives together and focuses one target;
   a garrison spreads round its anchor; per-tick server time on the debug HUD is within noise of
   `legacy` at 64 units.
+- **Result so far:** `dotnet test` 1184 passed, 0 failed (1080 before; 104 new: 71 in
+  `UnitHtnTests`, 27 in `SquadCensusTests`, 3 in `NeighbourhoodTests`, 3 in `SquadBoardTests`), 0
+  warnings; `UnitBrainTests` unchanged, 24 passing; `dotnet build Gdpyr.csproj` 0 warnings, 0 errors.
+  `UnitHtnTests` covers every row of §5.2 as built, Retreat pre-empting a running Attack and only
+  for a computer strategist's order, a new order ending a plan for a lower branch, the P3 case on the
+  real domain, every operator ending when its premise goes (a theory over all twelve), keeping pace
+  (the wait, its hysteresis, the cap on one wait, a slow squad waited for more than 8 s in all, a
+  wait counted once a tick however often the operator runs), the fact bands, determinism, and zero
+  bytes over 64 units × 7,200 ticks with the pooled factory (the same run with `DefaultFactory` must
+  allocate). `SquadCensusTests` covers the counts, ranks, the focus rule and its stickiness, the
+  phase, zero bytes for a census of 64 units a tick, and the posts and bearings. Checked to fail,
+  then reverted: without Advance's executing condition on its order, 2 fail; with pacing off, 5;
+  with the focus not kept, 1. Legacy is unchanged: with no plan, `SimulateUnit`, `AcquireTarget`,
+  `ApplyOrder` and `Damage` compute what they did before.
+- **Cost, the engine-free half.** A scratch program, not committed, doing what `UnitManager` does
+  per tick under `htn` apart from the engine — the census and neighbour list, each unit's scan
+  staggered over 10 ticks (survey, memory, posts, encode), then track and plan every unit — for 64
+  units in 8 squads with 16 remembered contacts: 14.8–17.0 µs per tick over three runs of 3,600
+  ticks (about 0.1 % of a tick), 0 B allocated; 4-core Intel Xeon @ 2.10 GHz, .NET SDK 8.0.131.
+- **Not checked: everything that needs the engine.** This session had no Godot (the environment's
+  network policy refused `github.com` release downloads), so the three checks above, and the twelve
+  scenarios under `htn`, are still to run. The HUD has what they need, on the authority: `unit plan`
+  (units on each task, and how many are waiting for their squad) and `unit ms` (the unit pass, mean
+  of the last second, under either AI, which is the number to set against legacy at 64 units).
+  Scenario-placed units have no issuer and no squad, so under `htn` they obey, and a lone defender's
+  post is its anchor: the scenarios should play as they do under legacy, but that is a prediction.
 
 ### H4 — Strategist commander (3 days)
 

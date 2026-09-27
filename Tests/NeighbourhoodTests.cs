@@ -111,6 +111,60 @@ public class NeighbourhoodTests
 	}
 
 	[Fact]
+	public void TheNearestFriendsPosition_IsItsOwn_OrTheSurveyorsWithNobodyNear()
+	{
+		var self = new Vector3(3f, 0f, 4f);
+		Neighbour[] friends =
+		{
+			new(9, new Vector3(10f, 0f, 0f), 1f, false),
+			new(4, new Vector3(-10f, 0f, 0f), 1f, false),
+		};
+
+		Assert.Equal(new Vector3(10f, 0f, 0f),
+			Neighbourhood.Survey(SelfId, self, friends, null, 0, OddsBand.Even).NearestFriendPosition);
+		Assert.Equal(self,
+			Neighbourhood.Survey(SelfId, self, ReadOnlySpan<Neighbour>.Empty, null, 0, OddsBand.Even)
+				.NearestFriendPosition);
+	}
+
+	[Fact]
+	public void TheNearestFriendInAFight_IsLookedForFurtherOutThanTheOdds()
+	{
+		// §5.2: a friend within 40 m in a fight is one to answer; the odds are counted in 30.
+		Neighbour[] friends =
+		{
+			new(2, new Vector3(5f, 0f, 0f), 1f, false),
+			new(3, new Vector3(35f, 0f, 0f), 1f, true),
+			new(4, new Vector3(0f, 0f, 38f), 1f, true),
+			new(5, new Vector3(0f, 0f, 41f), 1f, true),
+		};
+
+		Neighbourhood around = Neighbourhood.Survey(SelfId, Vector3.Zero, friends, null, 0, OddsBand.Even);
+
+		Assert.Equal(1, around.Friends);
+		Assert.Equal(0, around.FriendsEngaging);
+		Assert.Equal(3, around.EngagedFriendId);
+		Assert.Equal(new Vector3(35f, 0f, 0f), around.EngagedFriendPosition);
+	}
+
+	[Fact]
+	public void TheNearestFriendInAFight_TiesGoToTheLowerId_AndNobodyIsNone()
+	{
+		Neighbour[] friends =
+		{
+			new(8, new Vector3(20f, 0f, 0f), 1f, true),
+			new(6, new Vector3(-20f, 0f, 0f), 1f, true),
+			new(SelfId, Vector3.Zero, 1f, true),
+		};
+
+		Assert.Equal(6, Neighbourhood.Survey(SelfId, Vector3.Zero, friends, null, 0, OddsBand.Even).EngagedFriendId);
+
+		Neighbourhood quiet = Neighbourhood.Survey(SelfId, Vector3.One, friends.AsSpan(2), null, 0, OddsBand.Even);
+		Assert.Equal(0, quiet.EngagedFriendId);
+		Assert.Equal(Vector3.One, quiet.EngagedFriendPosition);
+	}
+
+	[Fact]
 	public void Alone_TheCentroidIsWhereTheSurveyorStands()
 	{
 		var self = new Vector3(3f, 0f, 4f);

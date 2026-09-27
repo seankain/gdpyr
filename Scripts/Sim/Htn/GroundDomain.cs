@@ -94,6 +94,28 @@ public enum HealthBand : byte
 	Critical = 2,
 }
 
+/// <summary>The health bands both domains share (§5.1, §5.2), with their hysteresis.</summary>
+public static class HealthBands
+{
+	/// <summary>
+	/// The band for <paramref name="fraction"/>, held past its edge by
+	/// <paramref name="hysteresis"/> once entered, so health sitting on an edge does
+	/// not replan every scan (§9).
+	/// </summary>
+	public static HealthBand Band(float fraction, HealthBand previous, float okFraction, float criticalFraction,
+		float hysteresis)
+	{
+		float critical = criticalFraction + (previous == HealthBand.Critical ? hysteresis : 0f);
+		if (fraction < critical)
+		{
+			return HealthBand.Critical;
+		}
+
+		float ok = okFraction + (previous == HealthBand.Ok ? -hysteresis : 0f);
+		return fraction >= ok ? HealthBand.Ok : HealthBand.Hurt;
+	}
+}
+
 /// <summary>What the coordinator wants this bot for (§5.1). Humans are never given one.</summary>
 public enum GroundRole : byte
 {
@@ -401,17 +423,9 @@ public sealed class GroundContext : BaseContext
 	}
 
 	/// <summary>The health band for a fraction, held past its edge by <see cref="GroundPlanTraits.HealthHysteresis"/> once entered.</summary>
-	public static HealthBand Band(float fraction, HealthBand previous, in GroundPlanTraits traits)
-	{
-		float critical = traits.HealthCriticalFraction + (previous == HealthBand.Critical ? traits.HealthHysteresis : 0f);
-		if (fraction < critical)
-		{
-			return HealthBand.Critical;
-		}
-
-		float ok = traits.HealthOkFraction + (previous == HealthBand.Ok ? -traits.HealthHysteresis : 0f);
-		return fraction >= ok ? HealthBand.Ok : HealthBand.Hurt;
-	}
+	public static HealthBand Band(float fraction, HealthBand previous, in GroundPlanTraits traits) =>
+		HealthBands.Band(fraction, previous, traits.HealthOkFraction, traits.HealthCriticalFraction,
+			traits.HealthHysteresis);
 
 	// ---- operators ---------------------------------------------------------
 

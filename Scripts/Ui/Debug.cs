@@ -187,6 +187,15 @@ public partial class Debug : PanelContainer
 		if (NetworkManager.Instance is { IsServer: true })
 		{
 			SetProperty("rejected orders", $"{units.RejectedOrders}");
+
+			// The unit pass per tick, mean of the last second: what --bot-ai htn is set
+			// against legacy with at the unit ceiling (docs/HTN_BOTS.md §6, H3). Under
+			// htn, how many units run each task of §5.2.
+			SetProperty("unit ms", $"{units.UnitMilliseconds:0.000}  {units.LiveUnitCount} units");
+			if (units.Plans)
+			{
+				SetProperty("unit plan", units.DescribeUnitPlans());
+			}
 		}
 
 		// Builders' work (docs/NETCODE.md §10.5). "0 built" across a session means the
