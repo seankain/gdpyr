@@ -13,7 +13,8 @@ dedicated-server authoritative.
   changed since PPO, and the order to run things in here
 - [`docs/HTN_BOTS.md`](docs/HTN_BOTS.md) — hierarchical task network planners for the ground
   bots, the RTS units and the computer strategist, on FluidHTN — what it is, what it was checked to
-  do, what it costs, and the phases; H0 (the planner in the tree) is done
+  do, what it costs, and the phases; H0 (the planner in the tree) and H1 (what each side knows) are
+  done
 - [`docs/DEMOS.md`](docs/DEMOS.md) — recording a round and watching it back: the console, the
   journal, and what playback does with it
 - [`docs/LAN.md`](docs/LAN.md) — hosting a room of machines from a checkout, with a dev build
@@ -26,7 +27,8 @@ Scripts/Core/   Bootstrap (CLI args, engine settings), LaunchOptions, weapon and
 Scripts/Net/    TransportFactory, NetworkManager (transport + clocks), PlayerManager (tick loop, roster)
 Scripts/Sim/    Engine-free simulation code; unit-tested without Godot
 Scripts/Sim/Demo/ The demo container: header, records, writer, reader — a codec like the others
-Scripts/Sim/Htn/ HTN planning: the pooled FluidHTN factory; domains, contexts and boards as H1-H4 land
+Scripts/Sim/Htn/ HTN planning: the pooled FluidHTN factory, the contact memories, squad and zone
+                boards and force ratio; domains and contexts as H2-H4 land
 Scripts/Fps/    Character controller, movement FSM, input sampler, weapons, viewmodel
 Scripts/Rts/    Units, barracks, orders, the strategist camera and selection
 Scripts/Match/  CombatManager (the round), MatchState, TeamService

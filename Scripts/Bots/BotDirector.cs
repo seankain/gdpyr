@@ -5,7 +5,9 @@ using Gdpyr.Core;
 using Gdpyr.Fps;
 using Gdpyr.Match;
 using Gdpyr.Net;
+using Gdpyr.Rts;
 using Gdpyr.Sim;
+using Gdpyr.Sim.Htn;
 using Godot;
 
 namespace Gdpyr.Bots;
@@ -40,6 +42,7 @@ public sealed class BotDirector
 	private readonly Dictionary<int, BotStrategist> _commanders = new();
 
 	private uint _nextReconcileTick;
+	private uint _nextPruneTick;
 
 	public BotDirector(GameModeDefinition gameMode, LaunchOptions options)
 	{
@@ -75,6 +78,16 @@ public sealed class BotDirector
 
 	public bool Enabled => GroundTarget > 0 || StrategistTarget > 0;
 
+	/// <summary>
+	/// The ground force's contact memory (docs/HTN_BOTS.md §4.3, D3): what any ground
+	/// bot's own scan has found — enemy units and armed structures — pooled for the
+	/// team, as callouts would pool it. Sized for everything the strategist can field
+	/// at once, with one observer per roster slot, live for one scan interval.
+	/// Nothing reads it to decide yet; the ground domain does from H2.
+	/// </summary>
+	public ContactMemory GroundContacts { get; } = new(SimConfig.MaxUnits + SimConfig.MaxStructures,
+		BotRoster.MaxBots, BotPilot.ScanIntervalTicks);
+
 	public int GroundBots => _pilots.Count;
 
 	public int StrategistBots => _commanders.Count;
@@ -92,6 +105,12 @@ public sealed class BotDirector
 		{
 			_nextReconcileTick = tick + (uint)ReconcileIntervalTicks;
 			Reconcile();
+		}
+
+		if (tick >= _nextPruneTick)
+		{
+			_nextPruneTick = tick + (uint)BotPilot.ScanIntervalTicks;
+			PruneGroundContacts(tick);
 		}
 
 		AgentServer agents = AgentServer.Instance;
@@ -174,6 +193,39 @@ public sealed class BotDirector
 		}
 
 		_commanders.Remove(peerId);
+	}
+
+	// ---- knowledge ---------------------------------------------------------
+
+	/// <summary>
+	/// Ages the ground memory, and forgets what is dead: a unit killed or a structure
+	/// knocked down is no contact to plan against. That is no privilege — the unit
+	/// snapshot is not fogged for the ground force, so every ground client draws a
+	/// unit's death, and every structure's (docs/NETCODE.md §6.2, §10.5).
+	/// </summary>
+	private void PruneGroundContacts(uint tick)
+	{
+		ContactMemory memory = GroundContacts;
+		memory.Age(tick);
+
+		UnitManager units = UnitManager.Instance;
+		if (units == null)
+		{
+			return;
+		}
+
+		for (int i = memory.Count - 1; i >= 0; i--)
+		{
+			int ownerId = memory.At(i).OwnerId;
+			bool gone = OwnerId.IsStructure(ownerId)
+				? units.StructureOf(ownerId) is not { IsDestroyed: false }
+				: units.Find(OwnerId.UnitOf(ownerId)) is not { IsAlive: true };
+
+			if (gone)
+			{
+				memory.Forget(ownerId);
+			}
+		}
 	}
 
 	// ---- roster ------------------------------------------------------------
@@ -348,7 +400,7 @@ public sealed class BotDirector
 		else
 		{
 			Equip(combat, peerId);
-			_pilots[peerId] = new BotPilot(peerId, character, BotTraits.Default);
+			_pilots[peerId] = new BotPilot(peerId, character, BotTraits.Default, GroundContacts);
 		}
 
 		GD.Print($"[bots] {BotRoster.NameOf(peerId)} joined as {team}");

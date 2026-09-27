@@ -10,6 +10,10 @@ using Gdpyr.Sim;
 using Gdpyr.Sim.Htn;
 using Xunit;
 
+// The sketch's own fact, which the game's Gdpyr.Sim.Htn.OddsBand mirrors; the probes
+// drive the sketch until H2 writes the real domain.
+using OddsBand = Gdpyr.HtnBench.OddsBand;
+
 namespace Gdpyr.Tests;
 
 /// <summary>

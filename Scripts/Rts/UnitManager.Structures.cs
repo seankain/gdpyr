@@ -362,7 +362,7 @@ public partial class UnitManager
 
 		Structure structure = CreateStructure(free, kind, site, facing, team, simulated: true);
 		AnnounceStructure(structure);
-		AssignBuilders(builders, structure);
+		AssignBuilders(builders, structure, senderPeerId);
 
 		AgentEventBus.Emit(AgentEventKind.StructurePlaced, NetworkManager.Instance?.Tick ?? 0, free, kind, builders,
 			site.X, site.Z);
@@ -392,7 +392,7 @@ public partial class UnitManager
 			return false;
 		}
 
-		AssignBuilders(builders, structure);
+		AssignBuilders(builders, structure, senderPeerId);
 		return true;
 	}
 
@@ -508,11 +508,13 @@ public partial class UnitManager
 	/// <summary>
 	/// Sends builders to a structure: each to the nearest point of its own side of
 	/// it, at <see cref="Construction.StandoffMeters"/> from the edge — inside the
-	/// reach, and clear of the collider it will have when it is finished.
+	/// reach, and clear of the collider it will have when it is finished. A builder
+	/// sent to build is out of whatever squad it was in (docs/HTN_BOTS.md §4.3).
 	/// </summary>
-	private void AssignBuilders(int count, Structure structure)
+	private void AssignBuilders(int count, Structure structure, int issuer)
 	{
 		Footprint footprint = structure.Footprint;
+		uint tick = NetworkManager.Instance?.Tick ?? 0;
 		for (int i = 0; i < count; i++)
 		{
 			Unit builder = _builders[i];
@@ -524,7 +526,10 @@ public partial class UnitManager
 				TargetOwnerId = structure.ShooterId,
 				Returning = false,
 			};
+			builder.OrderIssuer = issuer;
+			builder.OrderTick = tick;
 			builder.NextScanTick = 0;
+			Squads.Leave(builder.UnitId);
 			_builders[i] = null;
 		}
 	}

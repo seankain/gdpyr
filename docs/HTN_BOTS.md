@@ -1,13 +1,16 @@
 # HTN bots — research and implementation plan
 
-Status: **H0 done** (§6). FluidHTN is vendored at `ThirdParty/FluidHTN` and compiled into the game
+Status: **H1 done** (§6). FluidHTN is vendored at `ThirdParty/FluidHTN` and compiled into the game
 and the tests; `PooledHtnFactory` is in `Scripts/Sim/Htn`; `--bot-ai legacy|htn` and
 `GameModeDefinition.BotAi` are parsed, and `htn` still runs legacy; `HtnPlannerTests` holds probes
-P1–P8 in `dotnet test`. Nothing in the game plans with an HTN yet: that starts at H2. H0 found one
-FluidHTN defect the probes had not reached, a queue dropped when a paused partial plan is replaced
-(§3.4, D6). `tools/Gdpyr.HtnBench` — §5.1's domain written against FluidHTN, the behaviour probes of
-§3.4 and the cost measurement of §3.5 — and `scripts/htn-bench.sh`, which runs them, now run against
-the vendored copy.
+P1–P8 in `dotnet test`. H1 put the four boards of §4.3 in `Scripts/Sim/Htn` and fed three of them in
+the running game: each side's `ContactMemory` and the strategist's `SquadBoard`, with the order
+issuer on every unit; the debug HUD shows them. `Neighbourhood` and `ZoneBoard` are built and tested
+and wait for the scans that will run them (H2–H4). Nothing in the game plans with an HTN yet: that
+starts at H2. H0 found one FluidHTN defect the probes had not reached, a queue dropped when a paused
+partial plan is replaced (§3.4, D6). `tools/Gdpyr.HtnBench` — §5.1's domain written against
+FluidHTN, the behaviour probes of §3.4 and the cost measurement of §3.5 — and
+`scripts/htn-bench.sh`, which runs them, run against the vendored copy.
 
 Scope: replace the goal selection of the three computer-controlled deciders — the ground bot
 (`BotPilot`), the RTS unit (`UnitManager.SimulateUnit` over `UnitBrain`) and the computer strategist
@@ -378,6 +381,15 @@ Recording that batch as an ad-hoc squad (and the issuing peer on each unit, serv
 human's selection the same cohesion and focus fire as a bot's — and lets the commander HTN leave a
 human's units alone (D1).
 
+**As built in H1** (`Scripts/Sim/Htn/`, with `ForceRatio` holding the arithmetic the boards share):
+
+| Board | Owner | Rules the table above leaves open |
+|---|---|---|
+| `ContactMemory` | Strategist: `VisibilityService.Contacts`. Ground: `BotDirector.GroundContacts`. | A contact is **live** while an observer has reported it within one scan interval (8 ticks for the fog refresh, 10 for a bot's scan), inclusive, so a contact every scan finds never flickers; a **ghost** after that; forgotten 8 s after it was last seen. Seen-by counts distinct observers within that interval: ground bots by roster slot; the fog is one observer, because it stops at the first sensor with a clear line. The strategist records live ground-force players only; the ground side, hostile units and armed structures, and forgets one the tick-10 prune finds dead — the unit snapshot is not fogged for the ground force, so that is parity. Full: a new contact takes the stalest ghost's entry, and is refused if every entry is live; both are counted and both are 0 when sized right. |
+| `Neighbourhood` | The caller, per scan (H2, H3). | Bodies, not strengths, as §5.1 defines outnumbered, with the surveyor counted on its own side. Hostiles are live and ghost contacts within 40 m. Bands enter at 2 : 1 and are held down to 1.5 : 1 (§9). |
+| `ZoneBoard` | The commander and the ground coordinator (H2, H4). | Strength is `ForceRatio.Strength`: cost × health fraction. Bullet-proof contacts are answered by the side's explosives in proportion; the unanswered share counts at `UnansweredArmourScale` times. Observation is range-only against a `VisionField`. `Stalest(kind)` is the least-recently-observed zone, never-seen first. |
+| `SquadBoard` | `UnitManager.Squads`. | One order is one squad; the same issuer, kind and focus within 2 m of a squad's target joins it — which keeps a bot's garrison, reinforced a unit at a time, one squad. A stop, a build order or a death takes a unit out; the last one out closes the squad. Full: the least recently ordered squad is recycled. Membership lives only on the board, and the unit carries its order's issuer and tick. Target zone and staging point wait for the commander that sets them (H4). |
+
 ### 4.4 Where it plugs in
 
 | File | Change |
@@ -387,7 +399,7 @@ human's units alone (D1).
 | `Scripts/Bots/BotPilot.cs` | `Sample` asks the ground domain for a `GroundIntent` instead of calling `Objective`; `AcquireTarget` prefers the intent's target. `OutsideDefences`, `Reachable`, stuck recovery, the friendly-fire and blast checks stay. `BotBrain` gains a `Use` press (a locker tap). |
 | `Scripts/Bots/BotDirector.cs` | Owns the ground coordinator and the team `ContactMemory`; builds pilots and commanders with the selected `BotAi`. Agent fallback branches unchanged. |
 | `Scripts/Rts/UnitManager.cs` | In `SimulateUnit`, after acquisition and before `UnitBrain.Destination`, run the unit's planner and apply its `UnitIntent` (destination override, target preference, hold). `ApplyOrder` records the order batch as a squad and the issuer on the unit. |
-| `Scripts/Rts/Unit.cs` | Server-only fields: squad id, order issuer, HTN context. Nothing replicated. |
+| `Scripts/Rts/Unit.cs` | Server-only fields: order issuer and order tick (H1), HTN context. Squad membership is on `SquadBoard`, not the unit. Nothing replicated. |
 | `Scripts/Bots/BotStrategist.cs` | `ServerTick` becomes the commander domain's tick; `Build` / `Fortify` / `StrategistBrain` survive as its primitive tasks. |
 | `Scripts/Core/LaunchOptions.cs`, `Scripts/Match/GameModeDefinition.cs` | `--bot-ai`, `BotAi`. |
 | `Scripts/Ui/Debug.cs`, `Scripts/Core/ConsoleCommands.cs` | A plan row on the debug HUD; `bot_plan <n>` prints a bot's current task chain from FluidHTN's `OnNewTask` / MTR debug. |
@@ -565,7 +577,7 @@ Estimates in solo-dev days, as IMPLEMENTATION_PLAN.md §4 counts them. Each phas
   `BotDirector` resolving `--bot-ai` over the game mode and logging, for `htn`, that every bot
   still runs legacy.
 
-### H1 — Shared knowledge (1.5 days)
+### H1 — Shared knowledge (1.5 days) — done
 
 - `ContactMemory`, `Neighbourhood`, `ZoneBoard`, `SquadBoard`, engine-free, fixed-size, tested
   (ageing, capacity overflow, force-ratio bands, squad membership when a unit dies or is re-ordered).
@@ -573,6 +585,29 @@ Estimates in solo-dev days, as IMPLEMENTATION_PLAN.md §4 counts them. Each phas
   ground memory; `ApplyOrder` → ad-hoc squads and issuer.
 - **Done when:** the debug HUD shows each side's contact count and squad count, and the numbers
   match what is on the field in a `--listen` round.
+- **Result:** `dotnet test` 1004 passed, 0 failed (942 before; 62 new: 13 in `ContactMemoryTests`,
+  19 in `NeighbourhoodTests`, 13 in `ZoneBoardTests`, 17 in `SquadBoardTests`, each with a
+  zero-allocation fact), 0 warnings; `dotnet build Gdpyr.csproj` 0 warnings, 0 errors. The rules
+  each board settles are in §4.3, "As built in H1". On the HUD, under `fog`: `contacts: strategist
+  <live> live <ghosts> ghosts  ground <live> live <ghosts> ghosts` and `squads: <n>/8  <units>
+  units`, authority only; overflow, eviction and recycling counts appear only when they are not 0.
+- **Checked in a `--listen` round** (Godot 4.6 .NET, Xvfb, default game mode: five ground bots and
+  one computer strategist, the host on the ground, later strategist). A temporary probe, not
+  committed, logged every 300 ticks the boards next to what it recomputed from the field — ground
+  players alive and visible to the fog; hostile units and armed structures a living ground bot had in
+  range with a clear line at that tick; living units grouped by issuer, order, target and focus. At
+  tick 5400 the HUD read strategist 1 live 1 ghost, ground 4 live, squads 2 with 7 units, and the
+  probe had the fog at 2 seen, one of them the host, dead — the ghost; the same four ground ids in
+  memory and on the field (a tank seen by two bots); and two order groups of 4 and 3. The ground
+  count trails the field by up to one scan interval when a unit first comes into view (3 against 4
+  at tick 4200, equal at 4500): the memory is only as new as the last scan. Squads matched the order
+  groups at every sample: the bot's garrison, reinforced a unit at a time, stayed one squad of 4;
+  switching to strategist and giving every unit one move order formed one squad, issuer peer 1, of
+  5, and closed the bot's two. A ghost left the memory once it was 480 ticks old.
+- Beyond the plan: an order batch that repeats a squad's order joins it rather than forming a new
+  one (§4.3), because without that the computer strategist's garrison is one squad per unit; and
+  the ground memory forgets dead units and destroyed structures on a 10-tick prune, which the unit
+  snapshot already shows every ground client.
 
 ### H2 — Ground bot HTN (2–3 days)
 
