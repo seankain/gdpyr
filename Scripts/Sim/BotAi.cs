@@ -14,8 +14,8 @@ public enum BotAi
 	Legacy,
 
 	/// <summary>
-	/// The HTN planners of docs/HTN_BOTS.md §5. Each decider switches over as its
-	/// phase lands (H2 ground bot, H3 unit, H4 strategist); until then it runs legacy.
+	/// The HTN planners of docs/HTN_BOTS.md §5: the ground bot's (H2), the unit's
+	/// (H3) and the strategist's commander (H4).
 	/// </summary>
 	Htn,
 }

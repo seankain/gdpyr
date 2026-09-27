@@ -52,6 +52,9 @@ public sealed class BotDirector
 	private readonly GroundPlanning _groundPlanning;
 	private readonly GroundCoordinator _coordinator;
 
+	/// <summary>The squad domain every computer strategist's commander shares under <c>--bot-ai htn</c> (§5.3); null for legacy.</summary>
+	private readonly CommanderPlanning _commanderPlanning;
+
 	// The coordinator's inputs and outputs, reused every assignment.
 	private readonly GroundMember[] _members = new GroundMember[SnapshotCodec.MaxPlayers];
 	private readonly BotPilot[] _memberPilots = new BotPilot[SnapshotCodec.MaxPlayers];
@@ -76,11 +79,11 @@ public sealed class BotDirector
 		{
 			_groundPlanning = new GroundPlanning(GroundPlanTraits.Default);
 			_coordinator = new GroundCoordinator(BotRoster.MaxBots, GroundCoordinatorTraits.Default);
+			_commanderPlanning = new CommanderPlanning(CommanderTraitsFor(StrategistTraits.Default));
 
 			if (Enabled)
 			{
-				GD.Print("[bots] ground bots and units plan with the HTN (docs/HTN_BOTS.md §5.1, §5.2);"
-					+ " the strategist still runs legacy until H4");
+				GD.Print("[bots] ground bots, units and strategists plan with the HTN (docs/HTN_BOTS.md §5.1-§5.3)");
 			}
 		}
 	}
@@ -93,8 +96,8 @@ public sealed class BotDirector
 
 	/// <summary>
 	/// What the bots decide with: <c>--bot-ai</c>, else the game mode's. The ground
-	/// bots follow it from H2 and the units — <c>UnitManager</c> reads it here — from
-	/// H3; the strategist does from H4 (docs/HTN_BOTS.md §6).
+	/// bots follow it from H2, the units — <c>UnitManager</c> reads it here — from H3,
+	/// and the strategist from H4 (docs/HTN_BOTS.md §6).
 	/// </summary>
 	public BotAi Ai { get; }
 
@@ -368,6 +371,68 @@ public sealed class BotDirector
 		return text.ToString();
 	}
 
+	/// <summary>The commander's knobs, with the garrison legacy keeps (§5.3: "garrison stays as today's").</summary>
+	private static CommanderTraits CommanderTraitsFor(in StrategistTraits strategist)
+	{
+		CommanderTraits d = CommanderTraits.Default;
+		return new CommanderTraits(strategist.GarrisonUnits, d.AssaultSquadSize, d.RetreatShare, d.RetreatEnemyRatio,
+			d.EnemyNearMeters, d.ThreatMeters, d.ReinforceRatio, d.AttackRatio, d.ClusterMeters, d.StagingMeters,
+			d.AssembleMeters, d.AssembleShare, d.StageMaxTicks, d.ReconQuietTicks, d.ReconStaleTicks, d.ResupplyShare,
+			d.ResupplyHysteresis, d.ClaimTicks, d.ArriveMeters, d.ReserveOffsetMeters, d.SweepIntervalTicks);
+	}
+
+	/// <summary>
+	/// What each planning strategist's squads are doing, for the debug HUD: per squad,
+	/// its role, size and running task, and the zone it is buying time for. Empty
+	/// under legacy.
+	/// </summary>
+	public string DescribeCommanders()
+	{
+		if (_commanderPlanning == null)
+		{
+			return string.Empty;
+		}
+
+		var text = new System.Text.StringBuilder();
+		foreach (BotStrategist strategist in _commanders.Values)
+		{
+			Commander commander = strategist.Commander;
+			if (commander == null)
+			{
+				continue;
+			}
+
+			if (text.Length > 0)
+			{
+				text.Append(" || ");
+			}
+
+			for (int s = 0; s < commander.Capacity; s++)
+			{
+				CommandSquad squad = commander.SquadAt(s);
+				if (!squad.Active)
+				{
+					continue;
+				}
+
+				char role = squad.Role switch
+				{
+					CommandRole.Garrison => 'g',
+					CommandRole.Scout => 's',
+					_ => squad.Ready ? 'a' : 'f',
+				};
+				text.Append(role).Append(squad.Members).Append(' ').Append(commander.IntentOf(s).Goal).Append("  ");
+			}
+
+			if (commander.BuyTimeZone >= 0)
+			{
+				text.Append("| buying time");
+			}
+		}
+
+		return text.ToString();
+	}
+
 	// ---- roster ------------------------------------------------------------
 
 	/// <summary>
@@ -535,7 +600,7 @@ public sealed class BotDirector
 
 		if (team == Team.Strategist)
 		{
-			_commanders[peerId] = new BotStrategist(peerId, StrategistTraits.Default);
+			_commanders[peerId] = new BotStrategist(peerId, StrategistTraits.Default, _commanderPlanning);
 		}
 		else
 		{

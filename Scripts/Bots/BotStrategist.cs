@@ -5,6 +5,7 @@ using Gdpyr.Match;
 using Gdpyr.Net;
 using Gdpyr.Rts;
 using Gdpyr.Sim;
+using Gdpyr.Sim.Htn;
 using Godot;
 
 namespace Gdpyr.Bots;
@@ -69,13 +70,45 @@ public sealed class BotStrategist
 
 	private uint _nextDecisionTick;
 
-	public BotStrategist(int peerId, in StrategistTraits traits)
+	/// <summary>
+	/// The commander under <c>--bot-ai htn</c> (docs/HTN_BOTS.md §5.3), and the side's
+	/// picture of the map it decides over; both null for legacy, which leaves every
+	/// legacy line as it was.
+	/// </summary>
+	private readonly Commander _commander;
+	private readonly ZoneBoard _zones;
+
+	// The commander's inputs and the order batches, reused every decision.
+	private readonly CommandUnit[] _commandUnits = new CommandUnit[SimConfig.MaxUnits];
+	private readonly ushort[] _squadMembers = new ushort[SimConfig.MaxUnits];
+	private readonly int[] _batch = new int[SimConfig.MaxUnits];
+	private readonly bool[] _boardSquads = new bool[SquadBoard.DefaultSquads];
+
+	/// <summary>The zone the commander wants fortified first, as a node index; -1 for none.</summary>
+	private int _priorityNode = -1;
+
+	private readonly int _claimTicks;
+
+	public BotStrategist(int peerId, in StrategistTraits traits, CommanderPlanning planning = null)
 	{
 		_peerId = peerId;
 		_traits = traits;
+
+		if (planning != null)
+		{
+			_commander = new Commander(planning, ThreatWeightsFor());
+			_zones = new ZoneBoard();
+			_claimTicks = planning.Traits.ClaimTicks;
+		}
 	}
 
 	public int PeerId => _peerId;
+
+	/// <summary>True when this strategist decides with the commander HTN (docs/HTN_BOTS.md §5.3).</summary>
+	public bool Plans => _commander != null;
+
+	/// <summary>The commander, for the debug HUD; null under legacy.</summary>
+	public Commander Commander => _commander;
 
 	/// <summary>Units it has ordered forward at the last decision. For the debug HUD.</summary>
 	public int AssaultCount { get; private set; }
@@ -110,6 +143,18 @@ public sealed class BotStrategist
 		// and the queues emptied when the next one starts (UnitManager.ClearUnits).
 		if (combat.Match.Phase == RoundPhase.Ended)
 		{
+			_commander?.Clear();
+			return;
+		}
+
+		if (_commander != null)
+		{
+			// The commander decides first, so the node it wants fortified is this
+			// decision's; the orders go out after the points are spent, as legacy's do.
+			Decide(tick, combat, units);
+			Fortify(tick, combat, units);
+			Build(combat, units);
+			ApplyIntents(units);
 			return;
 		}
 
@@ -118,6 +163,280 @@ public sealed class BotStrategist
 		Fortify(tick, combat, units);
 		Build(combat, units);
 		Command(tick, combat, units);
+	}
+
+	// ---- commander (--bot-ai htn, docs/HTN_BOTS.md §5.3) -------------------
+
+	/// <summary>
+	/// What a remembered contact is worth to the commander's estimates: its cost. The
+	/// strategist's side only ever remembers ground-force players (§4.3), each worth
+	/// two riflemen — a person aims, takes cover and picks up a launcher.
+	/// </summary>
+	private static ThreatWeights ThreatWeightsFor()
+	{
+		float rifleman = UnitCatalog.IsLoaded ? UnitCatalog.CostOf(UnitCatalog.Infantry) : 50f;
+		float tank = UnitCatalog.IsLoaded ? UnitCatalog.CostOf(UnitCatalog.Tank) : 400f;
+		return new ThreatWeights(infantry: rifleman, armour: tank, armedStructure: tank, player: 2f * rifleman,
+			unansweredArmourScale: 1f);
+	}
+
+	/// <summary>
+	/// The side's zone board rebuilt from what it may know (§4.3), its fighting units
+	/// counted, and one commander decision over them.
+	/// </summary>
+	private void Decide(uint tick, CombatManager combat, UnitManager units)
+	{
+		ContactMemory contacts = combat.Visibility?.Contacts;
+		FillZones(tick, combat, units, contacts);
+
+		int count = 0;
+		for (int i = 0; i < units.SlotCount && count < _commandUnits.Length; i++)
+		{
+			Unit unit = units.UnitAt(i);
+			if (unit == null || !unit.IsAlive || unit.Team != Team.Strategist || UnitCatalog.CanConstruct(unit.DefinitionId))
+			{
+				continue;
+			}
+
+			_commandUnits[count++] = new CommandUnit
+			{
+				Id = unit.UnitId,
+				Position = unit.GlobalPosition,
+				Strength = ForceRatio.Strength(UnitCatalog.CostOf(unit.DefinitionId),
+					unit.Health / (unit.Definition?.MaxHealth ?? 100f)),
+				Armour = unit.DefinitionId == UnitCatalog.Tank,
+				Scout = unit.DefinitionId == UnitCatalog.Technical,
+				Engaging = unit.State == UnitStateId.Engaging,
+				Claimed = IsClaimed(unit, tick),
+			};
+		}
+
+		PlayerManager players = PlayerManager.Instance;
+		Vector3 threat = players?.SpawnCentroid ?? Vector3.Zero;
+		var world = new CommanderWorld
+		{
+			Tick = tick,
+			Home = Home(units, threat, hasObjective: true),
+			Threat = threat,
+		};
+
+		_commander.Decide(world, _commandUnits.AsSpan(0, count), _zones, contacts);
+
+		int buyTime = _commander.BuyTimeZone;
+		Zone zone = _zones.At(buyTime);
+		_priorityNode = buyTime >= 0 && zone.Kind == ZoneKind.ResourceNode ? zone.Index : -1;
+
+		int garrison = _commander.SquadAt(Commander.GarrisonSlot).Members;
+		GarrisonCount = garrison;
+		AssaultCount = 0;
+		for (int s = 0; s < _commander.Capacity; s++)
+		{
+			AssaultCount += s == Commander.GarrisonSlot ? 0 : _commander.SquadAt(s).Members;
+		}
+	}
+
+	/// <summary>
+	/// Whether somebody else has the say over a unit (docs/HTN_BOTS.md §8, D1): a
+	/// person, or a seat an external policy drives, that ordered it in the last 30 s;
+	/// or another computer strategist, for as long as it is one — two bots sharing
+	/// an army each keep the units they ordered rather than re-ordering each other's
+	/// on every decision.
+	/// </summary>
+	private bool IsClaimed(Unit unit, uint tick)
+	{
+		int issuer = unit.OrderIssuer;
+		if (issuer == 0 || issuer == _peerId)
+		{
+			return false;
+		}
+
+		bool bot = (PlayerManager.Instance?.Bots?.IsBot(issuer) ?? false)
+			&& !(Gdpyr.Agent.AgentServer.Instance?.IsAttached(issuer) ?? false);
+		return bot || tick - unit.OrderTick < (uint)_claimTicks;
+	}
+
+	/// <summary>
+	/// Lays the board out once per map — every resource node, every barracks, every
+	/// ground spawn — and rebuilds what the side knows of each: who holds it, its own
+	/// strength there, the enemy's from memory, and whether a sensor covers it now
+	/// (range only, as <see cref="VisibilityService.Covers"/> is; no ray).
+	/// </summary>
+	private void FillZones(uint tick, CombatManager combat, UnitManager units, ContactMemory contacts)
+	{
+		EconomyService economy = combat.Economy;
+		PlayerManager players = PlayerManager.Instance;
+		int nodes = economy?.NodeCount ?? 0;
+		int spawns = players?.SpawnPointCount ?? 0;
+
+		bool same = _zones.Count == nodes + units.BarracksCount + spawns;
+		for (int z = 0; same && z < _zones.Count; z++)
+		{
+			Zone zone = _zones.At(z);
+			same = zone.Position == ZonePosition(zone.Kind, zone.Index, economy, units, players);
+		}
+
+		if (!same)
+		{
+			_zones.Clear();
+			for (int i = 0; i < nodes; i++)
+			{
+				ResourceNode node = economy.NodeAt(i);
+				_zones.Add(ZoneKind.ResourceNode, i, node?.GlobalPosition ?? Vector3.Zero, node?.CaptureRadiusMeters ?? 0f);
+			}
+
+			for (int i = 0; i < units.BarracksCount; i++)
+			{
+				Barracks barracks = units.BarracksAt(i);
+				_zones.Add(ZoneKind.Barracks, i, barracks?.RallyPoint ?? Vector3.Zero, BarracksZoneMeters);
+			}
+
+			for (int i = 0; i < spawns; i++)
+			{
+				_zones.Add(ZoneKind.GroundSpawn, i, players.SpawnPositionAt(i), SpawnZoneMeters);
+			}
+		}
+
+		for (int z = 0; z < _zones.Count; z++)
+		{
+			Zone zone = _zones.At(z);
+			switch (zone.Kind)
+			{
+				case ZoneKind.ResourceNode:
+					ResourceNode node = economy.NodeAt(zone.Index);
+					_zones.SetHolder(z, node?.Capture.Owner ?? NodeHolder.Neutral, node?.Capture.Contested ?? false);
+					break;
+
+				case ZoneKind.Barracks:
+					Barracks barracks = units.BarracksAt(zone.Index);
+					_zones.SetHolder(z, barracks?.Team == Team.Strategist ? NodeHolder.Strategist : NodeHolder.GroundForce,
+						contested: false);
+					break;
+
+				default:
+					_zones.SetHolder(z, NodeHolder.GroundForce, contested: false);
+					break;
+			}
+
+			if (combat.Visibility?.Covers(zone.Position) == true)
+			{
+				_zones.MarkObserved(z, tick);
+			}
+		}
+
+		_zones.BeginCensus();
+		for (int i = 0; i < units.SlotCount; i++)
+		{
+			Unit unit = units.UnitAt(i);
+			if (unit != null && unit.IsAlive && unit.Team == Team.Strategist)
+			{
+				_zones.AddFriendly(unit.GlobalPosition, ForceRatio.Strength(UnitCatalog.CostOf(unit.DefinitionId),
+					unit.Health / (unit.Definition?.MaxHealth ?? 100f)));
+			}
+		}
+
+		_zones.AddEnemies(contacts, tick, ThreatWeightsFor(), explosives: 0);
+	}
+
+	/// <summary>How far round a barracks' rally point the barracks zone reaches: where its garrison stands.</summary>
+	private const float BarracksZoneMeters = 20f;
+
+	/// <summary>How far round a ground spawn point its zone reaches.</summary>
+	private const float SpawnZoneMeters = 20f;
+
+	private static Vector3 ZonePosition(ZoneKind kind, int index, EconomyService economy, UnitManager units,
+		PlayerManager players) => kind switch
+	{
+		ZoneKind.ResourceNode => economy?.NodeAt(index)?.GlobalPosition ?? Vector3.Zero,
+		ZoneKind.Barracks => units.BarracksAt(index)?.RallyPoint ?? Vector3.Zero,
+		_ => players?.SpawnPositionAt(index) ?? Vector3.Zero,
+	};
+
+	/// <summary>
+	/// Puts each squad's members under the order its running task asked for — only
+	/// the ones not already under it, as legacy's <see cref="StrategistBrain.NeedsOrder"/>
+	/// decides, one batch a squad — and writes what the order alone does not say onto
+	/// the <see cref="SquadBoard"/> their units read: the mission, and the phase with
+	/// its staging point (§4.3, §5.2).
+	/// </summary>
+	private void ApplyIntents(UnitManager units)
+	{
+		SquadBoard board = units.Squads;
+		for (int s = 0; s < _commander.Capacity; s++)
+		{
+			CommandIntent intent = _commander.IntentOf(s);
+			if (intent.Goal == CommandGoal.None)
+			{
+				continue;
+			}
+
+			int members = _commander.MembersOf(s, _squadMembers);
+			int batch = 0;
+			for (int m = 0; m < members; m++)
+			{
+				Unit unit = units.Find(_squadMembers[m]);
+				if (unit == null || !unit.IsAlive)
+				{
+					continue;
+				}
+
+				float drift = unit.Order.Target.DistanceTo(intent.Point);
+				bool named = intent.Order == OrderKind.Attack && unit.Order.TargetOwnerId != intent.TargetOwnerId;
+				if (named || StrategistBrain.NeedsOrder(unit.State, unit.Order.Kind, intent.Order, drift, _traits))
+				{
+					_batch[batch++] = unit.UnitId;
+				}
+			}
+
+			if (batch > 0)
+			{
+				units.ServerIssueOrder(_peerId, _batch.AsSpan(0, batch), intent.Order, intent.Point, intent.TargetOwnerId);
+			}
+
+			WriteBoard(board, units, members, intent);
+		}
+	}
+
+	/// <summary>The mission and phase onto every board squad the commander squad's units are in that this bot formed.</summary>
+	private void WriteBoard(SquadBoard board, UnitManager units, int members, in CommandIntent intent)
+	{
+		Array.Clear(_boardSquads);
+		for (int m = 0; m < members; m++)
+		{
+			int b = board.SquadOf(_squadMembers[m]);
+			if (b < 0 || b >= _boardSquads.Length || _boardSquads[b] || board.At(b).Issuer != _peerId)
+			{
+				continue;
+			}
+
+			_boardSquads[b] = true;
+			Squad squad = board.At(b);
+			board.SetMission(b, intent.Mission);
+
+			switch (intent.Phase)
+			{
+				case SquadPhase.Gathering:
+					if (squad.Phase != SquadPhase.Gathering || !squad.HasStaging
+						|| squad.StagingPoint.DistanceTo(intent.StagingPoint) > SquadBoard.MergeRadiusMeters)
+					{
+						board.Stage(b, intent.StagingPoint);
+					}
+
+					break;
+
+				case SquadPhase.FallingBack:
+					board.SetPhase(b, SquadPhase.FallingBack);
+					break;
+
+				default:
+					// Moving and engaged are the census's to move between (§5.2).
+					if (squad.Phase is SquadPhase.Gathering or SquadPhase.FallingBack)
+					{
+						board.SetPhase(b, SquadPhase.Moving);
+					}
+
+					break;
+			}
+		}
 	}
 
 	/// <summary>
@@ -454,10 +773,11 @@ public sealed class BotStrategist
 				site.HasWall |= tick < _retryTick[retry + StructureKinds.SandbagWall];
 				site.HasTower |= tick < _retryTick[retry + StructureKinds.SniperTower];
 
-				// Nearest home first, by insertion into this pass's run.
-				float distance = home.DistanceSquaredTo(site.Anchor);
+				// Nearest home first, by insertion into this pass's run; the node the
+				// commander is buying time for before any (docs/HTN_BOTS.md §5.3).
+				float distance = SiteKey(i, site.Anchor, home);
 				int at = count;
-				while (at > first && home.DistanceSquaredTo(_sites[at - 1].Anchor) > distance)
+				while (at > first && SiteKey(_siteNodes[at - 1], _sites[at - 1].Anchor, home) > distance)
 				{
 					_sites[at] = _sites[at - 1];
 					_siteNodes[at] = _siteNodes[at - 1];
@@ -472,6 +792,10 @@ public sealed class BotStrategist
 
 		return count;
 	}
+
+	/// <summary>A site's place in its pass: its distance from home, and before everything for the commander's priority node.</summary>
+	private float SiteKey(int node, Vector3 anchor, Vector3 home) =>
+		node == _priorityNode ? -1f : home.DistanceSquaredTo(anchor);
 
 	/// <summary>What of its own already stands within reach of a site, finished or going up.</summary>
 	private static void Survey(UnitManager units, ref FortificationSite site)

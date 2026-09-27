@@ -29,7 +29,7 @@ Scripts/Sim/    Engine-free simulation code; unit-tested without Godot
 Scripts/Sim/Demo/ The demo container: header, records, writer, reader — a codec like the others
 Scripts/Sim/Htn/ HTN planning: the pooled FluidHTN factory, the contact memories, squad and zone
                 boards and force ratio, the ground bot's domain and its coordinator (H2),
-                the unit domain and its squad census (H3); the commander's as H4 lands
+                the unit domain and its squad census (H3), the strategist's commander (H4)
 Scripts/Fps/    Character controller, movement FSM, input sampler, weapons, viewmodel
 Scripts/Rts/    Units, barracks, orders, the strategist camera and selection
 Scripts/Match/  CombatManager (the round), MatchState, TeamService
@@ -102,10 +102,11 @@ Three more flags change the computer players the authority keeps around:
 None is needed to get bots: the numbers default to `BotGroundForce` and `BotStrategists` in
 `Match/default_gamemode.tres` (6 and 1), and the AI to its `BotAi` (legacy). `--bots 4` overrides
 only the ground force and leaves the strategists to the game mode. Under `htn` the ground bots plan
-with the HTN of [`docs/HTN_BOTS.md`](docs/HTN_BOTS.md) §5.1 (H2) and the units with §5.2's (H3),
-whoever ordered them; the computer strategist runs legacy until H4, and the server log says so. The
-debug HUD's `ground plan` row counts the ground bots on each task and the roles their coordinator
-handed out, `unit plan` the units on each task, and `unit ms` what the unit pass costs a tick.
+with the HTN of [`docs/HTN_BOTS.md`](docs/HTN_BOTS.md) §5.1 (H2), the units with §5.2's (H3),
+whoever ordered them, and the computer strategist with §5.3's commander (H4). The debug HUD's
+`ground plan` row counts the ground bots on each task and the roles their coordinator handed out,
+`unit plan` the units on each task, `unit ms` what the unit pass costs a tick, and `commander` each
+computer strategist's squads and what each is doing.
 
 Two more record a round or watch one back ([`docs/DEMOS.md`](docs/DEMOS.md)):
 
