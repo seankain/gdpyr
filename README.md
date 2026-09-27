@@ -11,9 +11,9 @@ dedicated-server authoritative.
   server, in C#, with [RLMatrix](https://github.com/asieradzk/RL_Matrix)
 - [`docs/RL_ARCHITECTURE.md`](docs/RL_ARCHITECTURE.md) — which algorithm to reach for in 2026, what
   changed since PPO, and the order to run things in here
-- [`docs/HTN_BOTS.md`](docs/HTN_BOTS.md) — proposal: hierarchical task network planners for the
-  ground bots, the RTS units and the computer strategist, on FluidHTN — what it is, what it was
-  checked to do, and what it costs
+- [`docs/HTN_BOTS.md`](docs/HTN_BOTS.md) — hierarchical task network planners for the ground
+  bots, the RTS units and the computer strategist, on FluidHTN — what it is, what it was checked to
+  do, what it costs, and the phases; H0 (the planner in the tree) is done
 - [`docs/DEMOS.md`](docs/DEMOS.md) — recording a round and watching it back: the console, the
   journal, and what playback does with it
 - [`docs/LAN.md`](docs/LAN.md) — hosting a room of machines from a checkout, with a dev build
@@ -26,6 +26,7 @@ Scripts/Core/   Bootstrap (CLI args, engine settings), LaunchOptions, weapon and
 Scripts/Net/    TransportFactory, NetworkManager (transport + clocks), PlayerManager (tick loop, roster)
 Scripts/Sim/    Engine-free simulation code; unit-tested without Godot
 Scripts/Sim/Demo/ The demo container: header, records, writer, reader — a codec like the others
+Scripts/Sim/Htn/ HTN planning: the pooled FluidHTN factory; domains, contexts and boards as H1-H4 land
 Scripts/Fps/    Character controller, movement FSM, input sampler, weapons, viewmodel
 Scripts/Rts/    Units, barracks, orders, the strategist camera and selection
 Scripts/Match/  CombatManager (the round), MatchState, TeamService
@@ -38,6 +39,7 @@ Units/          UnitDefinition resources: three fighting tiers and the builder
 Structures/     StructureDefinition resources: pillbox, sandbag wall, sniper tower
 Tests/          xUnit over the engine-free sources — `dotnet test`, no Godot needed
 Tests/Scenarios/ Playtest scenario files: data, and authoring one needs no Godot install
+ThirdParty/     Vendored source: FluidHTN at a pinned commit (docs/HTN_BOTS.md §3.8)
 tools/          External processes that talk to a server over a socket: the agent client (both
                 seats' action spaces, rewards and environments), the RLMatrix trainer, the
                 divergence probe, the playtest harness, a Python client, and the HTN planner
@@ -85,17 +87,20 @@ matchmaking and none is planned. Two flags change what a host looks like in it:
 Hosting for other people on the same network — addresses, the one firewall rule, seats and bots,
 and what a LAN hides — is [`docs/LAN.md`](docs/LAN.md); no export needed.
 
-Two more flags change how many computer players the authority keeps around:
+Three more flags change the computer players the authority keeps around:
 
 | Flag | Effect |
 |---|---|
 | `--bots <n>` | fill the ground force to `n` players, humans included |
 | `--bots <n>:<m>` | ...and the strategists to `m` |
 | `--no-bots` | no computer players at all |
+| `--bot-ai legacy\|htn` | what they decide with: today's code, or the HTN planners of [`docs/HTN_BOTS.md`](docs/HTN_BOTS.md) |
 
-Neither flag is needed to get bots: the numbers default to `BotGroundForce` and `BotStrategists` in
-`Match/default_gamemode.tres` (6 and 1). `--bots 4` overrides only the ground force and leaves the
-strategists to the game mode.
+None is needed to get bots: the numbers default to `BotGroundForce` and `BotStrategists` in
+`Match/default_gamemode.tres` (6 and 1), and the AI to its `BotAi` (legacy). `--bots 4` overrides
+only the ground force and leaves the strategists to the game mode. `htn` is accepted now and runs
+legacy until each decider's phase lands (H2 ground bot, H3 unit, H4 strategist); the server log
+says so.
 
 Two more record a round or watch one back ([`docs/DEMOS.md`](docs/DEMOS.md)):
 

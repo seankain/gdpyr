@@ -1,4 +1,5 @@
 using Gdpyr.Core;
+using Gdpyr.Sim;
 using Xunit;
 
 namespace Gdpyr.Tests;
@@ -220,6 +221,81 @@ public class LaunchOptionsTests
 	public void Bots_DoesNotSwallowTheNextFlagAsACount()
 	{
 		Assert.NotNull(LaunchOptions.Parse(new[] { "--bots", "--listen" }).Error);
+	}
+
+	// ---- what the bots decide with (docs/HTN_BOTS.md §4.2) -----------------
+
+	[Fact]
+	public void NoBotAiFlag_LeavesItToTheGameMode()
+	{
+		var options = LaunchOptions.Parse(new[] { "--listen" });
+
+		Assert.Null(options.Error);
+		Assert.Null(options.BotAi);
+	}
+
+	[Theory]
+	[InlineData("legacy", BotAi.Legacy)]
+	[InlineData("htn", BotAi.Htn)]
+	[InlineData("HTN", BotAi.Htn)]
+	public void BotAi_ParsesEitherChoice(string value, BotAi expected)
+	{
+		// Legacy is a choice too: named, it overrides a game mode that says htn.
+		var options = LaunchOptions.Parse(new[] { "--server", "--bot-ai", value });
+
+		Assert.Null(options.Error);
+		Assert.Equal(expected, options.BotAi);
+	}
+
+	[Fact]
+	public void BotAi_SitsBesideTheBotCounts()
+	{
+		var options = LaunchOptions.Parse(new[] { "--listen", "--bots", "6:1", "--bot-ai", "htn" });
+
+		Assert.Null(options.Error);
+		Assert.Equal(6, options.GroundBots);
+		Assert.Equal(1, options.StrategistBots);
+		Assert.Equal(BotAi.Htn, options.BotAi);
+		Assert.Contains("bot ai htn", options.ToString());
+	}
+
+	[Theory]
+	[InlineData("goap")]
+	[InlineData("")]
+	[InlineData("htn2")]
+	public void BotAi_OtherThanLegacyOrHtn_Fails(string value)
+	{
+		Assert.Contains("is not legacy or htn", LaunchOptions.Parse(new[] { "--bot-ai", value }).Error);
+	}
+
+	[Fact]
+	public void BotAi_WithoutAValue_Fails()
+	{
+		Assert.NotNull(LaunchOptions.Parse(new[] { "--bot-ai" }).Error);
+	}
+
+	[Fact]
+	public void BotAi_DoesNotSwallowTheNextFlagAsAValue()
+	{
+		Assert.NotNull(LaunchOptions.Parse(new[] { "--bot-ai", "--listen" }).Error);
+	}
+
+	[Fact]
+	public void BotAi_GivenTwice_Fails()
+	{
+		Assert.Contains("twice", LaunchOptions.Parse(new[] { "--bot-ai", "htn", "--bot-ai", "legacy" }).Error);
+	}
+
+	[Fact]
+	public void EveryBotAi_HasASpellingThatParsesBackToIt()
+	{
+		foreach (BotAi ai in System.Enum.GetValues<BotAi>())
+		{
+			Assert.True(BotAiNames.TryParse(BotAiNames.Name(ai), out BotAi parsed));
+			Assert.Equal(ai, parsed);
+		}
+
+		Assert.Contains($"--bot-ai {BotAiNames.Legacy}|{BotAiNames.Htn}", LaunchOptions.Usage);
 	}
 
 	// ---- the agent channel (docs/AGENT_API.md §4.1) ------------------------

@@ -13,17 +13,21 @@
          measurement runs first is partly timed at tier 0 and the two rows cannot
          be compared; a server twenty minutes into a round is long past tiering. -->
     <TieredCompilation>false</TieredCompilation>
-    <!-- FluidHTN's library folder (docs/HTN_BOTS.md §3.8). The plan vendors it at
-         ThirdParty/FluidHTN; until that lands, scripts/htn-bench.sh fetches the
-         pinned commit into the user's cache and passes it here. -->
+    <!-- FluidHTN's library folder: the vendored copy the game compiles
+         (docs/HTN_BOTS.md §3.8). Overridable, so that a candidate commit can be
+         probed and measured before it replaces the vendored one:
+         dotnet run -c Release -p:FluidHtnSource=<checkout>/Fluid-HTN -->
     <FluidHtnSource Condition="'$(FluidHtnSource)' == ''">$(MSBuildThisFileDirectory)../../ThirdParty/FluidHTN</FluidHtnSource>
   </PropertyGroup>
 
   <ItemGroup>
     <!-- Properties/AssemblyInfo.cs is left out: its attributes collide with the
-         ones the SDK generates, which is also why the vendored copy drops it. -->
+         ones the SDK generates, which is also why the vendored copy drops it. It
+         only exists in an upstream checkout passed as FluidHtnSource. -->
     <Compile Include="$(FluidHtnSource)/**/*.cs"
              Exclude="$(FluidHtnSource)/Properties/**;$(FluidHtnSource)/obj/**;$(FluidHtnSource)/bin/**" />
+    <!-- The factory the game plans with, so the bench measures that one. -->
+    <Compile Include="../../Scripts/Sim/Htn/PooledHtnFactory.cs" />
     <Compile Include="*.cs" />
   </ItemGroup>
 

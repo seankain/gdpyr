@@ -1,0 +1,1 @@
+FluidHTN https://github.com/ptrefall/fluid-hierarchical-task-network at e67af264cfdf240053f392d4e0e6c620c454eb97 (v0.4.1 plus comments), Fluid-HTN/ only, less Properties/, Fluid-HTN.csproj, Fluid.HTN.asmdef{,.meta} and package.json; *.cs byte-identical to upstream (docs/HTN_BOTS.md §3.8).
