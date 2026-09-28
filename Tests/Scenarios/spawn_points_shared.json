@@ -1,0 +1,26 @@
+{
+  "name": "six ground players on the four spawn points of the test map all stay on the ground at a round reset",
+  "seeds": [1, 2],
+  "duration_ticks": 240,
+  "warmup_ticks": 60,
+  "roster": { "ground": 6, "strategists": 0 },
+
+  "seats": [
+    { "id": "s0", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json" },
+    { "id": "s1", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json" },
+    { "id": "s2", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json" },
+    { "id": "s3", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json" },
+    { "id": "s4", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json" },
+    { "id": "s5", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json" }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "observation.s0.self.position.1.max", "op": "<", "value": 0.05 },
+    { "metric": "observation.s1.self.position.1.max", "op": "<", "value": 0.05 },
+    { "metric": "observation.s2.self.position.1.max", "op": "<", "value": 0.05 },
+    { "metric": "observation.s3.self.position.1.max", "op": "<", "value": 0.05 },
+    { "metric": "observation.s4.self.position.1.max", "op": "<", "value": 0.05 },
+    { "metric": "observation.s5.self.position.1.max", "op": "<", "value": 0.05 }
+  ]
+}

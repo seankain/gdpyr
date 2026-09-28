@@ -13,8 +13,8 @@ dedicated-server authoritative.
   changed since PPO, and the order to run things in here
 - [`docs/HTN_BOTS.md`](docs/HTN_BOTS.md) — hierarchical task network planners for the ground
   bots, the RTS units and the computer strategist, on FluidHTN — what it is, what it was checked to
-  do, what it costs, and the phases; H0 (the planner in the tree) and H1 (what each side knows) are
-  done, H2 (ground bots) and H3 (units) are built
+  do, what it costs, and the phases; H0–H5 are built, and since H6 the HTN bots are the default,
+  with scenarios of their own and the legacy bots pinned for training
 - [`docs/DEMOS.md`](docs/DEMOS.md) — recording a round and watching it back: the console, the
   journal, and what playback does with it
 - [`docs/LAN.md`](docs/LAN.md) — hosting a room of machines from a checkout, with a dev build
@@ -97,11 +97,14 @@ Three more flags change the computer players the authority keeps around:
 | `--bots <n>` | fill the ground force to `n` players, humans included |
 | `--bots <n>:<m>` | ...and the strategists to `m` |
 | `--no-bots` | no computer players at all |
-| `--bot-ai legacy\|htn` | what they decide with: today's code, or the HTN planners of [`docs/HTN_BOTS.md`](docs/HTN_BOTS.md) |
+| `--bot-ai legacy\|htn` | what they decide with: the HTN planners of [`docs/HTN_BOTS.md`](docs/HTN_BOTS.md), the default, or the code from before them |
 
 None is needed to get bots: the numbers default to `BotGroundForce` and `BotStrategists` in
-`Match/default_gamemode.tres` (6 and 1), and the AI to its `BotAi` (legacy). `--bots 4` overrides
-only the ground force and leaves the strategists to the game mode. Under `htn` the ground bots plan
+`Match/default_gamemode.tres` (6 and 1), and the AI to its `BotAi` (htn since H6). `--bots 4`
+overrides only the ground force and leaves the strategists to the game mode. The training and
+evaluation scripts start their servers with `--bot-ai legacy` whatever the default is: the legacy
+bots are the baseline a policy is measured against ([`docs/TRAINING.md`](docs/TRAINING.md) §3,
+§9). Under `htn` the ground bots plan
 with the HTN of [`docs/HTN_BOTS.md`](docs/HTN_BOTS.md) §5.1 (H2), the units with §5.2's (H3),
 whoever ordered them, and the computer strategist with §5.3's commander (H4) — which, from H5,
 buys a supply truck once it has eight fighting units, stations it behind its squads, and sends a
@@ -325,3 +328,7 @@ names the tick it failed on and a `trace-<seed>.jsonl` that replays. The asserti
 distributional on purpose — `between`, `percentile`, `over_seeds`, and deliberately nothing that
 names a tick — because this is a stochastic environment with a seeded core and a suite that asserts
 trajectories is a suite that flakes ([`docs/AGENT_API.md`](docs/AGENT_API.md) §3, §9).
+
+The `htn_*` scenarios make claims about the HTN bots and say so (`"bot_ai": "htn"`); the harness
+starts their server with them, and `--bot-ai legacy` on the command line runs the same claims
+against the legacy bots, which fail them ([`docs/HTN_BOTS.md`](docs/HTN_BOTS.md) §6, H6).

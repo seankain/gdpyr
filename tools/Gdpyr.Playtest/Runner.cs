@@ -22,6 +22,9 @@ public sealed class ScenarioResult
 
 	public double WallSeconds;
 
+	/// <summary>What the server's bots decided with, as its <c>welcome</c> said.</summary>
+	public string BotAi;
+
 	public int Ticks;
 
 	public bool Passed
@@ -74,7 +77,7 @@ public sealed class Runner
 
 	public async Task<ScenarioResult> RunAsync(Scenario scenario, CancellationToken cancel = default)
 	{
-		var result = new ScenarioResult { Scenario = scenario };
+		var result = new ScenarioResult { Scenario = scenario, BotAi = _connection.BotAi };
 		long started = DateTime.UtcNow.Ticks;
 
 		// A result obtained by cheating is not a result about this game
@@ -164,6 +167,10 @@ public sealed class Runner
 			// be read as an ordinary one (docs/AGENT_API.md §6.4, §7.3).
 			writer.WriteBoolean("omniscient", _connection.Omniscient);
 			writer.WriteBoolean("unbounded", _connection.Unbounded);
+
+			// And what the bots decided with, so a trace says which opponent it is
+			// about (docs/HTN_BOTS.md §8, D5).
+			writer.WriteString("bot_ai", _connection.BotAi);
 		});
 
 		await _connection.ResetAsync(seed, cancel).ConfigureAwait(false);

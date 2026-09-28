@@ -85,8 +85,14 @@ GODOT=/path/to/Godot_mono ./scripts/train.sh --policy strategist    # the other 
 ```
 
 That starts a headless server with the agent channel on loopback, fills the rest
-of the round with bots, attaches one seat, and trains PPO against it. Everything
-after the recognised flags is passed through to the trainer:
+of the round with bots, attaches one seat, and trains PPO against it. **The bots
+are the legacy ones**: the game's default became the HTN bots in H6
+([`HTN_BOTS.md`](HTN_BOTS.md) §6), but the legacy bots are the baseline a trained
+policy is measured against, so the scripts start every server with `--bot-ai
+legacy` and the trainer refuses a server whose `welcome` says otherwise (D5 in
+that document's §8). `--bot-ai htn` on the script trains against the HTN bots
+instead — a re-baseline, and a different result. Everything after the recognised
+flags is passed through to the trainer:
 
 ```bash
 ./scripts/train.sh --algo dqn --steps 200000 --save runs/dqn
@@ -98,9 +104,13 @@ after the recognised flags is passed through to the trainer:
 Or drive it by hand, which is what the script does:
 
 ```bash
-godot --path . --headless -- --server 7777 --agent-api 7900 --bots 6:1 &
+godot --path . --headless -- --server 7777 --agent-api 7900 --bots 6:1 --bot-ai legacy &
 dotnet run --project tools/Gdpyr.Trainer -c Release -- --port 7900 --policy ground
 ```
+
+A server started by hand without `--bot-ai legacy` runs the HTN bots, and the
+trainer stops at attach with a sentence saying so rather than training against an
+opponent nobody asked for.
 
 | Flag | Default | What it does |
 |---|---|---|
@@ -114,7 +124,8 @@ dotnet run --project tools/Gdpyr.Trainer -c Release -- --port 7900 --policy grou
 | `--save <dir>` / `--load <dir>` | – | A **directory**: RLMatrix writes one file per network and numbers them. |
 | `--play` | off | Run a loaded policy without learning from it. |
 | `--episodes N` | – | Stop after N finished episodes, whatever `--steps` says. For evaluation (§9). |
-| `--metrics <file>` | – | Append a CSV row per report window: step, episodes, reward, wins, losses, fallbacks. |
+| `--metrics <file>` | – | Append a CSV row per report window: step, episodes, reward, wins, losses, fallbacks, and the bots played against (`bot_ai`). A file written before that column is refused rather than appended to. |
+| `--bot-ai legacy\|htn\|any` | `legacy` | The bots every server must be running, as its `welcome` says; a server running others is refused. `any` takes whatever each server runs, and the output says `mixed` if they differ. |
 | `--realtime` | off | Do not engage stepped mode. For watching, not for training — see §5. |
 | `--step-timeout <ms>` | `10000` | How long the server holds the sim for this learner. Raise it when two share one (§8). |
 | `--no-reset` | off | Never restart the round; follow the learner that does (§8). |
@@ -123,8 +134,9 @@ dotnet run --project tools/Gdpyr.Trainer -c Release -- --port 7900 --policy grou
 A run prints a line every `--report-every` steps and a summary at the end:
 
 ```
+attached to 127.0.0.1:7900 seat 1073741824 | ground | step_mul 4 | 145 floats (1 frame(s)) | legacy bots
 step 5000/200000 | episodes 12 | last episode 41.30 | reward in flight 3.90 | wins 5/9
-ground: 12 episodes, 9 decided, 5 won, 4 lost, win rate 55.6%
+ground: 12 episodes, 9 decided, 5 won, 4 lost, win rate 55.6%, against legacy bots
 ```
 
 **Reward is the number this repository made up; the win rate is the game's.** §9
@@ -375,6 +387,8 @@ The mechanics the script exists to get right:
   one's optimizer step; at the 10-second default the slower of the two will
   eventually be dropped back to real time, and then it is learning from
   transitions a bot partly chose. The script uses 60 s.
+- **The bots that fill the seats the two learners leave** — the ground learner's
+  teammates — are legacy, as in `train.sh`, unless `--bot-ai` says otherwise.
 - **Checkpoints land in `<out>/ground` and `<out>/strategist`**, metrics beside
   them. Keep every one: the set of frozen checkpoints is the league, and playing a
   new policy against the old ones is how you find out whether progress is real or
@@ -392,14 +406,21 @@ finished *rounds* rather than a number of decisions, because "how often does thi
 win" is a question about rounds. The last line is the one to write down:
 
 ```
-ground: 20 episodes, 17 decided, 11 won, 6 lost, win rate 64.7%
+ground: 20 episodes, 17 decided, 11 won, 6 lost, win rate 64.7%, against legacy bots
 ```
 
-Four rules, argued in [`RL_ARCHITECTURE.md`](RL_ARCHITECTURE.md) §6: a truncated
+**Which bots it was evaluated against is part of the result.** `evaluate.sh`
+plays against the legacy bots unless told otherwise, whatever the game's default
+is: they are the baseline every checkpoint in this repository has been measured
+against, and "beats the bot" means beats *that* bot ([`HTN_BOTS.md`](HTN_BOTS.md)
+§8, D5). `./scripts/evaluate.sh runs/ppo-ground --bot-ai htn` measures the same
+checkpoint against the HTN bots; report the two as two numbers, never one.
+
+Five rules, argued in [`RL_ARCHITECTURE.md`](RL_ARCHITECTURE.md) §6: a truncated
 episode has no outcome and is in neither column; claims about this environment are
 distributional because an episode is not reproducible (§10); the shaping term is
-the first thing to ablate; and a result obtained under `--agent-omniscient` is a
-result about a different game.
+the first thing to ablate; a result obtained under `--agent-omniscient` is a
+result about a different game; and a win rate names the bots it was won against.
 
 ## 10. Determinism: measure it before you rely on it
 

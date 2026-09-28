@@ -5,6 +5,7 @@ using Gdpyr.Match;
 using Gdpyr.Net;
 using Gdpyr.Rts;
 using Gdpyr.Sim;
+using Gdpyr.Sim.Agent;
 using Gdpyr.Sim.Htn;
 using Godot;
 
@@ -84,6 +85,9 @@ public sealed class BotStrategist
 	private readonly int[] _batch = new int[SimConfig.MaxUnits];
 	private readonly bool[] _boardSquads = new bool[SquadBoard.DefaultSquads];
 
+	/// <summary>The goal each squad slot was last announced on the agent event stream with (<c>squad_task</c>).</summary>
+	private readonly CommandGoal[] _announced;
+
 	/// <summary>The zone the commander wants fortified first, as a node index; -1 for none.</summary>
 	private int _priorityNode = -1;
 
@@ -97,6 +101,7 @@ public sealed class BotStrategist
 		if (planning != null)
 		{
 			_commander = new Commander(planning, ThreatWeightsFor());
+			_announced = new CommandGoal[_commander.Capacity];
 			_zones = new ZoneBoard();
 			_claimTicks = planning.Traits.ClaimTicks;
 		}
@@ -144,6 +149,11 @@ public sealed class BotStrategist
 		if (combat.Match.Phase == RoundPhase.Ended)
 		{
 			_commander?.Clear();
+			if (_announced != null)
+			{
+				Array.Clear(_announced);
+			}
+
 			return;
 		}
 
@@ -155,7 +165,7 @@ public sealed class BotStrategist
 			Fortify(tick, combat, units);
 			QueueSupply(combat, units);
 			Build(combat, units);
-			ApplyIntents(units);
+			ApplyIntents(tick, units);
 			return;
 		}
 
@@ -359,14 +369,23 @@ public sealed class BotStrategist
 	/// the ones not already under it, as legacy's <see cref="StrategistBrain.NeedsOrder"/>
 	/// decides, one batch a squad — and writes what the order alone does not say onto
 	/// the <see cref="SquadBoard"/> their units read: the mission, and the phase with
-	/// its staging point (§4.3, §5.2).
+	/// its staging point (§4.3, §5.2). A squad whose goal changed is announced on
+	/// the agent event stream (docs/AGENT_API.md §8, <c>squad_task</c>), a disbanded
+	/// one as goal 0.
 	/// </summary>
-	private void ApplyIntents(UnitManager units)
+	private void ApplyIntents(uint tick, UnitManager units)
 	{
 		SquadBoard board = units.Squads;
 		for (int s = 0; s < _commander.Capacity; s++)
 		{
 			CommandIntent intent = _commander.IntentOf(s);
+			if (intent.Goal != _announced[s])
+			{
+				_announced[s] = intent.Goal;
+				AgentEventBus.Emit(AgentEventKind.SquadTask, tick, _peerId, s, (int)intent.Goal, intent.Point.X,
+					intent.Point.Z);
+			}
+
 			if (intent.Goal == CommandGoal.None)
 			{
 				continue;

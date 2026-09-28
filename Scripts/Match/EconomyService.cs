@@ -26,6 +26,9 @@ public sealed class EconomyService
 {
 	private readonly List<ResourceNode> _nodes = new();
 
+	/// <summary>Per node, the scan its current contest started on (<c>node_contested</c>).</summary>
+	private readonly uint[] _contestedSince = new uint[SimConfig.MaxResourceNodes];
+
 	/// <summary>Resource nodes on the map, ordered by name: the index is the wire id.</summary>
 	public int NodeCount => _nodes.Count;
 
@@ -98,12 +101,27 @@ public sealed class EconomyService
 			Count(node, combat, units, out int ground, out int strategist);
 
 			NodeHolder before = node.Capture.Owner;
+			bool wasContested = node.Capture.Contested;
 			int income = node.Capture.Tick(tick, ground, strategist, node.Rules);
 
 			if (node.Capture.Owner != before)
 			{
 				AgentEventBus.Emit(AgentEventKind.NodeCaptured, tick, i, (int)node.Capture.Owner, (int)before,
 					node.GlobalPosition.X, node.GlobalPosition.Z);
+			}
+
+			// A contest's start and its end, with how long it lasted: denial is time,
+			// and "contested for N ticks" is what a scenario about it claims
+			// (docs/AGENT_API.md §8, docs/HTN_BOTS.md §6).
+			if (node.Capture.Contested != wasContested)
+			{
+				if (node.Capture.Contested)
+				{
+					_contestedSince[i] = tick;
+				}
+
+				AgentEventBus.Emit(AgentEventKind.NodeContested, tick, i, (int)node.Capture.Owner,
+					node.Capture.Contested ? 1 : 0, node.Capture.Contested ? 0f : tick - _contestedSince[i]);
 			}
 
 			if (income <= 0)

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Gdpyr.Fps;
 using Gdpyr.Rts;
 using Gdpyr.Sim;
+using Gdpyr.Sim.Agent;
 using Gdpyr.Sim.Htn;
 using Godot;
 
@@ -52,6 +53,9 @@ public sealed class VisibilityService
 	}
 
 	private readonly VisionField _sensors = new(SimConfig.MaxUnits + (SimConfig.MaxStructures * 4));
+
+	/// <summary>Per sensor in <see cref="_sensors"/>, the unit tier it belongs to; -1 for a structure's.</summary>
+	private readonly int[] _sensorTier = new int[SimConfig.MaxUnits + (SimConfig.MaxStructures * 4)];
 	private readonly Dictionary<int, Contact> _contacts = new();
 	private readonly int[] _candidates = new int[SimConfig.FogLineOfSightCandidates];
 	private readonly Func<Vector3, Vector3, bool> _lineOfSight;
@@ -206,13 +210,23 @@ public sealed class VisibilityService
 			// The chest, not the eyes: it is the middle of the capsule a unit would be
 			// shooting at, and a player crouching behind a crate should not be visible
 			// because the top of their head clears it.
-			bool seen = Sees(player.Character.Hitbox.Center);
+			int observer = Sees(player.Character.Hitbox.Center);
+			bool seen = observer >= 0;
 			if (seen)
 			{
 				visible++;
 			}
 
 			_contacts.TryGetValue(player.PeerId, out Contact contact);
+
+			// Picked up at this refresh and not at the one before: what a trainer or a
+			// scenario counts as the side having found somebody (docs/AGENT_API.md §8).
+			if (seen && !contact.Visible && player.IsAlive)
+			{
+				AgentEventBus.Emit(AgentEventKind.ContactSpotted, tick, player.PeerId, _sensorTier[observer],
+					contact.Known ? 0 : 1, player.Character.SimPosition.X, player.Character.SimPosition.Z);
+			}
+
 			contact.Visible = seen;
 			if (seen)
 			{
@@ -267,7 +281,10 @@ public sealed class VisibilityService
 
 			// From the eye rather than the feet, so the ray below leaves from the same
 			// place the unit's own target acquisition does.
-			_sensors.Add(unit.EyePosition, unit.Traits.SensorRadiusMeters);
+			if (_sensors.Add(unit.EyePosition, unit.Traits.SensorRadiusMeters))
+			{
+				_sensorTier[_sensors.Count - 1] = unit.DefinitionId;
+			}
 		}
 
 		for (int i = 0; units != null && i < SimConfig.MaxStructures; i++)
@@ -281,22 +298,26 @@ public sealed class VisibilityService
 			float radius = structure.Definition?.SensorRadiusMeters ?? 0f;
 			for (int s = 0; s < structure.SensorCount; s++)
 			{
-				_sensors.Add(structure.SensorAt(s), radius);
+				if (_sensors.Add(structure.SensorAt(s), radius))
+				{
+					_sensorTier[_sensors.Count - 1] = -1;
+				}
 			}
 		}
 	}
 
-	private bool Sees(Vector3 point)
+	/// <summary>The sensor that sees <paramref name="point"/>: the first with a clear line, nearest first; -1 for none.</summary>
+	private int Sees(Vector3 point)
 	{
 		int candidates = _sensors.Gather(point, _candidates);
 		if (candidates == 0)
 		{
-			return false;
+			return -1;
 		}
 
 		if (_lineOfSight == null)
 		{
-			return true;
+			return _candidates[0];
 		}
 
 		for (int i = 0; i < candidates; i++)
@@ -304,10 +325,10 @@ public sealed class VisibilityService
 			LineOfSightRays++;
 			if (_lineOfSight(_sensors.OriginAt(_candidates[i]), point))
 			{
-				return true;
+				return _candidates[i];
 			}
 		}
 
-		return false;
+		return -1;
 	}
 }

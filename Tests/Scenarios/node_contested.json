@@ -1,0 +1,23 @@
+{
+  "name": "a player and a rifleman on one node contest it until one of them is dead",
+  "seeds": [1, 2],
+  "duration_ticks": 600,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 0 },
+
+  "seats": [
+    { "id": "holder", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json" }
+  ],
+
+  "spawns": [
+    { "peer": "holder", "at": [0, 1, -35], "look": [0, 0] },
+    { "unit": "infantry", "team": "strategist", "at": [3, 1, -35], "order": "none" }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.kill.count", "op": ">=", "value": 1 },
+    { "metric": "events.node_contested[node=1,contested=1].count", "op": ">=", "value": 1 },
+    { "metric": "events.node_contested[node=1,contested=0].ticks.max", "op": ">", "value": 0 }
+  ]
+}

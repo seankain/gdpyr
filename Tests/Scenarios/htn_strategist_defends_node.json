@@ -1,0 +1,35 @@
+{
+  "name": "the HTN strategist takes the nodes, and sends a squad to one a ground player comes near",
+  "bot_ai": "htn",
+  "seeds": [1, 2, 3],
+  "duration_ticks": 3600,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 1 },
+
+  "seats": [
+    { "id": "raider", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/wait_then_advance.json" }
+  ],
+
+  "spawns": [
+    { "peer": "raider", "at": [0, 1, 25], "look": [0, 0] },
+    { "unit": "infantry", "team": "strategist", "at": [-3, 1, -38], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [-3, 1, -35], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [-3, 1, -32], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [-3, 1, -29], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [0, 1, -38], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [0, 1, -35], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [0, 1, -32], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [0, 1, -29], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [3, 1, -38], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [3, 1, -35], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [3, 1, -32], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [3, 1, -29], "order": "none" }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.node_captured[owner=2].count", "op": ">=", "value": 3 },
+    { "metric": "events.squad_task[goal=2,x<50].count", "op": ">=", "value": 1 },
+    { "metric": "events.node_captured[claimant=2].count", "op": "==", "value": 0 }
+  ]
+}

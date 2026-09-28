@@ -1,0 +1,23 @@
+{
+  "name": "the HTN strategist sends its technical to scout, and it finds a player hiding at a far node",
+  "bot_ai": "htn",
+  "seeds": [1, 2, 3],
+  "duration_ticks": 3600,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 1 },
+
+  "seats": [
+    { "id": "hider", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json" }
+  ],
+
+  "spawns": [
+    { "peer": "hider", "at": [-25, 1, -100], "look": [0, 0] },
+    { "unit": "technical", "team": "strategist", "at": [92, 1, -88], "order": "none" }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.squad_task[goal=5].count", "op": ">=", "value": 1 },
+    { "metric": "events.contact_spotted[first=1,observer=1].count", "op": "==", "value": 1 }
+  ]
+}

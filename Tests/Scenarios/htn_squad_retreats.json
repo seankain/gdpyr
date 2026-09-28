@@ -1,0 +1,34 @@
+{
+  "name": "an HTN squad that is losing its fight falls back: the scout, or an assault squad in a strike",
+  "bot_ai": "htn",
+  "seeds": [1, 2, 3, 4],
+  "duration_ticks": 5400,
+  "warmup_ticks": 60,
+  "roster": { "ground": 6, "strategists": 1 },
+
+  "seats": [
+    { "id": "idle", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json" }
+  ],
+
+  "spawns": [
+    { "peer": "idle", "at": [110, 1, 110], "look": [0, 0] },
+    { "unit": "infantry", "team": "strategist", "at": [56, 1, -24], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [60, 1, -24], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [64, 1, -24], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [68, 1, -24], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [56, 1, -20], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [60, 1, -20], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [64, 1, -20], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [68, 1, -20], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [56, 1, -16], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [60, 1, -16], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [64, 1, -16], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [68, 1, -16], "order": "none" }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.squad_task[goal=4].count", "op": ">=", "value": 1 },
+    { "metric": "events.squad_task[goal=1].count", "op": "over_seeds", "cmp": ">=", "value": 1, "fraction": 0.5 }
+  ]
+}

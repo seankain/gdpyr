@@ -459,7 +459,7 @@ obtained by cheating is not a result about this game.
 | `op` | Direction | Purpose |
 |---|---|---|
 | `hello` | → | protocol version, observation format, token |
-| `welcome` | ← | tick rate, build id, observation schema, current seed |
+| `welcome` | ← | tick rate, build id, observation schema, current seed, and `bot_ai` — what the server's bots decide with, `legacy` or `htn` ([`HTN_BOTS.md`](HTN_BOTS.md) §8, D5; added in H6, and absent from a server that predates it, whose bots were legacy) |
 | `config` | → | `mode` (realtime/stepped), `step_timeout_ms`, feature planes on/off |
 | `list_seats` | → ← | every roster slot: peer id, team, controller (human/bot/agent), alive |
 | `list_units` | → ← | a strategist seat's army, in the order its observation carries it, **with the ids an order names** (§7.5) |
@@ -608,11 +608,32 @@ from position deltas and gets it slightly wrong.
 | `kill` / `death` | attacker, victim, weapon, distance |
 | `damage` | attacker, victim, amount, remaining |
 | `unit_built` / `unit_lost` | unit id, tier, barracks, position |
-| `node_captured` / `node_contested` | node, owner, claimant |
-| `gun_mounted` / `can_spent` | peer, emplacement |
-| `seat_attached` / `seat_released` | seat, peer, reason |
+| `node_captured` | node, owner, claimant — `claimant` is the side that held it before, `NodeHolder` numbered: 0 neutral, 1 ground force, 2 strategist; x, z |
+| `seat_attached` / `seat_released` | seat, policy, and `step_mul` or a reason |
 | `structure_placed` | structure (its slot), type, builders sent, x, z |
 | `structure_built` / `structure_lost` | structure, type, x, z; and for a loss, the killer |
+| `squad_task` | strategist (its peer id), squad (the commander's slot), goal, x, z — a computer strategist's commander squad took a new goal. `--bot-ai htn` only (H6) |
+| `contact_spotted` | peer, observer, first, x, z — the strategist side's fog picked up a ground-force player it did not have in sight at the refresh before. Either bot AI (H6) |
+| `node_contested` | node, owner, contested, ticks — a node's contest (both sides inside its radius) started (`contested` 1) or ended (0, with `ticks` it lasted). Either bot AI (H6) |
+
+`node_contested` was in this table from M6 and first emitted in H6. `gun_mounted` and `can_spent`
+were in it too and are still not emitted, so neither is a kind a scenario can name (§9.1).
+
+**The three H6 kinds** exist because a claim about the HTN bots (docs/HTN_BOTS.md §6) needs words
+the older kinds do not have. `squad_task`'s `goal` is the commander's `CommandGoal` by number, a
+protocol constant from here on: 1 fall back, 2 reinforce (defend a zone — the garrison's standing
+task at home is one), 3 stage, 4 strike, 5 scout, 6 station (the supply trucks), 7 refill, 8 hold,
+and 0 when the squad disbands; x and z are where the goal's order points. It fires when a squad's
+goal changes, not when the point under the same goal moves, so a strike on a moving contact is one
+record; the end of a round clears every squad without one, and the next round's first decision
+announces them afresh. `contact_spotted`'s `observer` is the tier of the unit whose sensor saw the player (0
+infantry, 1 technical, 2 tank, 3 builder, 4 supply truck) or −1 for a structure's, and `first` is 1
+when nothing had seen that player before this round; a body waiting out its respawn is not spotted.
+A player at the edge of a sensor is spotted each time the edge is crossed, as often as every fog
+refresh (8 ticks). `node_contested` is read off the capture scan, so a contest's `ticks` is a
+multiple of its interval; one the round or the episode ends in the middle of has no end record, and
+`events.node_contested[contested=0].sum` — the shorthand's field is `ticks` — counts only the
+contests that finished.
 
 An `attacker` or `victim` is an `OwnerId` (`Scripts/Sim/OwnerId.cs`): positive is a peer, and
 everything the strategist's side fires with is negative — `-1` to `-65535` a unit, `-65536` down
@@ -695,8 +716,13 @@ machine-readable summary on `--json`, and a trace file to re-run.
 **The harness starts the server itself**, one per scenario file, because the roster a scenario wants
 is in the scenario file: `--bots 6:1` is a launch option, and a wrapper that had to read the JSON to
 build a command line would be a JSON parser written in bash. `--attach` uses a server somebody
-already started instead. `--bot-ai htn` starts it with the HTN bots of docs/HTN_BOTS.md; without
-it the server's default, legacy, is what a scenario plays against (§8 of that document, D5). Everything binds loopback, and `deploy/gdpyr-server.service` still never
+already started instead. **What the bots decide with** is the scenario's `bot_ai` (`legacy` or
+`htn`) when it names one, `--bot-ai` on the command line over that, and the server's default —
+htn since H6 — when neither says; the harness checks the server's `welcome` against what was asked
+and refuses a mismatch (exit 2), including an `--attach`ed server started otherwise. A scenario whose
+claims are about one AI names it; the command line overriding it is how the same claims are checked
+against the other (docs/HTN_BOTS.md §6, H6). The summary line, the `--json` summary and every trace
+header say which it was. Everything binds loopback, and `deploy/gdpyr-server.service` still never
 passes `--agent-api` (§4.1).
 
 **The metric vocabulary**, which is what an assertion's `metric` names:
@@ -705,7 +731,8 @@ passes `--agent-api` (§4.1).
 |---|---|
 | `events.<kind>.count` | how many of that event fired. A kind that never fired reads **zero**; a kind that does not exist **fails** |
 | `events.<kind>.<field>.<agg>` | an aggregate over one event field — `sum`, `mean`, `min`, `max`, `last`, `count` |
-| `events.<kind>.<agg>` | shorthand for that kind's own field (`damage` → `amount`, `kill` → `distance`) |
+| `events.<kind>.<agg>` | shorthand for that kind's own field (`damage` → `amount`, `kill` → `distance`, `squad_task` → `goal`) |
+| `events.<kind>[<cond>,…].<rest>` | any of the three above, over only the events matching every condition: a field, one of `=` `!=` `<` `<=` `>` `>=`, and a number. `events.unit_lost[tier=2].count` is tanks lost; `events.node_captured[owner=1,claimant=2].count` strategist nodes the ground force took. Nothing matching reads zero; a field the kind does not have fails |
 | `observation.<field>` | an observation field by its published name, for the scenario's first seat |
 | `observation.<field>.<n>` | element *n* of a field that is a run — `observation.contacts.6` is the nearest contact's distance |
 | `observation.<seat id>.<field>` | the same, for a named seat, when a scenario holds more than one |
@@ -812,6 +839,9 @@ The same rule the rest of the codebase follows: the interesting part is engine-f
 | Scenario parser: seeds, roster, seats, spawns, scripts, and every malformed field as a sentence | `Tests/ScenarioTests.cs` | M7 |
 | The metric vocabulary: counts, aggregates, the event shorthand, and a typo that fails rather than reading zero | `Tests/ScenarioTests.cs` | M7 |
 | The assertion vocabulary: `between`, `percentile`, `over_seeds`, and that nothing names a tick | `Tests/ScenarioTests.cs` | M7 |
+| Event filters: only matching events count, nothing matching reads zero, a field, kind or operator nothing answers to fails; a scenario's `bot_ai` | `Tests/ScenarioTests.cs` | H6 |
+| Every checked-in scenario parses, and every `events.*` metric in it names a kind, field and aggregate that exist | `Tests/ScenarioTests.cs` | H6 |
+| The harness knows every event kind and every field of each that the game's schema publishes; `squad_task`'s goal numbers | `Tests/AgentEventTests.cs` | H6 |
 
 One test is not engine-free and is worth the exception: the **divergence probe** of §3 — two seeded
 600-tick episodes against one headless server, comparing `state_hash` per tick and reporting the

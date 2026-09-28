@@ -56,8 +56,8 @@ public sealed class ServerProcess : IDisposable
 		start.ArgumentList.Add("--bots");
 		start.ArgumentList.Add($"{groundBots}:{strategistBots}");
 
-		// Left to the server's own default — legacy, the RL baseline (docs/HTN_BOTS.md
-		// §8, D5) — unless a run asks for the HTN bots by name.
+		// Left to the server's own default — htn since H6 (docs/HTN_BOTS.md §6) — unless
+		// the scenario or the command line names one.
 		if (!string.IsNullOrEmpty(botAi))
 		{
 			start.ArgumentList.Add("--bot-ai");

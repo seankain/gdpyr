@@ -12,6 +12,7 @@
 #   ./scripts/train.sh --ports 7900,7901,7902           # three servers, one learner
 #   ./scripts/train.sh --algo dqn --steps 20000 --save runs/dqn
 #   ./scripts/train.sh --history 4 --save runs/ppo-h4   # stack four observations
+#   ./scripts/train.sh --bot-ai htn                     # against the HTN bots: a re-baseline
 #
 # Which algorithm to reach for, and why PPO is the default, is argued in
 # docs/RL_ARCHITECTURE.md. Anything this script does not recognise is passed
@@ -27,6 +28,12 @@ BOTS="${BOTS:-6:1}"
 POLICY="${POLICY:-ground}"
 LOG_DIR="${LOG_DIR:-build/train}"
 
+# The bots a policy is trained against. Pinned to legacy, the RL baseline, since
+# the game's default became htn: a policy measured against a different opponent is
+# a different result, and changing this is a deliberate re-baseline
+# (docs/HTN_BOTS.md §8, D5).
+BOT_AI="${BOT_AI:-legacy}"
+
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR"
 
@@ -39,6 +46,9 @@ while [ $# -gt 0 ]; do
 		# Consumed *and* forwarded: the script names the log file after the seat and
 		# the trainer needs to know which chair to sit in.
 		--policy) POLICY="$2"; shift 2 ;;
+		# Consumed and forwarded too: the server runs these bots, and the trainer
+		# refuses a server that runs others.
+		--bot-ai) BOT_AI="$2"; shift 2 ;;
 		*) PASSTHROUGH+=("$1"); shift ;;
 	esac
 done
@@ -73,7 +83,7 @@ for port in "${PORT_LIST[@]}"; do
 	# so the backfill arrives around it rather than leaving it an empty map
 	# (docs/AGENT_API.md §2).
 	"$GODOT" --headless --path "$PROJECT_DIR" -- \
-		--server "$game_port" --agent-api "127.0.0.1:$port" --bots "$BOTS" > "$log" 2>&1 &
+		--server "$game_port" --agent-api "127.0.0.1:$port" --bots "$BOTS" --bot-ai "$BOT_AI" > "$log" 2>&1 &
 
 	SERVERS+=("$!")
 	echo ">> server on game port $game_port, agent api 127.0.0.1:$port -> $log"
@@ -91,7 +101,7 @@ for port in "${PORT_LIST[@]}"; do
 	done
 done
 
-echo ">> training a $POLICY policy"
+echo ">> training a $POLICY policy against $BOT_AI bots"
 # An empty array must expand to nothing, not to one empty argument.
 dotnet run --project tools/Gdpyr.Trainer -c Release -- \
-	--port "$PORTS" --policy "$POLICY" ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}
+	--port "$PORTS" --policy "$POLICY" --bot-ai "$BOT_AI" ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}

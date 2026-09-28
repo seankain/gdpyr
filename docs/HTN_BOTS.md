@@ -1,7 +1,7 @@
 # HTN bots — research and implementation plan
 
-Status: **H5 built and checked headless, with one display check of its own; the display checks of
-H2–H4 are outstanding** (§6). FluidHTN is vendored at
+Status: **H6 done: the HTN bots are the default. The playtest with people and the display checks
+of H2–H4 are outstanding** (§6). FluidHTN is vendored at
 `ThirdParty/FluidHTN` and compiled into the game and the tests; `PooledHtnFactory` is in
 `Scripts/Sim/Htn`; `--bot-ai legacy|htn` and `GameModeDefinition.BotAi` are parsed;
 `HtnPlannerTests` holds probes P1–P8 in `dotnet test`. H1 put the four boards of §4.3 in
@@ -19,7 +19,12 @@ depleted one, and leaves a person's units alone. H5 decided D2 (§8) and built i
 a barracks' ring and round a new **supply truck** that any strategist can buy (`Resupply.cs`,
 `Units/supply_truck.tres`); under `--bot-ai htn` a bot's wounded unit walks to the nearest supply
 source, a depleted squad heals there rather than being merged, and the commander buys a truck and
-stations it behind its squads. H0 found one FluidHTN defect the probes had not
+stations it behind its squads. H6 wrote four scenarios that pass under `htn` and fail under
+`legacy` (`Tests/Scenarios/htn_*.json`), on three new agent events and event filters in the
+playtest vocabulary; compared bot-only rounds under both; flipped the default to `htn`; pinned
+`legacy` for training and evaluation, with every trainer output naming the bots it played (D5);
+and fixed a spawn bug that had been pushing up to four ground players out of the world at every
+round reset. H0 found one FluidHTN defect the probes had not
 reached, a queue dropped when a paused partial plan is replaced (§3.4); the vendored copy carries
 the fix from H4 (D6). `tools/Gdpyr.HtnBench` — §5.1's domain written against
 FluidHTN, the behaviour probes of §3.4 and the cost measurement of §3.5 — and
@@ -381,7 +386,9 @@ boards. Nothing new goes on the wire (§4.4).
    operators progress, but it replans only when an encoded fact changed or the plan ended.
 5. **Deterministic.** No RNG; ties broken by id or `Spread.Seed`.
 6. **Switchable.** `--bot-ai legacy|htn` (`LaunchOptions`) and a `BotAi` field on
-   `GameModeDefinition`. `legacy` is today's code path, kept intact, and stays the default until H6.
+   `GameModeDefinition`. `legacy` is today's code path, kept intact, and was the default until H6,
+   which made it `htn` (`BotAiNames.Default`); the training and evaluation scripts pin `legacy`
+   (D5).
 
 ### 4.3 Shared knowledge
 
@@ -420,10 +427,13 @@ human's units alone (D1).
 | `Scripts/Core/LaunchOptions.cs`, `Scripts/Match/GameModeDefinition.cs` | `--bot-ai`, `BotAi`. |
 | `Scripts/Sim/Resupply.cs`, `Units/*.tres`, `Units/supply_truck.tres` (H5) | The resupply rule (D2), `RegenPerSecond` and `SupplyRadiusMeters` on `UnitDefinition`, and the supply truck, catalog id 4; `UnitManager` heals once a tick and hands each unit's scan the nearest source ([`NETCODE.md`](NETCODE.md) §10.7). |
 | `Scripts/Ui/Debug.cs`, `Scripts/Core/ConsoleCommands.cs` | A plan row on the debug HUD; `bot_plan <n>` prints a bot's current task chain from FluidHTN's `OnNewTask` / MTR debug. |
+| `Scripts/Sim/Agent/AgentEvents.cs`, `Scripts/Bots/BotStrategist.cs`, `Scripts/Match/VisibilityService.cs`, `Scripts/Match/EconomyService.cs` (H6) | Three agent events: `squad_task` when a commander squad's goal changes, `contact_spotted` when the strategist's fog picks a player up, `node_contested` when a node's contest starts and ends ([`AGENT_API.md`](AGENT_API.md) §8). `welcome` says which bot AI the server runs. |
+| `tools/Gdpyr.Playtest`, `tools/Gdpyr.Trainer`, `tools/Gdpyr.AgentClient`, `scripts/*.sh`, `Tests/Scenarios/htn_*.json` (H6) | A scenario's `bot_ai` and event filters in the metric vocabulary ([`AGENT_API.md`](AGENT_API.md) §9.1); the trainer's `--bot-ai` pin and `bot_ai` in its output; the scripts' `--bot-ai legacy`; the four H6 scenarios. |
 
 No message, codec, snapshot field or agent observation changes. A demo records frames and "no bot
 thinks" during playback (DEMOS.md), so demos are unaffected. H5 appends one line to the unit
-catalog; health was already in the unit snapshot.
+catalog; health was already in the unit snapshot. H6 adds three kinds to the agent event stream and
+a field to `welcome`, both additive: the observation schema is still `gdpyr-agent-obs-2`.
 
 ---
 
@@ -746,7 +756,8 @@ Estimates in solo-dev days, as IMPLEMENTATION_PLAN.md §4 counts them. Each phas
   spawn indices *i* and *i* + 4 on the same point of the test map's four, and two coincident
   character capsules push each other upward about 2 m a tick and out of the world; nothing kills a
   body that leaves it, so it stays alive with no position worth the name. Reproduced under `legacy`
-  and `htn` alike with seven ground players. Separately, the barracks' defended ring reaches about
+  and `htn` alike with seven ground players. **Fixed in H6** (`SpawnLap`, §6 H6), which also found
+  that every probe round here with more than four ground players had run with it. Separately, the barracks' defended ring reaches about
   117 m, over the far half of the middle node; `OutsideDefences` keeps every bot out of it.
 - **Left for the `--listen` check and later:** the round with a display and the HUD's `nodes` and
   `ground plan` rows (the probe counted contested nodes, it did not read the HUD); `bot_plan <n>` on
@@ -930,7 +941,7 @@ Estimates in solo-dev days, as IMPLEMENTATION_PLAN.md §4 counts them. Each phas
 - **Legacy.** The rule applies under `--bot-ai legacy` too; legacy's decisions are unchanged and it
   never buys a truck, but the world the RL baseline plays in is not (D5): its garrison now heals.
 
-### H6 — Scenarios, playtest, switch the default (1 day, then ongoing)
+### H6 — Scenarios, playtest, switch the default (1 day, then ongoing) — done; the playtest with people is outstanding
 
 - New scenarios in `Tests/Scenarios/`, distributional as AGENT_API.md §3 requires, e.g.
   `htn_ground_denies_node.json` (strategist nodes contested for ≥ N ticks), `htn_strategist_defends_node.json`,
@@ -941,6 +952,127 @@ Estimates in solo-dev days, as IMPLEMENTATION_PLAN.md §4 counts them. Each phas
   units lost by tier, nodes held over time).
 - **Done when:** the default flips to `htn`, and `docs/TRAINING.md` / `RL_ARCHITECTURE.md` say which
   bot a trained policy was evaluated against.
+- **Result:** the default is `htn` (`BotAiNames.Default`, `Match/default_gamemode.tres`), and
+  `TRAINING.md` §3, §8, §9 and `RL_ARCHITECTURE.md` §6 rule 5 say every policy trained or evaluated
+  with this repository's scripts was measured against the legacy bots, which the scripts pin (D5).
+  `dotnet test` 1312 passed, 0 failed (1297 before; 15 new: 6 in `ScenarioTests`, 5 in
+  `SpawnLapTests`, 3 in `AgentEventTests`, 1 in `LaunchOptionsTests`), 0 warnings; `dotnet build
+  Gdpyr.csproj` 0 warnings, 0 errors; `./scripts/htn-bench.sh --probe` passes all nine. Checked to
+  fail, then reverted: without the spawn side-step, 3 fail; with the default back at legacy, 1; with
+  the harness not knowing `node_contested` and a filter ignoring its conditions, 4.
+- **What H6 added to measure the bots with** (the agent-API change the plan anticipated;
+  [`AGENT_API.md`](AGENT_API.md) §7.1, §8, §9.1):
+
+  | Addition | What it says | Why |
+  |---|---|---|
+  | `squad_task` event | A commander squad took a new goal (`CommandGoal` by number: 1 fall back, 2 reinforce, 4 strike, 5 scout, …), with where its order points | The plan's "squad mission change": nothing on the stream said what the commander decided |
+  | `contact_spotted` event | The strategist's fog picked a player up, the tier of the unit that saw it, and whether it was the first sighting this round | Recon is about who found whom |
+  | `node_contested` event | A node's contest started, or ended with how long it lasted | "Contested for ≥ N ticks"; listed in §8 since M6 and never emitted |
+  | Event filters | `events.<kind>[<field><op><value>,…].<rest>`: `events.node_captured[owner=1,claimant=2].count` | One kind, many questions: which node, whose, which goal. Also M8's "units lost by tier" (`events.unit_lost[tier=2].count`) |
+  | `bot_ai` | On a scenario; in `welcome`; in the harness's summaries and trace headers | A claim about one AI is run against it, and checked against the other with `--bot-ai` |
+  | A test over every checked-in scenario | Each parses, and each `events.*` metric in it resolves | A typo in a filter fails `dotnet test`, not a playtest. It found that a kind's field named in full errored rather than reading zero when the kind never fired, as §9.1 says it should; fixed |
+
+- **The four scenarios.** Each makes a claim that the bots of §5 exist to satisfy, names `"bot_ai":
+  "htn"`, passes, and fails under `--bot-ai legacy` on the claims that separate them. The setups
+  were chosen, and the thresholds set, from draft runs of more seeds than the files hold, under both
+  AIs — the denial and retreat drafts on the build with the spawn fix below; the recon and defence
+  drafts, with one ground player, which that bug never reached, before it. A round with nobody
+  attached has no bots (the backfill fills around somebody, `BotFillPolicy`), so a bot-only scenario attaches one idle ground seat and puts
+  it in the far corner; with a sixth ground player, 5 bots play.
+
+  | Scenario | Setup | Claims | Drafts: `htn` | Drafts: `legacy` |
+  |---|---|---|---|---|
+  | `htn_ground_denies_node` | 5 ground bots, no strategist; 2 riflemen placed on the far node (−25, −100), which they take 8 s in. 90 s, 4 seeds | The strategist takes the far node (the premise); the ground force takes ≥ 2 nodes, every seed; the far node is taken from the strategist in ≥ half | 7 seeds: ≥ 2 nodes 7/7; far node taken 5/7, 30–82 s in | ≥ 2 nodes 0/7 (0 or 1 each); far node 0/7, and 1/4 in the suite run below |
+  | `htn_strategist_defends_node` | 1 strategist; 12 riflemen placed on the middle node; one ground seat that waits 15 s 60 m from it on the ground spawn's side, then walks at it for 8 s. 60 s, 3 seeds | The strategist takes all three nodes; a squad is sent to defend a node rather than home (`squad_task[goal=2,x<50]`; the barracks is at x = 100); no node is lost | 3/3 on each: reinforcements at the middle and west nodes as the raider came in | 1–2 nodes taken; nothing sent; the minute spent killing the raider at the spawn, 16–18 times |
+  | `htn_recon_finds_contact` | 1 strategist; a technical placed at the barracks; a ground seat hiding still on the far node. 60 s, 3 seeds | A scout goes out; the hider's first sighting is the technical's | 3/3: the scout task at the first decision, first sighting 10–27 s in, then staged and struck | 0/3: nothing seen in 90 s — the technical stays in the garrison |
+  | `htn_squad_retreats` | 5 ground bots, 1 strategist; 12 riflemen placed about 63 m from both the ground spawn and the middle node. 90 s, 4 seeds | A strike; a squad falls back in ≥ half the seeds | 7 seeds: a strike 7/7; a fall-back 6/7 — the scout in 6, an assault squad in mid-strike in 4 | legacy has no squads |
+
+  The ground seat idle in the corner, the placed units that nobody ordered and the one computer
+  strategist are the whole of each setup; everything else is the bots. `htn_ground_denies_node` has
+  no computer strategist on purpose: the claim is the ground side's.
+- **Units lost per engagement against legacy** — the comparison the plan gave
+  `htn_squad_retreats`. It is **not** a claim the scenario makes, because it does not come out in
+  the HTN's favour. The same setup, 7 seeds each:
+
+  | | `legacy` | `htn` |
+  |---|---|---|
+  | Placed riflemen lost, of 12 | 8 in 7/7: the eight outside the garrison, every one | 8–9 |
+  | Strategist units lost in all | 10 | 11–13 |
+  | Ground players killed | 6–19, median 16 | 6–20, median 10 |
+  | A squad fell back | never: legacy has no squads | 6/7 |
+
+  The Retreat branch fires in a real engagement, and it saves nothing measurable: in the 30 s after
+  each of the four assault fall-backs the side lost 1, 5, 6 and 6 units. Retreat waits for 40 % of
+  strength at formation (§5.3): a squad of four riflemen at full health gets there with one left. With the army placed 37 m
+  from the ground spawn instead, legacy's blob **spawn-camps**: in 3 of 7 seeds it killed all 50
+  ground tickets in about 30 s for 2–3 units; the commander, whose squads go to nodes and targets,
+  did that in none, and lost 9–12 units in each. In 1 of those 7 a depleted squad in the middle of
+  its refill was sent back to reinforce the middle node: `Commander.Idle` does not look at
+  `Depleted`, and Defend Zone is above Resupply in the tree (H5 saw the same once).
+- **Comparison rounds on the M8 columns.** Bot-only rounds, 5 ground bots and the idle seat against
+  one computer strategist, 20 minutes each, 4 seeds per AI, the fixed build, read off the event
+  stream (no M8 writer exists yet):
+
+  | Column | `legacy` | `htn` |
+  |---|---|---|
+  | Round length | 20:00, 4/4 | 20:00, 4/4 |
+  | Outcome | the clock: the ground force wins, 4/4 | the same, 4/4 |
+  | Tickets left, of 50 | 28–45 | 31–42 |
+  | Units built, by tier | 7 infantry, 1 tank, 1 builder (4/4) | 7 infantry, 1 technical, 1 tank, 1 builder (4/4) |
+  | Units lost, by tier | 3 infantry, 1 tank, 1 builder (4/4) | 3 infantry, 1 technical (4/4) |
+  | Nodes held over time (share of 3 nodes × the round) | ground 32–62 %, neutral 38–68 %, strategist 0 | ground 98.3 %, neutral 1.7 %, strategist 0 |
+  | Last death on either side | 2.2–2.8 min | 2.3–3.3 min |
+
+  Every one of the eight rounds is decided in its first three minutes and waits seventeen for the
+  clock. The strategist spends its opening 1,000 points in the first 1.1 minutes, never holds a node,
+  so never earns another point, and nothing of either side dies after 3.3 minutes: the ground bots
+  of both AIs stop at the edge of the barracks' defended ring (§1, `OutsideDefences`), and the
+  strategist cannot be eliminated while it has a unit alive (`WinConditions`). The HTN ground force denies
+  the nodes almost completely where legacy's leaves most of them neutral; the outcome is the same.
+  That is H4's open question — economy balance — answered for bot-only rounds on the test map: the
+  strategist is locked out of income by the ground force's first two minutes, under either AI.
+- **Found and fixed: players pushed out of the world at every round reset.** H2 found it and left
+  it (§6, H2): spawn index *i* is spawn point *i* mod 4 on the test map, so with more than four
+  ground players two capsules are put in one place at a reset and push each other upward out of the
+  world, where nothing kills them. It made the first run of `htn_ground_denies_node` fail on a seed
+  where one bot of five was playing. `SpawnLap` puts each lap of indices round the points in a slot
+  of its own — 2 m to the side, 2 m behind, or both — which is 16 players on four points
+  (`SnapshotCodec.MaxPlayers`); `spawn_points_shared.json` is the regression scenario, six idle
+  seats left where the reset puts them. Before the fix the four on shared points reached the
+  observation's height ceiling (256 m) within 85 ticks of the reset and the other two stood at the
+  spawn height, 4.07 m; after it all six stand at 4.07 m, in both seeds. **Every earlier probe round
+  with more than four ground players — H2's, H4's, H5's — ran with up to four of them out of the
+  world from each reset**, under both AIs alike; so did H6's first drafts with six ground players,
+  which were thrown away. Every H6 number above from a run with more than four ground players is
+  from the fixed build.
+- **Found, not changed** — each is a change to §5 or to the game, and each is now measurable by the
+  scenarios above:
+  - Contests do not happen between bots: in 50 episodes of the fixed-build runs above, 0
+    `node_contested` records. A fight at a node is decided at range before either side stands in
+    it (`node_contested.json` shows the event itself works). So `htn_ground_denies_node` claims
+    nodes taken, which is the stronger thing, rather than time contested.
+  - A lone denier: the coordinator sends one denier per strategist node (§5.1), and against two
+    riflemen the HTN ground force spent 1–13 lives (median 5) taking the far node; legacy spent 2–8
+    (median 3) and did not take it.
+  - The retreat comes late and a depleted squad counts as idle for Defend Zone (above).
+  - A pillbox the builder puts up on the west node's spawn-facing side, (−25, −11), is 35–40 m from
+    every ground spawn point, inside its 45 m reach, and kills players as they respawn — seen in the
+    recon drafts. Fortify is shared by both AIs.
+- **The suite, on the fixed build** (`./scripts/playtest.sh Tests/Scenarios/*.json`, headless,
+  Godot 4.6 .NET): with no `--bot-ai`, all 17 pass — the twelve from before H6 under the new
+  default among them. With `--bot-ai legacy`, the twelve and `spawn_points_shared` pass and the four
+  `htn_*` fail, each on the claims that separate the two AIs: the denial scenario on nodes taken
+  (0 in the first seed) and the far node (1 seed of 4), recon on the scout and its sighting, the
+  retreat on the strike and the fall-back, the defence on nodes taken (2) and the squad sent.
+  `node_contested.json`, written after those runs started, passes under both on its own run.
+  `builder_fortifies` still asserts `events.unit_built.tier.max == 3`: the commander, now the
+  default, did not buy a truck in its 110 s, as in H5.
+- **Left:** the playtest with people, which a headless session cannot do; the display checks of
+  H2–H4 (H5's own was done); `bot_plan <n>` on the console (§4.4), never written; and the changes
+  the findings argue for — an earlier retreat, a depleted squad not idle for Defend Zone, deniers in
+  pairs against a defended node, and an economy the strategist is not locked out of on a map whose
+  nodes the ground force takes in two minutes — which are the next tuning, measured by these
+  scenarios.
 
 Total: about 10–12 days before playtesting.
 
@@ -954,8 +1086,9 @@ Total: about 10–12 days before playtesting.
 | The planner allocates nothing on the tick | P8, in both of the above; `./scripts/htn-bench.sh` for the per-tick figure |
 | A given situation produces a given plan | Fact-vector → task-chain tests per domain (H2–H5); no engine needed |
 | Units heal where and when D2 says | `ResupplyTests` (reach, whose sources, the lockout, the rate); the debug HUD's `resupply` row in a round |
-| Legacy behaviour is intact | Existing `BotBrainTests`, `UnitBrainTests`, `StrategistBrainTests` unchanged; `--bot-ai legacy` default until H6 |
-| The bots behave as described in a real round | Scenarios in H6, run by `./scripts/playtest.sh` |
+| Legacy behaviour is intact | Existing `BotBrainTests`, `UnitBrainTests`, `StrategistBrainTests` unchanged; `--bot-ai legacy` one flag away since H6, and pinned by the training scripts |
+| The bots behave as described in a real round | The four `htn_*` scenarios of H6, run by `./scripts/playtest.sh`, which pass under `htn` and fail under `--bot-ai legacy` |
+| A trained policy's result names its opponent | `bot_ai` in `welcome`; the trainer's `--bot-ai` pin, attach line, summary line and `--metrics` column (H6) |
 | It costs nothing noticeable | Debug HUD server-frame-time row, `legacy` vs `htn`, 64 units |
 
 ---
@@ -968,7 +1101,7 @@ Total: about 10–12 days before playtesting.
 | D2 | RTS units have nothing to resupply: magazines reload without a reserve and nothing heals. Add healing inside a friendly barracks' defended ring? | Yes — one `RegenPerSecond` per `UnitDefinition`. Without it, unit Resupply means reinforcement only, and unit Retreat saves a unit that can never recover. **Decided for H5:** healing at the barracks, and at a new unit, the **supply truck**, which a strategist — a person with `8` or the barracks card, a policy with `build` tier 4, the commander on its own — buys and units visit. A game rule, not a bot's: it applies under legacy too, which changes the world legacy's baseline plays in (D5), not what legacy decides. |
 | D3 | May a ground bot know what a **teammate** has seen? | Yes, as a team `ContactMemory` — the equivalent of voice callouts, and less than a human client already draws (the unit snapshot is not fogged for the ground force, IMPLEMENTATION_PLAN.md §M4). Today a bot knows only its own eyes (`BotTraits.SensorRadiusMeters`). |
 | D4 | May the computer strategist act on **ghosts** (last-known positions)? `BotStrategist.TryObjective` deliberately does not. | Yes, for Recon and for staging only, and never to name a target: a human strategist can click a ghost (M4), so the bot doing so is parity, not cheating. |
-| D5 | The scripted bots are the RL baseline ("beats the bot" should stay true, RL_ARCHITECTURE.md). | Keep `legacy` selectable for ever; `scripts/evaluate.sh` and the trainer pin `--bot-ai legacy` until a deliberate re-baseline, and training output records which one was used. |
+| D5 | The scripted bots are the RL baseline ("beats the bot" should stay true, RL_ARCHITECTURE.md). | Keep `legacy` selectable for ever; `scripts/evaluate.sh` and the trainer pin `--bot-ai legacy` until a deliberate re-baseline, and training output records which one was used. **Done in H6:** `train.sh`, `train-selfplay.sh` and `evaluate.sh` start their servers with `--bot-ai legacy` (`--bot-ai htn` on the script is the re-baseline); `welcome` carries `bot_ai`; the trainer takes `--bot-ai legacy\|htn\|any`, default legacy, and refuses a server running other bots; its attach line, its summary line and a `bot_ai` column in `--metrics` say which bots it played. |
 | D6 | FluidHTN drops a borrowed queue when a plan replaces a paused partial plan: 128 B per pre-emption, pooled or not (§3.4, P8). Needed only from H4, whose stage → strike is the one `PausePlan`. | Before H4: offer the one-line fix upstream; if it has not landed by then, patch the vendored copy with that line, record the patch in `ThirdParty/FluidHTN/README`, and flip the pinning test to assert 0 B. Accepting the allocation is the fallback: it is per event, not per tick. **Done in H4:** upstream's head was still `e67af26`; the vendored copy is patched, the README records it, and the test asserts 0 B. Offering the fix upstream is left to the maintainer. |
 
 ---

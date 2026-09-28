@@ -12,9 +12,11 @@
 #   ./scripts/evaluate.sh runs/ppo-ground                      # 20 rounds, ground
 #   ./scripts/evaluate.sh runs/strategist --policy strategist --episodes 10
 #   ./scripts/evaluate.sh runs/ppo-ground --ports 7900,7901    # four at a time
+#   ./scripts/evaluate.sh runs/ppo-ground --bot-ai htn         # against the HTN bots
 #
-# The number to write down is the last line: episodes, decided rounds, and the
-# win rate over the decided ones. A truncated episode has no outcome and is
+# The number to write down is the last line: episodes, decided rounds, the win
+# rate over the decided ones, and the bots it was won against — legacy unless
+# --bot-ai says otherwise (docs/HTN_BOTS.md §8, D5). A truncated episode has no outcome and is
 # counted in neither, which is why a ground run with the default two-minute
 # episode cap reports far fewer decided rounds than episodes — raise
 # --episode-steps if you want the policy judged on whole rounds.
@@ -30,6 +32,11 @@ POLICY="${POLICY:-ground}"
 EPISODES="${EPISODES:-20}"
 LOG_DIR="${LOG_DIR:-build/evaluate}"
 
+# The bots a policy is evaluated against: legacy, the RL baseline, whatever the
+# game's default is (docs/HTN_BOTS.md §8, D5). --bot-ai htn evaluates against the
+# HTN bots instead, which is a different number and is reported as one.
+BOT_AI="${BOT_AI:-legacy}"
+
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR"
 
@@ -43,10 +50,17 @@ while [ $# -gt 0 ]; do
 		--policy) POLICY="$2"; shift 2 ;;
 		--episodes) EPISODES="$2"; shift 2 ;;
 		--load) LOAD="$2"; shift 2 ;;
+		--bot-ai) BOT_AI="$2"; shift 2 ;;
 		-h|--help)
 			sed -n '2,20p' "${BASH_SOURCE[0]}"
 			exit 0 ;;
-		--*) PASSTHROUGH+=("$1"); shift ;;
+		# The trainer's two switches take no value; every other flag of its takes one,
+		# which goes with it rather than being read as the checkpoint.
+		--realtime|--no-reset) PASSTHROUGH+=("$1"); shift ;;
+		--*)
+			PASSTHROUGH+=("$1")
+			if [ $# -gt 1 ]; then PASSTHROUGH+=("$2"); shift; fi
+			shift ;;
 		*) LOAD="$1"; shift ;;
 	esac
 done
@@ -83,7 +97,7 @@ for port in "${PORT_LIST[@]}"; do
 	log="$LOG_DIR/server-$port.log"
 
 	"$GODOT" --headless --path "$PROJECT_DIR" -- \
-		--server "$game_port" --agent-api "127.0.0.1:$port" --bots "$BOTS" > "$log" 2>&1 &
+		--server "$game_port" --agent-api "127.0.0.1:$port" --bots "$BOTS" --bot-ai "$BOT_AI" > "$log" 2>&1 &
 
 	SERVERS+=("$!")
 	echo ">> server on game port $game_port, agent api 127.0.0.1:$port -> $log"
@@ -100,11 +114,11 @@ for port in "${PORT_LIST[@]}"; do
 	done
 done
 
-echo ">> evaluating $LOAD as a $POLICY policy over $EPISODES episodes"
+echo ">> evaluating $LOAD as a $POLICY policy over $EPISODES episodes against $BOT_AI bots"
 
 # --steps is the ceiling rather than the plan: --episodes is what stops the run,
 # and a round that never decides must not run for ever.
 dotnet run --project tools/Gdpyr.Trainer -c Release -- \
-	--port "$PORTS" --policy "$POLICY" --play --load "$LOAD" \
+	--port "$PORTS" --policy "$POLICY" --play --load "$LOAD" --bot-ai "$BOT_AI" \
 	--episodes "$EPISODES" --steps 2000000 \
 	${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}

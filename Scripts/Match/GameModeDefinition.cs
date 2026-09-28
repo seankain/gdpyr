@@ -61,9 +61,10 @@ public partial class GameModeDefinition : Resource
 
 	/// <summary>
 	/// What the computer players decide with (docs/HTN_BOTS.md §4.2 rule 6);
-	/// <c>--bot-ai</c> overrides it. Legacy until H6: the scripted bots are what
+	/// <c>--bot-ai</c> overrides it. HTN from H6. Legacy stays selectable for ever,
+	/// and the training and evaluation scripts pin it: the legacy bots are what
 	/// trained policies are measured against (§8, D5).
 	/// </summary>
 	[Export]
-	public BotAi BotAi = BotAi.Legacy;
+	public BotAi BotAi = BotAiNames.Default;
 }

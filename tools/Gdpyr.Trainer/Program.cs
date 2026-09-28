@@ -53,7 +53,7 @@ public static class Program
 	{
 		var environments = new List<IEnvironmentAsync<float[]>>();
 		var seats = new List<IGdpyrSeat>();
-		var metrics = new MetricsLog(options.MetricsPath);
+		MetricsLog metrics = null;
 
 		try
 		{
@@ -71,8 +71,23 @@ public static class Program
 				environments.Add((IEnvironmentAsync<float[]>)seat);
 				Console.WriteLine($"attached to {options.Host}:{port} seat {seat.Seat}"
 					+ $" | {options.Policy} | step_mul {seat.StepMul}"
-					+ $" | {seat.StateFloats} floats ({options.History} frame(s))");
+					+ $" | {seat.StateFloats} floats ({options.History} frame(s))"
+					+ $" | {seat.BotAi} bots");
+
+				// A policy trained or evaluated against a different opponent from the one
+				// it is compared with is a different result, and the default flipped under
+				// everybody's feet in H6 (docs/HTN_BOTS.md §8, D5).
+				if (options.BotAi != "any" && seat.BotAi != options.BotAi)
+				{
+					throw new InvalidOperationException(
+						$"the server on port {port} runs {seat.BotAi} bots and this run is pinned to"
+						+ $" {options.BotAi} (docs/HTN_BOTS.md §8, D5). Start it with --bot-ai {options.BotAi},"
+						+ $" or pass --bot-ai {seat.BotAi} to re-baseline on purpose");
+				}
 			}
+
+			string botAi = BotAiOf(seats);
+			metrics = new MetricsLog(options.MetricsPath, botAi);
 
 			LocalDiscreteRolloutAgent<float[]> agent = options.Algorithm == "dqn"
 				? new LocalDiscreteRolloutAgent<float[]>(Dqn(options), environments)
@@ -128,12 +143,12 @@ public static class Program
 			}
 
 			Report(Math.Min(step, options.Steps), options.Steps, seats, metrics);
-			Summarize(options, seats);
+			Summarize(options, seats, botAi);
 			return 0;
 		}
 		finally
 		{
-			metrics.Dispose();
+			metrics?.Dispose();
 			foreach (IGdpyrSeat seat in seats)
 			{
 				seat.Dispose();
@@ -166,6 +181,21 @@ public static class Program
 			history: options.History,
 			stepTimeoutMilliseconds: options.StepTimeoutMilliseconds,
 			resetsRound: options.ResetsRound).ConfigureAwait(false);
+
+	/// <summary>The bots every server runs, or <c>mixed</c> when <c>--bot-ai any</c> let them differ.</summary>
+	private static string BotAiOf(List<IGdpyrSeat> seats)
+	{
+		string botAi = seats.Count > 0 ? seats[0].BotAi : "none";
+		for (int i = 1; i < seats.Count; i++)
+		{
+			if (seats[i].BotAi != botAi)
+			{
+				return "mixed";
+			}
+		}
+
+		return botAi;
+	}
 
 	private static int Episodes(List<IGdpyrSeat> seats)
 	{
@@ -222,7 +252,7 @@ public static class Program
 	/// all truncate has no win rate, and saying so is more useful than dividing by
 	/// the wrong thing (docs/RL_ARCHITECTURE.md §6).
 	/// </summary>
-	private static void Summarize(TrainerOptions options, List<IGdpyrSeat> seats)
+	private static void Summarize(TrainerOptions options, List<IGdpyrSeat> seats, string botAi)
 	{
 		int episodes = 0;
 		int wins = 0;
@@ -241,7 +271,7 @@ public static class Program
 			: "no decided rounds";
 
 		Console.WriteLine($"{options.Policy}: {episodes} episodes, {decided} decided,"
-			+ $" {wins} won, {losses} lost, win rate {rate}");
+			+ $" {wins} won, {losses} lost, win rate {rate}, against {botAi} bots");
 	}
 
 	/// <summary>

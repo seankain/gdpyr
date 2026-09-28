@@ -99,6 +99,9 @@ public sealed class GdpyrGroundEnv : IEnvironmentAsync<float[]>, IGdpyrSeat
 	/// <summary>Ticks this seat's bot covered for, as the last step reported it.</summary>
 	public int PilotFallbacks { get; private set; }
 
+	/// <summary>What the server's bots decide with, as its <c>welcome</c> said (D5).</summary>
+	public string BotAi => _connection.BotAi;
+
 	// RLMatrix's interface spells these in camelCase; they are set once, in the
 	// constructor, from the schema the server published.
 	public OneOf<int, (int, int)> stateSize { get; set; }

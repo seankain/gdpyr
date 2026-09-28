@@ -118,6 +118,9 @@ public sealed class GdpyrStrategistEnv : IEnvironmentAsync<float[]>, IGdpyrSeat
 	/// <summary>Decisions this seat's bot covered for, as the last step reported it.</summary>
 	public int PilotFallbacks { get; private set; }
 
+	/// <summary>What the server's bots decide with, as its <c>welcome</c> said (D5).</summary>
+	public string BotAi => _connection.BotAi;
+
 	/// <summary>The commands the last decision produced. For a trace and for the log.</summary>
 	public IReadOnlyList<GdpyrCommand> LastCommands => _commands;
 
