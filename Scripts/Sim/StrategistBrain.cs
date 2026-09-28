@@ -43,8 +43,21 @@ public readonly struct StrategistTraits
 	/// </summary>
 	public readonly int UnitsBeforeBuilders;
 
+	/// <summary>
+	/// Supply trucks it keeps on the field (docs/HTN_BOTS.md §8, D2). Only the
+	/// commander buys them (§5.3, H5); legacy, the RL baseline, never does (D5).
+	/// </summary>
+	public readonly int SupplyTrucks;
+
+	/// <summary>
+	/// Fighting units it wants on the field before it pays for a supply truck: a
+	/// garrison and a squad. A truck heals an army; it is not one.
+	/// </summary>
+	public readonly int UnitsBeforeSupply;
+
 	public StrategistTraits(int decisionIntervalTicks, int queueDepth, int garrisonUnits,
-		float reorderRadiusMeters, int infantryPerHeavy = 3, int builders = 1, int unitsBeforeBuilders = 4)
+		float reorderRadiusMeters, int infantryPerHeavy = 3, int builders = 1, int unitsBeforeBuilders = 4,
+		int supplyTrucks = 1, int unitsBeforeSupply = 8)
 	{
 		DecisionIntervalTicks = Math.Max(decisionIntervalTicks, 1);
 		QueueDepth = Math.Max(queueDepth, 0);
@@ -53,6 +66,8 @@ public readonly struct StrategistTraits
 		InfantryPerHeavy = Math.Max(infantryPerHeavy, 0);
 		Builders = Math.Max(builders, 0);
 		UnitsBeforeBuilders = Math.Max(unitsBeforeBuilders, 0);
+		SupplyTrucks = Math.Max(supplyTrucks, 0);
+		UnitsBeforeSupply = Math.Max(unitsBeforeSupply, 0);
 	}
 
 	/// <summary>
@@ -210,6 +225,17 @@ public static class StrategistBrain
 		cost > 0 && balance >= cost
 		&& builders + queuedBuilders < traits.Builders
 		&& fightingUnits >= traits.UnitsBeforeBuilders;
+
+	/// <summary>
+	/// Whether to put a supply truck on a queue (docs/HTN_BOTS.md §8, D2): the
+	/// builder's rule with the truck's numbers — fewer than it wants, counting the
+	/// ones queued, and an army out worth resupplying.
+	/// </summary>
+	public static bool ShouldQueueSupply(int balance, int cost, int trucks, int queuedTrucks, int fightingUnits,
+		in StrategistTraits traits) =>
+		cost > 0 && balance >= cost
+		&& trucks + queuedTrucks < traits.SupplyTrucks
+		&& fightingUnits >= traits.UnitsBeforeSupply;
 
 	/// <summary>
 	/// Points to hold back from the army for a structure: the whole of its cost while

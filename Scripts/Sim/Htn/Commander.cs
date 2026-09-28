@@ -21,6 +21,12 @@ public struct CommandUnit
 	/// <summary>A technical, the scout of choice: a 70 m sensor at 8 m/s.</summary>
 	public bool Scout;
 
+	/// <summary>A supply truck (D2, H5): never in a fighting squad; the commander stations it where its squads will want it.</summary>
+	public bool Supply;
+
+	/// <summary>What <see cref="Strength"/> is at full health: its cost. What resupply can bring it back to.</summary>
+	public float FullStrength;
+
 	public bool Engaging;
 
 	/// <summary>Somebody else's to order (D1): a person or a policy's seat in the last 30 s, or another computer strategist.</summary>
@@ -52,6 +58,9 @@ public enum CommandRole : byte
 
 	/// <summary>Everything else: formed from production, sent where the assignment says.</summary>
 	Assault = 3,
+
+	/// <summary>The supply trucks (D2, H5), stationed where the squads will want resupply.</summary>
+	Supply = 4,
 }
 
 /// <summary>What an attack is aimed at.</summary>
@@ -87,6 +96,9 @@ public struct CommandSquad
 
 	public float Strength;
 
+	/// <summary>What its units would be worth at full health: what resupply can bring it back to (D2).</summary>
+	public float FullStrength;
+
 	/// <summary>What its units were worth when they joined: Retreat and Resupply measure what is left against it.</summary>
 	public float StrengthAtFormation;
 
@@ -113,6 +125,9 @@ public struct CommandSquad
 	public bool Short;
 
 	public bool Depleted;
+
+	/// <summary>Healing its units would bring it back above its resupply share: it heals rather than being merged (D2).</summary>
+	public bool Healable;
 
 	public bool FallingBack;
 
@@ -154,7 +169,7 @@ public sealed class CommanderPlanning
 		var context = new CommandContext(Factory, Traits);
 		context.Init();
 
-		for (int branch = 0; branch < 6; branch++)
+		for (int branch = 0; branch < 7; branch++)
 		{
 			context.Clear();
 			context.Sense(CommandFact.FallingBack, branch == 0);
@@ -163,6 +178,7 @@ public sealed class CommanderPlanning
 				1 => CommandTask.Defend,
 				2 or 3 => CommandTask.Attack,
 				4 => CommandTask.Recon,
+				6 => CommandTask.Supply,
 				_ => CommandTask.None,
 			}));
 			context.Sense(CommandFact.Depleted, branch == 5);
@@ -192,9 +208,10 @@ public sealed class CommanderPlanning
 /// Two halves, as the ground side has (§5.1): an assignment, which is a plain
 /// function because it assigns rather than sequences — squads formed from
 /// production, a threatened zone given the nearest squad strong enough for it, an
-/// idle squad given the nearest target it is strong enough for, one scout — and a
-/// planner per squad, which sequences: stage then strike, fall back when losing,
-/// refill when depleted.
+/// idle squad given the nearest target it is strong enough for, one scout, the supply
+/// trucks stationed — and a planner per squad, which sequences: stage then strike,
+/// fall back when losing, refill when depleted — at a supply source when healing can
+/// bring the squad back (D2, H5), else at home where it is merged.
 ///
 /// It knows what the side knows (§4.2 rule 2): its own units, the
 /// <see cref="ZoneBoard"/> the engine half fills from the economy, the fog and the
@@ -381,6 +398,7 @@ public sealed class Commander
 		AssignDefence(world, zones, contacts);
 		AssignAttacks(tick, zones, contacts);
 		AssignScout(tick, zones);
+		AssignSupply(world, contacts);
 
 		for (int s = 0; s < _squads.Length; s++)
 		{
@@ -419,6 +437,7 @@ public sealed class Commander
 			_squads[s].Armour = 0;
 			_squads[s].Engaging = 0;
 			_squads[s].Strength = 0f;
+			_squads[s].FullStrength = 0f;
 			_sum[s] = Vector3.Zero;
 		}
 
@@ -435,6 +454,7 @@ public sealed class Commander
 			squad.Armour += units[i].Armour ? 1 : 0;
 			squad.Engaging += units[i].Engaging ? 1 : 0;
 			squad.Strength += MathF.Max(units[i].Strength, 0f);
+			squad.FullStrength += MathF.Max(units[i].FullStrength, 0f);
 			_sum[s] += units[i].Position;
 		}
 
@@ -448,17 +468,34 @@ public sealed class Commander
 	}
 
 	/// <summary>
-	/// Puts every unit in no squad into one, in the unit manager's order: the garrison
-	/// while it is short, riflemen only — a tank goes with infantry, and a technical's
-	/// 70 m sensor is wasted at home; one scout when recon is wanted; then a depleted
-	/// squad that is refilling; then, for a tank, an infantry squad to escort it; then
-	/// an idle squad too weak for its target; then the squad forming from production.
+	/// Puts every unit in no squad into one, in the unit manager's order: a supply
+	/// truck into the trucks' squad, and never anywhere else; the garrison while it is
+	/// short, riflemen only — a tank goes with infantry, and a technical's 70 m sensor
+	/// is wasted at home; one scout when recon is wanted; then a depleted squad that is
+	/// refilling; then, for a tank, an infantry squad to escort it; then an idle squad
+	/// too weak for its target; then the squad forming from production.
 	/// </summary>
 	private void Route(uint tick, ReadOnlySpan<CommandUnit> units)
 	{
 		for (int i = 0; i < units.Length; i++)
 		{
-			if (Free(units, i) && !units[i].Armour && !units[i].Scout && _squads[GarrisonSlot].Members < _traits.GarrisonUnits)
+			if (!Free(units, i) || !units[i].Supply)
+			{
+				continue;
+			}
+
+			int supply = FindRole(CommandRole.Supply);
+			int slot = supply >= 0 ? supply : FreeSlot();
+			if (slot >= 0)
+			{
+				Join(Ensure(slot, CommandRole.Supply, tick), units, i);
+			}
+		}
+
+		for (int i = 0; i < units.Length; i++)
+		{
+			if (Free(units, i) && !units[i].Armour && !units[i].Scout && !units[i].Supply
+				&& _squads[GarrisonSlot].Members < _traits.GarrisonUnits)
 			{
 				Join(Ensure(GarrisonSlot, CommandRole.Garrison, tick), units, i);
 			}
@@ -477,7 +514,8 @@ public sealed class Commander
 
 		for (int i = 0; i < units.Length; i++)
 		{
-			if (!Free(units, i))
+			// A truck with no slot of its own is left alone rather than sent to fight.
+			if (!Free(units, i) || units[i].Supply)
 			{
 				continue;
 			}
@@ -515,7 +553,7 @@ public sealed class Commander
 		{
 			for (int i = 0; i < units.Length; i++)
 			{
-				if (units[i].Claimed || units[i].Armour || (pass < 2 && !units[i].Scout))
+				if (units[i].Claimed || units[i].Armour || units[i].Supply || (pass < 2 && !units[i].Scout))
 				{
 					continue;
 				}
@@ -799,6 +837,11 @@ public sealed class Commander
 		{
 			float share = squad.Depleted ? _traits.ResupplyShare + _traits.ResupplyHysteresis : _traits.ResupplyShare;
 			squad.Depleted = squad.Strength < share * formation;
+
+			// Whether healing alone would end it: its units at full health are worth what
+			// a depleted squad has to get back to. One that has lost too many cannot heal
+			// its way back, and is merged at home as before D2.
+			squad.Healable = squad.FullStrength >= (_traits.ResupplyShare + _traits.ResupplyHysteresis) * formation;
 		}
 
 		if (squad.Role != CommandRole.Garrison && !squad.FallingBack && squad.Strength < _traits.RetreatShare * formation)
@@ -1248,6 +1291,132 @@ public sealed class Commander
 		}
 	}
 
+	/// <summary>
+	/// Where the supply trucks stand (D2, H5), as one squad: with a depleted squad that
+	/// healing will restore and that is out of its fight — one coming to them to heal,
+	/// to meet it, or one still holding a zone, to heal it there; else at the staging
+	/// point of the nearest attack — out of the target's sight, and never nearer it
+	/// than a staging point would be — which its units come back to; else behind the
+	/// nearest squad defending a zone away from home; else in reserve in front of home.
+	/// Only where the side remembers no enemy within
+	/// <see cref="CommanderTraits.SupplyStandoffMeters"/>: a truck is soft, and one sent
+	/// to a squad that has only just broken contact is shot where the squad was.
+	/// </summary>
+	private void AssignSupply(in CommanderWorld world, ContactMemory contacts)
+	{
+		int s = FindRole(CommandRole.Supply);
+		if (s < 0 || _squads[s].FallingBack)
+		{
+			return;
+		}
+
+		ref CommandSquad trucks = ref _squads[s];
+		Vector3 point = Station(trucks.Centroid, world, contacts);
+		if (trucks.Task != CommandTask.Supply)
+		{
+			Give(ref trucks, CommandTask.Supply, CommandTarget.None, -1, OwnerId.None, point, world.Tick);
+		}
+		else
+		{
+			trucks.TaskPoint = point;
+		}
+	}
+
+	private Vector3 Station(Vector3 trucks, in CommanderWorld world, ContactMemory contacts)
+	{
+		for (int kind = 0; kind < 3; kind++)
+		{
+			int best = -1;
+			float bestDistance = float.MaxValue;
+			Vector3 bestPoint = Vector3.Zero;
+			for (int s = 0; s < _squads.Length; s++)
+			{
+				ref CommandSquad squad = ref _squads[s];
+				if (!squad.Active || !StationFor(kind, squad, trucks, world, out Vector3 point))
+				{
+					continue;
+				}
+
+				float distance = Flat(point, trucks);
+				if (distance < bestDistance && EnemyNear(contacts, world.Tick, point, _traits.SupplyStandoffMeters) <= 0f)
+				{
+					best = s;
+					bestDistance = distance;
+					bestPoint = point;
+				}
+			}
+
+			if (best >= 0)
+			{
+				return bestPoint;
+			}
+		}
+
+		return Reserve(world);
+	}
+
+	/// <summary>
+	/// Where the trucks would stand for <paramref name="squad"/>, by kind of station: 0,
+	/// a depleted squad healing will restore, out of its fight and nearer the trucks
+	/// than home, whatever its task — at it; 1, an attack — a staging distance back from
+	/// its target; 2, a defence away from home — behind it.
+	/// </summary>
+	private bool StationFor(int kind, in CommandSquad squad, Vector3 trucks, in CommanderWorld world, out Vector3 point)
+	{
+		point = Vector3.Zero;
+		switch (kind)
+		{
+			case 0:
+				// One that home is nearer is going home (NearestSupply), so it is not met.
+				if (squad.Role != CommandRole.Assault || !squad.Depleted || !squad.Healable || squad.FallingBack
+					|| squad.Engaging > 0 || Flat(squad.Centroid, trucks) >= Flat(squad.Centroid, world.Home))
+				{
+					return false;
+				}
+
+				point = squad.Centroid;
+				return true;
+
+			case 1:
+				if (squad.Task != CommandTask.Attack)
+				{
+					return false;
+				}
+
+				point = Behind(squad.TaskPoint, squad.StagingPoint, world.Home, _traits.StagingMeters);
+				return true;
+
+			default:
+				if (squad.Role != CommandRole.Assault || squad.Task != CommandTask.Defend
+					|| Flat(squad.TaskPoint, world.Home) <= _traits.ArriveMeters)
+				{
+					return false;
+				}
+
+				point = Behind(squad.TaskPoint, squad.TaskPoint, world.Home, _traits.SupplyStandoffMeters);
+				return true;
+		}
+	}
+
+	/// <summary>
+	/// <paramref name="point"/> when it is at least <paramref name="meters"/> from
+	/// <paramref name="target"/>; else the point that far from the target towards home,
+	/// or home when home is nearer than that. A squad that staged where it stood staged
+	/// in the fight, and a truck there dies in it.
+	/// </summary>
+	private static Vector3 Behind(Vector3 target, Vector3 point, Vector3 home, float meters)
+	{
+		if (Flat(point, target) >= meters - 0.5f)
+		{
+			return point;
+		}
+
+		Vector3 back = home - target;
+		back.Y = 0f;
+		float length = back.Length();
+		return length > meters ? target + (back / length * meters) : home;
+	}
+
 	/// <summary>A node unseen for <see cref="CommanderTraits.ReconStaleTicks"/>, the stalest; else the stalest zone of any kind.</summary>
 	private int ReconZone(uint tick, ZoneBoard zones)
 	{
@@ -1327,6 +1496,8 @@ public sealed class Commander
 		context.HomePoint = world.Home;
 		context.AtHome = Flat(squad.Centroid, world.Home) <= _traits.ArriveMeters;
 		context.ReservePoint = Reserve(world);
+		context.Healable = squad.Healable;
+		context.SupplyPoint = NearestSupply(squad.Centroid, world.Home, units);
 		context.Arrived = false;
 
 		context.Sense(CommandFact.Task, (byte)squad.Task);
@@ -1364,6 +1535,28 @@ public sealed class Commander
 		}
 
 		return present >= MathF.Ceiling(_traits.AssembleShare * members);
+	}
+
+	/// <summary>
+	/// The supply source nearest a point (D2): home — the first barracks' rally point,
+	/// inside its ring — or a supply truck, whoever's it is; a truck heals a squad
+	/// whoever gave it its orders.
+	/// </summary>
+	private static Vector3 NearestSupply(Vector3 from, Vector3 home, ReadOnlySpan<CommandUnit> units)
+	{
+		Vector3 best = home;
+		float bestDistance = Flat(from, home);
+		for (int i = 0; i < units.Length; i++)
+		{
+			float distance = units[i].Supply ? Flat(from, units[i].Position) : float.MaxValue;
+			if (distance < bestDistance)
+			{
+				best = units[i].Position;
+				bestDistance = distance;
+			}
+		}
+
+		return best;
 	}
 
 	/// <summary>Where a squad with nothing to do waits: in front of home, towards the threat.</summary>

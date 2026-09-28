@@ -192,6 +192,10 @@ public partial class Debug : PanelContainer
 			// against legacy with at the unit ceiling (docs/HTN_BOTS.md §6, H3). Under
 			// htn, how many units run each task of §5.2.
 			SetProperty("unit ms", $"{units.UnitMilliseconds:0.000}  {units.LiveUnitCount} units");
+
+			// Resupply (docs/HTN_BOTS.md §8, D2): units getting health back this tick, and
+			// how much the round has given back, under either AI.
+			SetProperty("resupply", $"{units.UnitsResupplied} healing  {units.HealthResupplied:0} hp this round");
 			if (units.Plans)
 			{
 				SetProperty("unit plan", units.DescribeUnitPlans());
@@ -371,7 +375,7 @@ public partial class Debug : PanelContainer
 			// Under --bot-ai htn: how many ground bots run each task, and the roles the
 			// coordinator handed out (docs/HTN_BOTS.md §5.1). Nothing under legacy.
 			// And per computer strategist, its squads: role and size (g garrison, s scout,
-			// a assault, f forming) and each one's running task (§5.3).
+			// a assault, f forming, r supply trucks) and each one's running task (§5.3).
 			if (bots.Ai == BotAi.Htn)
 			{
 				SetProperty("ground plan", bots.DescribeGroundPlans());

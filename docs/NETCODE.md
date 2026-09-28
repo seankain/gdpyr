@@ -535,7 +535,7 @@ exists to be.
 
 ---
 
-## 10. Economy, emplacements, the scoreboard, barracks defences, structures and armour
+## 10. Economy, emplacements, the scoreboard, barracks defences, structures, armour and resupply
 
 M5 added three things that are neither a per-tick sample nor a projectile, and all three are on the
 wire as **state**: sent when it changes, reliable, and absent the rest of the time.
@@ -901,6 +901,49 @@ reload, rounded up to the script's next pull of the trigger.
 agent schema is unchanged and a policy that uses a locker has to remember what it took
 ([`AGENT_API.md`](AGENT_API.md) §6.1); and the strategist's units do not know what the ground force
 is carrying — a tank does not stand off from a grenadier.
+
+### 10.7 Resupply and the supply truck
+
+Added with the HTN bots' H5 ([`HTN_BOTS.md`](HTN_BOTS.md) §8, D2), because a unit had nothing to
+come back from: magazines reload without a reserve and nothing healed, so a unit that walked out of
+a fight at a quarter health was a quarter of a unit for the rest of its life.
+
+**The rule** (`Scripts/Sim/Resupply.cs`, engine-free, `Tests/ResupplyTests.cs`): a strategist unit
+gets health back at its own `UnitDefinition.RegenPerSecond` while it stands inside a friendly
+**supply source's reach** and nothing has hurt it for three seconds (`Resupply.DamageLockoutTicks`).
+Two things are sources: every barracks, out to its defended ring (§10.4; never less than 25 m, for a
+barracks with no defences), and every living **supply truck**, out to its `SupplyRadiusMeters`.
+Reach is measured flat, as the ring is drawn. A truck does not resupply itself; two trucks resupply
+each other. The lockout is what keeps it resupply rather than armour: a fight at the door is fought
+at the health the units walked into it with. It is a rule of the game, not of a bot — a person's
+units heal where a computer strategist's do, under `--bot-ai legacy` as under `htn`. The rates are
+five percent of health a second for a rifleman, technical and builder, 2.5 % for the tank: a
+rifleman at half health is whole again in ten seconds, a tank from nothing in forty.
+
+| | rifleman | technical | tank | builder | supply truck |
+|---|---|---|---|---|---|
+| `RegenPerSecond` | 5 | 11 | 17.5 | 4 | 13 |
+
+**The supply truck** is the fifth line in the unit catalog (`Units/supply_truck.tres`, id 4, `8` to
+queue): 120 points, ten seconds at the barracks, 260 health that bullets hurt, 6.5 m/s, a pistol,
+and a 12 m reach drawn on the ground as a ring in its colour. What makes it a truck is one number,
+`UnitDefinition.SupplyRadiusMeters`, as `CanConstruct` makes a builder. Like the builder it is not
+a tier, so `UnitCatalog.Tiers`, the computer strategist's army and the defeat condition's cheapest
+unit are unchanged.
+
+**On the wire: one catalog line.** Health is already in the unit snapshot as a byte (§6.1), so a
+client sees a unit heal with nothing added to any message; the truck is a unit, spawned by the
+roster message every unit is. Appending is what the catalog allows (`UnitCatalog`): every other id
+still means what it did, and a client built before the truck has no line 4 and draws one with the
+defaults a missing definition gets — a rifleman-sized capsule. The agent schema is unchanged
+too ([`AGENT_API.md`](AGENT_API.md) §6.2): the truck is a unit with no tier bit, like the builder.
+
+**Who uses it.** A person moves units into a ring. Under `--bot-ai htn` a computer strategist buys
+one truck once it has eight fighting units and stations it behind its squads, a depleted squad that
+healing can bring back heals at the nearest source instead of being merged, and a wounded unit a bot
+ordered, with nothing in sight, walks to a source within 60 m of its reach and stands in it until it
+is back to 95 % ([`HTN_BOTS.md`](HTN_BOTS.md) §5.2, §5.3). Legacy's strategist never buys one; its
+garrison heals where it stands, inside the ring.
 
 ---
 

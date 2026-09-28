@@ -26,16 +26,17 @@ public partial class StrategistHud : CanvasLayer
 	private const string Keys =
 		"WASD/edge pan · Space/Ctrl raise/lower · hold RMB and drag to look (Q/E also turn) · wheel zoom\n"
 		+ "LMB select · click the barracks to train units · RMB order · X attack-move · C patrol · B defend · Z stop · F select all\n"
-		+ "1/2/3 queue infantry/technical/tank · 4 queue builder · Backspace cancel · RMB with no units selected sets the rally point\n"
+		+ "1/2/3 queue infantry/technical/tank · 4 queue builder · 8 queue supply truck · Backspace cancel · RMB with no units selected sets the rally point\n"
 		+ "with builders selected: 5/6/7 then RMB places pillbox/sandbags/tower (turn the view to turn it) · RMB on a site finishes or mends it\n"
+		+ "units out of a fight for 3 s heal inside the barracks ring and a supply truck's ring: move them there\n"
 		+ "F1 ground force · F2 strategist";
 
-	/// <summary>What the barracks card offers, in the order the number keys are: the three tiers, then the builder.</summary>
+	/// <summary>What the barracks card offers, in the order the number keys are: the three tiers, the builder, the supply truck.</summary>
 	private static readonly byte[] CardUnits =
-		{ UnitCatalog.Infantry, UnitCatalog.Technical, UnitCatalog.Tank, UnitCatalog.Builder };
+		{ UnitCatalog.Infantry, UnitCatalog.Technical, UnitCatalog.Tank, UnitCatalog.Builder, UnitCatalog.SupplyTruck };
 
 	/// <summary>The key that queues each of <see cref="CardUnits"/>, printed on its button.</summary>
-	private static readonly string[] CardKeys = { "1", "2", "3", "4" };
+	private static readonly string[] CardKeys = { "1", "2", "3", "4", "8" };
 
 	private static readonly Color CardBorderColor = new(0.35f, 0.45f, 0.55f, 0.9f);
 
@@ -81,7 +82,7 @@ public partial class StrategistHud : CanvasLayer
 		_selection = NewLabel(root, new Vector2(24f, 80f), new Vector2(520f, 32f));
 		_economy = NewLabel(root, new Vector2(24f, 112f), new Vector2(640f, 32f));
 		_builders = NewLabel(root, new Vector2(24f, 144f), new Vector2(760f, 32f));
-		_keys = NewLabel(root, new Vector2(24f, -132f), new Vector2(1100f, 120f), anchorTop: 1f);
+		_keys = NewLabel(root, new Vector2(24f, -156f), new Vector2(1100f, 144f), anchorTop: 1f);
 		_keys.Text = Keys;
 
 		BuildCard(root);
@@ -148,6 +149,9 @@ public partial class StrategistHud : CanvasLayer
 			button.Text = $"{UnitCatalog.NameOf(id).Capitalize()} ({CardKeys[i]})\n{cost} pts";
 			button.TooltipText = UnitCatalog.Definition(id) is { } definition
 				? $"{cost} points, {definition.BuildSeconds:0.#} s to train"
+					+ (definition.IsSupply
+						? $"; heals friendly units within {definition.SupplyRadiusMeters:0} m that are out of a fight"
+						: string.Empty)
 				: string.Empty;
 			button.Disabled = full || !UnitCatalog.IsBuildable(id) || match.StrategistPoints < cost;
 		}
@@ -296,8 +300,8 @@ public partial class StrategistHud : CanvasLayer
 		panel.GrowVertical = Control.GrowDirection.Begin;
 		panel.OffsetLeft = -16f;
 		panel.OffsetRight = -16f;
-		panel.OffsetTop = -140f;
-		panel.OffsetBottom = -140f;
+		panel.OffsetTop = -164f;
+		panel.OffsetBottom = -164f;
 
 		_card = panel;
 	}

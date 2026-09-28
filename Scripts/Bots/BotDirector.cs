@@ -378,7 +378,8 @@ public sealed class BotDirector
 		return new CommanderTraits(strategist.GarrisonUnits, d.AssaultSquadSize, d.RetreatShare, d.RetreatEnemyRatio,
 			d.EnemyNearMeters, d.ThreatMeters, d.ReinforceRatio, d.AttackRatio, d.ClusterMeters, d.StagingMeters,
 			d.AssembleMeters, d.AssembleShare, d.StageMaxTicks, d.ReconQuietTicks, d.ReconStaleTicks, d.ResupplyShare,
-			d.ResupplyHysteresis, d.ClaimTicks, d.ArriveMeters, d.ReserveOffsetMeters, d.SweepIntervalTicks);
+			d.ResupplyHysteresis, d.ClaimTicks, d.ArriveMeters, d.ReserveOffsetMeters, d.SweepIntervalTicks,
+			d.RefillHealTicks, d.SupplyStandoffMeters);
 	}
 
 	/// <summary>
@@ -419,6 +420,7 @@ public sealed class BotDirector
 				{
 					CommandRole.Garrison => 'g',
 					CommandRole.Scout => 's',
+					CommandRole.Supply => 'r',
 					_ => squad.Ready ? 'a' : 'f',
 				};
 				text.Append(role).Append(squad.Members).Append(' ').Append(commander.IntentOf(s).Goal).Append("  ");

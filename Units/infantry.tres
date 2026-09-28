@@ -8,6 +8,7 @@ Name = &"infantry"
 Cost = 50
 BuildSeconds = 4.0
 MaxHealth = 100.0
+RegenPerSecond = 5.0
 MoveSpeed = 4.5
 HeightMeters = 1.8
 RadiusMeters = 0.4

@@ -8,6 +8,7 @@ Name = &"builder"
 Cost = 60
 BuildSeconds = 6.0
 MaxHealth = 80.0
+RegenPerSecond = 4.0
 MoveSpeed = 4.5
 HeightMeters = 1.7
 RadiusMeters = 0.4
