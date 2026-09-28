@@ -197,7 +197,8 @@ The protocol:
 ```
 
 That plays the checkpoint with learning switched off and prints episodes, decided
-rounds and the win rate over the decided ones. Four rules around it:
+rounds, the win rate over the decided ones, and the bots it was won against. Five
+rules around it:
 
 1. **Claims are distributional.** A gdpyr episode is not reproducible — `reset`
    starts a fresh round rather than a repeatable one, and every stochastic
@@ -215,6 +216,16 @@ rounds and the win rate over the decided ones. Four rules around it:
    observation frame and the playtest harness fails any scenario that claims a win
    under it (§6.4, §9), because a result obtained by cheating is a result about a
    different game.
+5. **Name the opponent.** Every policy trained or evaluated with this repository's
+   scripts so far was measured against the **legacy** bots — `BotBrain`,
+   `UnitBrain`, `BotStrategist` — and still is: the game's default became the HTN
+   bots in H6 ([`HTN_BOTS.md`](HTN_BOTS.md) §6), but `train.sh`, `train-selfplay.sh`
+   and `evaluate.sh` pin `--bot-ai legacy`, the trainer refuses a server running
+   anything else unless told to, and every summary line and `--metrics` row says
+   which bots it was (D5 in that document's §8). Evaluating against the HTN bots is
+   `--bot-ai htn`, and it is a second number beside the first, not a replacement
+   for it: moving the baseline is a deliberate re-baseline, with every checkpoint
+   that is compared re-evaluated against the new one.
 
 Check `scripts/playtest.sh` when a run stops improving and you suspect the ground
 moved: it answers "did the *game* change" with a deterministic exit code and no
@@ -236,7 +247,8 @@ So, in order:
 
 1. **Both sides against the scripted bots.** `BotBrain` and `BotStrategist` are a
    fixed, readable opponent, and "beats the bot" is a claim that stays true
-   tomorrow.
+   tomorrow — the legacy bots, which the training scripts pin (§6, rule 5)
+   whatever the game's default is.
 2. **Freeze one, train the other.** `scripts/train-selfplay.sh --freeze ground
    --load-ground runs/ppo-ground` puts a trained ground policy in play-only mode
    and trains the strategist against it.

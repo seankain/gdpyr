@@ -287,6 +287,22 @@ public class LaunchOptionsTests
 	}
 
 	[Fact]
+	public void TheDefaultBotAiIsHtnAndTheFlagThenTheGameModeOverrideIt()
+	{
+		// docs/HTN_BOTS.md §6, H6: the default flipped. Legacy is still one flag, or
+		// one field of a game mode, away (D5).
+		Assert.Equal(BotAi.Htn, BotAiNames.Default);
+		Assert.Equal(BotAi.Htn, BotAiNames.Resolve(null, null));
+		Assert.Equal(BotAi.Legacy, BotAiNames.Resolve(null, BotAi.Legacy));
+		Assert.Equal(BotAi.Legacy, BotAiNames.Resolve(BotAi.Legacy, BotAi.Htn));
+		Assert.Equal(BotAi.Htn, BotAiNames.Resolve(BotAi.Htn, BotAi.Legacy));
+
+		// The numbers a game mode resource stores the choice as.
+		Assert.Equal(0, (int)BotAi.Legacy);
+		Assert.Equal(1, (int)BotAi.Htn);
+	}
+
+	[Fact]
 	public void EveryBotAi_HasASpellingThatParsesBackToIt()
 	{
 		foreach (BotAi ai in System.Enum.GetValues<BotAi>())

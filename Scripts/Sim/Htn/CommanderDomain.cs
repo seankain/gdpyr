@@ -50,18 +50,22 @@ public enum CommandTask : byte
 	Supply = 4,
 }
 
-/// <summary>What a primitive task asks the squad to do: the operator's name, and the intent's.</summary>
+/// <summary>
+/// What a primitive task asks the squad to do: the operator's name, and the intent's.
+/// The numbers are on the agent event stream as <c>squad_task</c>'s <c>goal</c>
+/// (docs/AGENT_API.md §8), so they are protocol constants: append, never renumber.
+/// </summary>
 public enum CommandGoal : byte
 {
 	None = 0,
-	FallBack,
-	Reinforce,
-	Stage,
-	Strike,
-	Scout,
-	Station,
-	Refill,
-	Hold,
+	FallBack = 1,
+	Reinforce = 2,
+	Stage = 3,
+	Strike = 4,
+	Scout = 5,
+	Station = 6,
+	Refill = 7,
+	Hold = 8,
 }
 
 /// <summary>

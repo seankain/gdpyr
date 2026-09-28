@@ -38,6 +38,11 @@ FREEZE="${FREEZE:-none}"
 LOAD_GROUND="${LOAD_GROUND:-}"
 LOAD_STRATEGIST="${LOAD_STRATEGIST:-}"
 
+# The bots that fill the seats the two learners leave: the ground learner's
+# teammates. Legacy, the RL baseline, whatever the game's default is
+# (docs/HTN_BOTS.md §8, D5).
+BOT_AI="${BOT_AI:-legacy}"
+
 # The hold one learner waits through is the other one's optimizer step, so the
 # server must be willing to stand still for longer than it would for one
 # (docs/AGENT_API.md §5.2).
@@ -59,6 +64,7 @@ while [ $# -gt 0 ]; do
 		--freeze) FREEZE="$2"; shift 2 ;;
 		--load-ground) LOAD_GROUND="$2"; shift 2 ;;
 		--load-strategist) LOAD_STRATEGIST="$2"; shift 2 ;;
+		--bot-ai) BOT_AI="$2"; shift 2 ;;
 		-h|--help)
 			sed -n '2,26p' "${BASH_SOURCE[0]}"
 			exit 0 ;;
@@ -105,7 +111,7 @@ for port in "${PORT_LIST[@]}"; do
 	log="$LOG_DIR/server-$port.log"
 
 	"$GODOT" --headless --path "$PROJECT_DIR" -- \
-		--server "$game_port" --agent-api "127.0.0.1:$port" --bots "$BOTS" > "$log" 2>&1 &
+		--server "$game_port" --agent-api "127.0.0.1:$port" --bots "$BOTS" --bot-ai "$BOT_AI" > "$log" 2>&1 &
 
 	PIDS+=("$!")
 	echo ">> server on game port $game_port, agent api 127.0.0.1:$port -> $log"
@@ -123,7 +129,7 @@ for port in "${PORT_LIST[@]}"; do
 done
 
 common=(--port "$PORTS" --algo "$ALGO" --steps "$STEPS" --history "$HISTORY"
-	--step-timeout "$STEP_TIMEOUT")
+	--step-timeout "$STEP_TIMEOUT" --bot-ai "$BOT_AI")
 
 strategist=("${common[@]}" --policy strategist --save "$OUT/strategist"
 	--metrics "$OUT/strategist.csv")

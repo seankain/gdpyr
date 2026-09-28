@@ -136,6 +136,14 @@ public sealed partial class AgentServer
 			writer.WriteNumber("turn_rate_radians", Limits.Unbounded ? 0f : Limits.TurnRateRadians);
 			writer.WriteNumber("commands_per_second", Limits.Unbounded ? 0 : Limits.CommandsPerSecond);
 			writer.WriteNumber("grace_ticks", AgentSeatBook.DefaultGraceTicks);
+
+			// What the backfill bots decide with, so a trainer can record which bot a
+			// policy was trained and evaluated against (docs/HTN_BOTS.md §8, D5).
+			if (PlayerManager.Instance?.Bots is { } bots)
+			{
+				writer.WriteString("bot_ai", BotAiNames.Name(bots.Ai));
+			}
+
 			AgentJson.WriteSchema(writer);
 		});
 

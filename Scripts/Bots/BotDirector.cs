@@ -68,7 +68,7 @@ public sealed class BotDirector
 
 		GroundTarget = Math.Clamp(ground, 0, BotRoster.MaxBots);
 		StrategistTarget = Math.Clamp(strategists, 0, TeamService.MaxStrategists);
-		Ai = options?.BotAi ?? gameMode?.BotAi ?? BotAi.Legacy;
+		Ai = BotAiNames.Resolve(options?.BotAi, gameMode?.BotAi);
 
 		GD.Print(Enabled
 			? $"[bots] backfilling to {GroundTarget} ground force and {StrategistTarget} strategist(s)"
@@ -95,9 +95,10 @@ public sealed class BotDirector
 	public int StrategistTarget { get; }
 
 	/// <summary>
-	/// What the bots decide with: <c>--bot-ai</c>, else the game mode's. The ground
-	/// bots follow it from H2, the units — <c>UnitManager</c> reads it here — from H3,
-	/// and the strategist from H4 (docs/HTN_BOTS.md §6).
+	/// What the bots decide with: <c>--bot-ai</c>, else the game mode's, else htn
+	/// (<see cref="BotAiNames.Default"/>, H6). The ground bots follow it from H2, the
+	/// units — <c>UnitManager</c> reads it here — from H3, and the strategist from H4
+	/// (docs/HTN_BOTS.md §6).
 	/// </summary>
 	public BotAi Ai { get; }
 

@@ -198,6 +198,10 @@ class GdpyrEnv:
         self.schema = Schema()
         self.omniscient = False
         self.unbounded = False
+        #: What the server's bots decide with, "legacy" or "htn": the opponent a
+        #: result is against (docs/HTN_BOTS.md §8, D5). A server that does not say
+        #: predates H6, whose default was legacy.
+        self.bot_ai = "legacy"
         self.tick = 0
         self.seat = 0
         self._elapsed = 0
@@ -251,6 +255,7 @@ class GdpyrEnv:
             "events": events,
             "omniscient": self.omniscient,
             "unbounded": self.unbounded,
+            "bot_ai": self.bot_ai,
         }
 
         if observation.planes is not None:
@@ -337,6 +342,7 @@ class GdpyrEnv:
 
         self.omniscient = bool(welcome.get("omniscient", False))
         self.unbounded = bool(welcome.get("unbounded", False))
+        self.bot_ai = str(welcome.get("bot_ai", "legacy"))
         self.tick = int(welcome.get("tick", 0))
 
         read = Schema(version=version, tick_rate=int(welcome.get("tick_rate", 60)))

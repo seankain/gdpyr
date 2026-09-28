@@ -307,6 +307,16 @@ public sealed class GdpyrConnection : IDisposable
 	/// <summary>Ticks a seat may go without an action before its bot takes over.</summary>
 	public int GraceTicks { get; private set; }
 
+	/// <summary>
+	/// What the server's bots decide with, <c>legacy</c> or <c>htn</c>
+	/// (docs/HTN_BOTS.md §8, D5): the opponent, and the teammates, a policy plays
+	/// beside. A server that does not say predates H6, whose default was legacy.
+	/// </summary>
+	public string BotAi { get; private set; } = LegacyBotAi;
+
+	/// <summary>The bot AI a server from before H6 ran, which is what one that does not say is taken to run.</summary>
+	public const string LegacyBotAi = "legacy";
+
 	public uint Tick { get; private set; }
 
 	/// <summary>What the last <c>step</c> reported about the seats this session holds.</summary>
@@ -343,6 +353,9 @@ public sealed class GdpyrConnection : IDisposable
 			? turn.GetSingle()
 			: 0f;
 		GraceTicks = welcome.TryGetProperty("grace_ticks", out JsonElement grace) ? grace.GetInt32() : 30;
+		BotAi = welcome.TryGetProperty("bot_ai", out JsonElement botAi) && botAi.ValueKind == JsonValueKind.String
+			? botAi.GetString()
+			: LegacyBotAi;
 		Tick = welcome.TryGetProperty("tick", out JsonElement tick) ? tick.GetUInt32() : 0;
 
 		Schema = ReadSchema(welcome);

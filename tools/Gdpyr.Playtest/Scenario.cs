@@ -180,6 +180,14 @@ public sealed class Scenario
 
 	public int StrategistBots;
 
+	/// <summary>
+	/// What the server's bots should decide with, <c>legacy</c> or <c>htn</c>
+	/// (docs/HTN_BOTS.md §4.2 rule 6); null for the server's default. A scenario
+	/// that makes a claim about one bot AI names it; <c>--bot-ai</c> on the command
+	/// line overrides it, which is how the same claim is checked against the other.
+	/// </summary>
+	public string BotAi;
+
 	public List<ScenarioSeat> Seats = new();
 
 	public List<ScenarioSpawn> Spawns = new();
@@ -257,6 +265,17 @@ public sealed class Scenario
 			{
 				scenario.GroundBots = Math.Max(Int(roster, "ground", 1), 0);
 				scenario.StrategistBots = Math.Max(Int(roster, "strategists", 0), 0);
+			}
+
+			if (root.TryGetProperty("bot_ai", out JsonElement botAi))
+			{
+				string named = botAi.ValueKind == JsonValueKind.String ? botAi.GetString() : null;
+				if (named is not ("legacy" or "htn"))
+				{
+					throw new ScenarioException($"'{scenario.Name}': 'bot_ai' is \"legacy\" or \"htn\"");
+				}
+
+				scenario.BotAi = named;
 			}
 
 			ReadSeats(scenario, root);

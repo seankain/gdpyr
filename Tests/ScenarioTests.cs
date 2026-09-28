@@ -59,6 +59,66 @@ public class ScenarioTests
 	}
 
 	[Fact]
+	public void AScenarioMayNameTheBotAiItsClaimsAreAbout()
+	{
+		// docs/HTN_BOTS.md §6, H6: a claim about the HTN bots names them, and the
+		// harness starts its server with them unless --bot-ai says otherwise.
+		Scenario htn = Scenario.Parse("""
+			{ "bot_ai": "htn", "assert": [ { "metric": "events.kill.count", "op": ">=", "value": 1 } ] }
+			""");
+		Assert.Equal("htn", htn.BotAi);
+		Assert.Null(Scenario.Parse(Minimal).BotAi);
+
+		ScenarioException error = Assert.Throws<ScenarioException>(() => Scenario.Parse("""
+			{ "bot_ai": "fsm", "assert": [ { "metric": "events.kill.count", "op": ">=", "value": 1 } ] }
+			"""));
+		Assert.Contains("bot_ai", error.Message);
+		Assert.Throws<ScenarioException>(() => Scenario.Parse("""
+			{ "bot_ai": 1, "assert": [ { "metric": "events.kill.count", "op": ">=", "value": 1 } ] }
+			"""));
+	}
+
+	[Fact]
+	public void EveryCheckedInScenarioParsesAndNamesOnlyEventMetricsThatExist()
+	{
+		// A typo in a checked-in scenario's filter would otherwise surface as a failed
+		// playtest, a Godot install later. An event metric resolves on an episode with
+		// nothing in it — to zero — exactly when it names a kind, a field and an
+		// aggregate that exist (§9.1).
+		string directory = ScenarioDirectory();
+		string[] files = System.IO.Directory.GetFiles(directory, "*.json");
+		Assert.NotEmpty(files);
+
+		var empty = new EpisodeMetrics(0);
+		foreach (string file in files)
+		{
+			Scenario scenario = Scenario.Load(file);
+			foreach (Assertion assertion in scenario.Assertions)
+			{
+				if (assertion.Metric.StartsWith("events.", StringComparison.Ordinal))
+				{
+					Assert.True(empty.TryValue(assertion.Metric, out _, out _),
+						$"{System.IO.Path.GetFileName(file)}: {assertion.Metric}");
+				}
+			}
+		}
+	}
+
+	private static string ScenarioDirectory()
+	{
+		for (var at = new System.IO.DirectoryInfo(AppContext.BaseDirectory); at != null; at = at.Parent)
+		{
+			string candidate = System.IO.Path.Combine(at.FullName, "Tests", "Scenarios");
+			if (System.IO.Directory.Exists(candidate))
+			{
+				return candidate;
+			}
+		}
+
+		throw new InvalidOperationException("no Tests/Scenarios above " + AppContext.BaseDirectory);
+	}
+
+	[Fact]
 	public void ASpawnCanPutUpAStructureFacingAWay()
 	{
 		Scenario scenario = Scenario.Parse("""
@@ -295,12 +355,109 @@ public class ScenarioTests
 		Assert.Equal(0d, lost);
 		Assert.True(metrics.TryValue("events.unit_lost.sum", out double sum, out _));
 		Assert.Equal(0d, sum);
+		Assert.True(metrics.TryValue("events.unit_lost.tier.max", out double tier, out _));
+		Assert.Equal(0d, tier);
+		Assert.False(metrics.TryValue("events.unit_lost.teir.max", out _, out _));
 
 		// A name nothing answers to is a typo, and a typo that read as zero would be
 		// an assertion that passes for the wrong reason.
 		Assert.False(metrics.TryValue("events.kil.count", out _, out _));
 		Assert.False(metrics.TryValue("observation.self.helth", out _, out _));
 		Assert.False(metrics.TryValue("counters.nothing", out _, out _));
+	}
+
+	[Fact]
+	public void AFilterCountsAndAggregatesOnlyTheEventsThatMatch()
+	{
+		var metrics = new EpisodeMetrics(7) { StartTick = 0, EndTick = 3000 };
+		metrics.Event("node_captured", 600, Fields(("node", 0), ("owner", 2), ("claimant", 0), ("x", -30), ("z", -15)));
+		metrics.Event("node_captured", 1200, Fields(("node", 0), ("owner", 1), ("claimant", 2), ("x", -30), ("z", -15)));
+		metrics.Event("node_captured", 1800, Fields(("node", 2), ("owner", 1), ("claimant", 0), ("x", -25), ("z", -100)));
+		metrics.Event("unit_lost", 900, Fields(("unit", 3), ("tier", 0), ("killer", 5)));
+		metrics.Event("unit_lost", 950, Fields(("unit", 4), ("tier", 2), ("killer", 5)));
+
+		// A strategist node the ground force took: both conditions, one event.
+		Assert.True(metrics.TryValue("events.node_captured[owner=1,claimant=2].count", out double taken, out uint tick));
+		Assert.Equal(1d, taken);
+		Assert.Equal(1200u, tick);
+
+		Assert.True(metrics.TryValue("events.node_captured[owner=1].count", out double ground, out _));
+		Assert.Equal(2d, ground);
+		Assert.True(metrics.TryValue("events.node_captured[owner=1].node.max", out double node, out _));
+		Assert.Equal(2d, node);
+
+		// The shorthand is the kind's own field, as it is without a filter.
+		Assert.True(metrics.TryValue("events.unit_lost[tier>=1].max", out double tier, out _));
+		Assert.Equal(2d, tier);
+		Assert.True(metrics.TryValue("events.unit_lost[tier!=2].count", out double soft, out _));
+		Assert.Equal(1d, soft);
+		Assert.True(metrics.TryValue("events.unit_lost[tier<1].unit", out double unit, out _));
+		Assert.Equal(3d, unit);
+	}
+
+	[Fact]
+	public void ContestedTimeIsTheSumOfTheContestsThatEnded()
+	{
+		// docs/HTN_BOTS.md §6, H6: "strategist nodes contested for N ticks" is a sum
+		// over node_contested's ends, which carry how long each lasted.
+		var metrics = new EpisodeMetrics(7) { StartTick = 0, EndTick = 3000 };
+		metrics.Event("node_contested", 600, Fields(("node", 2), ("owner", 2), ("contested", 1), ("ticks", 0)));
+		metrics.Event("node_contested", 900, Fields(("node", 2), ("owner", 2), ("contested", 0), ("ticks", 300)));
+		metrics.Event("node_contested", 1200, Fields(("node", 0), ("owner", 0), ("contested", 1), ("ticks", 0)));
+		metrics.Event("node_contested", 1260, Fields(("node", 0), ("owner", 0), ("contested", 0), ("ticks", 60)));
+
+		Assert.True(metrics.TryValue("events.node_contested[owner=2,contested=0].sum", out double held, out _));
+		Assert.Equal(300d, held);
+		Assert.True(metrics.TryValue("events.node_contested[contested=1].count", out double contests, out _));
+		Assert.Equal(2d, contests);
+		Assert.Equal("ticks", EpisodeMetrics.DefaultFieldOf("node_contested"));
+	}
+
+	[Fact]
+	public void AFilterNothingMatchesReadsZeroAndAFilterTypoFails()
+	{
+		var metrics = new EpisodeMetrics(7) { StartTick = 0, EndTick = 3000 };
+		metrics.Event("unit_lost", 900, Fields(("unit", 3), ("tier", 0), ("killer", 5)));
+
+		// No tank died: a fact about the round, as a kind that never fired is.
+		Assert.True(metrics.TryValue("events.unit_lost[tier=2].count", out double tanks, out _));
+		Assert.Equal(0d, tanks);
+		Assert.True(metrics.TryValue("events.squad_task[goal=1].count", out double retreats, out _));
+		Assert.Equal(0d, retreats);
+		Assert.True(metrics.TryValue("events.squad_task[goal=1].x.min", out double x, out _));
+		Assert.Equal(0d, x);
+
+		// A field, a kind or an operator nothing answers to is a typo.
+		Assert.False(metrics.TryValue("events.unit_lost[teir=2].count", out _, out _));
+		Assert.False(metrics.TryValue("events.unit_lst[tier=2].count", out _, out _));
+		Assert.False(metrics.TryValue("events.unit_lost[tier~2].count", out _, out _));
+		Assert.False(metrics.TryValue("events.unit_lost[tier=two].count", out _, out _));
+		Assert.False(metrics.TryValue("events.unit_lost[tier=2].helth.max", out _, out _));
+		Assert.False(metrics.TryValue("events.unit_lost[tier=2].tier.median", out _, out _));
+		Assert.False(metrics.TryValue("events.unit_lost[tier=2]", out _, out _));
+		Assert.False(metrics.TryValue("events.unit_lost[tier=2.count", out _, out _));
+
+		// A kind with no shorthand needs its field named.
+		Assert.False(metrics.TryValue("events.seat_attached[policy=0].max", out _, out _));
+	}
+
+	[Fact]
+	public void AFilteredClaimParsesAndEvaluatesAcrossTheSweep()
+	{
+		Scenario scenario = Scenario.Parse("""
+			{ "assert": [ { "metric": "events.node_captured[owner=1,claimant=2].count", "op": "over_seeds",
+			                "cmp": ">=", "value": 1, "fraction": 0.5 } ] }
+			""");
+
+		var taken = new EpisodeMetrics(1) { StartTick = 0, EndTick = 100 };
+		taken.Event("node_captured", 50, Fields(("node", 1), ("owner", 1), ("claimant", 2)));
+		var held = new EpisodeMetrics(2) { StartTick = 0, EndTick = 100 };
+		held.Event("node_captured", 50, Fields(("node", 1), ("owner", 2), ("claimant", 0)));
+
+		AssertionResult result = AssertionEvaluator.Evaluate(scenario.Assertions[0],
+			new List<EpisodeMetrics> { taken, held });
+		Assert.True(result.Passed, result.Observed);
+		Assert.Null(result.Error);
 	}
 
 	[Fact]

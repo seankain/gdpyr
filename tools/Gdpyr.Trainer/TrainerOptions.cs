@@ -17,7 +17,7 @@ public sealed class TrainerOptions
 		+ "                   [--lr 1e-4] [--width 512] [--save <dir>] [--load <dir>]\n"
 		+ "                   [--play] [--episodes N] [--realtime] [--step-timeout 10000]\n"
 		+ "                   [--report-every 100] [--save-every 5000] [--metrics <file>]\n"
-		+ "                   [--no-reset]\n"
+		+ "                   [--no-reset] [--bot-ai legacy|htn|any]\n"
 		+ "  --port          one or more agent-api ports; one gdpyr server per port\n"
 		+ "  --policy        which seat to sit in: ground (default) or strategist\n"
 		+ "  --algo          ppo (default) or dqn; see docs/RL_ARCHITECTURE.md §3\n"
@@ -33,8 +33,10 @@ public sealed class TrainerOptions
 		+ "  --step-timeout  ms the server holds the sim for this learner before giving up\n"
 		+ "  --metrics       append a CSV row per report window to this file\n"
 		+ "  --no-reset      never restart the round; follow the learner that does (§8)\n"
+		+ "  --bot-ai        the bots the servers must run: legacy (default, the RL baseline),\n"
+		+ "                  htn, or any; a server running others is refused (HTN_BOTS.md D5)\n"
 		+ "Start a server for each port with:\n"
-		+ "  godot --path . --headless -- --server 7777 --agent-api 7900 --bots 6:1\n"
+		+ "  godot --path . --headless -- --server 7777 --agent-api 7900 --bots 6:1 --bot-ai legacy\n"
 		+ "See docs/TRAINING.md and docs/RL_ARCHITECTURE.md.";
 
 	/// <summary>Ticks one decision is held for, per seat, when the command line does not say.</summary>
@@ -132,6 +134,14 @@ public sealed class TrainerOptions
 	/// </summary>
 	public bool ResetsRound { get; private set; } = true;
 
+	/// <summary>
+	/// The bot AI every server must be running: <c>legacy</c>, <c>htn</c>, or
+	/// <c>any</c>. Legacy by default: the scripted bots are the baseline a policy is
+	/// measured against, and a result against a different opponent is a different
+	/// result (docs/HTN_BOTS.md §8, D5). Changing it is a deliberate re-baseline.
+	/// </summary>
+	public string BotAi { get; private set; } = "legacy";
+
 	public bool Help { get; private set; }
 
 	public static TrainerOptions Parse(string[] args, out string error)
@@ -199,6 +209,12 @@ public sealed class TrainerOptions
 			return options;
 		}
 
+		if (options.BotAi is not ("legacy" or "htn" or "any"))
+		{
+			error = $"--bot-ai is 'legacy', 'htn' or 'any', not '{options.BotAi}'";
+			return options;
+		}
+
 		if (options.PlayOnly && options.LoadPath == null)
 		{
 			error = "--play needs --load: there is nothing to play without a policy";
@@ -233,6 +249,7 @@ public sealed class TrainerOptions
 			case "--save": options.SavePath = value; return true;
 			case "--load": options.LoadPath = value; return true;
 			case "--metrics": options.MetricsPath = value; return true;
+			case "--bot-ai": options.BotAi = value.ToLowerInvariant(); return true;
 
 			case "--port":
 				foreach (string part in value.Split(',', StringSplitOptions.RemoveEmptyEntries))

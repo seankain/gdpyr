@@ -13,14 +13,21 @@ namespace Gdpyr.Trainer;
 /// nothing is, and a training run that has to be watched live is a training run
 /// nobody can leave alone overnight. The columns are the ones an RL run is
 /// actually read by — the reward this repository made up, and the win rate the
-/// game decided (docs/RL_ARCHITECTURE.md §6).
+/// game decided (docs/RL_ARCHITECTURE.md §6) — and on every row the bots the game
+/// was played against, because a win rate means nothing without its opponent
+/// (docs/HTN_BOTS.md §8, D5).
 /// </summary>
 public sealed class MetricsLog : IDisposable
 {
-	private readonly StreamWriter _writer;
+	/// <summary>The first line of every file this writes.</summary>
+	public const string Header = "wall_clock,step,episodes,last_episode_reward,reward_in_flight,wins,losses,fallbacks,bot_ai";
 
-	public MetricsLog(string path)
+	private readonly StreamWriter _writer;
+	private readonly string _botAi;
+
+	public MetricsLog(string path, string botAi)
 	{
+		_botAi = botAi ?? string.Empty;
 		if (string.IsNullOrWhiteSpace(path))
 		{
 			return;
@@ -33,10 +40,24 @@ public sealed class MetricsLog : IDisposable
 		}
 
 		bool fresh = !File.Exists(path) || new FileInfo(path).Length == 0;
+
+		// A file from before the bot_ai column would take rows one column wider than
+		// its header: refused, rather than a CSV no reader parses.
+		if (!fresh)
+		{
+			using var reader = new StreamReader(path);
+			string existing = reader.ReadLine();
+			if (existing != Header)
+			{
+				throw new InvalidOperationException(
+					$"{path} has a different header from the one this trainer writes; name a new --metrics file");
+			}
+		}
+
 		_writer = new StreamWriter(path, append: true) { AutoFlush = true };
 		if (fresh)
 		{
-			_writer.WriteLine("wall_clock,step,episodes,last_episode_reward,reward_in_flight,wins,losses,fallbacks");
+			_writer.WriteLine(Header);
 		}
 	}
 
@@ -56,7 +77,8 @@ public sealed class MetricsLog : IDisposable
 			rewardInFlight.ToString("0.0000", CultureInfo.InvariantCulture),
 			wins.ToString(CultureInfo.InvariantCulture),
 			losses.ToString(CultureInfo.InvariantCulture),
-			fallbacks.ToString(CultureInfo.InvariantCulture)));
+			fallbacks.ToString(CultureInfo.InvariantCulture),
+			_botAi));
 	}
 
 	public void Dispose() => _writer?.Dispose();

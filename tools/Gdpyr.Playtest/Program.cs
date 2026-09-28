@@ -133,6 +133,10 @@ public static class Program
 		string host, int port, int gamePort, string token, bool attach, string traceDirectory, string botAi)
 	{
 		ServerProcess server = null;
+
+		// The command line wins over the scenario, so one file's claims can be checked
+		// against either bot AI.
+		string wanted = botAi ?? scenario.BotAi;
 		try
 		{
 			if (!attach)
@@ -140,11 +144,23 @@ public static class Program
 				Directory.CreateDirectory(traceDirectory);
 				server = await ServerProcess.StartAsync(godot, project, port, gamePort, scenario.GroundBots,
 					scenario.StrategistBots,
-					Path.Combine(traceDirectory, $"server-{port}.log"), botAi).ConfigureAwait(false);
+					Path.Combine(traceDirectory, $"server-{port}.log"), wanted).ConfigureAwait(false);
 			}
 
 			using GdpyrConnection connection = await GdpyrConnection.ConnectAsync(host, port, token)
 				.ConfigureAwait(false);
+
+			// A claim about one bot AI checked against the other is not a result about
+			// either: said, rather than run (docs/HTN_BOTS.md §6, H6).
+			if (wanted != null && connection.BotAi != wanted)
+			{
+				return new ScenarioResult
+				{
+					Scenario = scenario,
+					BotAi = connection.BotAi,
+					Error = $"this server's bots decide with {connection.BotAi}, and the run asks for {wanted}",
+				};
+			}
 
 			var runner = new Runner(connection, traceDirectory);
 			return await runner.RunAsync(scenario).ConfigureAwait(false);
@@ -173,7 +189,8 @@ public static class Program
 		Console.WriteLine($"{name} {dots} {(result.Passed ? "PASS" : "FAIL")}"
 			+ $"  ({result.Ticks:N0} ticks, {simSeconds.ToString("0.0", CultureInfo.InvariantCulture)} s sim,"
 			+ $" {result.WallSeconds.ToString("0.0", CultureInfo.InvariantCulture)} s wall,"
-			+ $" {result.Episodes.Count} seed{(result.Episodes.Count == 1 ? string.Empty : "s")})");
+			+ $" {result.Episodes.Count} seed{(result.Episodes.Count == 1 ? string.Empty : "s")},"
+			+ $" bot ai {result.BotAi})");
 
 		foreach (AssertionResult assertion in result.Assertions)
 		{
@@ -212,6 +229,10 @@ public static class Program
 				writer.WriteBoolean("passed", result.Passed);
 				writer.WriteNumber("ticks", result.Ticks);
 				writer.WriteNumber("wall_seconds", Math.Round(result.WallSeconds, 3));
+				if (result.BotAi != null)
+				{
+					writer.WriteString("bot_ai", result.BotAi);
+				}
 
 				if (result.Error != null)
 				{
@@ -268,7 +289,8 @@ public static class Program
 		  --port <port>        agent channel port (default 7900)
 		  --game-port <port>   the server's own UDP port (default 7777)
 		  --token <token>      agent token, when the server was started with one
-		  --bot-ai <ai>        what the server's bots decide with: legacy (the server's default) or htn
+		  --bot-ai <ai>        what the server's bots decide with, legacy or htn: overrides a scenario's
+		                       own bot_ai; with neither, the server's default
 		  --trace-dir <dir>    where traces and server logs go (default build/playtest)
 		  --json               print a machine-readable summary instead of the human one
 

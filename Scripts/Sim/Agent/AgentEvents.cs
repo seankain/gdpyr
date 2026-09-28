@@ -17,6 +17,24 @@ public enum AgentEventKind : byte
 	StructurePlaced = 9,
 	StructureBuilt = 10,
 	StructureLost = 11,
+
+	/// <summary>
+	/// A computer strategist's commander squad took a new goal (docs/HTN_BOTS.md §5.3,
+	/// H6). Only <c>--bot-ai htn</c> has squads; legacy never emits one.
+	/// </summary>
+	SquadTask = 12,
+
+	/// <summary>
+	/// The strategist side's fog picked up a ground-force player it did not have in
+	/// sight at the refresh before (docs/NETCODE.md §6.2, H6). Either bot AI.
+	/// </summary>
+	ContactSpotted = 13,
+
+	/// <summary>
+	/// A resource node became contested — both sides inside its radius — or stopped
+	/// being, with how long it was (docs/IMPLEMENTATION_PLAN.md §M5, H6).
+	/// </summary>
+	NodeContested = 14,
 }
 
 /// <summary>
@@ -73,12 +91,23 @@ public static class AgentEventSchema
 		new[] { "structure", "type", "builders", "x", "z" },                                   // StructurePlaced
 		new[] { "structure", "type", "", "x", "z" },                                           // StructureBuilt
 		new[] { "structure", "type", "killer", "x", "z" },                                     // StructureLost
+		// The strategist's peer id, the commander's squad slot, and the goal by its
+		// CommandGoal number (0 when the squad disbands); x and z are where the goal's
+		// order points.
+		new[] { "strategist", "squad", "goal", "x", "z" },                                    // SquadTask
+		// The player spotted, the tier of the unit that saw it (-1 for a structure),
+		// and 1 when nothing had seen it before this round.
+		new[] { "peer", "observer", "first", "x", "z" },                                       // ContactSpotted
+		// Who holds the node; 1 when the contest starts and 0 when it ends; and for an
+		// end, the ticks it lasted. One that the round ends in the middle of has no end.
+		new[] { "node", "owner", "contested", "ticks", "" },                                  // NodeContested
 	};
 
 	private static readonly string[] Kinds =
 	{
 		"round_start", "round_end", "kill", "damage", "unit_built", "unit_lost", "node_captured",
 		"seat_attached", "seat_released", "structure_placed", "structure_built", "structure_lost",
+		"squad_task", "contact_spotted", "node_contested",
 	};
 
 	/// <summary>The highest kind there is. Everything from 0 to this has a name and a slate of fields.</summary>

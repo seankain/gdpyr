@@ -1653,7 +1653,12 @@ public partial class PlayerManager : Node
 	{
 		if (_spawnPoints.Count > 0)
 		{
-			return _spawnPoints[index % _spawnPoints.Count];
+			// Past the last point, a slot beside it rather than the point itself: two
+			// players put in one place at a round reset push each other out of the
+			// world (SpawnLap).
+			Transform3D point = _spawnPoints[index % _spawnPoints.Count];
+			point.Origin += point.Basis * SpawnLap.Offset(index, _spawnPoints.Count);
+			return point;
 		}
 
 		// Fallback ring, so a map with no spawn points is still playable rather than

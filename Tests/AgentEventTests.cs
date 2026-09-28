@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using Gdpyr.Sim;
 using Gdpyr.Sim.Agent;
+using Gdpyr.Sim.Htn;
 using Xunit;
 
 namespace Gdpyr.Tests;
@@ -193,8 +194,37 @@ public class AgentEventTests
 		Assert.Equal("structure_placed", AgentEventSchema.NameOf(AgentEventKind.StructurePlaced));
 		Assert.Equal("structure_built", AgentEventSchema.NameOf(AgentEventKind.StructureBuilt));
 		Assert.Equal("structure_lost", AgentEventSchema.NameOf(AgentEventKind.StructureLost));
-		Assert.Equal(AgentEventKind.StructureLost, AgentEventSchema.Last);
 		Assert.Equal("killer", AgentEventSchema.FieldsOf(AgentEventKind.StructureLost)[2]);
+	}
+
+	[Fact]
+	public void TheHtnEventsAreOnTheStreamUnderTheirOwnNames()
+	{
+		// docs/HTN_BOTS.md §6, H6: what a scenario needs to say about the bots that
+		// the older kinds cannot.
+		Assert.Equal("squad_task", AgentEventSchema.NameOf(AgentEventKind.SquadTask));
+		Assert.Equal("contact_spotted", AgentEventSchema.NameOf(AgentEventKind.ContactSpotted));
+		Assert.Equal("node_contested", AgentEventSchema.NameOf(AgentEventKind.NodeContested));
+		Assert.Equal(AgentEventKind.NodeContested, AgentEventSchema.Last);
+		Assert.Equal("ticks", AgentEventSchema.FieldsOf(AgentEventKind.NodeContested)[3]);
+		Assert.Equal("goal", AgentEventSchema.FieldsOf(AgentEventKind.SquadTask)[2]);
+		Assert.Equal("observer", AgentEventSchema.FieldsOf(AgentEventKind.ContactSpotted)[1]);
+	}
+
+	[Fact]
+	public void TheSquadGoalNumbersAreTheOnesTheApiPublishes()
+	{
+		// squad_task carries a CommandGoal by number (docs/AGENT_API.md §8): a
+		// renumbering would silently change what every recorded trace means.
+		Assert.Equal(0, (int)CommandGoal.None);
+		Assert.Equal(1, (int)CommandGoal.FallBack);
+		Assert.Equal(2, (int)CommandGoal.Reinforce);
+		Assert.Equal(3, (int)CommandGoal.Stage);
+		Assert.Equal(4, (int)CommandGoal.Strike);
+		Assert.Equal(5, (int)CommandGoal.Scout);
+		Assert.Equal(6, (int)CommandGoal.Station);
+		Assert.Equal(7, (int)CommandGoal.Refill);
+		Assert.Equal(8, (int)CommandGoal.Hold);
 	}
 
 	[Fact]
@@ -235,6 +265,29 @@ public class AgentEventTests
 		{
 			Assert.Contains(AgentEventSchema.NameOf((AgentEventKind)kind),
 				Gdpyr.Playtest.EpisodeMetrics.AgentEventKinds);
+		}
+	}
+
+	[Fact]
+	public void ThePlaytestHarnessKnowsEveryFieldOfEveryKind()
+	{
+		// A filter on a field the harness does not know is a typo; one it knows that
+		// the game does not write would read zero for ever.
+		Assert.Equal((byte)AgentEventSchema.Last + 1, Gdpyr.Playtest.EpisodeMetrics.AgentEventFields.Count);
+		for (byte kind = 0; kind <= (byte)AgentEventSchema.Last; kind++)
+		{
+			string name = AgentEventSchema.NameOf((AgentEventKind)kind);
+			var published = new List<string>();
+			foreach (string field in AgentEventSchema.FieldsOf((AgentEventKind)kind))
+			{
+				if (field.Length > 0)
+				{
+					published.Add(field);
+				}
+			}
+
+			Assert.True(Gdpyr.Playtest.EpisodeMetrics.AgentEventFields.TryGetValue(name, out string[] known), name);
+			Assert.Equal(published, known);
 		}
 	}
 }

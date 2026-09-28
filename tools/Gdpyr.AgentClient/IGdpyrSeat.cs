@@ -42,6 +42,12 @@ public interface IGdpyrSeat : IDisposable
 	int PilotFallbacks { get; }
 
 	/// <summary>
+	/// What the server's bots decide with, <c>legacy</c> or <c>htn</c>: the opponent
+	/// and the teammates this seat plays beside (docs/HTN_BOTS.md §8, D5).
+	/// </summary>
+	string BotAi { get; }
+
+	/// <summary>
 	/// Changes the seed the next reset will label its episode with. The simulation
 	/// has no global RNG to seed, so this labels an episode rather than determining
 	/// one (docs/AGENT_API.md §3.1).
