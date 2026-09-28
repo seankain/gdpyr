@@ -38,7 +38,7 @@ Scripts/Agent/  The agent control channel: listener, sessions, seats, observatio
 Scripts/Ui/     Main menu and server browser, role select, pause menu, reticle, combat HUD, RTS HUD,
                 net debug HUD, the `~` console and the demo camera
 Scenes/         Main menu, greybox map, player, weapon, pause menu
-Units/          UnitDefinition resources: three fighting tiers and the builder
+Units/          UnitDefinition resources: three fighting tiers, the builder and the supply truck
 Structures/     StructureDefinition resources: pillbox, sandbag wall, sniper tower
 Tests/          xUnit over the engine-free sources — `dotnet test`, no Godot needed
 Tests/Scenarios/ Playtest scenario files: data, and authoring one needs no Godot install
@@ -103,10 +103,13 @@ None is needed to get bots: the numbers default to `BotGroundForce` and `BotStra
 `Match/default_gamemode.tres` (6 and 1), and the AI to its `BotAi` (legacy). `--bots 4` overrides
 only the ground force and leaves the strategists to the game mode. Under `htn` the ground bots plan
 with the HTN of [`docs/HTN_BOTS.md`](docs/HTN_BOTS.md) §5.1 (H2), the units with §5.2's (H3),
-whoever ordered them, and the computer strategist with §5.3's commander (H4). The debug HUD's
+whoever ordered them, and the computer strategist with §5.3's commander (H4) — which, from H5,
+buys a supply truck once it has eight fighting units, stations it behind its squads, and sends a
+wounded squad, or a bot's wounded unit, to the nearest supply to heal. The debug HUD's
 `ground plan` row counts the ground bots on each task and the roles their coordinator handed out,
-`unit plan` the units on each task, `unit ms` what the unit pass costs a tick, and `commander` each
-computer strategist's squads and what each is doing.
+`unit plan` the units on each task, `unit ms` what the unit pass costs a tick, `resupply` the units
+healing and the health given back this round (under either AI), and `commander` each computer
+strategist's squads and what each is doing.
 
 Two more record a round or watch one back ([`docs/DEMOS.md`](docs/DEMOS.md)):
 
@@ -149,7 +152,7 @@ map:
 | left-drag, left-click, `F` | box select, single select, select all |
 | right-click | order the selection (or, with nothing selected, move the barracks rally point) |
 | `X` `C` `B` `Z` | attack-move · patrol · defend · stop, applied by the next right-click |
-| `1` `2` `3` `4`, Backspace | queue an infantryman, a technical, a tank or a builder; cancel the last one |
+| `1` `2` `3` `4` `8`, Backspace | queue an infantryman, a technical, a tank, a builder or a supply truck; cancel the last one |
 | `5` `6` `7` | with builders selected: put a pillbox, a sandbag wall or a sniper tower where the next right-click lands |
 
 Right-clicking an enemy player orders an attack on that player rather than on the ground under
@@ -165,6 +168,11 @@ while builders stand beside it — two build twice as fast — and cannot finish
 ground force is standing where it goes. Right-clicking builders onto one of your own sites or damaged
 structures finishes or mends it. Finished, it is solid for everybody: it stops bullets, bodies and
 sight lines, and a crouched player behind a sandbag wall is hidden from a rifleman in front of it.
+
+**Units heal** ([`docs/HTN_BOTS.md`](docs/HTN_BOTS.md) §8, D2) inside a barracks' red ring and inside
+the green ring round a **supply truck** (120 points, `8`), once nothing has hit them for three
+seconds — a rifleman at half health is whole again ten seconds later. The truck is soft, carries a
+pistol and does not heal itself; move it up behind a fight and send the wounded back to it.
 
 On the ground, right mouse raises the sights. What that gets you is the weapon's:
 

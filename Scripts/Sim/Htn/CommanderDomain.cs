@@ -45,6 +45,9 @@ public enum CommandTask : byte
 
 	/// <summary>Patrol to the zone the side has gone longest without seeing.</summary>
 	Recon = 3,
+
+	/// <summary>Stand where the squads will want resupply: the supply trucks' standing task (D2, H5).</summary>
+	Supply = 4,
 }
 
 /// <summary>What a primitive task asks the squad to do: the operator's name, and the intent's.</summary>
@@ -56,6 +59,7 @@ public enum CommandGoal : byte
 	Stage,
 	Strike,
 	Scout,
+	Station,
 	Refill,
 	Hold,
 }
@@ -159,11 +163,21 @@ public readonly struct CommanderTraits
 	/// <summary>How long an assault sweeps one ground spawn before the next, when nothing else is known (legacy's sweep).</summary>
 	public readonly int SweepIntervalTicks;
 
+	/// <summary>
+	/// How long a depleted squad that healing can bring back waits at a supply source
+	/// for it, walk included, before it goes home to be merged as one that cannot
+	/// (§3.4, P4: what the world has to confirm needs a give-up).
+	/// </summary>
+	public readonly int RefillHealTicks;
+
+	/// <summary>How far behind a squad defending a zone, towards home, the supply trucks stand.</summary>
+	public readonly float SupplyStandoffMeters;
+
 	public CommanderTraits(int garrisonUnits, int assaultSquadSize, float retreatShare, float retreatEnemyRatio,
 		float enemyNearMeters, float threatMeters, float reinforceRatio, float attackRatio, float clusterMeters,
 		float stagingMeters, float assembleMeters, float assembleShare, int stageMaxTicks, int reconQuietTicks,
 		int reconStaleTicks, float resupplyShare, float resupplyHysteresis, int claimTicks, float arriveMeters,
-		float reserveOffsetMeters, int sweepIntervalTicks)
+		float reserveOffsetMeters, int sweepIntervalTicks, int refillHealTicks, float supplyStandoffMeters)
 	{
 		GarrisonUnits = Math.Max(garrisonUnits, 0);
 		AssaultSquadSize = Math.Max(assaultSquadSize, 1);
@@ -186,6 +200,8 @@ public readonly struct CommanderTraits
 		ArriveMeters = MathF.Max(arriveMeters, 0f);
 		ReserveOffsetMeters = MathF.Max(reserveOffsetMeters, 0f);
 		SweepIntervalTicks = Math.Max(sweepIntervalTicks, 1);
+		RefillHealTicks = Math.Max(refillHealTicks, 0);
+		SupplyStandoffMeters = MathF.Max(supplyStandoffMeters, 0f);
 	}
 
 	/// <summary>
@@ -193,7 +209,10 @@ public readonly struct CommanderTraits
 	/// times the threat within 60 m, attack at 1.5 times the estimate, strike once 80 %
 	/// have assembled, recon after 20 s without a live contact or 60 s without seeing a
 	/// node, resupply below 60 %, and 30 s off a unit a person ordered (D1). A
-	/// ground bot sees 45 m, so a squad stages 60 m short.
+	/// ground bot sees 45 m, so a squad stages 60 m short. A depleted squad healing can
+	/// bring back waits 60 s at a supply source for it (D2); trucks stand 40 m behind
+	/// a defence, where a ground player at the zone is not on top of them and a unit
+	/// defending it is well inside the 60 m it walks for resupply (§5.2).
 	/// </summary>
 	public static CommanderTraits Default => new(
 		garrisonUnits: 4,
@@ -216,7 +235,9 @@ public readonly struct CommanderTraits
 		claimTicks: SimConfig.TickRate * 30,
 		arriveMeters: 10f,
 		reserveOffsetMeters: 10f,
-		sweepIntervalTicks: SimConfig.TickRate * 25);
+		sweepIntervalTicks: SimConfig.TickRate * 25,
+		refillHealTicks: SimConfig.TickRate * 60,
+		supplyStandoffMeters: 40f);
 }
 
 /// <summary>
@@ -275,6 +296,16 @@ public sealed class CommandContext : BaseContext
 	/// <summary>Where a squad with nothing to do waits.</summary>
 	public Vector3 ReservePoint;
 
+	/// <summary>
+	/// Healing can bring the squad back above its resupply share: its units at full
+	/// health would be worth enough (D2). A squad that has lost too many cannot be, and
+	/// goes home to be merged.
+	/// </summary>
+	public bool Healable;
+
+	/// <summary>The supply source nearest the squad: home, or a supply truck.</summary>
+	public Vector3 SupplyPoint;
+
 	/// <summary>The tick the running operator started on.</summary>
 	public uint GoalStartTick;
 
@@ -307,6 +338,8 @@ public sealed class CommandContext : BaseContext
 		FallbackPoint = default;
 		AtFallback = false;
 		AtHome = false;
+		Healable = false;
+		SupplyPoint = default;
 		GoalStartTick = 0;
 		Arrived = false;
 	}
@@ -364,7 +397,19 @@ public sealed class CommandContext : BaseContext
 				// A patrol, not an attack: a scout's job is to see (§5.3).
 				return Order(OrderKind.Patrol, TaskPoint, OwnerId.None, SquadMission.Recon, SquadPhase.Moving);
 
+			case CommandGoal.Station:
+				// A move, not an attack-move: a truck's job is to be there when it is wanted.
+				return Order(OrderKind.Move, TaskPoint, OwnerId.None, SquadMission.Resupply, SquadPhase.Moving);
+
 			case CommandGoal.Refill:
+				if (Healable && (Tick < GoalStartTick || Tick - GoalStartTick < (uint)Traits.RefillHealTicks))
+				{
+					// Healing will bring it back (D2): to the nearest supply source, where it
+					// stays until it is no longer depleted — which ends this task — or its
+					// time is up.
+					return Order(OrderKind.Move, SupplyPoint, OwnerId.None, SquadMission.Resupply, SquadPhase.Moving);
+				}
+
 				if (AtHome)
 				{
 					// Home: merged into whatever is forming there, which production fills
@@ -462,7 +507,8 @@ public sealed class CommandDomainBuilder : BaseDomainBuilder<CommandDomainBuilde
 /// Selectors are in priority order. Retreat is the squad's own and pre-empts
 /// anything (P2); Defend Zone pre-empts an attack, so a squad the commander pulls
 /// back to a threatened node goes; Resupply is below the assignment, because the
-/// commander takes a depleted squad's attack away when it is not in a fight. Every
+/// commander takes a depleted squad's attack away when it is not in a fight. Supply
+/// is the trucks' standing task (H5), which no other squad is ever given. Every
 /// operator but Hold has an executing condition for its premise (P3); Hold is the
 /// bottom of the tree, and anything above it replaces it.
 ///
@@ -499,6 +545,12 @@ public static class CommanderDomain
 				.Sequence("scout")
 					.If(CommandFact.Task, CommandTask.Recon)
 					.Act(CommandGoal.Scout).While(CommandFact.Task, CommandTask.Recon).End()
+				.End()
+			.End()
+			.Select("supply")
+				.Sequence("station")
+					.If(CommandFact.Task, CommandTask.Supply)
+					.Act(CommandGoal.Station).While(CommandFact.Task, CommandTask.Supply).End()
 				.End()
 			.End()
 			.Select("resupply")

@@ -52,6 +52,15 @@ public partial class UnitDefinition : Resource
 	/// <summary>True for a unit bullets do nothing to.</summary>
 	public bool IsBulletProof => Armour.IsBulletProof(BulletDamageScale);
 
+	/// <summary>
+	/// Health it gets back per second while it is resupplied: inside a friendly
+	/// barracks' defended ring or a supply truck's reach, and not hit for
+	/// <see cref="Resupply.DamageLockoutTicks"/> (docs/HTN_BOTS.md §8, D2). Zero is a
+	/// unit that never heals, which is what a file that says nothing gets.
+	/// </summary>
+	[Export]
+	public float RegenPerSecond;
+
 	/// <summary>Ground speed [m/s]. A rifleman jogs; nothing here sprints.</summary>
 	[Export]
 	public float MoveSpeed = 4.5f;
@@ -114,6 +123,17 @@ public partial class UnitDefinition : Resource
 	/// </summary>
 	[Export]
 	public bool CanConstruct;
+
+	/// <summary>
+	/// How far round it, measured flat, friendly units are resupplied
+	/// (<see cref="Resupply"/>): the supply truck's one trait, as building is the
+	/// builder's. Zero for everything else. It does not resupply itself.
+	/// </summary>
+	[Export]
+	public float SupplyRadiusMeters;
+
+	/// <summary>True for a unit other units come to for resupply.</summary>
+	public bool IsSupply => SupplyRadiusMeters > 0f;
 
 	[ExportCategory("Presentation")]
 

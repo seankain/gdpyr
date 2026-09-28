@@ -8,6 +8,7 @@ Name = &"technical"
 Cost = 150
 BuildSeconds = 9.0
 MaxHealth = 220.0
+RegenPerSecond = 11.0
 MoveSpeed = 8.0
 HeightMeters = 2.2
 RadiusMeters = 1.0

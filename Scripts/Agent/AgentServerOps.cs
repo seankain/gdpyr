@@ -1027,6 +1027,7 @@ public sealed partial class AgentServer
 		"technical" or "1" => UnitCatalog.Technical,
 		"tank" or "2" => UnitCatalog.Tank,
 		"builder" or "3" => UnitCatalog.Builder,
+		"supply_truck" or "4" => UnitCatalog.SupplyTruck,
 		_ => UnitCatalog.Infantry,
 	};
 

@@ -359,6 +359,12 @@ call. This makes one person enough to see a round.
   Ground bots now carry two launchers in six, hold their fire while the blast would reach a
   teammate or themselves, leave armour alone when they have no explosive, and let go of the trigger
   between shots with a weapon that fires on the press.
+- **Resupply and the supply truck** *(added with the HTN bots' H5)*. Units heal inside a barracks'
+  defended ring and within 12 m of a **supply truck** — a fifth catalog unit
+  (`Units/supply_truck.tres`, 120 points, `8` to queue) — once nothing has hit them for three
+  seconds, each at its own `RegenPerSecond` ([`NETCODE.md`](NETCODE.md) §10.7,
+  [`HTN_BOTS.md`](HTN_BOTS.md) §8, D2). Nothing new on the wire: health was already in the unit
+  snapshot.
 
 ### M6 — Agent API: headless play for external policies (3–4 days) ✅ *shipped*
 

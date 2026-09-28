@@ -153,6 +153,7 @@ public sealed class BotStrategist
 			// decision's; the orders go out after the points are spent, as legacy's do.
 			Decide(tick, combat, units);
 			Fortify(tick, combat, units);
+			QueueSupply(combat, units);
 			Build(combat, units);
 			ApplyIntents(units);
 			return;
@@ -198,14 +199,16 @@ public sealed class BotStrategist
 				continue;
 			}
 
+			int cost = UnitCatalog.CostOf(unit.DefinitionId);
 			_commandUnits[count++] = new CommandUnit
 			{
 				Id = unit.UnitId,
 				Position = unit.GlobalPosition,
-				Strength = ForceRatio.Strength(UnitCatalog.CostOf(unit.DefinitionId),
-					unit.Health / (unit.Definition?.MaxHealth ?? 100f)),
+				Strength = ForceRatio.Strength(cost, unit.Health / (unit.Definition?.MaxHealth ?? 100f)),
+				FullStrength = cost,
 				Armour = unit.DefinitionId == UnitCatalog.Tank,
 				Scout = unit.DefinitionId == UnitCatalog.Technical,
+				Supply = UnitCatalog.IsSupply(unit.DefinitionId),
 				Engaging = unit.State == UnitStateId.Engaging,
 				Claimed = IsClaimed(unit, tick),
 			};
@@ -678,6 +681,58 @@ public sealed class BotStrategist
 		if (result != PlacementResult.Ok && result != PlacementResult.CannotAfford)
 		{
 			_retryTick[(_siteNodes[site] * StructureKinds.Count) + kind] = tick + PlacementRetryTicks;
+		}
+	}
+
+	/// <summary>
+	/// Puts a supply truck on the first queue it owns, when it has fewer than it wants
+	/// and an army worth resupplying (docs/HTN_BOTS.md §8, D2). The commander's only:
+	/// legacy is left as it was (D5). After <see cref="Fortify"/>, so a builder
+	/// waiting for a structure's points keeps them.
+	/// </summary>
+	private void QueueSupply(CombatManager combat, UnitManager units)
+	{
+		if (_traits.SupplyTrucks == 0 || !UnitCatalog.IsBuildable(UnitCatalog.SupplyTruck))
+		{
+			return;
+		}
+
+		int trucks = 0;
+		int builders = 0;
+		for (int i = 0; i < units.SlotCount; i++)
+		{
+			Unit unit = units.UnitAt(i);
+			if (unit == null || !unit.IsAlive || unit.Team != Team.Strategist)
+			{
+				continue;
+			}
+
+			trucks += UnitCatalog.IsSupply(unit.DefinitionId) ? 1 : 0;
+			builders += UnitCatalog.CanConstruct(unit.DefinitionId) ? 1 : 0;
+		}
+
+		int queued = 0;
+		int door = -1;
+		for (int i = 0; i < units.BarracksCount; i++)
+		{
+			Barracks barracks = units.BarracksAt(i);
+			if (barracks == null || barracks.Team != Team.Strategist)
+			{
+				continue;
+			}
+
+			queued += barracks.Queue.CountOf(UnitCatalog.SupplyTruck);
+			if (door < 0)
+			{
+				door = i;
+			}
+		}
+
+		int fighting = units.LiveUnitCount - builders - trucks;
+		if (door >= 0 && StrategistBrain.ShouldQueueSupply(combat.Match.StrategistPoints - _savings,
+			UnitCatalog.CostOf(UnitCatalog.SupplyTruck), trucks, queued, fighting, _traits))
+		{
+			units.ServerQueueUnit(_peerId, door, UnitCatalog.SupplyTruck);
 		}
 	}
 

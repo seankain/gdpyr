@@ -400,7 +400,11 @@ Four things the shipped encoder settled that the table above does not say
 **Builders and structures are not a block of their own** ([`NETCODE.md`](NETCODE.md) §10.5), and
 the schema is unchanged by them. A builder is a unit in the unit block with no tier bit set (its
 catalog id is 3, past the one-hot's three), a unit on a `Build` order has no order bit set, and a
-barracks building one reads a head tier of 1, the same as a tank. What a policy's builders put up is
+barracks building one reads a head tier of 1, the same as a tank. A **supply truck**
+([`HTN_BOTS.md`](HTN_BOTS.md) §8, D2) is the same case again: catalog id 4, no tier bit, a head tier
+of 1, queued with `{"cmd":"build","tier":4}`. What it does — units heal within its 12 m and inside a
+barracks' ring, three seconds after they were last hit — shows in the vector only as the health
+fraction of the units it heals. What a policy's builders put up is
 not in the vector at all: a strategist policy can build (§7.4) but cannot see what it built. That is
 the first thing to add when somebody trains one that wants to — a structure block, and a schema
 version.
@@ -661,7 +665,7 @@ of assertions. It is checked into the repo beside the tests.
 ```
 
 A spawn names exactly one of a `peer` (a seat to place), a `unit` (`infantry`, `technical`,
-`tank` or `builder`) or a `structure` (`pillbox`, `sandbag_wall`, `sniper_tower`, with a `yaw`). A
+`tank`, `builder` or `supply_truck`) or a `structure` (`pillbox`, `sandbag_wall`, `sniper_tower`, with a `yaw`). A
 structure is put up finished and free, and the server refuses one that does not fit where it was put
 rather than guessing — a pillbox inside a wall is a typo in the scenario, not a test.
 

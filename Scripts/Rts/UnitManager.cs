@@ -89,6 +89,14 @@ public partial class UnitManager : Node
 	private readonly ushort[] _squadMembers = new ushort[SimConfig.MaxUnits];
 	private int _neighbourCount;
 
+	/// <summary>
+	/// Every supply source on the field this tick (docs/HTN_BOTS.md §8, D2): each
+	/// barracks' ring, then each living supply truck. Rebuilt once a tick before any
+	/// unit moves; pre-sized.
+	/// </summary>
+	private readonly SupplySource[] _supplies = new SupplySource[SimConfig.MaxBarracks + SimConfig.MaxUnits];
+	private int _supplyCount;
+
 	/// <summary>The unit pass's cost, summed over <see cref="UnitTimeWindowTicks"/> and reported as a mean.</summary>
 	private const int UnitTimeWindowTicks = SimConfig.TickRate;
 	private long _unitTimeSum;
@@ -162,6 +170,15 @@ public partial class UnitManager : Node
 	/// <summary>Orders refused because the sender did not own the units or the order made no sense.</summary>
 	public int RejectedOrders { get; private set; }
 
+	/// <summary>Health units have got back from resupply this round (docs/HTN_BOTS.md §8, D2). Server-side.</summary>
+	public float HealthResupplied { get; private set; }
+
+	/// <summary>Units that got health back on the last tick. Server-side, for the debug HUD.</summary>
+	public int UnitsResupplied { get; private set; }
+
+	/// <summary>The supply sources as the last tick found them: barracks rings, then trucks. Server-side.</summary>
+	public ReadOnlySpan<SupplySource> Supplies => _supplies.AsSpan(0, _supplyCount);
+
 	/// <summary>
 	/// The barracks' own guns and mortars (docs/NETCODE.md §10.4). Held here because
 	/// they belong to the barracks this manager already owns, and ticked straight
@@ -232,11 +249,13 @@ public partial class UnitManager : Node
 		ResolveAi();
 
 		long started = Stopwatch.GetTimestamp();
+		CollectSupplies();
 		if (_planning != null)
 		{
 			CountSquads();
 		}
 
+		UnitsResupplied = 0;
 		for (int i = 0; i < _ordered.Count; i++)
 		{
 			SimulateUnit(_ordered[i], tick);
@@ -485,6 +504,55 @@ public partial class UnitManager : Node
 		unit.FaceTowards(hasTarget ? targetPoint : working ? site.Pose.Base : destination, SimConfig.TickDelta);
 
 		ServerFire(unit, tick, hasTarget, targetPoint, targetVelocity);
+		ServerResupply(unit, tick);
+	}
+
+	// ---- server: resupply (docs/HTN_BOTS.md §8, D2) --------------------------
+
+	/// <summary>
+	/// The supply sources for this tick: every barracks' ring
+	/// (<see cref="Resupply.BarracksReach"/>), then every living supply truck's reach.
+	/// Taken before any unit moves, so every unit is measured against the same field.
+	/// </summary>
+	private void CollectSupplies()
+	{
+		_supplyCount = 0;
+		for (int i = 0; i < _barracks.Count && _supplyCount < _supplies.Length; i++)
+		{
+			Barracks barracks = _barracks[i];
+			_supplies[_supplyCount++] = new SupplySource(barracks.GlobalPosition,
+				Resupply.BarracksReach(barracks.DefendedRadiusMeters), unitId: 0, barracks.Team);
+		}
+
+		for (int i = 0; i < _ordered.Count && _supplyCount < _supplies.Length; i++)
+		{
+			Unit unit = _ordered[i];
+			if (unit.IsAlive && unit.Definition is { IsSupply: true } definition)
+			{
+				_supplies[_supplyCount++] = new SupplySource(unit.GlobalPosition, definition.SupplyRadiusMeters,
+					unit.UnitId, unit.Team);
+			}
+		}
+	}
+
+	/// <summary>
+	/// One tick of the resupply rule for one unit: health back at its own rate while it
+	/// is inside a friendly source's reach and has not been hit for
+	/// <see cref="Resupply.DamageLockoutTicks"/>. A rule of the game, whoever gave the
+	/// unit its orders and whichever AI the bots run.
+	/// </summary>
+	private void ServerResupply(Unit unit, uint tick)
+	{
+		if (!unit.CanBeResupplied || !Resupply.CanHeal(tick, unit.LastDamagedTick)
+			|| !Resupply.IsSupplied(unit.GlobalPosition, unit.UnitId, unit.Team, Supplies))
+		{
+			return;
+		}
+
+		float before = unit.Health;
+		unit.Heal(SimConfig.TickDelta);
+		HealthResupplied += unit.Health - before;
+		UnitsResupplied++;
 	}
 
 	/// <summary>
@@ -739,6 +807,7 @@ public partial class UnitManager : Node
 	/// </summary>
 	private void Encode(Unit unit, UnitContext plan, uint tick)
 	{
+		plan.Tick = tick;
 		Vector3 at = unit.GlobalPosition;
 		UnitOrder order = unit.Order;
 		UnitPlanTraits traits = plan.Traits;
@@ -842,6 +911,13 @@ public partial class UnitManager : Node
 			: TryNearestRally(unit.Team, at, out Vector3 rally) ? rally
 			: order.Anchor;
 
+		// The nearest friendly supply source, by the edge of its reach (D2): a barracks'
+		// ring or a truck, never the unit's own truck. One a unit with no rate to heal
+		// at is no source at all.
+		int source = Resupply.Nearest(at, unit.UnitId, unit.Team, Supplies, out float supplyEdge);
+		bool heals = source >= 0 && (unit.Definition?.RegenPerSecond ?? 0f) > 0f;
+		plan.SupplyPoint = heals ? _supplies[source].Position : at;
+
 		plan.Encode(new UnitSense
 		{
 			SideKnown = sideKnown,
@@ -853,6 +929,8 @@ public partial class UnitManager : Node
 			Autonomous = IsBotOrder(unit.OrderIssuer),
 			UnderFire = unit.LastDamagedTick != 0 && tick - unit.LastDamagedTick <= (uint)traits.UnderFireTicks,
 			FriendNear = around.Friends > 0,
+			HasSupply = heals,
+			SupplyEdgeMeters = supplyEdge,
 		});
 	}
 
@@ -1766,6 +1844,9 @@ public partial class UnitManager : Node
 
 		UnitsProduced = 0;
 		UnitsLost = 0;
+		HealthResupplied = 0f;
+		UnitsResupplied = 0;
+		_supplyCount = 0;
 	}
 
 	/// <summary>

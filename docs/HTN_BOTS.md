@@ -1,6 +1,7 @@
 # HTN bots — research and implementation plan
 
-Status: **H4 built and checked headless; the display checks of H2–H4 are outstanding** (§6). FluidHTN is vendored at
+Status: **H5 built and checked headless, with one display check of its own; the display checks of
+H2–H4 are outstanding** (§6). FluidHTN is vendored at
 `ThirdParty/FluidHTN` and compiled into the game and the tests; `PooledHtnFactory` is in
 `Scripts/Sim/Htn`; `--bot-ai legacy|htn` and `GameModeDefinition.BotAi` are parsed;
 `HtnPlannerTests` holds probes P1–P8 in `dotnet test`. H1 put the four boards of §4.3 in
@@ -14,7 +15,11 @@ whoever ordered it — keeping pace with its squad, focusing its squad's target,
 round a defended anchor. H4 wrote the strategist's commander of §5.3 (`CommanderDomain.cs`,
 `Commander.cs`): under `--bot-ai htn` a computer strategist forms squads, sends one to a threatened
 zone, stages and strikes at a node or a contact, scouts, pulls a losing squad back and refills a
-depleted one, and leaves a person's units alone. H0 found one FluidHTN defect the probes had not
+depleted one, and leaves a person's units alone. H5 decided D2 (§8) and built it: units heal inside
+a barracks' ring and round a new **supply truck** that any strategist can buy (`Resupply.cs`,
+`Units/supply_truck.tres`); under `--bot-ai htn` a bot's wounded unit walks to the nearest supply
+source, a depleted squad heals there rather than being merged, and the commander buys a truck and
+stations it behind its squads. H0 found one FluidHTN defect the probes had not
 reached, a queue dropped when a paused partial plan is replaced (§3.4); the vendored copy carries
 the fix from H4 (D6). `tools/Gdpyr.HtnBench` — §5.1's domain written against
 FluidHTN, the behaviour probes of §3.4 and the cost measurement of §3.5 — and
@@ -413,10 +418,12 @@ human's units alone (D1).
 | `Scripts/Rts/Unit.cs` | Server-only fields: order issuer and order tick (H1), HTN context. Squad membership is on `SquadBoard`, not the unit. Nothing replicated. |
 | `Scripts/Bots/BotStrategist.cs` | `ServerTick` becomes the commander domain's tick; `Build` / `Fortify` / `StrategistBrain` survive as its primitive tasks. |
 | `Scripts/Core/LaunchOptions.cs`, `Scripts/Match/GameModeDefinition.cs` | `--bot-ai`, `BotAi`. |
+| `Scripts/Sim/Resupply.cs`, `Units/*.tres`, `Units/supply_truck.tres` (H5) | The resupply rule (D2), `RegenPerSecond` and `SupplyRadiusMeters` on `UnitDefinition`, and the supply truck, catalog id 4; `UnitManager` heals once a tick and hands each unit's scan the nearest source ([`NETCODE.md`](NETCODE.md) §10.7). |
 | `Scripts/Ui/Debug.cs`, `Scripts/Core/ConsoleCommands.cs` | A plan row on the debug HUD; `bot_plan <n>` prints a bot's current task chain from FluidHTN's `OnNewTask` / MTR debug. |
 
 No message, codec, snapshot field or agent observation changes. A demo records frames and "no bot
-thinks" during playback (DEMOS.md), so demos are unaffected.
+thinks" during playback (DEMOS.md), so demos are unaffected. H5 appends one line to the unit
+catalog; health was already in the unit snapshot.
 
 ---
 
@@ -520,6 +527,7 @@ unit
 ├─ Retreat                    [Stance=autonomous ∧ Health=critical ∧ Odds=outnumbered ∧ Order∉{Move,Build}]
 │                               walk to the nearest friendly cluster or the squad's staging point without stopping to fight
 ├─ Resupply                   [Stance=autonomous ∧ Health≠ok ∧ Contact=none ∧ D2 adopted]   return inside the barracks ring until healed
+│                               (H5: or to a supply truck — whichever source's reach is nearest)
 ├─ Build                      [Order=Build]                                existing; builder steps to its nearest friend when shot at
 ├─ Attack                     [Order=Attack]
 │   ├─ wait for squad         [SquadPhase=gathering]                       hold at the staging point
@@ -546,13 +554,25 @@ review:
 | Facts | Two more: `UnderFire` (hit within 2 s) and `FriendNear` (a friendly unit within 30 m), for Build's "steps to its nearest friend when shot at". `Order`, `Contact` and `InLeash` are written every tick, the rest on the unit's 10-tick scan. `InLeash` is today's test, now `UnitBrain.InLeash`, which `Destination` calls; defending and idle units only, on the unit's target, else on the fight a friend is in. `FriendEngaged` is true only with a point to go to. A unit in no squad reads `SquadPhase=moving`. | A target that dies ends "engage focus" on the tick it goes, as today's code stops engaging on that tick. `Gathering` is phase 0, so no squad must not read as 0. Without `FriendNear`, a builder under fire with nobody near would "take cover" where it stands — the survey's nearest friend is then itself — instead of building. |
 | Order | Every operator holds only while its order does, and a new order — `ApplyOrder`, or a builder's assignment — resets the plan. The intent says how to move: `Order` (today's `UnitBrain.Destination`), `Target`, `Point` or `Hold`, and whether to stand to fight; an operator that follows the order stands to fight exactly when `HoldsWhileEngaging` says. A patrol turns round only at an end its order sent it to. | Four of the five top-level branches are below Attack, so an attack plan would outlive the defend order that replaced it (P3). A patrol that retreated would otherwise count the fall-back point as an end. |
 | Retreat | For a computer strategist's order only (`Stance=autonomous`: the issuer is a bot the director drives, with no policy attached to its seat). Issuer 0 — a fresh unit walking to its rally point, a unit a scenario placed — obeys. It falls back to the squad's staging point once the commander sets one (H4), else the nearest friendly barracks' rally point. | D1. For a unit that is outnumbered, "the nearest friendly cluster" within reach is the fight it is losing; the barracks is where the defences are, and where D2 would heal it. |
-| Resupply | Not built. | D2 is undecided: with no healing a unit has nothing to resupply (H5). |
+| Resupply | Not built in H3. | D2 was undecided: with no healing a unit had nothing to resupply. Built in H5, below. |
 | Build | "take cover" [UnderFire ∧ FriendNear] walks to the nearest friendly unit and does not work while it does; "work" is today's build. | A builder in reach of its site stands still to work, so the plan has to say it is not working for it to move. |
 | Attack | "engage focus": at the target, standing to fight, the squad's focus preferred. "support": to the squad's focus where the side last saw it, else to where its squad-mates in the fight stand; with none of those, to the target of the nearest friend in a fight within 40 m, else to that friend. "advance": to the named target's last-known position when the side remembers it, else the order's point, **keeping pace** — a unit more than 8 m nearer the objective than its squad's centroid holds until it is within 3 m again, and one wait that lasts 8 s ends the pacing for that advance. "wait for squad": at the staging point, else where it stands. | Keeping pace is what makes one attack order arrive together (§6, H3): over 150 m a technical at 8 m/s arrives 14 s before riflemen at 4.5. A slow squad closes up again and again and is waited for each time; one that does not close in 8 s has a unit that is stuck, and is left. |
 | Focus | `SquadCensus`, once a tick before any unit moves: a target a member holds — the target the order named while a member holds it, else the one already chosen while any member holds it, else the one most members hold, then the weakest the side remembers, then the lowest id. Acquisition takes it before the nearest when the unit's sensor has it with a clear line. | A focus worth having is one that is kept. One ray: it replaces the search's rays when the line is clear, and when it is not the search skips that player, so a scan casts at most one ray more than legacy's — against §9's "no new line-of-sight queries", and only while the focus is behind a wall. |
 | Defend Zone | "hold post": post k of n on a ring round the anchor — k the unit's place by id among its squad's living units, 4 m apart, the radius at least 4 m and at most half the unit's leash — post 0 towards the nearest contact the side remembers within 80 m of the anchor, else towards the ground force's spawns, rounded to 45°. A squad of one stands on the anchor. "engage in leash" is today's destination. "answer a call" is for a defend order only. | A bearing that moved with every step a contact took would send the ring round every scan. The strategist's `ZoneBoard` is not fed until H4 and has no bearing. A unit told to stop holds where it is, as `OrderKind.None` says. |
 | Recon, Obey | Today's destinations, the squad's focus preferred. | §5.2. |
 | Phase | The census writes `Engaged` while any member is engaging and `Moving` when none is; `Gathering` and `FallingBack` it leaves as they are. | Information up (§4.1): H4's Resupply reads "not engaged". |
+
+**As built in H5** (`Scripts/Sim/Htn/UnitDomain.cs`; the rule in `Scripts/Sim/Resupply.cs`, the
+engine half in `UnitManager`). D2 was decided for healing at the barracks **and at a supply truck**,
+a unit the strategist buys (§8); the branch sits second, below Retreat, as the tree has it:
+
+| Where | Built | Why |
+|---|---|---|
+| Facts | Three more. `Wounded`: entered when `Health` leaves ok, held until the unit is back to 95 %. `Supply`: a friendly source that can heal it — a barracks' ring or a truck's reach, never its own truck, and only for a unit with a rate to heal at — is within 60 m of the edge of its reach, held to 70 m, and no resupply was given up on in the last 30 s. `Supplied`: inside that reach, entered 3 m inside the edge and held to the edge. All three on the unit's scan; "nearest" is by the edge, not the middle, so a barracks' 117 m ring is near long before its building is. | "Until healed" is a band of its own: ending at the ok band would send a unit back at 60 %. The margin means a unit that stops on entering is inside the reach the rule heals in. Beyond 60 m the unit stays with its squad; the commander's Refill (§5.3) is what brings a squad back from across the map, rather than its units one at a time. |
+| Condition | `Stance=autonomous ∧ Wounded ∧ Supply ∧ Contact=none ∧ ¬Supplied ∧ Order∉{Move,Build}`. | D1, and §5.2's rule that a move is never second-guessed. A unit already inside a reach needs nothing: it heals where its order has it. |
+| Operator | `Resupply` walks to the source's middle — which crosses the edge wherever it starts — and holds, standing to fight, once `Supplied`; a truck that drives off is followed on the next scan. It holds while `Wounded`, `Supply`, the stance and the order do, and ends on a target of its own, not on a contact the side merely remembers. | Nothing below it can replace it (P3), so these are what end it. Ending on a remembered contact would turn a unit round for every ghost on the walk back. |
+| Give-up | A resupply that has not ended in 60 s fails, is counted, and turns `Supply` off for 30 s. | P4: success depends on the world — the unit reaching the reach, and not being hit in it — so it needs a give-up, or it would plan the same trip for ever. |
+| Walking out | A wounded unit inside a reach that its order walks out of: `Supplied` goes, Resupply pre-empts the order, the unit steps back in and stays until it is healed. | The one pre-emption this branch makes; it happens once, at the edge. |
 
 ### 5.3 Strategist commander
 
@@ -576,6 +596,7 @@ commander
 │                               stalest zones; Move, not Attack: a scout's job is to see
 ├─ Resupply                   [a squad is below 60% strength and not engaged]
 │                               pull it to the rally point; route the next produced units into it; heal if D2 adopted
+│                               (H5: heal at the nearest supply source when healing can restore it; station the trucks)
 └─ Economy                    existing StrategistBrain.TryChooseTier / ShouldQueue / builder / Fortify as primitives,
                                 with production directed at the squad the plan above is short of
 ```
@@ -601,6 +622,15 @@ by the probe rounds in §6:
 | Orders | Once a decision, the members of a squad not already under its order get it in one batch through `ServerIssueOrder`. A member needs it when the order kind differs, the target is more than 12 m off, or a different contact is named (legacy's `NeedsOrder`). | The reason `NeedsOrder` gives. |
 | Estimates | A ground player is worth two riflemen (100), from the side's `ContactMemory`, live and ghost. | |
 
+**As built in H5** (`Scripts/Sim/Htn/Commander.cs`, `CommanderDomain.cs`; the engine half in
+`BotStrategist`):
+
+| Where | Built | Why |
+|---|---|---|
+| Buying | One supply truck (`StrategistTraits.SupplyTrucks`) once eight units are fighting (`UnitsBeforeSupply`), bought after `Fortify` has held back what a waiting builder needs (`StrategistBrain.ShouldQueueSupply`, the builder's rule with the truck's numbers). The commander only: legacy never buys one. | A truck heals an army; it is not one. Legacy is the RL baseline (D5). |
+| Supply role | Trucks are a squad of their own, `CommandRole.Supply`: never the garrison, the scout, an escort or an assault; a truck with no slot is left alone. Its standing task, `CommandTask.Supply`, plans `Station`: a move to where the trucks should stand — with a depleted squad that healing will restore and that is out of its fight, whether it is coming to them to heal or still holding a zone; else the staging point of the nearest attack, and never nearer its target than the 60 m a staging point is; else 40 m behind the nearest squad defending a zone away from home; else in reserve. Never where the side remembers an enemy within 40 m: the next candidate, else reserve. Retreat applies to it as to any squad. | A move, not an attack-move: a truck's job is to be there. The staging point is where a strike's wounded units are nearest a source they can reach within §5.2's 60 m. The distance and enemy rules came out of the probe round (§6, H5): a squad already inside 72 m of its target stages where it stands, in the fight, and a truck sent there, or to a squad that had only just broken contact, was shot. |
+| Refill | A depleted squad is **healable** when its units at full health would be worth the 70 % that ends Depleted. A healable one moves to the nearest supply source — home, or any truck, whoever's — and stays there until healing ends Depleted, which ends the task, so it goes back to work as the same squad. One that is not, or that has waited 60 s (`RefillHealTicks`), goes home and is merged as in H4. | A squad that lost half its units cannot heal its way back and still needs merging; one that lost none should not be broken up. The time limit is P4's give-up. |
+
 ### 5.4 The five tasks at each layer
 
 | Task | Ground bot | RTS unit | Strategist commander |
@@ -609,7 +639,7 @@ by the probe rounds in §6:
 | **Recon** | Sweep the least-recently-seen node; investigate ghosts | Patrol without stopping for contacts it can report | One technical through stale zones on a patrol |
 | **Attack** | Focus the coordinator's target with a buddy; armour only with an explosive | Wait for the squad, then focus fire; support engaged friends | Stage out of sight, strike when assembled, escort armour |
 | **Retreat** | Leave barracks defences; fall back to teammates when critical and outnumbered | Back to friends when critical and outnumbered (autonomous stance only) | Pull a losing squad back to a held zone and merge |
-| **Resupply** | Locker run for a launcher when armour is known; reload between fights | Heal inside the barracks ring (D2) | Refill a depleted squad from production; heal (D2) |
+| **Resupply** | Locker run for a launcher when armour is known; reload between fights | Heal inside the barracks ring or at a supply truck (D2, H5) | Refill a depleted squad from production, or heal it at the nearest supply source; station the supply trucks (D2, H5) |
 
 ---
 
@@ -828,10 +858,77 @@ Estimates in solo-dev days, as IMPLEMENTATION_PLAN.md §4 counts them. Each phas
 - **Left for a display check:** a `--listen` round with the HUD's `commander` row on screen, and
   H2's and H3's display checks (§6 above).
 
-### H5 — Unit resupply (0.5–1 day, only if D2 is adopted)
+### H5 — Unit resupply (0.5–1 day, only if D2 is adopted) — built; D2 decided with a supply truck
 
 - `RegenPerSecond` on `UnitDefinition`, applied inside a friendly barracks' defended ring; tested in
   `DefenseTests` style.
+- **D2 as decided** (§8): healing at the barracks **and** at a new unit, the supply truck, which a
+  strategist buys and units visit. So H5 also has: the truck (`Units/supply_truck.tres`, catalog id
+  4, `SupplyRadiusMeters`), the human strategist's `8` key and barracks-card button, the agent
+  API's `build` tier 4 and scenario name `supply_truck`, the unit domain's Resupply branch (§5.2) and
+  the commander's truck and heal-refill (§5.3). The rule is [`NETCODE.md`](NETCODE.md) §10.7.
+- **Result:** `dotnet test` 1297 passed, 0 failed (1236 before; 61 new: 18 in `ResupplyTests`, 27 in
+  `UnitHtnTests`, 15 in `CommanderHtnTests`, 1 in `StructureTests`), 0 warnings; `dotnet build
+  Gdpyr.csproj` 0 warnings, 0 errors; `./scripts/htn-bench.sh --probe` passes all nine.
+  `ResupplyTests` covers reach (flat, the barracks' minimum, a truck's), whose sources count (the
+  side's, never a truck's own), the three-second lockout and its wrap-around, the rate and its cap,
+  and a full field checked without allocating. `UnitHtnTests` covers the branch for every order it
+  applies to, standing in the reach until healed, following a truck that drives off, D1, move and
+  build orders, a remembered contact against a target of its own, a unit already in reach walking
+  out of it, range and its hysteresis, no source that can heal, the give-up and its retry,
+  Retreat's priority, the three bands, three new premise rows, and the fourteen-situation
+  determinism and zero-allocation runs. `CommanderHtnTests` covers the truck's squad (never the
+  garrison, the scout or an assault), each station and the two rules the probe round added,
+  healable and not, meeting a squad, a healed squad going back to work unmerged, healing at home,
+  the heal time limit, the domain rows, and trucks in the churn that the determinism and 0 B runs
+  go through. Checked to fail, then reverted: without Resupply's `Wounded` executing condition, 2
+  fail; without its give-up, 1; without Refill's heal branch, 4; without `Station`'s executing
+  condition, 1; without the trucks' enemy rule, 1.
+- **What the checks showed.** Godot 4.6 .NET; the harness headless, and one display check.
+  - All twelve scenarios in `Tests/Scenarios` pass under `legacy` and `htn`, before H5 and after
+    it. `builder_fortifies` asserts `events.unit_built.tier.max == 3`: a truck bought inside its
+    110 s would make that 4 under `htn`. None was — the commander waits for eight fighting units —
+    but the assertion is one balance change from failing.
+  - **Display check** (`--listen` under Xvfb, OpenGL, a temporary hook that took the host to the
+    chair, selected the barracks, queued a truck and two riflemen and saved the viewport): the
+    barracks card shows five buttons, the fifth `Supply Truck (8) 120 pts`; points went from 1,000
+    to 780; the key list's new lines fit above the bottom edge; and the truck stands in its green
+    12 m ring inside the barracks' red one. The H2–H4 display checks are still outstanding.
+  - **Probe rounds.** A temporary probe, not committed, logged every two seconds the units healing
+    and the health given back, the trucks, the units on each task, every wounded unit's Resupply
+    facts, and each squad Refill and unit Resupply as it started and ended; a temporary switch, not
+    committed either, turned the rule off. The H4 scenario — five ground bots, an idle seat, one
+    computer strategist — did not exercise it: the ground force held all three nodes by tick
+    ≈2,500, the strategist sat at 40 points with at most seven units, and no squad ever depleted
+    (H4's economy finding again), nor with three ground seats. So the rounds placed an army of twelve
+    riflemen at the barracks — free, and nobody's order, so the commander takes them — against the
+    five bots, two seeds of four minutes under `htn`:
+    - **Healing is live**, under either AI: 2,630 hp given back under `htn`, 771 under `legacy`
+      (its garrison, inside the ring), 0 with the rule off.
+    - **The commander buys a truck**: 24 s into every round with the army (ten of them the
+      truck's build time), and again when one is lost — 57 s later, in one round.
+    - **Squads heal instead of being merged.** In the final `htn` run, 10 Refills. Of the 7 that
+      healing could restore, 4 ended with the squad healed and back at work as the same squad (3
+      at a truck, 1 at home), 2 with the squad dead, and 1 when a threatened zone called it
+      (Defend Zone is above Resupply). Of the 3 it could not, 2 were merged at home, as in H4, and
+      1 was called to a zone.
+    - **Unit Resupply rarely has work on this map.** Over a diagnostic run's two seeds, of 248
+      samples of a wounded unit, 202 were already inside a reach — the barracks' ring comes within 2, 8 and 38
+      m of the three nodes, so a wounded unit mostly heals where it stands — 67 had a target of
+      their own, and 89 were under a move order (the commander's Refill or Retreat), which the
+      branch never second-guesses. The branch ran 5 times in the final run: once to 96 %; the
+      others ended on a new order, on Retreat when a contact came into view, or with the unit dead.
+      On a map with nodes further from the barracks it has more to do; that is H6's playtest.
+    - Two changes came out of the rounds, both in §5.3's table: a truck sent to the staging point of
+      a squad already inside 72 m of its target stood in the fight, and one sent to meet a squad
+      that had just broken contact was shot there. The first trucks of the two seeds lived 20 s
+      and 87 s, then 26 s and 64 s with the staging distance alone; with the enemy rule as well,
+      119 s, and the whole 217 s it had.
+    - Not a balance result: of the four rounds only seed 1's with the army ended in both arms (the
+      strategist won, in 3.75 min with the rule and 2.43 without), rounds restart without the
+      placed army, and two seeds cannot say which side healing favours. H6 asks that.
+- **Legacy.** The rule applies under `--bot-ai legacy` too; legacy's decisions are unchanged and it
+  never buys a truck, but the world the RL baseline plays in is not (D5): its garrison now heals.
 
 ### H6 — Scenarios, playtest, switch the default (1 day, then ongoing)
 
@@ -855,7 +952,8 @@ Total: about 10–12 days before playtesting.
 |---|---|
 | FluidHTN behaves as §3 says it does | `./scripts/htn-bench.sh --probe` today (§3.4, nine passing); `HtnPlannerTests` in `dotnet test` from H0 |
 | The planner allocates nothing on the tick | P8, in both of the above; `./scripts/htn-bench.sh` for the per-tick figure |
-| A given situation produces a given plan | Fact-vector → task-chain tests per domain (H2–H4); no engine needed |
+| A given situation produces a given plan | Fact-vector → task-chain tests per domain (H2–H5); no engine needed |
+| Units heal where and when D2 says | `ResupplyTests` (reach, whose sources, the lockout, the rate); the debug HUD's `resupply` row in a round |
 | Legacy behaviour is intact | Existing `BotBrainTests`, `UnitBrainTests`, `StrategistBrainTests` unchanged; `--bot-ai legacy` default until H6 |
 | The bots behave as described in a real round | Scenarios in H6, run by `./scripts/playtest.sh` |
 | It costs nothing noticeable | Debug HUD server-frame-time row, `legacy` vs `htn`, 64 units |
@@ -867,7 +965,7 @@ Total: about 10–12 days before playtesting.
 | # | Question | Recommendation |
 |---|---|---|
 | D1 | Should unit-level HTN act on units a **human** strategist ordered? | Yes for how an order is carried out (cohesion, focus fire, defend posts, answering calls); no for autonomous Retreat/Resupply, which only units last ordered by a bot get (`Stance`). The bot commander does not re-order a unit a human ordered in the last 30 s. |
-| D2 | RTS units have nothing to resupply: magazines reload without a reserve and nothing heals. Add healing inside a friendly barracks' defended ring? | Yes — one `RegenPerSecond` per `UnitDefinition`. Without it, unit Resupply means reinforcement only, and unit Retreat saves a unit that can never recover. |
+| D2 | RTS units have nothing to resupply: magazines reload without a reserve and nothing heals. Add healing inside a friendly barracks' defended ring? | Yes — one `RegenPerSecond` per `UnitDefinition`. Without it, unit Resupply means reinforcement only, and unit Retreat saves a unit that can never recover. **Decided for H5:** healing at the barracks, and at a new unit, the **supply truck**, which a strategist — a person with `8` or the barracks card, a policy with `build` tier 4, the commander on its own — buys and units visit. A game rule, not a bot's: it applies under legacy too, which changes the world legacy's baseline plays in (D5), not what legacy decides. |
 | D3 | May a ground bot know what a **teammate** has seen? | Yes, as a team `ContactMemory` — the equivalent of voice callouts, and less than a human client already draws (the unit snapshot is not fogged for the ground force, IMPLEMENTATION_PLAN.md §M4). Today a bot knows only its own eyes (`BotTraits.SensorRadiusMeters`). |
 | D4 | May the computer strategist act on **ghosts** (last-known positions)? `BotStrategist.TryObjective` deliberately does not. | Yes, for Recon and for staging only, and never to name a target: a human strategist can click a ghost (M4), so the bot doing so is parity, not cheating. |
 | D5 | The scripted bots are the RL baseline ("beats the bot" should stay true, RL_ARCHITECTURE.md). | Keep `legacy` selectable for ever; `scripts/evaluate.sh` and the trainer pin `--bot-ai legacy` until a deliberate re-baseline, and training output records which one was used. |

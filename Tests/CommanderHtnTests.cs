@@ -17,8 +17,10 @@ namespace Gdpyr.Tests;
 /// garrison, scout, squads formed from production, a threatened zone given a squad
 /// strong enough for it, an idle squad given a target it is strong enough for; stage
 /// then strike as a partial plan; retreat pre-empting; the human-claim rule (D1);
-/// ghosts never named (D4); every operator ending when its premise goes (§3.4, P3);
-/// determinism (P7) and planning without allocating (P8).
+/// ghosts never named (D4); supply trucks stationed, and a depleted squad healing at
+/// the nearest supply source when healing can bring it back (H5, D2); every operator
+/// ending when its premise goes (§3.4, P3); determinism (P7) and planning without
+/// allocating (P8).
 /// </summary>
 public class CommanderHtnTests
 {
@@ -39,6 +41,7 @@ public class CommanderHtnTests
 	private const float Rifleman = 50f;
 	private const float Technical = 150f;
 	private const float Tank = 400f;
+	private const float Truck = 120f;
 
 	private sealed class Rig
 	{
@@ -66,11 +69,28 @@ public class CommanderHtnTests
 			Zones.SetHolder(SpawnZone, NodeHolder.GroundForce, contested: false);
 		}
 
-		public ushort Add(Vector3 at, float strength = Rifleman, bool armour = false, bool scout = false)
+		/// <summary>A unit; <paramref name="fullStrength"/> 0 is one resupply cannot bring back, as the tests before H5 had.</summary>
+		public ushort Add(Vector3 at, float strength = Rifleman, bool armour = false, bool scout = false,
+			bool supply = false, float fullStrength = 0f)
 		{
 			ushort id = _nextId++;
-			Units.Add(new CommandUnit { Id = id, Position = at, Strength = strength, Armour = armour, Scout = scout });
+			Units.Add(new CommandUnit
+			{
+				Id = id, Position = at, Strength = strength, Armour = armour, Scout = scout, Supply = supply,
+				FullStrength = fullStrength,
+			});
 			return id;
+		}
+
+		public ushort AddTruck(Vector3 at) => Add(at, Truck, supply: true, fullStrength: Truck);
+
+		/// <summary>Every unit worth its full cost at full health: squads resupply can bring back (D2).</summary>
+		public void Heals()
+		{
+			for (int i = 0; i < Units.Count; i++)
+			{
+				Units[i] = Units[i] with { FullStrength = Units[i].Supply ? Truck : Rifleman };
+			}
 		}
 
 		/// <summary>Riflemen standing in a row at home.</summary>
@@ -157,8 +177,11 @@ public class CommanderHtnTests
 		return new CommanderTraits(d.GarrisonUnits, d.AssaultSquadSize, d.RetreatShare, d.RetreatEnemyRatio,
 			d.EnemyNearMeters, d.ThreatMeters, d.ReinforceRatio, d.AttackRatio, d.ClusterMeters, d.StagingMeters,
 			d.AssembleMeters, d.AssembleShare, stageMaxTicks, reconQuietTicks, d.ReconStaleTicks, d.ResupplyShare,
-			d.ResupplyHysteresis, d.ClaimTicks, d.ArriveMeters, d.ReserveOffsetMeters, d.SweepIntervalTicks);
+			d.ResupplyHysteresis, d.ClaimTicks, d.ArriveMeters, d.ReserveOffsetMeters, d.SweepIntervalTicks,
+			d.RefillHealTicks, d.SupplyStandoffMeters);
 	}
+
+	private static Vector3 Flat(Vector3 v) => new(v.X, 0f, v.Z);
 
 	// ---- squads formed from production --------------------------------------
 
@@ -716,6 +739,225 @@ public class CommanderHtnTests
 		Assert.Equal(CommandTask.Attack, rig.Squad(assault).Task);
 	}
 
+	// ---- Supply trucks and healing (H5, D2) ------------------------------------------
+
+	[Fact]
+	public void ASupplyTruck_IsNeverTheGarrison_AndWithNothingToSupplyWaitsInReserve()
+	{
+		var rig = new Rig();
+		ushort truck = rig.AddTruck(Home);
+		rig.AddRiflemen(4);
+		rig.Decide();
+
+		int trucks = rig.Find(CommandRole.Supply);
+		Assert.True(trucks > Commander.GarrisonSlot);
+		Assert.Equal(trucks, rig.Commander.SquadOf(truck));
+		Assert.Equal(4, rig.Squad(Commander.GarrisonSlot).Members);
+		Assert.Equal(CommandTask.Supply, rig.Squad(trucks).Task);
+
+		CommandIntent intent = rig.Intent(trucks);
+		Assert.Equal(CommandGoal.Station, intent.Goal);
+		Assert.Equal(OrderKind.Move, intent.Order);
+		Assert.Equal(SquadMission.Resupply, intent.Mission);
+		Assert.Equal(new Vector3(0f, 0f, CommanderTraits.Default.ReserveOffsetMeters), intent.Point);
+	}
+
+	[Fact]
+	public void ASupplyTruck_NeverScouts_NorFillsAnAssault()
+	{
+		var rig = new Rig(traits: With(reconQuietTicks: 0));
+		ushort truck = rig.AddTruck(Home);
+		rig.AddRiflemen(9);
+		rig.Decide();
+
+		Assert.Equal(rig.Find(CommandRole.Supply), rig.Commander.SquadOf(truck));
+		int scout = rig.Find(CommandRole.Scout);
+		Assert.True(scout > 0);
+		Assert.DoesNotContain(truck, rig.Members(scout));
+		Assert.DoesNotContain(truck, rig.Members(rig.Assault));
+	}
+
+	[Fact]
+	public void TheTrucks_WaitAtTheStagingPointOfAnAttack()
+	{
+		(Rig rig, int assault) = Attacking(FarNode + new Vector3(0f, 0f, -80f));
+		Assert.Equal(CommandTask.Attack, rig.Squad(assault).Task);
+
+		ushort truck = rig.AddTruck(Home);
+		rig.Decide();
+
+		int trucks = rig.Commander.SquadOf(truck);
+		Assert.Equal(rig.Squad(assault).StagingPoint, rig.Intent(trucks).Point);
+	}
+
+	[Fact]
+	public void TheTrucks_StandBehindASquadDefendingANodeAwayFromHome()
+	{
+		var rig = new Rig();
+		rig.AddTruck(Home);
+		rig.AddRiflemen(8);
+		rig.Zones.SetHolder(NearZone, NodeHolder.Strategist, contested: true);
+		rig.Decide();
+		Assert.Equal(CommandTask.Defend, rig.Squad(rig.Assault).Task);
+
+		// The near node is 50 m out towards the threat; 40 m back from it towards home.
+		CommandIntent intent = rig.Intent(rig.Find(CommandRole.Supply));
+		Assert.Equal(NearNode - new Vector3(0f, 0f, CommanderTraits.Default.SupplyStandoffMeters), intent.Point);
+	}
+
+	[Fact]
+	public void TheTrucks_StayAStagingDistanceBack_FromASquadThatStagedWhereItStood()
+	{
+		// A squad already inside the staging distance stages where it stands, in the fight.
+		(Rig rig, int assault) = Attacking(FarNode + new Vector3(0f, 0f, -20f));
+		Assert.Equal(CommandTask.Attack, rig.Squad(assault).Task);
+		Assert.True(Flat(rig.Squad(assault).StagingPoint - FarNode).Length() < CommanderTraits.Default.StagingMeters);
+
+		ushort truck = rig.AddTruck(Home);
+		rig.Decide();
+
+		Vector3 point = rig.Intent(rig.Commander.SquadOf(truck)).Point;
+		Assert.Equal(CommanderTraits.Default.StagingMeters, Flat(point - FarNode).Length(), 2);
+		Assert.True(Flat(point).Length() < Flat(FarNode).Length());
+	}
+
+	/// <summary>An attack at <paramref name="at"/> that has taken every member to half health: 100 of 200, and all four alive.</summary>
+	private static (Rig rig, int assault) Wounded(Vector3 at)
+	{
+		(Rig rig, int assault) = Attacking(at);
+		rig.Heals();
+		foreach (ushort id in rig.Members(assault))
+		{
+			rig.Set(id, u => u with { Strength = Rifleman * 0.5f });
+		}
+
+		return (rig, assault);
+	}
+
+	[Fact]
+	public void ADepletedSquadHealingCanRestore_GoesToTheNearestTruck_WhichComesToMeetIt()
+	{
+		Vector3 far = FarNode + new Vector3(0f, 0f, -20f);
+		(Rig rig, int assault) = Wounded(far);
+		Vector3 truckAt = far + new Vector3(-20f, 0f, -20f);
+		ushort truck = rig.AddTruck(truckAt);
+		rig.Decide();
+
+		CommandSquad squad = rig.Squad(assault);
+		Assert.True(squad.Depleted);
+		Assert.True(squad.Healable);
+
+		CommandIntent intent = rig.Intent(assault);
+		Assert.Equal(CommandGoal.Refill, intent.Goal);
+		Assert.Equal(OrderKind.Move, intent.Order);
+		Assert.Equal(truckAt, intent.Point);
+		Assert.Equal(SquadMission.Resupply, intent.Mission);
+
+		// The trucks go to meet it, rather than it walking all the way to them.
+		Assert.Equal(Flat(squad.Centroid), Flat(rig.Intent(rig.Commander.SquadOf(truck)).Point));
+	}
+
+	[Fact]
+	public void TheTrucks_AreNotSentWhereTheEnemyIsRemembered()
+	{
+		Vector3 far = FarNode + new Vector3(0f, 0f, -20f);
+		(Rig rig, int assault) = Wounded(far);
+		ushort truck = rig.AddTruck(far + new Vector3(-20f, 0f, -20f));
+
+		// A player the side saw 20 m from the squad: the squad walks to the trucks,
+		// and the trucks stay where nobody is.
+		rig.See(4, far + new Vector3(0f, 0f, 20f));
+		rig.Decide();
+
+		Assert.Equal(CommandGoal.Refill, rig.Intent(assault).Goal);
+		Vector3 point = rig.Intent(rig.Commander.SquadOf(truck)).Point;
+		Assert.NotEqual(Flat(rig.Squad(assault).Centroid), Flat(point));
+		Assert.Equal(new Vector3(0f, 0f, CommanderTraits.Default.ReserveOffsetMeters), point);
+	}
+
+	[Fact]
+	public void AHealedSquad_IsNotMerged_AndGoesBackToWork()
+	{
+		Vector3 far = FarNode + new Vector3(0f, 0f, -20f);
+		(Rig rig, int assault) = Wounded(far);
+		ushort[] members = rig.Members(assault);
+		rig.AddTruck(far);
+		rig.Decide();
+		Assert.Equal(CommandGoal.Refill, rig.Intent(assault).Goal);
+
+		// Standing at the truck while it heals: still its own squad.
+		rig.Decide(3);
+		Assert.Equal(CommandGoal.Refill, rig.Intent(assault).Goal);
+		Assert.Equal(members, rig.Members(assault));
+
+		// Healed past 70 %: the task that ended it was the resupply, not the squad.
+		foreach (ushort id in members)
+		{
+			rig.Set(id, u => u with { Strength = Rifleman });
+		}
+
+		rig.Decide();
+		Assert.False(rig.Squad(assault).Depleted);
+		Assert.Equal(members, rig.Members(assault));
+		Assert.NotEqual(CommandGoal.Refill, rig.Intent(assault).Goal);
+		Assert.Equal(CommandTask.Attack, rig.Squad(assault).Task);
+	}
+
+	[Fact]
+	public void AHealableSquadWithNoTruck_HealsAtHome_WithoutBeingMerged()
+	{
+		Vector3 far = FarNode + new Vector3(0f, 0f, -20f);
+		(Rig rig, int assault) = Wounded(far);
+		ushort[] members = rig.Members(assault);
+		rig.Decide();
+		Assert.Equal(Home, rig.Intent(assault).Point);
+
+		rig.Move(assault, Home);
+		rig.Decide(2);
+
+		Assert.Equal(CommandGoal.Refill, rig.Intent(assault).Goal);
+		Assert.Equal(members, rig.Members(assault));
+	}
+
+	[Fact]
+	public void ASquadHealingCannotRestore_GoesHomeToBeMerged_EvenWithATruckNearer()
+	{
+		Vector3 far = FarNode + new Vector3(0f, 0f, -20f);
+		(Rig rig, int assault) = Attacking(far);
+		rig.Heals();
+		ushort[] members = rig.Members(assault);
+
+		// Two of four dead: at full health the two left are 100 of 200, short of 70 %.
+		rig.Kill(members[0]);
+		rig.Kill(members[1]);
+		rig.AddTruck(far);
+		rig.Decide();
+
+		Assert.True(rig.Squad(assault).Depleted);
+		Assert.False(rig.Squad(assault).Healable);
+		Assert.Equal(Home, rig.Intent(assault).Point);
+	}
+
+	[Fact]
+	public void AHealThatTakesTooLong_IsGivenUp_AndTheSquadGoesHomeToBeMerged()
+	{
+		Vector3 far = FarNode + new Vector3(0f, 0f, -20f);
+		(Rig rig, int assault) = Wounded(far);
+		Vector3 truckAt = far + new Vector3(5f, 0f, 0f);
+		ushort truck = rig.AddTruck(truckAt);
+		rig.Decide();
+		Assert.Equal(truckAt, rig.Intent(assault).Point);
+
+		// Nothing heals it — the truck's reach never lets it, say, or it keeps being hit.
+		int decisions = CommanderTraits.Default.RefillHealTicks / 30;
+		rig.Decide(decisions - 1);
+		Assert.Equal(truckAt, rig.Intent(assault).Point);
+
+		rig.Decide(2);
+		Assert.Equal(Home, rig.Intent(assault).Point);
+		Assert.NotEqual(rig.Commander.SquadOf(truck), assault);
+	}
+
 	// ---- D1: a person's units ----------------------------------------------------
 
 	[Fact]
@@ -780,6 +1022,8 @@ public class CommanderHtnTests
 	[InlineData(CommandTask.Defend, false, false, false, CommandGoal.Reinforce)]
 	[InlineData(CommandTask.Attack, false, false, false, CommandGoal.Stage)]
 	[InlineData(CommandTask.Recon, false, false, false, CommandGoal.Scout)]
+	[InlineData(CommandTask.Supply, false, false, false, CommandGoal.Station)]
+	[InlineData(CommandTask.Supply, true, false, false, CommandGoal.FallBack)]
 	[InlineData(CommandTask.None, false, true, false, CommandGoal.Refill)]
 	[InlineData(CommandTask.None, false, true, true, CommandGoal.Hold)]
 	[InlineData(CommandTask.Attack, false, true, false, CommandGoal.Stage)]
@@ -840,6 +1084,28 @@ public class CommanderHtnTests
 	}
 
 	[Fact]
+	public void ARefillThatWillHeal_GoesToTheNearestSupply_AndStaysThere_UntilItsTimeIsUp()
+	{
+		var squad = new Squad();
+		squad.C.Healable = true;
+		squad.C.SupplyPoint = new Vector3(30f, 0f, 40f);
+		squad.C.HomePoint = Home;
+		squad.C.Sense(CommandFact.Depleted, true);
+		squad.Tick();
+		Assert.Equal(CommandGoal.Refill, squad.Goal);
+		Assert.Equal(squad.C.SupplyPoint, squad.C.Intent.Point);
+
+		// Home, and healing: it is not merged while it heals.
+		squad.C.AtHome = true;
+		squad.C.SupplyPoint = Home;
+		squad.Tick();
+		Assert.False(squad.C.Arrived);
+
+		squad.Tick(CommanderTraits.Default.RefillHealTicks / 30);
+		Assert.True(squad.C.Arrived);
+	}
+
+	[Fact]
 	public void AFallBackThatArrives_TakesTheLatchOff_AndSaysSo()
 	{
 		var squad = new Squad();
@@ -871,6 +1137,8 @@ public class CommanderHtnTests
 			}),
 			(Action<CommandContext>)(c => c.Sense(CommandFact.Task, (byte)CommandTask.None)) };
 		yield return new object[] { CommandGoal.Scout, (Action<CommandContext>)(c => c.Sense(CommandFact.Task, (byte)CommandTask.Recon)),
+			(Action<CommandContext>)(c => c.Sense(CommandFact.Task, (byte)CommandTask.None)) };
+		yield return new object[] { CommandGoal.Station, (Action<CommandContext>)(c => c.Sense(CommandFact.Task, (byte)CommandTask.Supply)),
 			(Action<CommandContext>)(c => c.Sense(CommandFact.Task, (byte)CommandTask.None)) };
 		yield return new object[] { CommandGoal.Refill, (Action<CommandContext>)(c => c.Sense(CommandFact.Depleted, true)),
 			(Action<CommandContext>)(c => c.Sense(CommandFact.Depleted, false)) };
@@ -935,8 +1203,9 @@ public class CommanderHtnTests
 			{
 				bool tank = Next() % 7 == 0;
 				bool technical = !tank && Next() % 5 == 0;
-				rig.Add(new Vector3(Next() % 10, 0f, Next() % 10), tank ? Tank : technical ? Technical : Rifleman, tank,
-					technical);
+				bool truck = !tank && !technical && Next() % 13 == 0;
+				float cost = tank ? Tank : technical ? Technical : truck ? Truck : Rifleman;
+				rig.Add(new Vector3(Next() % 10, 0f, Next() % 10), cost, tank, technical, truck, cost);
 			}
 
 			for (int i = 0; i < rig.Units.Count; i++)
@@ -1008,7 +1277,7 @@ public class CommanderHtnTests
 		// And the round exercised the tree, not one branch of it.
 		var missing = new List<CommandGoal>();
 		foreach (CommandGoal goal in new[] { CommandGoal.Reinforce, CommandGoal.Stage, CommandGoal.Strike, CommandGoal.Scout,
-			CommandGoal.Refill, CommandGoal.FallBack, CommandGoal.Hold })
+			CommandGoal.Station, CommandGoal.Refill, CommandGoal.FallBack, CommandGoal.Hold })
 		{
 			if (!first.Any(line => line.Contains($":{goal}:")))
 			{

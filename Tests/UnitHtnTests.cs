@@ -13,9 +13,10 @@ namespace Gdpyr.Tests;
 /// <summary>
 /// The RTS unit's domain (docs/HTN_BOTS.md §5.2, H3): for each row of the tree, a
 /// fact vector and the task chain it must produce; the order as the top-level task;
-/// Retreat pre-empting, and only for a computer strategist's order (D1); every
-/// long-running operator ending when its premise goes (§3.4, P3); keeping pace with
-/// the squad; the fact bands; and planning without allocating (P8).
+/// Retreat pre-empting, and only for a computer strategist's order (D1); Resupply
+/// (H5, D2) to the nearest supply source and its give-up; every long-running operator
+/// ending when its premise goes (§3.4, P3); keeping pace with the squad; the fact
+/// bands; and planning without allocating (P8).
 /// </summary>
 public class UnitHtnTests
 {
@@ -24,6 +25,7 @@ public class UnitHtnTests
 
 	private static readonly Vector3 Anchor = new(10f, 0.5f, 10f);
 	private static readonly Vector3 Objective = new(10f, 0.5f, 110f);
+	private static readonly Vector3 Supply = new(10f, 0.5f, -60f);
 
 	private sealed class Squaddie
 	{
@@ -73,6 +75,18 @@ public class UnitHtnTests
 
 		public void Sense(UnitFact fact, bool value) => C.Sense(fact, value);
 
+		/// <summary>One scan: its health, how far outside the nearest supply source's reach it is, and whose order it has.</summary>
+		public void Scan(float health, float supplyEdge, bool autonomous = true, bool sideKnown = false,
+			bool hasSupply = true) => C.Encode(new UnitSense
+		{
+			HealthFraction = health,
+			Autonomous = autonomous,
+			SideKnown = sideKnown,
+			Odds = OddsBand.Even,
+			HasSupply = hasSupply,
+			SupplyEdgeMeters = supplyEdge,
+		});
+
 		public void Tick(int times = 1)
 		{
 			for (int i = 0; i < times; i++)
@@ -104,6 +118,16 @@ public class UnitHtnTests
 		unit.Sense(UnitFact.Stance, UnitStance.Autonomous);
 		unit.Sense(UnitFact.Health, HealthBand.Critical);
 		unit.Sense(UnitFact.Odds, OddsBand.Outnumbered);
+		return unit;
+	}
+
+	/// <summary>A unit on a computer strategist's order, at half health, <paramref name="supplyEdge"/> metres outside a supply source's reach.</summary>
+	private static Squaddie Hurt(OrderKind kind = OrderKind.Attack, float supplyEdge = 30f, float health = 0.5f,
+		bool autonomous = true)
+	{
+		Squaddie unit = Ordered(kind, kind == OrderKind.Defend ? Anchor : Objective);
+		unit.C.SupplyPoint = Supply;
+		unit.Scan(health, supplyEdge, autonomous);
 		return unit;
 	}
 
@@ -434,6 +458,225 @@ public class UnitHtnTests
 		Assert.Equal(UnitGoal.HoldPost, unit.Goal);
 	}
 
+	// ---- resupply (H5, D2) ---------------------------------------------------
+
+	[Theory]
+	[InlineData(OrderKind.Attack)]
+	[InlineData(OrderKind.Defend)]
+	[InlineData(OrderKind.Patrol)]
+	[InlineData(OrderKind.None)]
+	public void ABotsWoundedUnit_WithNothingInSight_WalksToTheNearestSupply(OrderKind order)
+	{
+		Squaddie unit = Hurt(order);
+		unit.Tick();
+
+		Assert.Equal("[Resupply]", unit.LastPlan);
+		Assert.Equal(UnitMove.Point, unit.C.Intent.Move);
+		Assert.Equal(Supply, unit.C.Intent.Point);
+	}
+
+	[Fact]
+	public void AResupply_StandsInsideTheReach_UntilHealed_ThenTheOrderResumes()
+	{
+		Squaddie unit = Hurt();
+		unit.Tick();
+		Assert.Equal(UnitGoal.Resupply, unit.Goal);
+
+		// Three metres inside the edge: it stops, and the task goes on while it heals.
+		unit.Scan(0.5f, -3.5f);
+		unit.Tick();
+		Assert.Equal(UnitGoal.Resupply, unit.Goal);
+		Assert.Equal(UnitMove.Hold, unit.C.Intent.Move);
+
+		// Out of the hurt band, and still wanting more.
+		unit.Scan(0.8f, -3.5f);
+		unit.Tick();
+		Assert.Equal(UnitGoal.Resupply, unit.Goal);
+
+		unit.Scan(0.96f, -3.5f);
+		unit.Tick();
+		Assert.Equal(UnitGoal.Advance, unit.Goal);
+	}
+
+	[Fact]
+	public void ATruckThatDrivesOff_IsFollowed()
+	{
+		Squaddie unit = Hurt();
+		unit.Tick();
+		unit.Scan(0.5f, -4f);
+		unit.Tick();
+		Assert.Equal(UnitMove.Hold, unit.C.Intent.Move);
+
+		unit.C.SupplyPoint = Supply + new Vector3(20f, 0f, 0f);
+		unit.Scan(0.5f, 5f);
+		unit.Tick();
+
+		Assert.Equal(UnitGoal.Resupply, unit.Goal);
+		Assert.Equal(UnitMove.Point, unit.C.Intent.Move);
+		Assert.Equal(unit.C.SupplyPoint, unit.C.Intent.Point);
+	}
+
+	[Fact]
+	public void AUnitAPersonOrdered_NeverResuppliesOnItsOwn()
+	{
+		Squaddie unit = Hurt(autonomous: false);
+		unit.Tick();
+
+		Assert.Equal(UnitGoal.Advance, unit.Goal);
+	}
+
+	[Theory]
+	[InlineData(OrderKind.Move)]
+	[InlineData(OrderKind.Build)]
+	public void AMoveOrABuildOrder_IsNeverAbandonedForResupply(OrderKind order)
+	{
+		Squaddie unit = Hurt(order);
+		unit.Tick();
+
+		Assert.NotEqual(UnitGoal.Resupply, unit.Goal);
+	}
+
+	[Fact]
+	public void AWoundedUnit_WithAContactNearby_KeepsToItsOrder()
+	{
+		Squaddie unit = Hurt();
+		unit.Scan(0.5f, 30f, sideKnown: true);
+		unit.Tick();
+
+		Assert.Equal(UnitGoal.Advance, unit.Goal);
+	}
+
+	[Fact]
+	public void AResupply_EndsWhenATargetOfItsOwnAppears_ButNotForAContactItOnlyKnowsOf()
+	{
+		Squaddie unit = Hurt();
+		unit.Tick();
+
+		// Walking back is not turned round by every ghost the side remembers.
+		unit.Scan(0.5f, 25f, sideKnown: true);
+		unit.Tick();
+		Assert.Equal(UnitGoal.Resupply, unit.Goal);
+
+		unit.See(Objective);
+		unit.Tick();
+		Assert.Equal(UnitGoal.EngageFocus, unit.Goal);
+	}
+
+	[Fact]
+	public void AWoundedUnitAlreadyInReach_KeepsToItsOrder_UntilItWalksOutOfIt()
+	{
+		// Healed where it stands: nothing to walk to.
+		Squaddie unit = Hurt(supplyEdge: -10f);
+		unit.Tick(5);
+		Assert.Equal(UnitGoal.Advance, unit.Goal);
+		Assert.Equal(0, unit.Replacements);
+
+		// Its order takes it past the edge: back in, and it stays until it is healed.
+		unit.Scan(0.5f, 1f);
+		unit.Tick();
+		Assert.Equal(UnitGoal.Resupply, unit.Goal);
+		Assert.Equal(1, unit.Replacements);
+	}
+
+	[Fact]
+	public void ASourceOutOfRange_IsLeftAlone_AndOneInRangeStaysInRangeALittleFurther()
+	{
+		float range = UnitPlanTraits.Default.SupplyRangeMeters;
+		Squaddie far = Hurt(supplyEdge: range + 1f);
+		far.Tick();
+		Assert.Equal(UnitGoal.Advance, far.Goal);
+
+		Squaddie near = Hurt(supplyEdge: range);
+		near.Tick();
+		Assert.Equal(UnitGoal.Resupply, near.Goal);
+
+		near.Scan(0.5f, range + UnitPlanTraits.Default.SupplyRangeHysteresisMeters - 1f);
+		near.Tick();
+		Assert.Equal(UnitGoal.Resupply, near.Goal);
+
+		near.Scan(0.5f, range + UnitPlanTraits.Default.SupplyRangeHysteresisMeters + 1f);
+		near.Tick();
+		Assert.Equal(UnitGoal.Advance, near.Goal);
+	}
+
+	[Fact]
+	public void NoSourceThatCanHealIt_IsNoResupply()
+	{
+		Squaddie unit = Hurt();
+		unit.Scan(0.5f, 0f, hasSupply: false);
+		unit.Tick();
+
+		Assert.Equal(UnitGoal.Advance, unit.Goal);
+	}
+
+	[Fact]
+	public void AResupplyThatTakesTooLong_IsGivenUp_AndNotTriedAgainFor30s()
+	{
+		UnitPlanTraits traits = UnitPlanTraits.Default;
+		Squaddie unit = Hurt();
+		unit.Tick();
+		Assert.Equal(UnitGoal.Resupply, unit.Goal);
+
+		unit.Tick(traits.ResupplyMaxTicks);
+		Assert.Equal(UnitGoal.Resupply, unit.Goal);
+
+		unit.Tick();
+		Assert.Equal(UnitGoal.Advance, unit.Goal);
+		Assert.Equal(1, unit.C.FailedResupplies);
+
+		// The same scan again does not bring the same trip back (§3.4, P4)…
+		unit.Scan(0.5f, 30f);
+		unit.Tick(traits.ResupplyRetryTicks - 1);
+		unit.Scan(0.5f, 30f);
+		unit.Tick();
+		Assert.Equal(UnitGoal.Advance, unit.Goal);
+
+		// …until its time is up.
+		unit.Tick(2);
+		unit.Scan(0.5f, 30f);
+		unit.Tick();
+		Assert.Equal(UnitGoal.Resupply, unit.Goal);
+	}
+
+	[Fact]
+	public void Retreat_OutranksResupply()
+	{
+		Squaddie unit = Hurt(health: 0.2f);
+		unit.Sense(UnitFact.Odds, OddsBand.Outnumbered);
+		unit.Tick();
+
+		Assert.Equal(UnitGoal.Retreat, unit.Goal);
+	}
+
+	[Theory]
+	[InlineData(0.61f, false, false)]
+	[InlineData(0.54f, false, true)]
+	[InlineData(0.9f, true, true)]
+	[InlineData(0.95f, true, false)]
+	public void Wounded_IsEnteredOutOfOk_AndHeldUntil95Percent(float health, bool before, bool expected)
+	{
+		UnitContext c = Context();
+		c.Sense(UnitFact.Wounded, before);
+		c.Sense(UnitFact.Health, (byte)(before ? HealthBand.Hurt : HealthBand.Ok));
+		c.Encode(new UnitSense { HealthFraction = health });
+
+		Assert.Equal(expected, c.Is(UnitFact.Wounded));
+	}
+
+	[Theory]
+	[InlineData(-2f, false, false)]
+	[InlineData(-3f, false, true)]
+	[InlineData(-0.5f, true, true)]
+	[InlineData(0.5f, true, false)]
+	public void Supplied_IsEnteredThreeMetresInside_AndHeldToTheEdge(float edge, bool before, bool expected)
+	{
+		UnitContext c = Context();
+		c.Sense(UnitFact.Supplied, before);
+		c.Encode(new UnitSense { HealthFraction = 1f, HasSupply = true, SupplyEdgeMeters = edge });
+
+		Assert.Equal(expected, c.Is(UnitFact.Supplied));
+	}
+
 	[Theory]
 	[InlineData(false, UnitGoal.EngageInLeash)]
 	[InlineData(true, UnitGoal.HoldPost)]
@@ -459,6 +702,9 @@ public class UnitHtnTests
 	public static IEnumerable<object[]> Premises()
 	{
 		yield return new object[] { OrderKind.Attack, UnitGoal.Retreat, "losing", "odds even", UnitGoal.Advance };
+		yield return new object[] { OrderKind.Attack, UnitGoal.Resupply, "wounded", "healed", UnitGoal.Advance };
+		yield return new object[] { OrderKind.Defend, UnitGoal.Resupply, "wounded", "supply gone", UnitGoal.HoldPost };
+		yield return new object[] { OrderKind.Attack, UnitGoal.Resupply, "wounded", "order move", UnitGoal.Obey };
 		yield return new object[] { OrderKind.Build, UnitGoal.TakeCover, "under fire", "fire stops", UnitGoal.Work };
 		yield return new object[] { OrderKind.Build, UnitGoal.Work, "", "order none", UnitGoal.HoldPost };
 		yield return new object[] { OrderKind.Attack, UnitGoal.WaitForSquad, "gathering", "moving", UnitGoal.Advance };
@@ -500,6 +746,11 @@ public class UnitHtnTests
 			case "friend engaged":
 				unit.Sense(UnitFact.FriendEngaged, true);
 				break;
+			case "wounded":
+				unit.Sense(UnitFact.Stance, UnitStance.Autonomous);
+				unit.Sense(UnitFact.Wounded, true);
+				unit.Sense(UnitFact.Supply, true);
+				break;
 		}
 
 		unit.Tick(3);
@@ -521,6 +772,12 @@ public class UnitHtnTests
 				break;
 			case "friend done":
 				unit.Sense(UnitFact.FriendEngaged, false);
+				break;
+			case "healed":
+				unit.Sense(UnitFact.Wounded, false);
+				break;
+			case "supply gone":
+				unit.Sense(UnitFact.Supply, false);
 				break;
 			case "order none":
 				unit.Order(OrderKind.None, unit.C.Position);
@@ -827,12 +1084,12 @@ public class UnitHtnTests
 
 	// ---- sharing and allocation --------------------------------------------
 
-	/// <summary>Twelve situations, one per operator of §5.2, as an order and facts.</summary>
+	/// <summary>Fourteen situations, one per operator of §5.2 and two for Advance, as an order and facts.</summary>
 	private static void Situation(UnitContext c, int phase, out OrderKind order, out bool hasTarget)
 	{
 		order = phase switch
 		{
-			0 or 4 or 5 or 6 or 7 => OrderKind.Attack,
+			0 or 4 or 5 or 6 or 7 or 13 => OrderKind.Attack,
 			1 or 2 => OrderKind.Build,
 			3 => OrderKind.Attack,
 			8 or 9 or 10 => OrderKind.Defend,
@@ -840,13 +1097,16 @@ public class UnitHtnTests
 			_ => OrderKind.Move,
 		};
 		hasTarget = phase is 5 or 8;
-		c.Sense(UnitFact.Stance, (byte)(phase == 0 ? UnitStance.Autonomous : UnitStance.Obey));
+		c.Sense(UnitFact.Stance, (byte)(phase is 0 or 13 ? UnitStance.Autonomous : UnitStance.Obey));
 		c.Sense(UnitFact.Health, (byte)(phase == 0 ? HealthBand.Critical : HealthBand.Ok));
 		c.Sense(UnitFact.Odds, (byte)(phase == 0 ? OddsBand.Outnumbered : OddsBand.Even));
 		c.Sense(UnitFact.UnderFire, phase == 1);
 		c.Sense(UnitFact.FriendNear, phase == 1);
 		c.Sense(UnitFact.SquadPhase, (byte)(phase == 4 ? SquadPhase.Gathering : SquadPhase.Moving));
 		c.Sense(UnitFact.FriendEngaged, phase is 6 or 9);
+		c.Sense(UnitFact.Wounded, phase == 13);
+		c.Sense(UnitFact.Supply, phase is 0 or 13);
+		c.Sense(UnitFact.Supplied, false);
 	}
 
 	/// <summary>One unit's tick; true when what it was told dirtied its context.</summary>
@@ -856,7 +1116,7 @@ public class UnitHtnTests
 		c.Tick = t;
 		if ((t + i) % interval == 0)
 		{
-			Situation(c, (int)(((t + i) / (uint)interval + (uint)i) % 13), out order, out hasTarget);
+			Situation(c, (int)(((t + i) / (uint)interval + (uint)i) % 14), out order, out hasTarget);
 		}
 
 		c.Track(c.Position, new UnitOrder { Kind = order, Target = Objective, Anchor = Anchor }, hasTarget,
@@ -883,6 +1143,7 @@ public class UnitHtnTests
 			c.SupportPoint = Anchor + new Vector3(3f, 0f, 3f);
 			c.HasPost = true;
 			c.PostPoint = Anchor + new Vector3(4f, 0f, 0f);
+			c.SupplyPoint = Supply;
 			contexts[i] = c;
 		}
 
@@ -928,7 +1189,7 @@ public class UnitHtnTests
 		{
 			UnitGoal.Retreat, UnitGoal.TakeCover, UnitGoal.Work, UnitGoal.Advance, UnitGoal.WaitForSquad,
 			UnitGoal.EngageFocus, UnitGoal.Support, UnitGoal.Advance, UnitGoal.EngageInLeash, UnitGoal.AnswerCall,
-			UnitGoal.HoldPost, UnitGoal.Patrol, UnitGoal.Obey,
+			UnitGoal.HoldPost, UnitGoal.Patrol, UnitGoal.Obey, UnitGoal.Resupply,
 		};
 
 		for (int phase = 0; phase < expected.Length; phase++)

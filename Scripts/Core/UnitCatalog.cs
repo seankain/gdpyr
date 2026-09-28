@@ -26,6 +26,7 @@ public static class UnitCatalog
 		"res://Units/technical.tres", // 1 — T1 gun truck
 		"res://Units/tank.tres",      // 2 — T2 tank
 		"res://Units/builder.tres",   // 3 — builder, not a tier
+		"res://Units/supply_truck.tres", // 4 — supply truck, not a tier
 	};
 
 	public const byte Infantry = 0;
@@ -47,6 +48,14 @@ public static class UnitCatalog
 	/// strategist chooses its army from.
 	/// </summary>
 	public const byte Builder = 3;
+
+	/// <summary>
+	/// The unit other units come to for resupply (docs/HTN_BOTS.md §8, D2): friendly
+	/// units inside its reach get health back as they do inside a barracks' ring
+	/// (<see cref="Resupply"/>). Not a tier either, for the builder's reason: what it
+	/// is for is where it stands, not what it kills.
+	/// </summary>
+	public const byte SupplyTruck = 4;
 
 	/// <summary>The three fighting tiers in order, which is the order the strategist's build keys are in.</summary>
 	public static readonly byte[] Tiers = { Infantry, Technical, Tank };
@@ -106,6 +115,9 @@ public static class UnitCatalog
 
 	/// <summary>Whether units of this kind can be sent to put a structure up.</summary>
 	public static bool CanConstruct(byte id) => Definition(id)?.CanConstruct ?? false;
+
+	/// <summary>Whether units of this kind resupply the units round them (<see cref="UnitDefinition.SupplyRadiusMeters"/>).</summary>
+	public static bool IsSupply(byte id) => Definition(id)?.IsSupply ?? false;
 
 	/// <summary>
 	/// What the cheapest buildable unit costs, or <see cref="int.MaxValue"/> when

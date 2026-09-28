@@ -46,6 +46,25 @@ public enum UnitFact : byte
 	/// <summary>A friendly unit within <see cref="Neighbourhood.FriendRadiusMeters"/>.</summary>
 	FriendNear,
 
+	/// <summary>
+	/// It wants resupply: entered when <see cref="Health"/> leaves ok, held until it is
+	/// back to <see cref="UnitPlanTraits.ResupplyDoneFraction"/> (§5.2, D2).
+	/// </summary>
+	Wounded,
+
+	/// <summary>
+	/// A friendly supply source that can heal it is within
+	/// <see cref="UnitPlanTraits.SupplyRangeMeters"/> of the edge of its reach, and the
+	/// last trip to one was not given up on too recently (<see cref="Resupply"/>).
+	/// </summary>
+	Supply,
+
+	/// <summary>
+	/// Inside that source's reach: entered <see cref="UnitPlanTraits.SupplyMarginMeters"/>
+	/// inside the edge, held to the edge, so a unit that stops on entering is healed.
+	/// </summary>
+	Supplied,
+
 	Count,
 }
 
@@ -76,6 +95,7 @@ public enum UnitGoal : byte
 {
 	None = 0,
 	Retreat,
+	Resupply,
 	TakeCover,
 	Work,
 	WaitForSquad,
@@ -167,10 +187,38 @@ public readonly struct UnitPlanTraits
 	/// <summary>How far from its anchor a remembered contact still turns a defended ring towards it.</summary>
 	public readonly float ThreatBearingMeters;
 
+	/// <summary>The health fraction a wounded unit is resupplied back to before it goes back to its order.</summary>
+	public readonly float ResupplyDoneFraction;
+
+	/// <summary>
+	/// How far outside a supply source's reach a wounded unit still goes to it. Past
+	/// that it stays with its order, and its squad's Refill is the commander's to call
+	/// (§5.3): a unit that walked home on its own from across the map would be a unit
+	/// its squad attacks without.
+	/// </summary>
+	public readonly float SupplyRangeMeters;
+
+	/// <summary>How much further than <see cref="SupplyRangeMeters"/> a source already in range stays in it.</summary>
+	public readonly float SupplyRangeHysteresisMeters;
+
+	/// <summary>How far inside a source's reach a unit walking to it stops.</summary>
+	public readonly float SupplyMarginMeters;
+
+	/// <summary>
+	/// How long a resupply may take, walk and all, before it is given up on — a unit
+	/// that cannot reach the source, or keeps being hit inside it (§3.4, P4: a method
+	/// the world has to confirm needs a give-up)…
+	/// </summary>
+	public readonly int ResupplyMaxTicks;
+
+	/// <summary>…and how long after that the unit goes back to its order before it tries again.</summary>
+	public readonly int ResupplyRetryTicks;
+
 	public UnitPlanTraits(float healthOkFraction, float healthCriticalFraction, float healthHysteresis,
 		float engagedFriendMeters, float paceAheadMeters, float paceResumeMeters, int paceMaxWaitTicks,
 		float postSpacingMeters, float postMinRadiusMeters, float postLeashShare, int underFireTicks,
-		float threatBearingMeters)
+		float threatBearingMeters, float resupplyDoneFraction, float supplyRangeMeters,
+		float supplyRangeHysteresisMeters, float supplyMarginMeters, int resupplyMaxTicks, int resupplyRetryTicks)
 	{
 		HealthOkFraction = healthOkFraction;
 		HealthCriticalFraction = healthCriticalFraction;
@@ -184,12 +232,21 @@ public readonly struct UnitPlanTraits
 		PostLeashShare = Math.Clamp(postLeashShare, 0f, 1f);
 		UnderFireTicks = Math.Max(underFireTicks, 1);
 		ThreatBearingMeters = MathF.Max(threatBearingMeters, 0f);
+		ResupplyDoneFraction = Math.Clamp(resupplyDoneFraction, HealthOkFraction, 1f);
+		SupplyRangeMeters = MathF.Max(supplyRangeMeters, 0f);
+		SupplyRangeHysteresisMeters = MathF.Max(supplyRangeHysteresisMeters, 0f);
+		SupplyMarginMeters = MathF.Max(supplyMarginMeters, 0f);
+		ResupplyMaxTicks = Math.Max(resupplyMaxTicks, 1);
+		ResupplyRetryTicks = Math.Max(resupplyRetryTicks, 0);
 	}
 
 	/// <summary>
 	/// §5.2's numbers. The health bands are the ground bot's. A unit more than 8 m
 	/// ahead of its squad waits until it is within 3 m, for 8 s at a stretch at most;
 	/// posts stand 4 m apart on a ring of at least 4 m and at most half the leash.
+	/// A unit out of ok health goes to a supply source within 60 m of its reach, stops
+	/// 3 m inside it and comes back at 95 %; a resupply that has not finished in 60 s
+	/// is dropped for 30 s.
 	/// </summary>
 	public static UnitPlanTraits Default => new(
 		healthOkFraction: 0.6f,
@@ -203,7 +260,13 @@ public readonly struct UnitPlanTraits
 		postMinRadiusMeters: 4f,
 		postLeashShare: 0.5f,
 		underFireTicks: SimConfig.TickRate * 2,
-		threatBearingMeters: 80f);
+		threatBearingMeters: 80f,
+		resupplyDoneFraction: 0.95f,
+		supplyRangeMeters: 60f,
+		supplyRangeHysteresisMeters: 10f,
+		supplyMarginMeters: 3f,
+		resupplyMaxTicks: SimConfig.TickRate * 60,
+		resupplyRetryTicks: SimConfig.TickRate * 30);
 }
 
 /// <summary>
@@ -234,6 +297,12 @@ public struct UnitSense
 	public bool UnderFire;
 
 	public bool FriendNear;
+
+	/// <summary>A friendly supply source can heal this unit: there is one, and the unit has a rate to heal at (<see cref="Resupply"/>).</summary>
+	public bool HasSupply;
+
+	/// <summary>How far outside the nearest source's reach the unit is, measured flat; negative inside.</summary>
+	public float SupplyEdgeMeters;
 }
 
 /// <summary>
@@ -322,6 +391,15 @@ public sealed class UnitContext : BaseContext
 	/// <summary>The nearest friendly unit, for a builder under fire.</summary>
 	public Vector3 FriendPoint;
 
+	/// <summary>The middle of the nearest friendly supply source's reach: where a resupply walks (D2).</summary>
+	public Vector3 SupplyPoint;
+
+	/// <summary>A resupply was given up on: <see cref="UnitFact.Supply"/> stays off until this tick.</summary>
+	public uint SupplyRetryTick;
+
+	/// <summary>Resupplies given up on. For the tests and the debug HUD.</summary>
+	public int FailedResupplies;
+
 	/// <summary>The tick the running operator started on.</summary>
 	public uint GoalStartTick;
 
@@ -366,6 +444,7 @@ public sealed class UnitContext : BaseContext
 		Sense(UnitFact.Stance, (byte)(sense.Autonomous ? UnitStance.Autonomous : UnitStance.Obey));
 		Sense(UnitFact.UnderFire, sense.UnderFire);
 		Sense(UnitFact.FriendNear, sense.FriendNear);
+		SenseSupply(sense);
 
 		SenseContact();
 		SenseLeash();
@@ -387,6 +466,26 @@ public sealed class UnitContext : BaseContext
 		Sense(UnitFact.Order, (byte)order.Kind);
 		SenseContact();
 		SenseLeash();
+	}
+
+	/// <summary>
+	/// Resupply's three facts (D2), each with its hysteresis: wounded from the moment
+	/// health leaves ok until it is back to <see cref="UnitPlanTraits.ResupplyDoneFraction"/>;
+	/// a source in range, held a little further once it is; inside its reach, entered
+	/// a margin inside the edge and held to the edge.
+	/// </summary>
+	private void SenseSupply(in UnitSense sense)
+	{
+		bool wounded = Is(UnitFact.Wounded)
+			? sense.HealthFraction < Traits.ResupplyDoneFraction
+			: Get(UnitFact.Health) != (byte)HealthBand.Ok;
+		Sense(UnitFact.Wounded, wounded);
+
+		float range = Traits.SupplyRangeMeters + (Is(UnitFact.Supply) ? Traits.SupplyRangeHysteresisMeters : 0f);
+		Sense(UnitFact.Supply, sense.HasSupply && sense.SupplyEdgeMeters <= range && Tick >= SupplyRetryTick);
+
+		float inside = Is(UnitFact.Supplied) ? 0f : -Traits.SupplyMarginMeters;
+		Sense(UnitFact.Supplied, sense.HasSupply && sense.SupplyEdgeMeters <= inside);
 	}
 
 	private void SenseContact() =>
@@ -446,6 +545,17 @@ public sealed class UnitContext : BaseContext
 			case UnitGoal.Retreat:
 				// Without stopping to fight: a unit that turned to shoot would not be retreating.
 				return Go(FallbackPoint, stopToFight: false);
+
+			case UnitGoal.Resupply:
+				if (Tick >= GoalStartTick && Tick - GoalStartTick > (uint)Traits.ResupplyMaxTicks)
+				{
+					return GiveUpResupply();
+				}
+
+				// Inside the reach it stands and heals; outside it, it walks to the middle,
+				// which crosses the edge wherever it starts. A truck that drives off is
+				// followed on the next scan.
+				return Is(UnitFact.Supplied) ? Hold() : Go(SupplyPoint, stopToFight: true);
 
 			case UnitGoal.TakeCover:
 				return Go(FriendPoint, stopToFight: false);
@@ -523,6 +633,20 @@ public sealed class UnitContext : BaseContext
 		}
 
 		return Waiting;
+	}
+
+	/// <summary>
+	/// A resupply that ran out of time: counted, and the source put out of reach for
+	/// <see cref="UnitPlanTraits.ResupplyRetryTicks"/> so that the next plan is the
+	/// order's rather than the same trip again (§3.4, P4). Set here rather than on the
+	/// next scan so the replan this failure causes already sees it.
+	/// </summary>
+	private TaskStatus GiveUpResupply()
+	{
+		FailedResupplies++;
+		SupplyRetryTick = Tick + (uint)Traits.ResupplyRetryTicks;
+		Sense(UnitFact.Supply, false);
+		return TaskStatus.Failure;
 	}
 
 	/// <summary>The order's own destination, standing to fight exactly when today's code does.</summary>
@@ -667,15 +791,19 @@ public sealed class UnitDomainBuilder : BaseDomainBuilder<UnitDomainBuilder, Uni
 /// <summary>
 /// docs/HTN_BOTS.md §5.2 as FluidHTN code: the RTS unit's domain, built once and
 /// shared by every unit (§3.4, P6). The standing order is the top-level task — the
-/// planner chooses how to carry it out and never whether — and the one thing a unit
-/// does on its own, retreating, it does only for a computer strategist's order (D1).
+/// planner chooses how to carry it out and never whether — and the two things a unit
+/// does on its own, retreating and resupplying, it does only for a computer
+/// strategist's order (D1).
 ///
 /// Selectors are in priority order; a higher method pre-empts a running plan when a
 /// fact changes (P2) and a lower one never does (P3), so every operator has an
 /// executing condition for its premise, and every one for its order: a new order is
 /// usually a lower branch, which could not replace the old one otherwise.
 ///
-/// Resupply is not here: without healing (D2, H5) a unit has nothing to resupply.
+/// Resupply (H5) is second: a wounded unit with nothing in sight goes to the nearest
+/// supply source in range — a barracks' ring or a supply truck (D2) — and stands in
+/// it until it is healed. Nothing below it replaces it, so it ends only on its
+/// executing conditions: healed, a target of its own, the source gone, a new order.
 /// </summary>
 public static class UnitDomain
 {
@@ -690,6 +818,20 @@ public static class UnitDomain
 					.IfNot(UnitFact.Order, OrderKind.Build)
 					.Act(UnitGoal.Retreat).While(UnitFact.Odds, OddsBand.Outnumbered)
 						.While(UnitFact.Stance, UnitStance.Autonomous)
+						.WhileNot(UnitFact.Order, OrderKind.Move).WhileNot(UnitFact.Order, OrderKind.Build).End()
+				.End()
+			.End()
+			.Select("resupply")
+				.Sequence("resupply")
+					.If(UnitFact.Stance, UnitStance.Autonomous)
+					.If(UnitFact.Wounded)
+					.If(UnitFact.Supply)
+					.If(UnitFact.Contact, UnitContact.None)
+					.If(UnitFact.Supplied, false)
+					.IfNot(UnitFact.Order, OrderKind.Move)
+					.IfNot(UnitFact.Order, OrderKind.Build)
+					.Act(UnitGoal.Resupply).While(UnitFact.Wounded).While(UnitFact.Supply)
+						.WhileNot(UnitFact.Contact, UnitContact.Own).While(UnitFact.Stance, UnitStance.Autonomous)
 						.WhileNot(UnitFact.Order, OrderKind.Move).WhileNot(UnitFact.Order, OrderKind.Build).End()
 				.End()
 			.End()

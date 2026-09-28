@@ -505,6 +505,21 @@ public class StructureTests
 	}
 
 	[Fact]
+	public void ASupplyTruckIsBoughtOnceThereIsAnArmyToResupply_AndOnlyOne()
+	{
+		// docs/HTN_BOTS.md §8, D2: the builder's rule with the truck's numbers.
+		StrategistTraits traits = StrategistTraits.Default;
+
+		Assert.False(StrategistBrain.ShouldQueueSupply(1000, 120, 0, 0, traits.UnitsBeforeSupply - 1, traits));
+		Assert.True(StrategistBrain.ShouldQueueSupply(1000, 120, 0, 0, traits.UnitsBeforeSupply, traits));
+		Assert.False(StrategistBrain.ShouldQueueSupply(1000, 120, traits.SupplyTrucks, 0, 20, traits));
+		Assert.False(StrategistBrain.ShouldQueueSupply(1000, 120, 0, traits.SupplyTrucks, 20, traits));
+		Assert.False(StrategistBrain.ShouldQueueSupply(119, 120, 0, 0, 20, traits));
+		Assert.False(StrategistBrain.ShouldQueueSupply(100000, 120, 0, 0, 50,
+			new StrategistTraits(30, 2, 4, 12f, supplyTrucks: 0)));
+	}
+
+	[Fact]
 	public void AStrategistThatWantsNoBuildersNeverBuysOne()
 	{
 		var traits = new StrategistTraits(30, 2, 4, 12f, builders: 0);

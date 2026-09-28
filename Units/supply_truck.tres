@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="UnitDefinition" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Rts/UnitDefinition.cs" id="1_unitdef"]
+
+[resource]
+script = ExtResource("1_unitdef")
+Name = &"supply_truck"
+Cost = 120
+BuildSeconds = 10.0
+MaxHealth = 260.0
+RegenPerSecond = 13.0
+MoveSpeed = 6.5
+HeightMeters = 2.4
+RadiusMeters = 1.1
+EyeHeightMeters = 1.9
+SensorRadiusMeters = 40.0
+EngageRangeMeters = 20.0
+LeashRadiusMeters = 20.0
+ArrivalRadiusMeters = 2.5
+WeaponId = 1
+AccuracyConeDegrees = 4.0
+SupplyRadiusMeters = 12.0
+Color = Color(0.3, 0.75, 0.45, 1)

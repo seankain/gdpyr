@@ -217,6 +217,20 @@ public partial class Unit : CharacterBody3D
 		return true;
 	}
 
+	/// <summary>
+	/// One tick of resupply (<see cref="Resupply"/>): health back at the unit's own
+	/// rate, up to its maximum. The caller has decided it is resupplied; this only
+	/// counts. Server-side, and replicated as health always is, in the unit snapshot.
+	/// </summary>
+	public void Heal(float dt)
+	{
+		Health = Resupply.Heal(Health, Definition?.MaxHealth ?? 100f, Definition?.RegenPerSecond ?? 0f, dt);
+	}
+
+	/// <summary>True while it has health to get back and a rate to get it back at.</summary>
+	public bool CanBeResupplied => IsAlive && (Definition?.RegenPerSecond ?? 0f) > 0f
+		&& Health < (Definition?.MaxHealth ?? 100f);
+
 	public byte HealthPercent => UnitFlags.PackHealth(Health, Definition?.MaxHealth ?? 100f);
 
 	// ---- client ------------------------------------------------------------
@@ -283,6 +297,40 @@ public partial class Unit : CharacterBody3D
 			},
 		};
 		AddChild(_mesh);
+
+		if (Definition?.IsSupply == true && !Bootstrap.IsDedicatedServer)
+		{
+			BuildSupplyRing(Definition.SupplyRadiusMeters);
+		}
+	}
+
+	/// <summary>
+	/// A line on the ground at a supply truck's reach, as a barracks draws its ring:
+	/// a strategist sending units to it, and a player deciding whether it is worth
+	/// shooting, both need to see how far it reaches.
+	/// </summary>
+	private void BuildSupplyRing(float radius)
+	{
+		const float HalfWidth = 0.15f;
+
+		AddChild(new MeshInstance3D
+		{
+			Name = "SupplyRing",
+			Position = new Vector3(0f, 0.05f, 0f),
+			Mesh = new TorusMesh
+			{
+				InnerRadius = Mathf.Max(radius - HalfWidth, 0f),
+				OuterRadius = radius + HalfWidth,
+				Rings = 64,
+				RingSegments = 4,
+			},
+			CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+			MaterialOverride = new StandardMaterial3D
+			{
+				AlbedoColor = Definition?.Color ?? new Color(0.3f, 0.75f, 0.45f),
+				ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+			},
+		});
 	}
 
 	private void BuildAgent()
