@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using Gdpyr.Bots;
 using Gdpyr.Core;
 using Gdpyr.Net;
+using Gdpyr.Sim.AiDebug;
 using Gdpyr.Sim.Demo;
+using Gdpyr.Ui.Spectator;
 using Godot;
 
 namespace Gdpyr.Ui;
@@ -339,6 +342,25 @@ public partial class GameConsole : CanvasLayer
 		_commands.Register("demofollow", "demofollow [peer]", "sit on a player's shoulder; no peer frees the camera",
 			DemoFollow);
 
+		// The AI debugger (docs/AI_DEBUG.md §7). The authority reads its own planners
+		// directly; a client reads them only while spectating, from what it was sent.
+		_commands.Register("spectate", "spectate", "watch instead of play: a free camera and the AI debugger (F3)",
+			_ => SetSpectating(true));
+
+		_commands.Register("play", "play", "stop spectating, and pick a side", _ => SetSpectating(false));
+
+		_commands.Register("ai_tree", "ai_tree <ground|unit|squad>", "print an HTN domain as a tree, with its conditions",
+			AiTree);
+
+		_commands.Register("ai_plan", $"ai_plan [{AiTargets.Usage}]",
+			"print a bot's, unit's or squad's plan; with nothing, the one the spectator's panel shows", AiPlan);
+
+		_commands.Register("ai_squads", "ai_squads", "print each computer strategist's commander, squad by squad",
+			AiSquads);
+
+		_commands.Register("ai_select", $"ai_select <{AiTargets.Usage}>", "inspect one in the spectator's panel",
+			AiSelect);
+
 		_commands.Register("clear", "clear", "empty the scrollback", _ =>
 		{
 			_lines.Clear();
@@ -589,6 +611,176 @@ public partial class GameConsole : CanvasLayer
 		return ConsoleResult.Say(peerId == 0 ? "free camera" : $"following peer {peerId}");
 	}
 
+	// ---- the AI debugger (docs/AI_DEBUG.md §7) -------------------------------
+
+	private static ConsoleResult SetSpectating(bool watch)
+	{
+		if (PlayerManager.Instance is not { } players || !Session.InGame || players.IsPlayingDemo)
+		{
+			return ConsoleResult.Failed("there is no round to watch");
+		}
+
+		if (players.IsSpectating == watch)
+		{
+			return ConsoleResult.Say(watch ? "already spectating" : "not spectating");
+		}
+
+		players.RequestSpectate(watch);
+		return ConsoleResult.Done();
+	}
+
+	private static ConsoleResult AiTree(IReadOnlyList<string> args)
+	{
+		if (args.Count != 1 || !HtnDomains.TryParse(args[0], out HtnDomainKind kind))
+		{
+			return ConsoleResult.Failed("usage: ai_tree <ground|unit|squad>");
+		}
+
+		HtnDomainMap map = HtnDomains.For(kind);
+		string tree = HtnText.Tree(map, null, HtnTextStyle.Plain, new HtnTreeOptions { Conditions = true });
+		return Lines($"{map.Name}: {map.Count} tasks, {map.Conditions.Count} conditions, signature {map.Signature:x8}\n{tree}");
+	}
+
+	private static ConsoleResult AiPlan(IReadOnlyList<string> args)
+	{
+		if (PlayerManager.Instance is not { } players || !Session.InGame)
+		{
+			return ConsoleResult.Failed("there is no round");
+		}
+
+		AiEntityRef target;
+		if (args.Count == 0)
+		{
+			target = SpectatorView.Instance?.Shown ?? default;
+			if (!target.IsValid)
+			{
+				return ConsoleResult.Failed($"usage: ai_plan <{AiTargets.Usage}>, or select something while spectating");
+			}
+		}
+		else if (!AiTargets.TryParse(args, out target, out string error))
+		{
+			return ConsoleResult.Failed(error);
+		}
+
+		// The authority has the planners in its own memory: nothing to wait for.
+		if (players.AiPublisher is { } publisher)
+		{
+			target = FirstStrategistsSquad(target, publisher);
+			if (publisher.Inspect(target) is not { } inspect)
+			{
+				return ConsoleResult.Failed($"{target} is not on the field");
+			}
+
+			AiDebugFrame frame = publisher.Build(NetworkManager.Instance?.Tick ?? 0, null);
+			return Lines(AiDebugText.Describe(inspect, frame, HtnTextStyle.Plain));
+		}
+
+		if (!players.IsSpectating)
+		{
+			return ConsoleResult.Failed("a client sees the bots' plans only while spectating: 'spectate' first");
+		}
+
+		if (!players.SpectatorAiDebug)
+		{
+			return ConsoleResult.Failed("this server does not send its bots' plans: it was started without --ai-debug");
+		}
+
+		if (players.AiFrame?.Find(target) is { } found)
+		{
+			return Lines(AiDebugText.Describe(found, players.AiFrame, HtnTextStyle.Plain));
+		}
+
+		SpectatorView.Instance?.PrintWhenReady(target);
+		return ConsoleResult.Say($"asked for {target}; it prints when the next frame brings it");
+	}
+
+	private static ConsoleResult AiSquads(IReadOnlyList<string> args)
+	{
+		if (PlayerManager.Instance is not { } players || !Session.InGame)
+		{
+			return ConsoleResult.Failed("there is no round");
+		}
+
+		AiDebugFrame frame;
+		if (players.AiPublisher is { } publisher)
+		{
+			var watch = new AiWatch { Flags = AiWatchFlags.Commander };
+			frame = publisher.Build(NetworkManager.Instance?.Tick ?? 0, watch);
+		}
+		else if (players.IsSpectating)
+		{
+			frame = players.AiFrame;
+			if (frame == null || frame.Commanders.Count == 0)
+			{
+				SpectatorView.Instance?.SetStrategist(true);
+				return ConsoleResult.Say("asked for the commanders: run it again in a moment");
+			}
+		}
+		else
+		{
+			return ConsoleResult.Failed("a client sees the bots' plans only while spectating: 'spectate' first");
+		}
+
+		if (frame.Commanders.Count == 0)
+		{
+			return ConsoleResult.Say(frame.BotAi == Sim.BotAi.Legacy
+				? "the bots run --bot-ai legacy: there is no commander"
+				: "no computer strategist is in a seat");
+		}
+
+		var text = new System.Text.StringBuilder();
+		foreach (AiCommander commander in frame.Commanders)
+		{
+			if (text.Length > 0)
+			{
+				text.Append("\n\n");
+			}
+
+			text.Append(SquadText.Table(commander, HtnTextStyle.Plain));
+		}
+
+		return Lines(text.ToString());
+	}
+
+	private static ConsoleResult AiSelect(IReadOnlyList<string> args)
+	{
+		if (SpectatorView.Instance is not { } view)
+		{
+			return ConsoleResult.Failed("only a spectator has a selection: 'spectate' first");
+		}
+
+		if (!AiTargets.TryParse(args, out AiEntityRef target, out string error))
+		{
+			return ConsoleResult.Failed(error);
+		}
+
+		if (target.Kind == AiEntityKind.Squad)
+		{
+			view.ShowSquad(target);
+		}
+		else
+		{
+			view.Select(target, add: true);
+		}
+
+		return ConsoleResult.Say($"inspecting {target}");
+	}
+
+	/// <summary>"squad 2" with no strategist named is the first computer strategist's.</summary>
+	private static AiEntityRef FirstStrategistsSquad(AiEntityRef target, AiDebugPublisher publisher)
+	{
+		if (target.Kind != AiEntityKind.Squad || target.Id != AiTargets.FirstStrategist)
+		{
+			return target;
+		}
+
+		var strategists = new List<int>();
+		publisher.CollectStrategists(strategists);
+		return strategists.Count > 0 ? AiEntityRef.Squad(strategists[0], target.Slot) : target;
+	}
+
+	private static ConsoleResult Lines(string text) => new(true, text.Split('\n'));
+
 	// ---- the widget --------------------------------------------------------
 
 	private void Build()
@@ -639,6 +831,13 @@ public partial class GameConsole : CanvasLayer
 			SizeFlagsVertical = Control.SizeFlags.ExpandFill,
 			FocusMode = Control.FocusModeEnum.None,
 		};
+
+		// Monospaced, so that the AI debugger's trees and tables line up
+		// (docs/AI_DEBUG.md §7).
+		_output.AddThemeFontOverride("normal_font", new SystemFont
+		{
+			FontNames = new[] { "DejaVu Sans Mono", "Consolas", "Menlo", "Liberation Mono", "Courier New", "monospace" },
+		});
 		column.AddChild(_output);
 
 		_entry = new LineEdit

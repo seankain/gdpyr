@@ -44,6 +44,7 @@ public partial class MainMenu : Control
 	private Button _joinByAddress;
 	private Button _host;
 	private Button _offline;
+	private Button _watch;
 	private Button _refresh;
 
 	private float _refreshAge = float.MaxValue;
@@ -60,13 +61,15 @@ public partial class MainMenu : Control
 		// dedicated server has nobody to ask. Both skip the menu entirely — including
 		// building it, because a headless process should not be laying out widgets.
 		// `--playdemo` names no mode and still skips it: a demo is watched in the map
-		// and there is no server to pick (docs/DEMOS.md §5.1).
+		// and there is no server to pick (docs/DEMOS.md §5.1). A bare `--spectate` is
+		// the menu's "Watch the bots" said on the command line (docs/AI_DEBUG.md §1).
+		bool watchBots = Bootstrap.Options.Spectate && Bootstrap.Options.Mode == LaunchMode.Offline;
 		if (Bootstrap.IsDedicatedServer || Bootstrap.Options.Mode != LaunchMode.Offline
-			|| Bootstrap.Options.PlayDemo != null)
+			|| Bootstrap.Options.PlayDemo != null || watchBots)
 		{
 			// No peer, no packets: a replay is a file being read, and the transport
 			// would otherwise sit waiting for a menu that is not going to be built.
-			if (Bootstrap.Options.PlayDemo != null)
+			if (Bootstrap.Options.PlayDemo != null || watchBots)
 			{
 				NetworkManager.Instance?.PlayOffline();
 			}
@@ -213,6 +216,16 @@ public partial class MainMenu : Control
 	}
 
 	/// <summary>
+	/// An offline round with nobody on the field: both sides bots, and this process
+	/// spectating them with the AI debugger (docs/AI_DEBUG.md §2). F3 joins the round.
+	/// </summary>
+	private void WatchBots()
+	{
+		PlayerManager.SpectateOnStart();
+		Offline();
+	}
+
+	/// <summary>
 	/// Hands over to the map. <see cref="Core.WorldRoot"/> is what actually opens the
 	/// session, on the far side of the scene change, so that a map reached from a
 	/// command line opens it the same way.
@@ -327,6 +340,7 @@ public partial class MainMenu : Control
 		_joinByAddress.Disabled = busy;
 		_host.Disabled = busy;
 		_offline.Disabled = busy;
+		_watch.Disabled = busy;
 		_refresh.Disabled = busy;
 	}
 
@@ -411,6 +425,9 @@ public partial class MainMenu : Control
 
 		_offline = NewButton(buttons, "Practice offline");
 		_offline.Pressed += Offline;
+
+		_watch = NewButton(buttons, "Watch the bots");
+		_watch.Pressed += WatchBots;
 
 		Button quit = NewButton(buttons, "Quit");
 		quit.Pressed += () => GetTree().Quit();

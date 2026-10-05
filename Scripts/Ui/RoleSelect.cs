@@ -1,4 +1,5 @@
 using Gdpyr.Match;
+using Gdpyr.Net;
 using Gdpyr.Sim;
 using Godot;
 
@@ -16,6 +17,9 @@ namespace Gdpyr.Ui;
 ///
 /// <see cref="TeamSelect"/>'s two keys keep working and mean the same thing. They
 /// are the fast way to change your mind mid-round; this is the one that asks.
+///
+/// The third answer is not a side: spectating takes this player off the field with
+/// no character at all, to watch the round and the bots' plans (docs/AI_DEBUG.md §2).
 /// </summary>
 public partial class RoleSelect : CanvasLayer
 {
@@ -23,6 +27,7 @@ public partial class RoleSelect : CanvasLayer
 	private Label _subtitle;
 	private Button _ground;
 	private Button _strategist;
+	private Button _spectate;
 
 	private bool _shown;
 
@@ -116,8 +121,12 @@ public partial class RoleSelect : CanvasLayer
 		_strategist = NewChoice(column, "Strategist  (F2)",
 			"the map from above, the units on it, and only what they can see — two seats");
 
+		_spectate = NewChoice(column, "Spectate  (F3)",
+			"a free camera over the whole round, and the AI debugger: what every bot is planning");
+
 		_ground.Pressed += () => Choose(Team.GroundForce);
 		_strategist.Pressed += () => Choose(Team.Strategist);
+		_spectate.Pressed += () => PlayerManager.Instance?.RequestSpectate(true);
 	}
 
 	private static Button NewChoice(Control parent, string text, string blurb)

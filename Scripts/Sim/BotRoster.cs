@@ -72,8 +72,15 @@ public readonly struct BotDemand
 	/// <summary>Strategists allowed at once, from <c>TeamService.MaxStrategists</c>.</summary>
 	public readonly int StrategistCap;
 
+	/// <summary>
+	/// People connected who are watching rather than playing (docs/AI_DEBUG.md §2). They
+	/// hold no seat — a spectator has no character and is in no snapshot — but they are
+	/// somebody, so a server with only spectators on it runs its bots for them.
+	/// </summary>
+	public readonly int Spectators;
+
 	public BotDemand(int groundTarget, int strategistTarget, int groundHumans, int strategistHumans,
-		int seats, int strategistCap)
+		int seats, int strategistCap, int spectators = 0)
 	{
 		GroundTarget = Math.Max(groundTarget, 0);
 		StrategistTarget = Math.Max(strategistTarget, 0);
@@ -81,6 +88,7 @@ public readonly struct BotDemand
 		StrategistHumans = Math.Max(strategistHumans, 0);
 		Seats = Math.Max(seats, 0);
 		StrategistCap = Math.Max(strategistCap, 0);
+		Spectators = Math.Max(spectators, 0);
 	}
 
 	public int Humans => GroundHumans + StrategistHumans;
@@ -116,7 +124,9 @@ public static class BotFillPolicy
 	/// <list type="number">
 	/// <item>An empty server gets no bots at all. Nobody is watching, and a headless
 	/// Godot burning a core on a firefight nobody can see is what spends the EC2
-	/// box's CPU credits before a playtest starts (docs/DEPLOYMENT.md §5).</item>
+	/// box's CPU credits before a playtest starts (docs/DEPLOYMENT.md §5). A
+	/// spectator is somebody watching: a server with only spectators fills both sides
+	/// for them, and a round of bots is what they came to watch (docs/AI_DEBUG.md §2).</item>
 	/// <item>The strategist seat is filled before the ground ones. A ground force
 	/// with nothing shooting back is not a game; a strategist with nobody to order
 	/// units at is at least still an RTS.</item>
@@ -126,7 +136,7 @@ public static class BotFillPolicy
 	/// </summary>
 	public static BotFill Plan(in BotDemand demand)
 	{
-		if (demand.Humans == 0)
+		if (demand.Humans == 0 && demand.Spectators == 0)
 		{
 			return new BotFill(0, 0);
 		}

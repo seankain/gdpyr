@@ -1,6 +1,7 @@
 using System;
 using FluidHTN;
 using FluidHTN.Factory;
+using Gdpyr.Sim.AiDebug;
 using Godot;
 
 namespace Gdpyr.Sim.Htn;
@@ -148,6 +149,7 @@ public sealed class CommanderPlanning
 		Factory = factory ?? new PooledHtnFactory();
 		Traits = traits;
 		Domain = CommanderDomain.Build(Factory);
+		Map = HtnDomainMap.Build(HtnDomainKind.Squad, Domain);
 	}
 
 	public IFactory Factory { get; }
@@ -155,6 +157,9 @@ public sealed class CommanderPlanning
 	public CommanderTraits Traits { get; }
 
 	public Domain<CommandContext> Domain { get; }
+
+	/// <summary>The domain numbered for the debugger (docs/AI_DEBUG.md §3.1): what a task index on the wire means.</summary>
+	public HtnDomainMap Map { get; }
 
 	public Planner<CommandContext> Planner { get; } = new();
 
@@ -195,7 +200,19 @@ public sealed class CommanderPlanning
 		}
 
 		context.Clear();
+
+		// After the walk, so that what the debugger shows starts with the squad's first
+		// real decision rather than with seven rehearsals.
+		context.History = new HtnHistory();
+		context.History.Attach(context.PlannerState, Map, () => context.Tick);
 		return context;
+	}
+
+	/// <summary>Drops a squad's plan, stopping its operator: a new task, or the same task somewhere else.</summary>
+	public void Reset(CommandContext context)
+	{
+		Planner.Reset(context);
+		context.History?.RecordReset();
 	}
 }
 
@@ -781,6 +798,9 @@ public sealed class Commander
 	{
 		_planning.Planner.Reset(_contexts[squad]);
 		_contexts[squad].Clear();
+
+		// The slot's next squad is another squad: its history starts empty.
+		_contexts[squad].History?.Clear();
 		_squads[squad] = new CommandSquad { Zone = -1 };
 		_boundTask[squad] = CommandTask.None;
 		_boundZone[squad] = -1;
@@ -1478,7 +1498,7 @@ public sealed class Commander
 		if (_boundTask[s] != squad.Task || _boundZone[s] != squad.Zone || _boundOwner[s] != squad.TargetOwnerId
 			|| _boundTarget[s] != squad.Target)
 		{
-			_planning.Planner.Reset(context);
+			_planning.Reset(context);
 			context.End();
 			_boundTask[s] = squad.Task;
 			_boundZone[s] = squad.Zone;

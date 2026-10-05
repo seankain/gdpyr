@@ -6,6 +6,7 @@ using FluidHTN.Debug;
 using FluidHTN.Factory;
 using FluidHTN.Operators;
 using FluidHTN.PrimitiveTasks;
+using Gdpyr.Sim.AiDebug;
 using Godot;
 
 namespace Gdpyr.Sim.Htn;
@@ -315,6 +316,9 @@ public sealed class CommandContext : BaseContext
 
 	/// <summary>A retreat or a refill arrived: the commander returns the squad's units to its pool, which merges them.</summary>
 	public bool Arrived;
+
+	/// <summary>What its planner has done lately, for the spectator's debugger (docs/AI_DEBUG.md §3.3). Null for a context made outside <see cref="CommanderPlanning"/>.</summary>
+	public HtnHistory History { get; internal set; }
 
 	public byte Get(CommandFact fact) => GetState((int)fact);
 

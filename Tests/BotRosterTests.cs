@@ -11,9 +11,9 @@ public class BotRosterTests
 	private const int StrategistCap = 2;
 
 	private static BotFill Plan(int groundHumans, int strategistHumans, int groundTarget = 6,
-		int strategistTarget = 1, int seats = Seats) =>
+		int strategistTarget = 1, int seats = Seats, int spectators = 0) =>
 		BotFillPolicy.Plan(new BotDemand(groundTarget, strategistTarget, groundHumans, strategistHumans,
-			seats, StrategistCap));
+			seats, StrategistCap, spectators));
 
 	// ---- the id band -------------------------------------------------------
 
@@ -157,5 +157,32 @@ public class BotRosterTests
 		BotFill fill = BotFillPolicy.Plan(new BotDemand(-4, -4, -1, -1, -1, -1));
 
 		Assert.Equal(0, fill.Total);
+	}
+
+	// ---- spectators (docs/AI_DEBUG.md §2) ----------------------------------
+
+	[Fact]
+	public void AServerWithOnlySpectators_FillsBothSidesForThem()
+	{
+		// A round of bots is what a spectator came to watch: nobody playing is not
+		// nobody there.
+		BotFill fill = Plan(groundHumans: 0, strategistHumans: 0, spectators: 1);
+
+		Assert.Equal(6, fill.Ground);
+		Assert.Equal(1, fill.Strategist);
+	}
+
+	[Fact]
+	public void SpectatorsTakeNoSeat()
+	{
+		// Three people playing and three watching: the bots fill around the three playing
+		// exactly as they would with nobody watching.
+		Assert.Equal(Plan(groundHumans: 3, strategistHumans: 0).Ground,
+			Plan(groundHumans: 3, strategistHumans: 0, spectators: 3).Ground);
+
+		// And a full roster stays full: a spectator never squeezes a bot out of the snapshot.
+		BotFill tight = Plan(groundHumans: 0, strategistHumans: 0, groundTarget: 20, strategistTarget: 2,
+			spectators: 10);
+		Assert.Equal(BotRoster.MaxBots, tight.Total);
 	}
 }

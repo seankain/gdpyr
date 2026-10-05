@@ -391,6 +391,10 @@ public partial class PlayerManager : Node
 		}
 
 		StartLaunchRecording();
+
+		// `--spectate`, or the menu's "Watch the bots": the local player steps off the
+		// field on the tick it arrived on (docs/AI_DEBUG.md §2).
+		SpectateIfAsked(net);
 	}
 
 	/// <summary>
@@ -578,6 +582,10 @@ public partial class PlayerManager : Node
 		_playback?.Dispose();
 		_playback = playback;
 		IsDemoSession = true;
+
+		// A demo is watched from outside it already, with no bots to debug: whatever
+		// was being spectated is over (docs/AI_DEBUG.md §2).
+		EndSpectating();
 
 		ClearRoster();
 
@@ -779,6 +787,9 @@ public partial class PlayerManager : Node
 
 		ApplyLocalFog();
 
+		// The bots' plans as the tick left them, for whoever is spectating
+		// (docs/AI_DEBUG.md §6). Nothing at all while nobody is.
+		PublishAiDebug(net);
 
 		// Last, so an observation carries the state the tick actually ended in and an
 		// event is on the stream before the trainer is asked to act on it.
@@ -1043,11 +1054,20 @@ public partial class PlayerManager : Node
 	private void ClientTick(NetworkManager net)
 	{
 		ApplyPendingSnapshots(net);
+		SpectateIfAsked(net);
 
 		int steps = net.StepsThisTick;
 		for (int i = 0; i < steps; i++)
 		{
 			uint tick = net.Clock.NextInputTick();
+
+			// A spectator has no character to drive and the server reads no input from
+			// it: the keys are the free camera's (docs/AI_DEBUG.md §2).
+			if (IsSpectating && _local == null)
+			{
+				continue;
+			}
+
 			InputFrame frame = _sampler != null ? _sampler.Sample(tick) : InputFrame.Neutral(tick);
 
 			_lastSampledTick = tick;
@@ -1080,7 +1100,7 @@ public partial class PlayerManager : Node
 			}
 		}
 
-		if (steps > 0 && net.Connected)
+		if (steps > 0 && net.Connected && !IsSpectating)
 		{
 			SendInput(net);
 		}
@@ -1304,6 +1324,10 @@ public partial class PlayerManager : Node
 		EmplacementManager.Instance?.ServerTick(net.Tick);
 		CombatManager.Instance?.ServerPostTick(net.Tick);
 
+		// Offline is its own spectator when it is one: the frames go straight to its
+		// panel (docs/AI_DEBUG.md §6).
+		PublishAiDebug(net);
+
 		// The one broadcast an offline round does make, and only when something is
 		// listening for it: a demo (docs/DEMOS.md §4.1). ReplicateSnapshot is a no-op
 		// with no peers and no recording.
@@ -1476,6 +1500,7 @@ public partial class PlayerManager : Node
 			return;
 		}
 
+		ForgetSpectator(peerId);
 		Despawn(peerId);
 		BroadcastDespawn(peerId);
 	}

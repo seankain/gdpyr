@@ -199,6 +199,9 @@ public partial class UnitManager : Node
 	/// <summary>True when units plan with the unit HTN (docs/HTN_BOTS.md §5.2): <c>--bot-ai htn</c>, on the authority.</summary>
 	public bool Plans => _planning != null;
 
+	/// <summary>What every unit plans with, for the spectator's debugger (docs/AI_DEBUG.md §6); null under legacy and on a client.</summary>
+	public UnitPlanning Planning => _planning;
+
 	/// <summary>
 	/// What the server spends on the units per tick — the squad count, then every
 	/// unit's scan, plan, walk and shot — as a mean over the last second, in
