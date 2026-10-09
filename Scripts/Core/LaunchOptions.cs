@@ -46,6 +46,7 @@ public sealed class LaunchOptions
 		"             [--agent-api [host:]port] [--agent-token <token>]\n" +
 		"             [--agent-unbounded] [--agent-omniscient]\n" +
 		"             [--record <name>] | [--playdemo <name>]\n" +
+		"             [--spectate] [--ai-debug | --no-ai-debug]\n" +
 		"  --server [port]         headless authority, no local player (default port 7777)\n" +
 		"  --client <host[:port]>  connect to a server\n" +
 		"  --listen [port]         authority plus a local player\n" +
@@ -60,6 +61,9 @@ public sealed class LaunchOptions
 		"  --agent-omniscient      drop the fog for attached seats; labelled as cheating\n" +
 		"  --record <name>         record a demo of the round from the first tick (docs/DEMOS.md)\n" +
 		"  --playdemo <name>       watch a demo instead of playing; implies no networking\n" +
+		"  --spectate              join as a spectator: a free camera and the AI debugger (docs/AI_DEBUG.md)\n" +
+		"  --ai-debug              send the bots' plans to spectators; on unless this is a dedicated-server build\n" +
+		"  --no-ai-debug           never send them\n" +
 		"  (no flags)              the main menu: the servers on this network, or a round on your own\n" +
 		"Godot consumes its own arguments first, so these go after a bare `--`:\n" +
 		"  gdpyr --headless -- --server 7777 --bots 6:1 --agent-api 7900";
@@ -145,6 +149,22 @@ public sealed class LaunchOptions
 
 	public bool HasAgentApi => AgentPort.HasValue;
 
+	/// <summary>
+	/// Join as a spectator rather than a player (docs/AI_DEBUG.md §2): no character, a
+	/// free camera, and the AI debugger. Needs a local player to be one instead of.
+	/// </summary>
+	public bool Spectate { get; private init; }
+
+	/// <summary>
+	/// Whether this authority sends its bots' plans to the spectators who ask
+	/// (docs/AI_DEBUG.md §6). <c>--ai-debug</c> or <c>--no-ai-debug</c>, else on for every
+	/// build but a dedicated-server export: the box with a public address does not hand
+	/// out what its strategist is about to do unless it is told to. A process that is its
+	/// own authority — a listen host or an offline round — reads its own bots' plans
+	/// either way: they are in its memory, not on a wire.
+	/// </summary>
+	public bool AiDebug { get; private init; } = true;
+
 	/// <summary>Null when parsing succeeded; a one-line diagnostic otherwise.</summary>
 	public string Error { get; private init; }
 
@@ -191,6 +211,16 @@ public sealed class LaunchOptions
 			mode += $" | playing {PlayDemo}";
 		}
 
+		if (Spectate)
+		{
+			mode += " | spectating";
+		}
+
+		if (!AiDebug)
+		{
+			mode += " | no ai debug";
+		}
+
 		if (AgentPort is { } agentPort)
 		{
 			mode += $" | agent api {AgentHost}:{agentPort}"
@@ -234,6 +264,8 @@ public sealed class LaunchOptions
 		bool agentOmniscient = false;
 		string recordDemo = null;
 		string playDemo = null;
+		bool spectate = false;
+		bool? aiDebug = null;
 
 		args ??= System.Array.Empty<string>();
 
@@ -425,6 +457,23 @@ public sealed class LaunchOptions
 					agentOmniscient = true;
 					break;
 
+				case "--spectate":
+					spectate = true;
+					break;
+
+				case "--ai-debug":
+				case "--no-ai-debug":
+				{
+					bool on = arg == "--ai-debug";
+					if (aiDebug is { } given && given != on)
+					{
+						return Failure("conflicting flags: --ai-debug and --no-ai-debug");
+					}
+
+					aiDebug = on;
+					break;
+				}
+
 				case "--no-bots":
 				{
 					if (groundBots.HasValue || strategistBots.HasValue)
@@ -465,6 +514,21 @@ public sealed class LaunchOptions
 		}
 
 		mode ??= dedicatedServer ? LaunchMode.Server : LaunchMode.Offline;
+
+		if (spectate)
+		{
+			// A spectator is a person who is not playing; a headless authority and a demo
+			// have nobody there to be one (docs/AI_DEBUG.md §2).
+			if (mode == LaunchMode.Server)
+			{
+				return Failure("--spectate needs somebody watching: use it with --client, --listen or offline, not --server");
+			}
+
+			if (playDemo != null)
+			{
+				return Failure("--spectate and --playdemo: a demo is already watched from outside it");
+			}
+		}
 
 		if (agentPort.HasValue)
 		{
@@ -507,6 +571,8 @@ public sealed class LaunchOptions
 			AgentOmniscient = agentOmniscient,
 			RecordDemo = recordDemo,
 			PlayDemo = playDemo,
+			Spectate = spectate,
+			AiDebug = aiDebug ?? !dedicatedServer,
 		};
 	}
 

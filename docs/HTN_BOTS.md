@@ -426,7 +426,7 @@ human's units alone (D1).
 | `Scripts/Bots/BotStrategist.cs` | `ServerTick` becomes the commander domain's tick; `Build` / `Fortify` / `StrategistBrain` survive as its primitive tasks. |
 | `Scripts/Core/LaunchOptions.cs`, `Scripts/Match/GameModeDefinition.cs` | `--bot-ai`, `BotAi`. |
 | `Scripts/Sim/Resupply.cs`, `Units/*.tres`, `Units/supply_truck.tres` (H5) | The resupply rule (D2), `RegenPerSecond` and `SupplyRadiusMeters` on `UnitDefinition`, and the supply truck, catalog id 4; `UnitManager` heals once a tick and hands each unit's scan the nearest source ([`NETCODE.md`](NETCODE.md) §10.7). |
-| `Scripts/Ui/Debug.cs`, `Scripts/Core/ConsoleCommands.cs` | A plan row on the debug HUD; `bot_plan <n>` prints a bot's current task chain from FluidHTN's `OnNewTask` / MTR debug. |
+| `Scripts/Ui/Debug.cs`, `Scripts/Core/ConsoleCommands.cs` | A plan row on the debug HUD; `bot_plan <n>` prints a bot's current task chain from FluidHTN's `OnNewTask` / MTR debug. **Built after H6 as the AI debugger** ([`AI_DEBUG.md`](AI_DEBUG.md)): a spectator's panel, graph and world overlay, and `ai_plan <target>` on the console, from the planner state and `IPlannerState` callbacks. |
 | `Scripts/Sim/Agent/AgentEvents.cs`, `Scripts/Bots/BotStrategist.cs`, `Scripts/Match/VisibilityService.cs`, `Scripts/Match/EconomyService.cs` (H6) | Three agent events: `squad_task` when a commander squad's goal changes, `contact_spotted` when the strategist's fog picks a player up, `node_contested` when a node's contest starts and ends ([`AGENT_API.md`](AGENT_API.md) §8). `welcome` says which bot AI the server runs. |
 | `tools/Gdpyr.Playtest`, `tools/Gdpyr.Trainer`, `tools/Gdpyr.AgentClient`, `scripts/*.sh`, `Tests/Scenarios/htn_*.json` (H6) | A scenario's `bot_ai` and event filters in the metric vocabulary ([`AGENT_API.md`](AGENT_API.md) §9.1); the trainer's `--bot-ai` pin and `bot_ai` in its output; the scripts' `--bot-ai legacy`; the four H6 scenarios. |
 
@@ -1068,7 +1068,10 @@ Estimates in solo-dev days, as IMPLEMENTATION_PLAN.md §4 counts them. Each phas
   `builder_fortifies` still asserts `events.unit_built.tier.max == 3`: the commander, now the
   default, did not buy a truck in its 110 s, as in H5.
 - **Left:** the playtest with people, which a headless session cannot do; the display checks of
-  H2–H4 (H5's own was done); `bot_plan <n>` on the console (§4.4), never written; and the changes
+  H2–H4 (H5's own was done); `bot_plan <n>` on the console (§4.4), never written — since built as
+  `ai_plan` and the spectator's AI debugger ([`AI_DEBUG.md`](AI_DEBUG.md)), whose first run found a
+  ground bot thrashing between Standoff and "leave defences" at the barracks' ring (§9, plan
+  thrash; [`AI_DEBUG.md`](AI_DEBUG.md) §9); and the changes
   the findings argue for — an earlier retreat, a depleted squad not idle for Defend Zone, deniers in
   pairs against a defended node, and an economy the strategist is not locked out of on a map whose
   nodes the ground force takes in two minutes — which are the next tuning, measured by these

@@ -6,6 +6,7 @@ using FluidHTN.Debug;
 using FluidHTN.Factory;
 using FluidHTN.Operators;
 using FluidHTN.PrimitiveTasks;
+using Gdpyr.Sim.AiDebug;
 using Godot;
 
 namespace Gdpyr.Sim.Htn;
@@ -380,6 +381,9 @@ public sealed class GroundContext : BaseContext
 
 	/// <summary>The tick the running operator started on.</summary>
 	public uint GoalStartTick;
+
+	/// <summary>What its planner has done lately, for the spectator's debugger (docs/AI_DEBUG.md §3.3). Null for a context made outside <see cref="GroundPlanning"/>.</summary>
+	public HtnHistory History { get; internal set; }
 
 	public byte Get(GroundFact fact) => GetState((int)fact);
 
@@ -802,6 +806,7 @@ public sealed class GroundPlanning
 		Factory = factory ?? new PooledHtnFactory();
 		Traits = traits;
 		Domain = GroundDomain.Build(Factory);
+		Map = HtnDomainMap.Build(HtnDomainKind.Ground, Domain);
 	}
 
 	public IFactory Factory { get; }
@@ -810,12 +815,17 @@ public sealed class GroundPlanning
 
 	public Domain<GroundContext> Domain { get; }
 
+	/// <summary>The domain numbered for the debugger (docs/AI_DEBUG.md §3.1): what a task index on the wire means.</summary>
+	public HtnDomainMap Map { get; }
+
 	public Planner<GroundContext> Planner { get; } = new();
 
 	public GroundContext CreateContext()
 	{
 		var context = new GroundContext(Factory, Traits);
 		context.Init();
+		context.History = new HtnHistory();
+		context.History.Attach(context.PlannerState, Map, () => context.Tick);
 		return context;
 	}
 
@@ -823,5 +833,9 @@ public sealed class GroundPlanning
 	public void Tick(GroundContext context) => Planner.Tick(Domain, context);
 
 	/// <summary>Drops the plan, stopping its operator: for a bot that has died.</summary>
-	public void Reset(GroundContext context) => Planner.Reset(context);
+	public void Reset(GroundContext context)
+	{
+		Planner.Reset(context);
+		context.History?.RecordReset();
+	}
 }

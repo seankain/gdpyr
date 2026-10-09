@@ -620,4 +620,64 @@ public class LaunchOptionsTests
 		Assert.Equal(LaunchMode.Server, options.Mode);
 		Assert.Equal("box.dem", options.RecordDemo);
 	}
+
+	// ---- spectating and the AI debugger (docs/AI_DEBUG.md) -----------------
+
+	[Theory]
+	[InlineData("--client", "10.0.0.2")]
+	[InlineData("--listen", null)]
+	public void Spectate_GoesWithAnythingThatHasAPersonBehindIt(string mode, string value)
+	{
+		string[] args = value == null ? new[] { mode, "--spectate" } : new[] { mode, value, "--spectate" };
+		LaunchOptions options = LaunchOptions.Parse(args);
+
+		Assert.Null(options.Error);
+		Assert.True(options.Spectate);
+		Assert.Contains("spectating", options.ToString());
+	}
+
+	[Fact]
+	public void Spectate_Offline_IsWatchingTheBots()
+	{
+		LaunchOptions options = LaunchOptions.Parse(new[] { "--spectate" });
+
+		Assert.Null(options.Error);
+		Assert.Equal(LaunchMode.Offline, options.Mode);
+		Assert.True(options.Spectate);
+	}
+
+	[Fact]
+	public void Spectate_IsRefusedWhereNobodyIsWatching()
+	{
+		Assert.Contains("--spectate", LaunchOptions.Parse(new[] { "--server", "--spectate" }).Error);
+		Assert.Contains("--spectate", LaunchOptions.Parse(new[] { "--spectate" }, dedicatedServer: true).Error);
+		Assert.Contains("--spectate", LaunchOptions.Parse(new[] { "--playdemo", "game.demo", "--spectate" }).Error);
+	}
+
+	[Fact]
+	public void AiDebug_IsOnUnlessThisIsADedicatedServerBuild()
+	{
+		Assert.True(LaunchOptions.Parse(new[] { "--server" }).AiDebug);
+		Assert.True(LaunchOptions.Parse(new[] { "--listen" }).AiDebug);
+		Assert.True(LaunchOptions.Offline.AiDebug);
+
+		LaunchOptions box = LaunchOptions.Parse(System.Array.Empty<string>(), dedicatedServer: true);
+		Assert.False(box.AiDebug);
+		Assert.Contains("no ai debug", box.ToString());
+	}
+
+	[Fact]
+	public void AiDebug_FlagsOverrideTheDefault_EitherWay()
+	{
+		Assert.True(LaunchOptions.Parse(new[] { "--ai-debug" }, dedicatedServer: true).AiDebug);
+		Assert.False(LaunchOptions.Parse(new[] { "--listen", "--no-ai-debug" }).AiDebug);
+		Assert.True(LaunchOptions.Parse(new[] { "--ai-debug", "--ai-debug" }).AiDebug);
+	}
+
+	[Fact]
+	public void AiDebug_BothWays_IsAContradiction()
+	{
+		Assert.Contains("--no-ai-debug", LaunchOptions.Parse(new[] { "--ai-debug", "--no-ai-debug" }).Error);
+	}
 }
+

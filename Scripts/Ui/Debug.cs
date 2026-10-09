@@ -365,6 +365,16 @@ public partial class Debug : PanelContainer
 		SetProperty("players", $"{players.PlayerCount}");
 		SetProperty("move state", players.LocalStateName);
 
+		// Spectators are peers with no character (docs/AI_DEBUG.md §2): the authority
+		// counts them, and a spectator says how fresh its debugger's frame is.
+		if (players.SpectatorCount > 0 || players.IsSpectating)
+		{
+			SetProperty("spectators", $"{players.SpectatorCount} watching"
+				+ (players.IsSpectating
+					? $"  (this one; ai frame {(players.AiFrame == null ? "none" : $"tick {players.AiFrame.Tick}")})"
+					: string.Empty));
+		}
+
 		// Only the authority has any; a client's roster does not distinguish them
 		// from anyone else (docs/NETCODE.md §9).
 		if (players.Bots is { Enabled: true } bots)

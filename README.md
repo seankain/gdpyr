@@ -15,6 +15,9 @@ dedicated-server authoritative.
   bots, the RTS units and the computer strategist, on FluidHTN — what it is, what it was checked to
   do, what it costs, and the phases; H0–H5 are built, and since H6 the HTN bots are the default,
   with scenarios of their own and the legacy bots pinned for training
+- [`docs/AI_DEBUG.md`](docs/AI_DEBUG.md) — spectating, and the AI debugger: every bot's, unit's
+  and commander squad's HTN with the running, planned and paused tasks marked on it, as text, a
+  graph and lines in the world
 - [`docs/DEMOS.md`](docs/DEMOS.md) — recording a round and watching it back: the console, the
   journal, and what playback does with it
 - [`docs/LAN.md`](docs/LAN.md) — hosting a room of machines from a checkout, with a dev build
@@ -30,6 +33,8 @@ Scripts/Sim/Demo/ The demo container: header, records, writer, reader — a code
 Scripts/Sim/Htn/ HTN planning: the pooled FluidHTN factory, the contact memories, squad and zone
                 boards and force ratio, the ground bot's domain and its coordinator (H2),
                 the unit domain and its squad census (H3), the strategist's commander (H4)
+Scripts/Sim/AiDebug/ The AI debugger's engine-free half: domain maps, plan traces and history,
+                the text and graph renderers, and the spectator's wire format
 Scripts/Fps/    Character controller, movement FSM, input sampler, weapons, viewmodel
 Scripts/Rts/    Units, barracks, orders, the strategist camera and selection
 Scripts/Match/  CombatManager (the round), MatchState, TeamService
@@ -37,6 +42,7 @@ Scripts/Bots/   Computer players: the roster director, the ground pilot, the str
 Scripts/Agent/  The agent control channel: listener, sessions, seats, observations, feature planes
 Scripts/Ui/     Main menu and server browser, role select, pause menu, reticle, combat HUD, RTS HUD,
                 net debug HUD, the `~` console and the demo camera
+Scripts/Ui/Spectator/ The spectator's camera, and the AI debugger's panel, graph and world overlay
 Scenes/         Main menu, greybox map, player, weapon, pause menu
 Units/          UnitDefinition resources: three fighting tiers, the builder and the supply truck
 Structures/     StructureDefinition resources: pillbox, sandbag wall, sniper tower
@@ -113,6 +119,13 @@ wounded squad, or a bot's wounded unit, to the nearest supply to heal. The debug
 `unit plan` the units on each task, `unit ms` what the unit pass costs a tick, `resupply` the units
 healing and the health given back this round (under either AI), and `commander` each computer
 strategist's squads and what each is doing.
+
+Two more watch rather than play ([`docs/AI_DEBUG.md`](docs/AI_DEBUG.md)):
+
+| Flag | Effect |
+|---|---|
+| `--spectate` | join as a spectator: no character, a free camera, and the AI debugger. Alone, an offline round of bots to watch |
+| `--ai-debug`, `--no-ai-debug` | whether this authority sends its bots' plans to spectators; on except in a dedicated-server export |
 
 Two more record a round or watch one back ([`docs/DEMOS.md`](docs/DEMOS.md)):
 
@@ -230,6 +243,19 @@ round full of bots starts without waiting for anybody.
 
 The debug HUD below counts them: `bots: 5/6 ground  1/1 strategist` is five ground bots against a
 target of six, and one strategist bot against a target of one.
+
+## Watching the bots think
+
+**Watch the bots** on the main menu — or `--spectate`, or **Spectate (F3)** on the role menu, or
+`F3` mid-round — takes you off the field with no character and a free camera (right-drag to look,
+WASD to fly). Bots fill both sides for a spectator as they would for a player. Click a bot or a
+unit, and the panel shows its HTN: the task running (`>>`), the tasks planned behind it (`#1`,
+`#2`), those behind a pause (`||`), which conditions hold now (`+`) and which do not (`-`), its
+facts, and the last sixteen things its planner did and why; in the world, a line to every place
+its plan knows about. `F6` does the same for the computer strategist's commander, squad by squad;
+`F5` labels every agent's task at once; `F7` draws the tree as a graph. On the console,
+`ai_plan bot 3`, `ai_squads` and `ai_tree ground` print the same as text. The whole of it, and what
+a server sends a spectator, is [`docs/AI_DEBUG.md`](docs/AI_DEBUG.md).
 
 Press `` ` `` on a client for the net debug HUD — RTT, clock lead, input buffer depth, mispredictions
 per second, prediction error, bytes in/out, server frame time. A headless server has no HUD and logs

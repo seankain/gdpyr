@@ -101,7 +101,20 @@ public partial class CombatHud : CanvasLayer
 	{
 		if (combat == null)
 		{
-			_status.Text = "no character";
+			// A spectator has no character by design (docs/AI_DEBUG.md §2): the round
+			// clock is still worth a corner, and the rest of the screen is the debugger's.
+			bool spectating = Net.PlayerManager.Instance is { IsSpectating: true };
+			_status.Text = spectating ? "spectating  ·  F3 to play" : "no character";
+			_ammo.Text = string.Empty;
+			_notice.Text = string.Empty;
+			_prompt.Text = string.Empty;
+			if (spectating)
+			{
+				_round.Text = match.Phase == RoundPhase.Live
+					? $"tickets {match.GroundTickets}   {Clock(match.SecondsRemaining(tick))}"
+					: match.Phase.ToString().ToLowerInvariant();
+			}
+
 			return;
 		}
 

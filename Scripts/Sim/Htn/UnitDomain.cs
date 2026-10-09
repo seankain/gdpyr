@@ -6,6 +6,7 @@ using FluidHTN.Debug;
 using FluidHTN.Factory;
 using FluidHTN.Operators;
 using FluidHTN.PrimitiveTasks;
+using Gdpyr.Sim.AiDebug;
 using Godot;
 
 namespace Gdpyr.Sim.Htn;
@@ -411,6 +412,9 @@ public sealed class UnitContext : BaseContext
 
 	/// <summary>A wait ran out: this advance no longer waits for its squad.</summary>
 	public bool PaceGivenUp;
+
+	/// <summary>What its planner has done lately, for the spectator's debugger (docs/AI_DEBUG.md §3.3). Null for a context made outside <see cref="UnitPlanning"/>.</summary>
+	public HtnHistory History { get; internal set; }
 
 	public byte Get(UnitFact fact) => GetState((int)fact);
 
@@ -916,6 +920,7 @@ public sealed class UnitPlanning
 		Factory = factory ?? new PooledHtnFactory();
 		Traits = traits;
 		Domain = UnitDomain.Build(Factory);
+		Map = HtnDomainMap.Build(HtnDomainKind.Unit, Domain);
 	}
 
 	public IFactory Factory { get; }
@@ -924,12 +929,17 @@ public sealed class UnitPlanning
 
 	public Domain<UnitContext> Domain { get; }
 
+	/// <summary>The domain numbered for the debugger (docs/AI_DEBUG.md §3.1): what a task index on the wire means.</summary>
+	public HtnDomainMap Map { get; }
+
 	public Planner<UnitContext> Planner { get; } = new();
 
 	public UnitContext CreateContext(in UnitTraits unitTraits)
 	{
 		var context = new UnitContext(Factory, Traits, unitTraits);
 		context.Init();
+		context.History = new HtnHistory();
+		context.History.Attach(context.PlannerState, Map, () => context.Tick);
 		return context;
 	}
 
@@ -937,5 +947,9 @@ public sealed class UnitPlanning
 	public void Tick(UnitContext context) => Planner.Tick(Domain, context);
 
 	/// <summary>Drops the plan, stopping its operator: for a new order, or a unit that has died.</summary>
-	public void Reset(UnitContext context) => Planner.Reset(context);
+	public void Reset(UnitContext context)
+	{
+		Planner.Reset(context);
+		context.History?.RecordReset();
+	}
 }

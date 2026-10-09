@@ -118,6 +118,36 @@ public sealed class BotDirector
 
 	public int StrategistBots => _commanders.Count;
 
+	// ---- for the spectator's debugger (docs/AI_DEBUG.md §6) ----------------
+
+	/// <summary>The ground domain's planning, under htn; null under legacy.</summary>
+	public GroundPlanning GroundPlanning => _groundPlanning;
+
+	/// <summary>The commander squads' planning, under htn; null under legacy.</summary>
+	public CommanderPlanning CommanderPlanning => _commanderPlanning;
+
+	/// <summary>The ground bot driving <paramref name="peerId"/>, or null for a person or a strategist.</summary>
+	public BotPilot PilotOf(int peerId) => _pilots.GetValueOrDefault(peerId);
+
+	/// <summary>The computer strategist in <paramref name="peerId"/>'s seat, or null.</summary>
+	public BotStrategist StrategistOf(int peerId) => _commanders.GetValueOrDefault(peerId);
+
+	/// <summary>Every ground bot, in peer-id order so that what a spectator is sent does not shuffle.</summary>
+	public void CollectPilots(List<BotPilot> into)
+	{
+		into.Clear();
+		into.AddRange(_pilots.Values);
+		into.Sort((a, b) => a.PeerId.CompareTo(b.PeerId));
+	}
+
+	/// <summary>Every computer strategist, in peer-id order.</summary>
+	public void CollectStrategists(List<BotStrategist> into)
+	{
+		into.Clear();
+		into.AddRange(_commanders.Values);
+		into.Sort((a, b) => a.PeerId.CompareTo(b.PeerId));
+	}
+
 	public int Count => _pilots.Count + _commanders.Count;
 
 	/// <summary>
@@ -457,8 +487,11 @@ public sealed class BotDirector
 
 		Census(combat, out int groundHumans, out int strategistHumans, out int reserved);
 
+		// Spectators are somebody to run the bots for, and nobody a seat is kept for
+		// (docs/AI_DEBUG.md §2).
 		BotFill want = BotFillPolicy.Plan(new BotDemand(GroundTarget, StrategistTarget, groundHumans,
-			strategistHumans, SnapshotCodec.MaxPlayers - reserved, TeamService.MaxStrategists));
+			strategistHumans, SnapshotCodec.MaxPlayers - reserved, TeamService.MaxStrategists,
+			players.SpectatorCount));
 
 		// Seats an external policy is sitting in are counted as participants in the
 		// census, not as backfill, so they come off both sides of the comparison:

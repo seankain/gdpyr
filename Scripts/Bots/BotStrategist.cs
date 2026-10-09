@@ -115,6 +115,9 @@ public sealed class BotStrategist
 	/// <summary>The commander, for the debug HUD; null under legacy.</summary>
 	public Commander Commander => _commander;
 
+	/// <summary>The zones its last decision was made over, for the spectator's debugger; null under legacy.</summary>
+	public ZoneBoard Zones => _zones;
+
 	/// <summary>Units it has ordered forward at the last decision. For the debug HUD.</summary>
 	public int AssaultCount { get; private set; }
 

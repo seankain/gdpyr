@@ -170,6 +170,12 @@ public sealed class BotPilot
 	/// <summary>What it is shooting at, as a unit id. 0 for nothing, or for a structure. For the debug HUD.</summary>
 	public ushort TargetUnitId => OwnerId.UnitOf(_targetOwnerId);
 
+	/// <summary>What it is shooting at, as an owner id; 0 for nothing. For the spectator's debugger.</summary>
+	public int TargetOwnerId => _targetOwnerId;
+
+	/// <summary>Its planning context, for the spectator's debugger (docs/AI_DEBUG.md §6); null under legacy. Read it, never write it.</summary>
+	public GroundContext Plan => _plan;
+
 	/// <summary>
 	/// One tick of intent. Called by <see cref="Net.PlayerManager"/> in place of
 	/// popping the jitter buffer this bot does not have.
