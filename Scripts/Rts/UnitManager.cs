@@ -252,6 +252,7 @@ public partial class UnitManager : Node
 		ResolveAi();
 
 		long started = Stopwatch.GetTimestamp();
+		SyncStructureCover();
 		CollectSupplies();
 		if (_planning != null)
 		{
@@ -330,6 +331,7 @@ public partial class UnitManager : Node
 		if (server)
 		{
 			BakeNavigation();
+			CollectCover();
 		}
 	}
 
@@ -629,6 +631,7 @@ public partial class UnitManager : Node
 				&& UnitBrain.CanAcquire(eye.DistanceTo(named.Character.EyePosition), unit.Traits))
 			{
 				unit.TargetOwnerId = unit.Order.TargetOwnerId;
+				unit.AimsHigh = AimsHigh(unit, eye, named, eyeClear: false);
 				return;
 			}
 		}
@@ -646,6 +649,7 @@ public partial class UnitManager : Node
 			if (HasLineOfSight(eye, focus.Character.EyePosition))
 			{
 				unit.TargetOwnerId = OwnerId.ForPeer(focused);
+				unit.AimsHigh = AimsHigh(unit, eye, focus, eyeClear: true);
 				return;
 			}
 
@@ -680,7 +684,18 @@ public partial class UnitManager : Node
 		}
 
 		unit.TargetOwnerId = best != null ? OwnerId.ForPeer(best.PeerId) : OwnerId.None;
+		unit.AimsHigh = best != null && AimsHigh(unit, eye, best, eyeClear: true);
 	}
+
+	/// <summary>
+	/// Whether a planning unit should aim at its target's head rather than its chest
+	/// (docs/COVER.md §3): the chest is behind something and the head is not. Under
+	/// <c>--bot-ai htn</c> only — legacy aims where it always has. One ray on the
+	/// scan, two when the head has not been looked at yet.
+	/// </summary>
+	private bool AimsHigh(Unit unit, Vector3 eye, PlayerCombat target, bool eyeClear) =>
+		unit.Plan != null && !HasLineOfSight(eye, target.Character.Hitbox.Center)
+		&& (eyeClear || HasLineOfSight(eye, target.Character.EyePosition));
 
 	/// <summary>
 	/// Where this unit's current target is right now, if it still has one worth
@@ -710,8 +725,9 @@ public partial class UnitManager : Node
 		}
 
 		// Chest rather than eye: the centre of the capsule is what a hit test is most
-		// likely to agree with.
-		point = target.Character.Hitbox.Center;
+		// likely to agree with — unless the chest is behind cover and the head is not
+		// (docs/COVER.md §3).
+		point = unit.AimsHigh ? target.Character.EyePosition : target.Character.Hitbox.Center;
 		velocity = target.Character.Velocity;
 		distance = unit.EyePosition.DistanceTo(point);
 
@@ -827,6 +843,9 @@ public partial class UnitManager : Node
 		bool threat = false;
 		float threatMeters = traits.ThreatBearingMeters;
 		Vector3 threatPoint = Vector3.Zero;
+		float nearestMeters = sensor;
+		bool nearest = false;
+		Vector3 nearestPoint = Vector3.Zero;
 		for (int i = 0; memory != null && i < memory.Count; i++)
 		{
 			if (!memory.IsRemembered(i, tick))
@@ -836,7 +855,15 @@ public partial class UnitManager : Node
 
 			KnownContact known = memory.At(i);
 			float fromAnchor = order.Anchor.DistanceTo(known.Position);
-			sideKnown |= fromAnchor <= sensor || at.DistanceTo(known.Position) <= sensor;
+			float fromUnit = at.DistanceTo(known.Position);
+			sideKnown |= fromAnchor <= sensor || fromUnit <= sensor;
+
+			if (fromUnit <= nearestMeters)
+			{
+				nearest = true;
+				nearestMeters = fromUnit;
+				nearestPoint = known.Position;
+			}
 
 			if (attackNamed && known.OwnerId == order.TargetOwnerId)
 			{
@@ -899,6 +926,7 @@ public partial class UnitManager : Node
 		// Post k of n on a ring round the anchor, the first facing the threat: the
 		// nearest remembered contact, else the ground force's spawns.
 		plan.HasPost = order.Kind == OrderKind.Defend;
+		float ringMeters = 0f;
 		if (plan.HasPost)
 		{
 			int count = hasSquad ? _census.AliveIn(squad) : 1;
@@ -908,7 +936,11 @@ public partial class UnitManager : Node
 				unit.Traits.LeashRadiusMeters * traits.PostLeashShare);
 			plan.PostPoint = DefendPosts.Post(order.Anchor, rank, count, DefendPosts.Bearing(order.Anchor, towards),
 				radius);
+			ringMeters = radius;
 		}
+
+		bool hasCover = SenseCover(unit, plan, order, nearest, nearestPoint,
+			threat ? threatPoint : PlayerManager.Instance?.SpawnCentroid ?? order.Anchor, ringMeters);
 
 		plan.FallbackPoint = plan.HasStaging ? plan.StagingPoint
 			: TryNearestRally(unit.Team, at, out Vector3 rally) ? rally
@@ -934,8 +966,95 @@ public partial class UnitManager : Node
 			FriendNear = around.Friends > 0,
 			HasSupply = heals,
 			SupplyEdgeMeters = supplyEdge,
+			HasCover = hasCover,
+			CoverHides = hasCover,
 		});
 	}
+
+	/// <summary>
+	/// The unit's cover, on its scan (docs/COVER.md §6), from what it is doing: a
+	/// builder hides from the nearest contact the side remembers, behind anything; a
+	/// unit with a target takes a low wall it can fire over at it, inside its leash
+	/// when it has one; a unit on a defended ring with nothing to shoot moves its post
+	/// to a spot beside it with a wall between it and the ring's threat. Returns true
+	/// for a spot to fight or hide from — what the <see cref="UnitFact.Cover"/> fact
+	/// is about; a post behind cover is just where its post is.
+	/// </summary>
+	private bool SenseCover(Unit unit, UnitContext plan, in UnitOrder order, bool nearest, Vector3 nearestPoint,
+		Vector3 ringThreat, float ringMeters)
+	{
+		plan.HasCoverPoint = false;
+		if (Cover.Count == 0 || (unit.Definition?.IsSupply ?? false))
+		{
+			unit.HasCoverSpot = false;
+			return false;
+		}
+
+		CoverSpot spot;
+		if (order.Kind == OrderKind.Build)
+		{
+			if (nearest && UpdateUnitCover(unit, UnitCoverQuery(unit, nearestPoint, mustFire: false,
+				BuilderCoverSearchMeters), out spot))
+			{
+				return Use(spot);
+			}
+		}
+		else if (order.Kind is OrderKind.Attack or OrderKind.Defend or OrderKind.None
+			&& TryTargetFeet(unit, out Vector3 target))
+		{
+			if (UpdateUnitCover(unit, UnitCoverQuery(unit, target, mustFire: true, UnitCoverSearchMeters), out spot)
+				&& InLeash(order, spot.Position, unit))
+			{
+				return Use(spot);
+			}
+		}
+		else if (plan.HasPost && order.Kind == OrderKind.Defend)
+		{
+			// Anywhere on or just outside the ring, nearest its own post first, against
+			// the ring's threat however far off it is — a ring faces the spawns before
+			// anything has been seen. Across the ring, so that a wall laid on the threat's
+			// side is found from the posts behind it too (docs/COVER.md §7).
+			CoverQuery query = UnitCoverQuery(unit, ringThreat, mustFire: true,
+				(2f * ringMeters) + PostCoverSearchMeters);
+			query.From = plan.PostPoint;
+			query.MinThreatMeters = 0f;
+			query.MaxThreatMeters = 0f;
+			if (UpdateUnitCover(unit, query, out spot) && InLeash(order, spot.Position, unit))
+			{
+				plan.PostPoint = spot.Position;
+				return false;
+			}
+		}
+
+		unit.HasCoverSpot = false;
+		return false;
+
+		bool Use(in CoverSpot found)
+		{
+			plan.HasCoverPoint = true;
+			plan.CoverPoint = found.Position;
+			return true;
+		}
+	}
+
+	/// <summary>Where its target's feet are, for a player it is shooting at.</summary>
+	private static bool TryTargetFeet(Unit unit, out Vector3 feet)
+	{
+		feet = Vector3.Zero;
+		if (!OwnerId.IsPeer(unit.TargetOwnerId)
+			|| CombatManager.Instance?.Find(OwnerId.PeerOf(unit.TargetOwnerId)) is not { Character: not null } target)
+		{
+			return false;
+		}
+
+		feet = target.Character.SimPosition;
+		return true;
+	}
+
+	/// <summary>A spot inside the leash of a unit that has one: defending or holding, as <see cref="UnitBrain.InLeash"/> reads it.</summary>
+	private static bool InLeash(in UnitOrder order, Vector3 spot, Unit unit) =>
+		order.Kind is not (OrderKind.Defend or OrderKind.None)
+		|| Flat(order.Anchor, spot) <= unit.Traits.LeashRadiusMeters;
 
 	/// <summary>
 	/// One tick of the unit domain: the order, position and target into the context,
@@ -1043,7 +1162,7 @@ public partial class UnitManager : Node
 			return string.Empty;
 		}
 
-		Span<int> goals = stackalloc int[(int)UnitGoal.Obey + 1];
+		Span<int> goals = stackalloc int[(int)UnitGoal.HoldCover + 1];
 		int waiting = 0;
 		for (int i = 0; i < _ordered.Count; i++)
 		{

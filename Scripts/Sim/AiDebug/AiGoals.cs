@@ -38,7 +38,8 @@ public static class AiGoals
 			GroundGoal.LeaveDefences or GroundGoal.FallBack => AiTaskFamily.Retreat,
 			GroundGoal.Reload or GroundGoal.PathToLocker or GroundGoal.UseLocker => AiTaskFamily.Resupply,
 			GroundGoal.EngageArmour or GroundGoal.TakeFocusTarget or GroundGoal.AdvanceWithBuddy
-				or GroundGoal.Engage or GroundGoal.InvestigateGhost => AiTaskFamily.Attack,
+				or GroundGoal.Engage or GroundGoal.InvestigateGhost or GroundGoal.TakeCover
+				or GroundGoal.HoldCover => AiTaskFamily.Attack,
 			GroundGoal.TakeNode or GroundGoal.HoldNode => AiTaskFamily.DefendZone,
 			GroundGoal.SweepZone or GroundGoal.Standoff => AiTaskFamily.Recon,
 			_ => AiTaskFamily.None,
@@ -48,7 +49,8 @@ public static class AiGoals
 			UnitGoal.Retreat => AiTaskFamily.Retreat,
 			UnitGoal.Resupply => AiTaskFamily.Resupply,
 			UnitGoal.TakeCover or UnitGoal.Work => AiTaskFamily.Build,
-			UnitGoal.WaitForSquad or UnitGoal.EngageFocus or UnitGoal.Support or UnitGoal.Advance => AiTaskFamily.Attack,
+			UnitGoal.WaitForSquad or UnitGoal.EngageFocus or UnitGoal.Support or UnitGoal.Advance
+				or UnitGoal.HoldCover => AiTaskFamily.Attack,
 			UnitGoal.EngageInLeash or UnitGoal.AnswerCall or UnitGoal.HoldPost => AiTaskFamily.DefendZone,
 			UnitGoal.Patrol => AiTaskFamily.Recon,
 			UnitGoal.Obey => AiTaskFamily.Obey,

@@ -15,6 +15,9 @@ dedicated-server authoritative.
   bots, the RTS units and the computer strategist, on FluidHTN — what it is, what it was checked to
   do, what it costs, and the phases; H0–H5 are built, and since H6 the HTN bots are the default,
   with scenarios of their own and the legacy bots pinned for training
+- [`docs/COVER.md`](docs/COVER.md) — cover: the low walls and blocks on the map, where the HTN
+  bots and units stand to fight from behind them, aiming at what shows over a wall, and the
+  computer strategist's builder laying sandbags in front of the squads it keeps holding ground
 - [`docs/AI_DEBUG.md`](docs/AI_DEBUG.md) — spectating, and the AI debugger: every bot's, unit's
   and commander squad's HTN with the running, planned and paused tasks marked on it, as text, a
   graph and lines in the world
@@ -185,6 +188,11 @@ ground force is standing where it goes. Right-clicking builders onto one of your
 structures finishes or mends it. Finished, it is solid for everybody: it stops bullets, bodies and
 sight lines, and a crouched player behind a sandbag wall is hidden from a rifleman in front of it.
 
+**Cover** ([`docs/COVER.md`](docs/COVER.md)): the map has 18 low walls, 1.2 m high, that a
+standing body fires over and a crouched one hides behind, and 8 blocks nothing sees through. A
+finished sandbag wall is cover in the same way. A map marks its cover by putting `CSGBox3D` nodes
+in the `cover` group.
+
 **Units heal** ([`docs/HTN_BOTS.md`](docs/HTN_BOTS.md) §8, D2) inside a barracks' red ring and inside
 the green ring round a **supply truck** (120 points, `8`), once nothing has hit them for three
 seconds — a rifleman at half health is whole again ten seconds later. The truck is soft, carries a
@@ -234,12 +242,19 @@ round full of bots starts without waiting for anybody.
   They are deliberately mediocre shots — a 3° aim error held for a third of a second at a time, and
   a 200 ms reaction. `BotTraits.Default` in `Scripts/Sim/BotBrain.cs` is the whole difficulty dial.
   Six carry two rifles, two DMRs and two launchers. Only the launchers take on a tank, a pillbox or a
-  tower, and they hold fire while the blast would reach a teammate or themselves.
+  tower, and they hold fire while the blast would reach a teammate or themselves. Under the HTN
+  bots, one with a low wall within 15 m of a fight walks to the side of it away from the enemy,
+  fights from there, and crouches behind it to reload. A unit whose chest is behind a wall is
+  shot at by its head.
 - **In the strategist's chair** one queues infantry at every barracks while the points last, keeps
   four units home defending, and attack-moves the rest at whatever its units have actually seen —
   it gets no free knowledge of where anybody is. Once it has four fighting units it buys a builder,
   and fortifies the resource nodes with a pillbox, a wall in front of it and a tower behind, facing
   the ground force's spawn. Ground bots shoot a pillbox or a tower only when no unit is in sight.
+  Under the HTN commander its builder first lays sandbags across the bearing its garrison, and any
+  squad reinforcing a zone, faces: up to two walls, a wall for every three units without a spot.
+  Its units fight from behind low walls, move their posts behind them, and a builder that is
+  shot at hides behind cover.
 
 The debug HUD below counts them: `bots: 5/6 ground  1/1 strategist` is five ground bots against a
 target of six, and one strategist bot against a target of one.

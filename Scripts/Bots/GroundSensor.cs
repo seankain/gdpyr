@@ -76,8 +76,13 @@ public static class GroundSensor
 	/// cannot see, or because it is bad" is otherwise unanswerable, and every
 	/// observation produced under it is labelled as cheating.
 	/// </param>
+	/// <param name="exposedHeads">
+	/// A unit whose middle is behind something is still seen by its head when that
+	/// is clear (docs/COVER.md §3): the HTN bots' scan. Off for the legacy bots and
+	/// for an agent's observation, which see what they always have.
+	/// </param>
 	public static int Scan(fps_controller character, int peerId, Team team, float sensorRadiusMeters,
-		Span<GroundContact> into, bool ignoreLineOfSight = false)
+		Span<GroundContact> into, bool ignoreLineOfSight = false, bool exposedHeads = false)
 	{
 		if (character == null || !GodotObject.IsInstanceValid(character) || into.Length == 0)
 		{
@@ -128,7 +133,8 @@ public static class GroundSensor
 
 			Vector3 at = unit.Hitbox.Center;
 			float distance = eye.DistanceTo(at);
-			if (distance > sensorRadiusMeters || !HasLineOfSight(space, eye, at))
+			if (distance > sensorRadiusMeters
+				|| (!HasLineOfSight(space, eye, at) && !(exposedHeads && HasLineOfSight(space, eye, unit.EyePosition))))
 			{
 				continue;
 			}

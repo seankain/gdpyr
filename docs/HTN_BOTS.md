@@ -641,6 +641,15 @@ by the probe rounds in §6:
 | Supply role | Trucks are a squad of their own, `CommandRole.Supply`: never the garrison, the scout, an escort or an assault; a truck with no slot is left alone. Its standing task, `CommandTask.Supply`, plans `Station`: a move to where the trucks should stand — with a depleted squad that healing will restore and that is out of its fight, whether it is coming to them to heal or still holding a zone; else the staging point of the nearest attack, and never nearer its target than the 60 m a staging point is; else 40 m behind the nearest squad defending a zone away from home; else in reserve. Never where the side remembers an enemy within 40 m: the next candidate, else reserve. Retreat applies to it as to any squad. | A move, not an attack-move: a truck's job is to be there. The staging point is where a strike's wounded units are nearest a source they can reach within §5.2's 60 m. The distance and enemy rules came out of the probe round (§6, H5): a squad already inside 72 m of its target stages where it stands, in the fight, and a truck sent there, or to a squad that had only just broken contact, was shot. |
 | Refill | A depleted squad is **healable** when its units at full health would be worth the 70 % that ends Depleted. A healable one moves to the nearest supply source — home, or any truck, whoever's — and stays there until healing ends Depleted, which ends the task, so it goes back to work as the same squad. One that is not, or that has waited 60 s (`RefillHealTicks`), goes home and is merged as in H4. | A squad that lost half its units cannot heal its way back and still needs merging; one that lost none should not be broken up. The time limit is P4's give-up. |
 
+**Cover, after H6** ([`COVER.md`](COVER.md)). The map has cover boxes, and all three domains use
+them. §5.1 gains a `Cover` fact and a "fight from cover" method in Attack, above "press with allies":
+`TakeCover` → `HoldCover`, behind a low wall from the unit it is fighting. §5.2 gains a `Cover` fact,
+"engage from cover" (`HoldCover`) above "engage focus" and "engage in leash", and "hide behind
+cover" above Build's "take cover". A defended ring's posts move behind a wall when there is one. The
+commander's builder lays sandbags for the garrison and every squad reinforcing a zone before it
+fortifies a node (`DigIn`, COVER.md §7). Under `htn` a bot or unit whose target's middle is hidden
+aims at its head (COVER.md §3). Legacy is unchanged (D5).
+
 ### 5.4 The five tasks at each layer
 
 | Task | Ground bot | RTS unit | Strategist commander |

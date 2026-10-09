@@ -114,6 +114,12 @@ public sealed class BotDirector
 	public ContactMemory GroundContacts { get; } = new(SimConfig.MaxUnits + SimConfig.MaxStructures,
 		BotRoster.MaxBots, BotPilot.ScanIntervalTicks);
 
+	/// <summary>
+	/// The spots behind cover the ground bots have taken, by roster slot, so two do
+	/// not walk to the same one (docs/COVER.md §5). Under <c>--bot-ai htn</c> only.
+	/// </summary>
+	public CoverClaims GroundCover { get; } = new(BotRoster.MaxBots);
+
 	public int GroundBots => _pilots.Count;
 
 	public int StrategistBots => _commanders.Count;
@@ -372,7 +378,7 @@ public sealed class BotDirector
 			return string.Empty;
 		}
 
-		Span<int> goals = stackalloc int[(int)GroundGoal.Standoff + 1];
+		Span<int> goals = stackalloc int[(int)GroundGoal.HoldCover + 1];
 		int deniers = 0;
 		int runners = 0;
 		int sweepers = 0;
@@ -641,7 +647,8 @@ public sealed class BotDirector
 		else
 		{
 			Equip(combat, peerId);
-			_pilots[peerId] = new BotPilot(peerId, character, BotTraits.Default, GroundContacts, _groundPlanning);
+			_pilots[peerId] = new BotPilot(peerId, character, BotTraits.Default, GroundContacts, _groundPlanning,
+				GroundCover);
 		}
 
 		GD.Print($"[bots] {BotRoster.NameOf(peerId)} joined as {team}");

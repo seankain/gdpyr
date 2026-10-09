@@ -71,6 +71,9 @@ public sealed class BotPilot
 	/// </summary>
 	private const float BlastMarginMeters = 2f;
 
+	/// <summary>Inside this of its goal a bot walks straight at it rather than along the path.</summary>
+	private const float FinalApproachMeters = 1.2f;
+
 	/// <summary>Metres the destination must move before the navigation agent is asked to re-path.</summary>
 	private const float RepathThresholdMeters = 1.5f;
 
@@ -98,6 +101,15 @@ public sealed class BotPilot
 
 	/// <summary>Friends for the <see cref="Neighbourhood"/> survey, reused by every scan.</summary>
 	private readonly Neighbour[] _friends;
+
+	/// <summary>The spots behind cover the team's bots have taken (<see cref="BotDirector.GroundCover"/>); null under legacy.</summary>
+	private readonly CoverClaims _coverClaims;
+
+	/// <summary>The other bots' spots, gathered for each cover search. Reused.</summary>
+	private readonly Vector3[] _claimed = new Vector3[BotRoster.MaxBots];
+
+	/// <summary>Whether, at the last scan, the box beside its spot hid it from the fight (docs/COVER.md §5).</summary>
+	private bool _coverHides;
 
 	/// <summary>The node the coordinator gave it, by economy index; -1 for none.</summary>
 	private int _zone = -1;
@@ -133,13 +145,14 @@ public sealed class BotPilot
 	private bool _wantedToMove;
 
 	public BotPilot(int peerId, fps_controller character, in BotTraits traits, ContactMemory teamContacts,
-		GroundPlanning planning = null)
+		GroundPlanning planning = null, CoverClaims coverClaims = null)
 	{
 		_peerId = peerId;
 		_character = character;
 		_traits = traits;
 		_teamContacts = teamContacts;
 		_planning = planning;
+		_coverClaims = planning != null ? coverClaims : null;
 
 		if (planning != null)
 		{
@@ -201,6 +214,7 @@ public sealed class BotPilot
 				_planning.Reset(_plan);
 				_planWasAlive = false;
 				_rescan = true;
+				LoseCover();
 			}
 
 			return InputFrame.Neutral(tick, character.Yaw, character.Pitch);
@@ -222,6 +236,7 @@ public sealed class BotPilot
 			_planning.Reset(_plan);
 			_planWasAlive = false;
 			_rescan = true;
+			LoseCover();
 		}
 
 		bool scheduled = tick >= _nextScanTick;
@@ -247,14 +262,14 @@ public sealed class BotPilot
 
 		Vector3 eye = character.EyePosition;
 		bool hasTarget = TryResolveTarget(eye, combat, out Vector3 aimDirection, out Vector3 targetPosition,
-			out float targetDistance);
+			out float targetDistance, out bool sightChecked, out bool inSight);
 
 		if (!hasTarget)
 		{
 			_targetOwnerId = OwnerId.None;
 		}
 
-		bool visible = hasTarget && TargetInSight(eye, targetPosition)
+		bool visible = hasTarget && (sightChecked ? inSight : TargetInSight(eye, targetPosition))
 			&& !FriendlyInLineOfFire(eye, targetPosition, combat.Team);
 
 		// A launcher's round goes off wherever it lands, and a blast spares nobody on
@@ -269,9 +284,11 @@ public sealed class BotPilot
 		bool hasGoal;
 		bool keepMoving = false;
 		bool use = false;
+		bool inCover = false;
 		if (_plan != null)
 		{
-			hasGoal = Planned(character, explosive, tick, hasTarget, targetPosition, out goal, out keepMoving, out use);
+			hasGoal = Planned(character, explosive, tick, hasTarget, targetPosition, out goal, out keepMoving, out use,
+				out inCover);
 		}
 		else if (hasTarget)
 		{
@@ -315,7 +332,9 @@ public sealed class BotPilot
 			semiAutomatic: stats.Mode != FireMode.Auto,
 			holdFire: holdFire,
 			keepMoving: keepMoving,
-			use: use);
+			use: use,
+			inCover: inCover,
+			reloading: combat.Equipped.IsReloading);
 
 		_wantedToMove = hasGoal || (hasTarget && visible);
 
@@ -325,6 +344,8 @@ public sealed class BotPilot
 	/// <summary>Drops the navigation agent when the bot leaves. The character node is freed with it.</summary>
 	public void Dispose()
 	{
+		LoseCover();
+
 		if (_agent != null && GodotObject.IsInstanceValid(_agent))
 		{
 			_agent.QueueFree();
@@ -346,7 +367,8 @@ public sealed class BotPilot
 	/// </summary>
 	private void AcquireTarget(fps_controller character, Team team, bool explosive, uint tick)
 	{
-		_contactCount = GroundSensor.Scan(character, _peerId, team, _traits.SensorRadiusMeters, _contacts);
+		_contactCount = GroundSensor.Scan(character, _peerId, team, _traits.SensorRadiusMeters, _contacts,
+			exposedHeads: _plan != null);
 		Report(team, tick);
 		int best = GroundSensor.NearestHostileTarget(_contacts.AsSpan(0, _contactCount), team, explosive);
 
@@ -429,15 +451,32 @@ public sealed class BotPilot
 	/// unlike acquisition, because a target's position is the thing being aimed at.
 	/// </summary>
 	private bool TryResolveTarget(Vector3 eye, PlayerCombat combat, out Vector3 aimDirection,
-		out Vector3 targetPosition, out float distance)
+		out Vector3 targetPosition, out float distance, out bool sightChecked, out bool inSight)
 	{
 		aimDirection = Vector3.Zero;
 		targetPosition = Vector3.Zero;
 		distance = float.MaxValue;
+		sightChecked = false;
+		inSight = false;
 
-		if (_targetOwnerId == OwnerId.None || !TryTargetState(out targetPosition, out Vector3 targetVelocity))
+		if (_targetOwnerId == OwnerId.None
+			|| !TryTargetState(out targetPosition, out Vector3 targetVelocity, out Vector3 head))
 		{
 			return false;
+		}
+
+		// A unit behind a low wall shows its head over it (docs/COVER.md §3): under
+		// the plan, a bot whose line to the middle is blocked aims at the head when
+		// that is clear. One ray more, and only while the middle is hidden.
+		if (_plan != null && OwnerId.IsUnit(_targetOwnerId))
+		{
+			sightChecked = true;
+			inSight = HasLineOfSight(eye, targetPosition);
+			if (!inSight && HasLineOfSight(eye, head))
+			{
+				inSight = true;
+				targetPosition = head;
+			}
 		}
 
 		distance = eye.DistanceTo(targetPosition);
@@ -472,10 +511,11 @@ public sealed class BotPilot
 	/// Where the current target is and how fast it is going: a unit's capsule, or
 	/// the middle of what stands of a structure, which is not going anywhere.
 	/// </summary>
-	private bool TryTargetState(out Vector3 position, out Vector3 velocity)
+	private bool TryTargetState(out Vector3 position, out Vector3 velocity, out Vector3 head)
 	{
 		position = Vector3.Zero;
 		velocity = Vector3.Zero;
+		head = Vector3.Zero;
 
 		UnitManager units = UnitManager.Instance;
 		if (units == null)
@@ -492,6 +532,7 @@ public sealed class BotPilot
 			}
 
 			position = structure.AimPoint;
+			head = position;
 			return true;
 		}
 
@@ -502,6 +543,7 @@ public sealed class BotPilot
 		}
 
 		position = unit.Hitbox.Center;
+		head = unit.EyePosition;
 		velocity = unit.Velocity;
 		return true;
 	}
@@ -529,7 +571,7 @@ public sealed class BotPilot
 	/// into where to walk, whether to keep walking, and whether to tap use.
 	/// </summary>
 	private bool Planned(fps_controller character, bool explosive, uint tick, bool hasTarget, Vector3 targetPosition,
-		out Vector3 goal, out bool keepMoving, out bool use)
+		out Vector3 goal, out bool keepMoving, out bool use, out bool inCover)
 	{
 		GroundContext plan = _plan;
 		plan.Tick = tick;
@@ -540,11 +582,17 @@ public sealed class BotPilot
 		// The hands are known every tick, not only on a scan: a locker swap lands
 		// between scans, and the task after it is planned on what it produced.
 		plan.Sense(GroundFact.Armed, (byte)(explosive ? Arms.Explosive : Arms.SmallArms));
+
+		// And whether it has reached its spot: the spot and whether its wall hides it
+		// are the scan's, the walk to it is every tick's (docs/COVER.md §5).
+		plan.Sense(GroundFact.Cover, (byte)CoverBands.Band(plan.HasCoverPoint, Flat(plan.Position, plan.CoverPoint),
+			_coverHides, (CoverState)plan.Get(GroundFact.Cover)));
 		_planning.Tick(plan);
 		_planWasAlive = true;
 
 		GroundIntent intent = plan.Intent;
 		keepMoving = intent.Move == GroundMove.Run;
+		inCover = false;
 
 		// A tap is a press and a release. Pressed on one tick and a quarter-second
 		// apart, which is long enough for the swap to be in hand before the next
@@ -559,11 +607,22 @@ public sealed class BotPilot
 		switch (intent.Move)
 		{
 			case GroundMove.Stay:
+				// A reload in its spot is a reload in cover: down behind the wall.
+				inCover = plan.Get(GroundFact.Cover) == (byte)CoverState.In;
 				return false;
 
 			case GroundMove.Point:
 			case GroundMove.Run:
 				return intent.HasPoint;
+
+			case GroundMove.Cover:
+				// Walking to the spot it shoots on the move; standing in it, it stands
+				// still behind its wall rather than strafing out from behind it, and
+				// steps back in when a body shoves it off.
+				float off = Flat(plan.Position, intent.Point);
+				inCover = off <= CoverBands.ArriveMeters;
+				keepMoving = !inCover;
+				return intent.HasPoint && off > CoverSettleMeters;
 
 			case GroundMove.Target:
 				if (hasTarget)
@@ -705,7 +764,176 @@ public sealed class BotPilot
 			plan.HasLocker = false;
 		}
 
+		sense.Cover = SenseCover(character, team, at, plan);
+
 		plan.Encode(sense);
+	}
+
+	/// <summary>How close to its spot a bot in cover stops walking: closer than the arrival band, so it settles in it.</summary>
+	private const float CoverSettleMeters = 0.35f;
+
+	/// <summary>
+	/// The cover search, on the scan (docs/COVER.md §5): against the soft hostile it
+	/// is shooting at, else the nearest one it can see, keep the spot it has while the
+	/// wall beside it still hides it from there and it is still in the fight, else
+	/// take the best one no other bot has. A remembered fight keeps the spot it had;
+	/// no fight lets it go. No ray: the board is boxes.
+	/// </summary>
+	private CoverState SenseCover(fps_controller character, Team team, Vector3 at, GroundContext plan)
+	{
+		CoverBoard board = UnitManager.Instance?.Cover;
+		if (board == null || board.Count == 0)
+		{
+			LoseCover();
+			return CoverState.None;
+		}
+
+		bool fight = TryCoverThreat(team, out Vector3 threat, out float threatEye, out float threatChest);
+		if (!fight)
+		{
+			if (plan.HasCoverPoint && plan.Get(GroundFact.Contact) == (byte)ContactLevel.Ghost)
+			{
+				return CoverBands.Band(true, Flat(at, plan.CoverPoint), _coverHides,
+					(CoverState)plan.Get(GroundFact.Cover));
+			}
+
+			LoseCover();
+			return CoverState.None;
+		}
+
+		GroundPlanTraits traits = plan.Traits;
+		var query = new CoverQuery
+		{
+			From = at,
+			Threat = threat,
+			ThreatEyeMeters = threatEye,
+			ThreatAimMeters = threatChest,
+			SearchMeters = traits.CoverSearchMeters,
+			BodyRadiusMeters = CoverBodyRadiusMeters,
+			// A standing body's numbers whatever this one is doing: crouched to reload,
+			// its own eye is below the wall it means to fire over when it stands.
+			ProtectMeters = UnitManager.CoverThreatChestMeters,
+			EyeMeters = UnitManager.CoverThreatEyeMeters,
+			MustFire = true,
+			MinThreatMeters = traits.CoverMinThreatMeters,
+			MaxThreatMeters = traits.CoverMaxThreatMeters,
+		};
+
+		bool kept = plan.HasCoverPoint && Keeps(board, plan.CoverPoint, query);
+		if (!kept)
+		{
+			int claimed = _coverClaims?.Gather(BotRoster.SlotOf(_peerId), _claimed) ?? 0;
+			// Snapped to where a bot can stand, and still behind its wall once it is: a
+			// spot the navigation mesh moved out of cover would be walked to for ever.
+			Vector3 snapped = Vector3.Zero;
+			if (board.TryFindSpot(query, _claimed.AsSpan(0, claimed), out CoverSpot spot)
+				&& !InsideEnemyDefences(team, spot.Position)
+				&& board.Protects(snapped = Reachable(spot.Position), query))
+			{
+				plan.HasCoverPoint = true;
+				plan.CoverPoint = snapped;
+				_coverClaims?.Claim(BotRoster.SlotOf(_peerId), plan.CoverPoint);
+			}
+			else
+			{
+				LoseCover();
+				return CoverState.None;
+			}
+		}
+
+		_coverHides = board.Protects(plan.CoverPoint, query);
+		return CoverBands.Band(true, Flat(at, plan.CoverPoint), _coverHides, (CoverState)plan.Get(GroundFact.Cover));
+	}
+
+	/// <summary>Whether a spot it already has still does: within reach, in the fight's range, and its wall still hides it.</summary>
+	private static bool Keeps(CoverBoard board, Vector3 spot, in CoverQuery query)
+	{
+		float range = Flat(spot, query.Threat);
+		return Flat(spot, query.From) <= query.SearchMeters + CoverBands.LeaveMeters
+			&& range >= query.MinThreatMeters && range <= query.MaxThreatMeters
+			&& board.Protects(spot, query);
+	}
+
+	/// <summary>
+	/// What it takes cover from: the unit it is shooting at when bullets hurt it, else
+	/// the nearest such unit its scan found — a unit's feet, eye and middle above them.
+	/// Armour is not a fight a wall settles, and a launcher has "engage armour".
+	/// </summary>
+	private bool TryCoverThreat(Team team, out Vector3 threat, out float eye, out float chest)
+	{
+		threat = Vector3.Zero;
+		eye = 0f;
+		chest = 0f;
+
+		UnitManager units = UnitManager.Instance;
+		if (units == null)
+		{
+			return false;
+		}
+
+		Unit unit = OwnerId.IsUnit(_targetOwnerId) ? units.Find(OwnerId.UnitOf(_targetOwnerId)) : null;
+		if (unit == null || !unit.IsAlive || unit.Team == team || (unit.Definition?.IsBulletProof ?? false))
+		{
+			unit = null;
+			for (int i = 0; i < _contactCount && unit == null; i++)
+			{
+				GroundContact seen = _contacts[i];
+				if (!seen.IsPlayer && !seen.IsStructure && seen.Team != team && !seen.BulletProof)
+				{
+					unit = units.Find(seen.UnitId);
+				}
+			}
+		}
+
+		if (unit == null || !unit.IsAlive)
+		{
+			return false;
+		}
+
+		threat = unit.GlobalPosition;
+		eye = unit.EyePosition.Y - threat.Y;
+		chest = unit.Hitbox.Center.Y - threat.Y;
+		return true;
+	}
+
+	/// <summary>Whether a point is inside an enemy barracks' defended ring, where <see cref="OutsideDefences"/> would never let it walk.</summary>
+	private static bool InsideEnemyDefences(Team team, Vector3 point)
+	{
+		UnitManager units = UnitManager.Instance;
+		for (int i = 0; units != null && i < units.BarracksCount; i++)
+		{
+			Barracks barracks = units.BarracksAt(i);
+			if (barracks != null && barracks.Team != team && barracks.DefendedRadiusMeters > 0f
+				&& DefenseSim.IsInside(barracks.GlobalPosition, point,
+					barracks.DefendedRadiusMeters + StandoffMarginMeters))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/// <summary>Lets its spot go: no fight, a new life, or gone.</summary>
+	private void LoseCover()
+	{
+		_coverHides = false;
+		if (_plan != null)
+		{
+			_plan.HasCoverPoint = false;
+		}
+
+		_coverClaims?.Release(BotRoster.SlotOf(_peerId));
+	}
+
+	/// <summary>A player's capsule radius, for how far off a wall a bot stands.</summary>
+	private const float CoverBodyRadiusMeters = 0.5f;
+
+	private static float Flat(Vector3 a, Vector3 b)
+	{
+		float x = a.X - b.X;
+		float z = a.Z - b.Z;
+		return Mathf.Sqrt((x * x) + (z * z));
 	}
 
 	/// <summary>
@@ -930,7 +1158,11 @@ public sealed class BotPilot
 			return Vector3.Zero;
 		}
 
-		Vector3 next = NextPathPosition(goal);
+		// Under the plan the last metre is walked straight: the navigation agent calls a
+		// goal reached at 1.5 m, which is further off a spot behind cover than its wall is.
+		Vector3 next = _plan != null && Flat(character.SimPosition, goal) <= FinalApproachMeters
+			? goal
+			: NextPathPosition(goal);
 		Vector3 direction = next - character.SimPosition;
 		direction.Y = 0f;
 

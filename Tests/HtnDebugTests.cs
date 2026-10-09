@@ -365,7 +365,7 @@ public class HtnDebugTests
 
 		// The root, five top-level tasks, and recon's two methods with Standoff under one.
 		Assert.Equal(1 + 5 + 2 + 1, lines.Length);
-		Assert.Contains(lines, l => l.Contains("attack  (+4)"));
+		Assert.Contains(lines, l => l.Contains("attack  (+5)"));
 		Assert.Contains(lines, l => l.Contains(">> Standoff"));
 	}
 

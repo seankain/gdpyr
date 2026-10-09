@@ -77,6 +77,21 @@ public partial class Unit : CharacterBody3D
 	/// <summary>Server-side: the last tick something hurt it; 0 for never. What tells a builder it is under fire (§5.2).</summary>
 	public uint LastDamagedTick { get; set; }
 
+	/// <summary>
+	/// Server-side, under <c>--bot-ai htn</c>: the spot it has taken behind cover
+	/// (docs/COVER.md §5), which other units' searches leave alone. Never replicated.
+	/// </summary>
+	public bool HasCoverSpot { get; set; }
+
+	/// <inheritdoc cref="HasCoverSpot"/>
+	public Vector3 CoverSpot { get; set; }
+
+	/// <summary>
+	/// Server-side: its target's chest is behind something and its head is not, so it
+	/// aims at the head (docs/COVER.md §3). Decided on its scan; never replicated.
+	/// </summary>
+	public bool AimsHigh { get; set; }
+
 	/// <summary>What this unit is shooting at, as an <see cref="OwnerId"/>. 0 for nothing.</summary>
 	public int TargetOwnerId { get; set; }
 

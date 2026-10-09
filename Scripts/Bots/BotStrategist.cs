@@ -62,6 +62,12 @@ public sealed class BotStrategist
 	/// <summary>How long a refused placement is left alone before it is tried again.</summary>
 	private const int PlacementRetryTicks = SimConfig.TickRate * 30;
 
+	/// <summary>Per commander squad and wall, the tick a refused dig-in placement may be tried again on (docs/COVER.md §7).</summary>
+	private readonly uint[] _digInRetry;
+
+	/// <summary>Spots behind cover a dig-in counts, reused every decision.</summary>
+	private readonly CoverSpot[] _digInSpots = new CoverSpot[SimConfig.MaxUnits];
+
 	/// <summary>
 	/// Points held back from the queue this decision for a structure a builder is
 	/// waiting to put up (<see cref="StrategistBrain.StructureSavings"/>). Set by
@@ -102,6 +108,7 @@ public sealed class BotStrategist
 		{
 			_commander = new Commander(planning, ThreatWeightsFor());
 			_announced = new CommandGoal[_commander.Capacity];
+			_digInRetry = new uint[_commander.Capacity * DigIn.MaxWallsPerAnchor];
 			_zones = new ZoneBoard();
 			_claimTicks = planning.Traits.ClaimTicks;
 		}
@@ -677,6 +684,14 @@ public sealed class BotStrategist
 			return;
 		}
 
+		// Then sandbags for the squads holding ground, before the nodes: twenty-five
+		// points and five seconds that every unit on the ring stands behind
+		// (docs/COVER.md §7). The commander's only; legacy is left as it was (D5).
+		if (_commander != null && DigInSquads(tick, combat, units, free, builders))
+		{
+			return;
+		}
+
 		PlayerManager players = PlayerManager.Instance;
 		if (players == null || players.SpawnPointCount == 0)
 		{
@@ -704,6 +719,197 @@ public sealed class BotStrategist
 		{
 			_retryTick[(_siteNodes[site] * StructureKinds.Count) + kind] = tick + PlacementRetryTicks;
 		}
+	}
+
+	/// <summary>
+	/// Sandbags for the squads holding ground (docs/COVER.md §7): the garrison, and
+	/// every squad reinforcing a zone, each a ring of posts round its anchor facing the
+	/// threat its units' rings face. Where fewer of their units than there are would
+	/// find a spot behind cover from that threat, a wall goes across the bearing just
+	/// outside the ring — up to <see cref="DigIn.MaxWallsPerAnchor"/> — unless the side
+	/// remembers an enemy within <see cref="DigIn.SafeMeters"/> of it, which is a fight
+	/// and not a building site. True when it placed one or is saving up for one.
+	/// </summary>
+	private bool DigInSquads(uint tick, CombatManager combat, UnitManager units, ReadOnlySpan<int> free, int builders)
+	{
+		StructureDefinition wall = StructureCatalog.Definition(StructureKinds.SandbagWall);
+		UnitDefinition infantry = UnitCatalog.Definition(UnitCatalog.Infantry);
+		if (wall == null || infantry == null)
+		{
+			return false;
+		}
+
+		ContactMemory contacts = combat.Visibility?.Contacts;
+		Vector3 spawns = PlayerManager.Instance?.SpawnCentroid ?? Vector3.Zero;
+		UnitPlanTraits posts = UnitPlanTraits.Default;
+
+		for (int s = 0; s < _commander.Capacity; s++)
+		{
+			CommandIntent intent = _commander.IntentOf(s);
+			int members = _commander.SquadAt(s).Members;
+			bool holds = intent.Order == OrderKind.Defend
+				&& (s == Commander.GarrisonSlot || intent.Goal == CommandGoal.Reinforce);
+			if (!holds || members == 0 || HeldByEarlierSquad(s, intent.Point)
+				|| EnemyWithin(contacts, intent.Point, DigIn.SafeMeters, tick))
+			{
+				continue;
+			}
+
+			Vector3 anchor = intent.Point;
+			Vector3 threat = RingThreat(contacts, anchor, tick, posts.ThreatBearingMeters, spawns);
+			float ring = DefendPosts.Radius(members, posts.PostSpacingMeters, posts.PostMinRadiusMeters,
+				infantry.LeashRadiusMeters * posts.PostLeashShare);
+
+			var query = new CoverQuery
+			{
+				From = anchor,
+				Threat = threat,
+				ThreatEyeMeters = UnitManager.CoverThreatEyeMeters,
+				ThreatAimMeters = UnitManager.CoverThreatChestMeters,
+				SearchMeters = ring + DigIn.OutsideRingMeters + UnitManager.PostCoverSearchMeters,
+				BodyRadiusMeters = infantry.RadiusMeters,
+				ProtectMeters = infantry.HeightMeters * 0.5f,
+				EyeMeters = infantry.EyeHeightMeters,
+				MustFire = true,
+			};
+
+			int spots = units.Cover.FindSpots(query, default, _digInSpots.AsSpan(0, Math.Min(members, _digInSpots.Length)));
+			OwnWalls(units, anchor, query.SearchMeters, out int walls, out int going);
+			if (DigIn.WallsWanted(members, spots + (going * DigIn.SpotsPerWall), walls) == 0)
+			{
+				continue;
+			}
+
+			for (int index = 0; index < DigIn.MaxWallsPerAnchor; index++)
+			{
+				int retry = (s * DigIn.MaxWallsPerAnchor) + index;
+				if (tick < _digInRetry[retry])
+				{
+					continue;
+				}
+
+				DigIn.Layout(anchor, threat, ring, index, wall.BodySize.X, out Vector3 at, out float facing);
+				if (OwnStructureAt(units, at, wall.BodySize.X * 0.5f))
+				{
+					continue;
+				}
+
+				if (combat.Match.StrategistPoints < wall.Cost)
+				{
+					_savings = StrategistBrain.StructureSavings(wall.Cost, builderWaiting: true,
+						units.LiveUnitCount - builders, _traits);
+					return true;
+				}
+
+				PlacementResult result = units.ServerConstruct(_peerId, free, StructureKinds.SandbagWall, at, facing,
+					out _);
+				if (result == PlacementResult.Ok)
+				{
+					return true;
+				}
+
+				if (result != PlacementResult.CannotAfford)
+				{
+					_digInRetry[retry] = tick + PlacementRetryTicks;
+				}
+			}
+		}
+
+		return false;
+	}
+
+	/// <summary>Whether an earlier commander squad holds ground within a ring's reach of <paramref name="anchor"/>: one dig-in each.</summary>
+	private bool HeldByEarlierSquad(int squad, Vector3 anchor)
+	{
+		for (int s = 0; s < squad; s++)
+		{
+			CommandIntent earlier = _commander.IntentOf(s);
+			if (earlier.Order == OrderKind.Defend && _commander.SquadAt(s).Members > 0
+				&& (s == Commander.GarrisonSlot || earlier.Goal == CommandGoal.Reinforce)
+				&& earlier.Point.DistanceTo(anchor) < StrategistBrain.SiteRadiusMeters)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/// <summary>Whether the side remembers an enemy within <paramref name="meters"/> of a point.</summary>
+	private static bool EnemyWithin(ContactMemory contacts, Vector3 point, float meters, uint tick)
+	{
+		for (int i = 0; contacts != null && i < contacts.Count; i++)
+		{
+			if (contacts.IsRemembered(i, tick) && contacts.At(i).Position.DistanceTo(point) <= meters)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/// <summary>
+	/// What a ring round <paramref name="anchor"/> faces, as its units' posts do
+	/// (<c>UnitManager.Encode</c>): the remembered contact nearest it within
+	/// <paramref name="meters"/>, else the ground force's spawns.
+	/// </summary>
+	private static Vector3 RingThreat(ContactMemory contacts, Vector3 anchor, uint tick, float meters, Vector3 spawns)
+	{
+		Vector3 threat = spawns;
+		float best = meters;
+		for (int i = 0; contacts != null && i < contacts.Count; i++)
+		{
+			if (!contacts.IsRemembered(i, tick))
+			{
+				continue;
+			}
+
+			float distance = anchor.DistanceTo(contacts.At(i).Position);
+			if (distance <= best)
+			{
+				best = distance;
+				threat = contacts.At(i).Position;
+			}
+		}
+
+		return threat;
+	}
+
+	/// <summary>Its own sandbag walls within <paramref name="meters"/> of a point: finished, and still going up.</summary>
+	private static void OwnWalls(UnitManager units, Vector3 point, float meters, out int walls, out int going)
+	{
+		walls = 0;
+		going = 0;
+		for (int slot = 0; slot < SimConfig.MaxStructures; slot++)
+		{
+			Structure structure = units.StructureAt(slot);
+			if (structure == null || structure.IsDestroyed || structure.Team != Team.Strategist
+				|| structure.Kind != StructureKinds.SandbagWall
+				|| structure.Pose.Base.DistanceTo(point) > meters)
+			{
+				continue;
+			}
+
+			walls++;
+			going += structure.IsBuilt ? 0 : 1;
+		}
+	}
+
+	/// <summary>Whether one of its own structures already stands within <paramref name="meters"/> of a point.</summary>
+	private static bool OwnStructureAt(UnitManager units, Vector3 point, float meters)
+	{
+		for (int slot = 0; slot < SimConfig.MaxStructures; slot++)
+		{
+			Structure structure = units.StructureAt(slot);
+			if (structure != null && !structure.IsDestroyed && structure.Team == Team.Strategist
+				&& structure.Pose.Base.DistanceTo(point) <= meters)
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/// <summary>

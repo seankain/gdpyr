@@ -51,6 +51,12 @@ public enum GroundFact : byte
 	/// <summary>The coordinator has given this bot a stale node to look at (Recon).</summary>
 	Sweep,
 
+	/// <summary>
+	/// <see cref="CoverState"/> against the fight it is in: a spot behind a low wall it
+	/// can shoot from, within reach, and whether it is standing in it (docs/COVER.md §5).
+	/// </summary>
+	Cover,
+
 	Count,
 }
 
@@ -147,6 +153,12 @@ public enum GroundGoal : byte
 	HoldNode,
 	SweepZone,
 	Standoff,
+
+	/// <summary>To a spot behind cover from the fight, shooting on the way (docs/COVER.md §5).</summary>
+	TakeCover,
+
+	/// <summary>In the spot: stand to fire over the wall, crouch behind it to reload.</summary>
+	HoldCover,
 }
 
 /// <summary>How the pilot picks where to walk for an intent.</summary>
@@ -166,6 +178,13 @@ public enum GroundMove : byte
 
 	/// <summary>Today's behaviour: at the target, else the pilot's own standoff point by the enemy barracks.</summary>
 	Standoff,
+
+	/// <summary>
+	/// To <see cref="GroundIntent.Point"/>, a spot behind cover, shooting on the move;
+	/// once there it stands in it — it does not strafe out from behind its wall — and
+	/// crouches to reload (docs/COVER.md §5).
+	/// </summary>
+	Cover,
 }
 
 /// <summary>
@@ -228,9 +247,19 @@ public readonly struct GroundPlanTraits
 	/// <summary>How far the buddy may be before advancing with it means walking to it first.</summary>
 	public readonly float BuddyLeashMeters;
 
+	/// <summary>How far from where it stands a bot in a fight looks for a spot behind cover (docs/COVER.md §5).</summary>
+	public readonly float CoverSearchMeters;
+
+	/// <summary>A spot nearer the threat than this is not walked to: that fight is already at the wall.</summary>
+	public readonly float CoverMinThreatMeters;
+
+	/// <summary>A spot further from the threat than this is out of the fight.</summary>
+	public readonly float CoverMaxThreatMeters;
+
 	public GroundPlanTraits(float healthOkFraction, float healthCriticalFraction, float healthHysteresis,
 		float alliesNearMeters, float alliesNearHoldMeters, float investigateRadiusMeters, float lockerArriveMeters,
-		int pathToLockerTimeoutTicks, int useLockerTimeoutTicks, int useTapIntervalTicks, float buddyLeashMeters)
+		int pathToLockerTimeoutTicks, int useLockerTimeoutTicks, int useTapIntervalTicks, float buddyLeashMeters,
+		float coverSearchMeters = 15f, float coverMinThreatMeters = 8f, float coverMaxThreatMeters = 55f)
 	{
 		HealthOkFraction = healthOkFraction;
 		HealthCriticalFraction = healthCriticalFraction;
@@ -243,12 +272,16 @@ public readonly struct GroundPlanTraits
 		UseLockerTimeoutTicks = Math.Max(useLockerTimeoutTicks, 1);
 		UseTapIntervalTicks = Math.Max(useTapIntervalTicks, 2);
 		BuddyLeashMeters = MathF.Max(buddyLeashMeters, 0f);
+		CoverSearchMeters = MathF.Max(coverSearchMeters, 0f);
+		CoverMinThreatMeters = MathF.Max(coverMinThreatMeters, 0f);
+		CoverMaxThreatMeters = MathF.Max(coverMaxThreatMeters, CoverMinThreatMeters);
 	}
 
 	/// <summary>
 	/// §5.1's numbers. The locker gets two seconds of tapping — a DMR needs two swaps
 	/// to reach the launcher (rifle → launcher → DMR → rifle), a quarter-second apart —
-	/// and thirty seconds of walking, the length of the map at a jog.
+	/// and thirty seconds of walking, the length of the map at a jog. Cover is looked
+	/// for within 15 m, between 8 m and 55 m of the fight (docs/COVER.md §5).
 	/// </summary>
 	public static GroundPlanTraits Default => new(
 		healthOkFraction: 0.6f,
@@ -261,7 +294,10 @@ public readonly struct GroundPlanTraits
 		pathToLockerTimeoutTicks: SimConfig.TickRate * 30,
 		useLockerTimeoutTicks: SimConfig.TickRate * 2,
 		useTapIntervalTicks: SimConfig.TickRate / 4,
-		buddyLeashMeters: 12f);
+		buddyLeashMeters: 12f,
+		coverSearchMeters: 15f,
+		coverMinThreatMeters: 8f,
+		coverMaxThreatMeters: 55f);
 }
 
 /// <summary>
@@ -300,6 +336,9 @@ public struct GroundSense
 	public bool InsideDefences;
 
 	public bool MagazineLow;
+
+	/// <summary>Where it stands against the fight it is in, as the pilot's cover search banded it.</summary>
+	public CoverState Cover;
 }
 
 /// <summary>
@@ -376,6 +415,10 @@ public sealed class GroundContext : BaseContext
 	public bool HasBuddy;
 	public Vector3 BuddyPoint;
 
+	/// <summary>Its spot behind cover from the fight it is in (docs/COVER.md §5). Only with <see cref="HasCoverPoint"/>.</summary>
+	public bool HasCoverPoint;
+	public Vector3 CoverPoint;
+
 	/// <summary>Trips to the locker given up on, for the coordinator's give-up rule (§3.4, P4).</summary>
 	public int FailedLockerTrips;
 
@@ -424,6 +467,7 @@ public sealed class GroundContext : BaseContext
 		Sense(GroundFact.AtZone, sense.AtZone && HasZone);
 		Sense(GroundFact.InsideDefences, sense.InsideDefences);
 		Sense(GroundFact.MagazineLow, sense.MagazineLow);
+		Sense(GroundFact.Cover, (byte)sense.Cover);
 	}
 
 	/// <summary>The health band for a fraction, held past its edge by <see cref="GroundPlanTraits.HealthHysteresis"/> once entered.</summary>
@@ -554,6 +598,25 @@ public sealed class GroundContext : BaseContext
 			case GroundGoal.Standoff:
 				Intent.Move = GroundMove.Standoff;
 				return TaskStatus.Continue;
+
+			case GroundGoal.TakeCover:
+				if (!HasCoverPoint)
+				{
+					return TaskStatus.Failure;
+				}
+
+				Intent.TargetOwnerId = FocusOwnerId;
+				Walk(GroundMove.Cover, CoverPoint);
+				return Get(GroundFact.Cover) == (byte)CoverState.In ? TaskStatus.Success : TaskStatus.Continue;
+
+			case GroundGoal.HoldCover:
+				if (!HasCoverPoint)
+				{
+					return TaskStatus.Failure;
+				}
+
+				Intent.TargetOwnerId = FocusOwnerId;
+				return Walk(GroundMove.Cover, CoverPoint);
 
 			default:
 				return TaskStatus.Failure;
@@ -740,6 +803,20 @@ public static class GroundDomain
 					.Act(GroundGoal.EngageArmour).If(GroundFact.Armed, Arms.Explosive)
 						.While(GroundFact.Armed, Arms.Explosive).WhileNot(GroundFact.Contact, ContactLevel.None)
 						.While(GroundFact.ThreatKind, Threat.Armour).End()
+				.End()
+				// Before the fights in the open: a bot with a low wall within reach of a
+				// fight it can see walks to it and fights from behind it, and keeps doing
+				// so while the fight lasts — a ghost included, which is what a contact is
+				// while it crouches to reload (docs/COVER.md §5).
+				.Sequence("fight from cover")
+					.If(GroundFact.ThreatKind, Threat.Infantry)
+					.If(GroundFact.Contact, ContactLevel.Visible)
+					.IfNot(GroundFact.Cover, CoverState.None)
+					.Act(GroundGoal.TakeCover).WhileNot(GroundFact.Cover, CoverState.None)
+						.WhileNot(GroundFact.Contact, ContactLevel.None).While(GroundFact.ThreatKind, Threat.Infantry)
+						.Predict(GroundFact.Cover, CoverState.In).End()
+					.Act(GroundGoal.HoldCover).If(GroundFact.Cover, CoverState.In).While(GroundFact.Cover, CoverState.In)
+						.WhileNot(GroundFact.Contact, ContactLevel.None).While(GroundFact.ThreatKind, Threat.Infantry).End()
 				.End()
 				.Sequence("press with allies")
 					.If(GroundFact.ThreatKind, Threat.Infantry)

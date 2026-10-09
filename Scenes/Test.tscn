@@ -54,6 +54,16 @@ size = Vector3(10, 0.5, 10)
 albedo_texture = ExtResource("3_ugpq5")
 uv1_triplanar = true
 
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_coverlow"]
+albedo_color = Color(0.78, 0.7, 0.52, 1)
+albedo_texture = ExtResource("3_ugpq5")
+uv1_triplanar = true
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_coverblock"]
+albedo_color = Color(0.62, 0.64, 0.68, 1)
+albedo_texture = ExtResource("3_ugpq5")
+uv1_triplanar = true
+
 [node name="Test" type="Node3D" unique_id=133298753]
 script = ExtResource("1_worldroot")
 
@@ -194,6 +204,136 @@ size = Vector3(0.6, 2, 0.6)
 [node name="Range150m" type="CSGBox3D" parent="CSGCombiner3D"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, -143)
 size = Vector3(0.6, 2, 0.6)
+
+[node name="CoverLow01" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+transform = Transform3D(0.766044, 0, 0.642788, 0, 1, 0, -0.642788, 0, 0.766044, 22, 1.1, -12)
+size = Vector3(5, 1.2, 0.8)
+material = SubResource("StandardMaterial3D_coverlow")
+
+[node name="CoverLow02" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+transform = Transform3D(0.819152, 0, 0.573576, 0, 1, 0, -0.573576, 0, 0.819152, 40, 1.1, 2)
+size = Vector3(4, 1.2, 0.8)
+material = SubResource("StandardMaterial3D_coverlow")
+
+[node name="CoverLow03" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+transform = Transform3D(0.5, 0, 0.866025, 0, 1, 0, -0.866025, 0, 0.5, -16, 1.1, -40)
+size = Vector3(4, 1.2, 0.8)
+material = SubResource("StandardMaterial3D_coverlow")
+
+[node name="CoverLow04" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+transform = Transform3D(0.866025, 0, 0.5, 0, 1, 0, -0.5, 0, 0.866025, 55, 1.1, 10)
+size = Vector3(4, 1.2, 0.8)
+material = SubResource("StandardMaterial3D_coverlow")
+
+[node name="CoverLow05" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+transform = Transform3D(0.707107, 0, 0.707107, 0, 1, 0, -0.707107, 0, 0.707107, 36, 1.1, -38)
+size = Vector3(5, 1.2, 0.8)
+material = SubResource("StandardMaterial3D_coverlow")
+
+[node name="CoverLow06" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+transform = Transform3D(0.642788, 0, 0.766044, 0, 1, 0, -0.766044, 0, 0.642788, 18, 1.1, -58)
+size = Vector3(4, 1.2, 0.8)
+material = SubResource("StandardMaterial3D_coverlow")
+
+[node name="CoverLow07" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+transform = Transform3D(0.707107, 0, 0.707107, 0, 1, 0, -0.707107, 0, 0.707107, 72, 1.1, -45)
+size = Vector3(4, 1.2, 0.8)
+material = SubResource("StandardMaterial3D_coverlow")
+
+[node name="CoverLow08" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -42, 1.1, -8)
+size = Vector3(4, 1.2, 0.8)
+material = SubResource("StandardMaterial3D_coverlow")
+
+[node name="CoverLow09" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+transform = Transform3D(0.866025, 0, 0.5, 0, 1, 0, -0.5, 0, 0.866025, -22, 1.1, -27)
+size = Vector3(4, 1.2, 0.8)
+material = SubResource("StandardMaterial3D_coverlow")
+
+[node name="CoverLow10" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -40, 1.1, -88)
+size = Vector3(4, 1.2, 0.8)
+material = SubResource("StandardMaterial3D_coverlow")
+
+[node name="CoverLow11" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -30, 1.1, -114)
+size = Vector3(4, 1.2, 0.8)
+material = SubResource("StandardMaterial3D_coverlow")
+
+[node name="CoverLow12" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+transform = Transform3D(0.939693, 0, 0.34202, 0, 1, 0, -0.34202, 0, 0.939693, 12, 1.1, -78)
+size = Vector3(4, 1.2, 0.8)
+material = SubResource("StandardMaterial3D_coverlow")
+
+[node name="CoverLow13" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+transform = Transform3D(0.766044, 0, 0.642788, 0, 1, 0, -0.642788, 0, 0.766044, 60, 1.1, -70)
+size = Vector3(4, 1.2, 0.8)
+material = SubResource("StandardMaterial3D_coverlow")
+
+[node name="CoverLow14" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+transform = Transform3D(0.34202, 0, 0.939693, 0, 1, 0, -0.939693, 0, 0.34202, -70, 1.1, -20)
+size = Vector3(4, 1.2, 0.8)
+material = SubResource("StandardMaterial3D_coverlow")
+
+[node name="CoverLow15" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+transform = Transform3D(0.707107, 0, 0.707107, 0, 1, 0, -0.707107, 0, 0.707107, 80, 1.1, -15)
+size = Vector3(4, 1.2, 0.8)
+material = SubResource("StandardMaterial3D_coverlow")
+
+[node name="CoverLow16" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, 1.1, -60)
+size = Vector3(4, 1.2, 0.8)
+material = SubResource("StandardMaterial3D_coverlow")
+
+[node name="CoverLow17" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 18, 1.1, 28)
+size = Vector3(4, 1.2, 0.8)
+material = SubResource("StandardMaterial3D_coverlow")
+
+[node name="CoverLow18" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -22, 1.1, 30)
+size = Vector3(4, 1.2, 0.8)
+material = SubResource("StandardMaterial3D_coverlow")
+
+[node name="CoverBlock01" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+transform = Transform3D(0.939693, 0, 0.34202, 0, 1, 0, -0.34202, 0, 0.939693, 30, 1.9, -25)
+size = Vector3(3, 2.8, 3)
+material = SubResource("StandardMaterial3D_coverblock")
+
+[node name="CoverBlock02" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -50, 1.9, -55)
+size = Vector3(3, 2.8, 3)
+material = SubResource("StandardMaterial3D_coverblock")
+
+[node name="CoverBlock03" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+transform = Transform3D(0.707107, 0, 0.707107, 0, 1, 0, -0.707107, 0, 0.707107, 48, 1.9, -55)
+size = Vector3(4, 2.8, 2)
+material = SubResource("StandardMaterial3D_coverblock")
+
+[node name="CoverBlock04" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 65, 2, 35)
+size = Vector3(3, 3, 3)
+material = SubResource("StandardMaterial3D_coverblock")
+
+[node name="CoverBlock05" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+transform = Transform3D(0.965926, 0, 0.258819, 0, 1, 0, -0.258819, 0, 0.965926, -20, 1.9, -70)
+size = Vector3(2.5, 2.8, 4)
+material = SubResource("StandardMaterial3D_coverblock")
+
+[node name="CoverBlock06" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 85, 1.9, -40)
+size = Vector3(3, 2.8, 3)
+material = SubResource("StandardMaterial3D_coverblock")
+
+[node name="CoverBlock07" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+transform = Transform3D(0.866025, 0, 0.5, 0, 1, 0, -0.5, 0, 0.866025, -85, 1.9, -60)
+size = Vector3(3, 2.8, 3)
+material = SubResource("StandardMaterial3D_coverblock")
+
+[node name="CoverBlock08" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 45, 1.9, -75)
+size = Vector3(3, 2.8, 3)
+material = SubResource("StandardMaterial3D_coverblock")
 
 [node name="NavigationRegion3D" type="NavigationRegion3D" parent="." groups=["navigation_region"]]
 navigation_mesh = SubResource("NavigationMesh_ground")

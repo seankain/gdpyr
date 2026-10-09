@@ -334,6 +334,70 @@ public static class StrategistBrain
 }
 
 /// <summary>
+/// Sandbags for a squad holding ground (docs/COVER.md §7): a computer strategist's
+/// builder lays walls across the bearing the squad's defended ring faces, just
+/// outside the ring, so the units on it have a wall to stand behind. Pure, as the
+/// rest of the strategist's plan is; the board says how many spots already exist,
+/// the engine half places what this asks for.
+/// </summary>
+public static class DigIn
+{
+	/// <summary>Bodies one sandbag wall hides from one threat: four metres, a body and a gap each (<c>CoverBoard</c>).</summary>
+	public const int SpotsPerWall = 3;
+
+	/// <summary>Walls one squad's ring is given, whatever its size. Past two it is a fort, and the builder has nodes to fortify.</summary>
+	public const int MaxWallsPerAnchor = 2;
+
+	/// <summary>How far outside the defended ring a wall's middle stands: its depth and the body behind it.</summary>
+	public const float OutsideRingMeters = 1.6f;
+
+	/// <summary>Space left between two walls laid side by side.</summary>
+	public const float GapMeters = 0.2f;
+
+	/// <summary>A remembered enemy this close to the anchor is a fight, not somewhere to send a builder.</summary>
+	public const float SafeMeters = 35f;
+
+	/// <summary>
+	/// How many more walls a squad of <paramref name="defenders"/> holding a ring
+	/// wants, when <paramref name="spots"/> spots behind cover from its threat already
+	/// exist there and <paramref name="walls"/> of its walls are already laid.
+	/// </summary>
+	public static int WallsWanted(int defenders, int spots, int walls)
+	{
+		int short_ = Math.Max(defenders, 0) - Math.Max(spots, 0);
+		if (short_ <= 0)
+		{
+			return 0;
+		}
+
+		int wanted = (short_ + SpotsPerWall - 1) / SpotsPerWall;
+		return Math.Clamp(wanted, 0, Math.Max(MaxWallsPerAnchor - Math.Max(walls, 0), 0));
+	}
+
+	/// <summary>
+	/// Where wall <paramref name="index"/> of a ring of <paramref name="ringMeters"/>
+	/// round <paramref name="anchor"/> goes, and which way it faces: its front to the
+	/// threat, its middle <see cref="OutsideRingMeters"/> outside the ring on the
+	/// bearing — rounded, as the ring's own posts are — and the second one beside the
+	/// first, alternating sides, so two make one longer wall.
+	/// </summary>
+	public static void Layout(Vector3 anchor, Vector3 threat, float ringMeters, int index, float wallWidth,
+		out Vector3 at, out float yaw)
+	{
+		float bearing = Htn.DefendPosts.Bearing(anchor, threat);
+		var forward = new Vector3(MathF.Sin(bearing), 0f, MathF.Cos(bearing));
+		var across = new Vector3(forward.Z, 0f, -forward.X);
+
+		int step = (index + 1) / 2;
+		float side = index % 2 == 1 ? 1f : -1f;
+		float offset = step * side * (MathF.Max(wallWidth, 0f) + GapMeters);
+
+		at = anchor + (forward * (MathF.Max(ringMeters, 0f) + OutsideRingMeters)) + (across * offset);
+		yaw = StructurePlacement.YawFacing(anchor, anchor + forward);
+	}
+}
+
+/// <summary>
 /// One place the computer strategist means to fortify — a resource node it holds —
 /// and what already stands there (docs/NETCODE.md §10.5).
 /// </summary>

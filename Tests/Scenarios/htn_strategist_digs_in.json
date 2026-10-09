@@ -1,0 +1,23 @@
+{
+  "name": "the HTN strategist's builder lays sandbags in front of its garrison at home",
+  "bot_ai": "htn",
+  "seeds": [1, 2],
+  "duration_ticks": 7200,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 1 },
+
+  "seats": [
+    { "id": "idle", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json" }
+  ],
+
+  "spawns": [
+    { "peer": "idle", "at": [110, 1, 110], "look": [0, 0] }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.structure_placed[type=1,x>80].count", "op": ">=", "value": 1 },
+    { "metric": "events.structure_built[type=1,x>80].count", "op": ">=", "value": 1 },
+    { "metric": "events.structure_lost.count", "op": "==", "value": 0 }
+  ]
+}
