@@ -753,8 +753,10 @@ public sealed class BotStrategist
 		{
 			CommandIntent intent = _commander.IntentOf(s);
 			int members = _commander.SquadAt(s).Members;
+			// The garrison's standing task at home is a reinforce too, so it is told
+			// apart by its slot, not its goal.
 			bool holds = intent.Order == OrderKind.Defend
-				&& ((s == Commander.GarrisonSlot && garrisonsTurn) || intent.Goal == CommandGoal.Reinforce);
+				&& (s == Commander.GarrisonSlot ? garrisonsTurn : intent.Goal == CommandGoal.Reinforce);
 			if (!holds || members == 0 || HeldByEarlierSquad(s, intent.Point)
 				|| EnemyWithin(contacts, intent.Point, DigIn.SafeMeters, tick))
 			{
