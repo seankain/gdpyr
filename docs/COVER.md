@@ -117,8 +117,17 @@ group, which is how the board finds them; a map marks its cover the same way.
 
 They are kept out of the lanes the scenarios shoot along: x = −90, −60, −30, −10, 0, 8 and 30
 over the ranges those scenarios use, the range markers on x = 0, the spawn area, the barracks'
-door and gun lines, and the technical's route in `htn_recon_finds_contact`. Every scenario
-that passed before still passes (§9).
+door and gun lines, and the technical's route in `htn_recon_finds_contact`.
+
+They are also kept off **the edge of the barracks' ring**. A ground bot never walks into the ring:
+`OutsideDefences` sends one that strays inside straight back out. The barracks' defences reach
+about 107 m, so a bot is turned back inside about 115 m. A wall on that edge, across a route that
+hugs it, has a navigation detour that dips inside the ring at one end. The bot walks the detour,
+is sent back out, and walks it again for the rest of the round. The first layout had a wall at
+115 m, across the route from the middle node to the far one, and `htn_ground_denies_node` caught
+it: the far node's denier oscillated against it for a minute (§9). So nothing stands between
+105 m and 122 m of the barracks. The three walls on the arc where the bots wait stand at 123 m,
+each lying across the line to the barracks, so its far side is cover from units coming out of it.
 
 ---
 

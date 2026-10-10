@@ -206,12 +206,12 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, -143)
 size = Vector3(0.6, 2, 0.6)
 
 [node name="CoverLow01" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
-transform = Transform3D(0.766044, 0, 0.642788, 0, 1, 0, -0.642788, 0, 0.766044, 22, 1.1, -12)
+transform = Transform3D(-0.744498, 0, 0.667624, 0, 1, 0, -0.667624, 0, -0.744498, 17.882193, 1.1, -8.426719)
 size = Vector3(5, 1.2, 0.8)
 material = SubResource("StandardMaterial3D_coverlow")
 
 [node name="CoverLow02" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
-transform = Transform3D(0.819152, 0, 0.573576, 0, 1, 0, -0.573576, 0, 0.819152, 40, 1.1, 2)
+transform = Transform3D(-0.867036, 0, 0.498245, 0, 1, 0, -0.498245, 0, -0.867036, 38.71582, 1.1, 6.645437)
 size = Vector3(4, 1.2, 0.8)
 material = SubResource("StandardMaterial3D_coverlow")
 
@@ -221,7 +221,7 @@ size = Vector3(4, 1.2, 0.8)
 material = SubResource("StandardMaterial3D_coverlow")
 
 [node name="CoverLow04" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
-transform = Transform3D(0.866025, 0, 0.5, 0, 1, 0, -0.5, 0, 0.866025, 55, 1.1, 10)
+transform = Transform3D(-0.92794, 0, 0.372728, 0, 1, 0, -0.372728, 0, -0.92794, 54.154409, 1.1, 14.13668)
 size = Vector3(4, 1.2, 0.8)
 material = SubResource("StandardMaterial3D_coverlow")
 
@@ -281,7 +281,7 @@ size = Vector3(4, 1.2, 0.8)
 material = SubResource("StandardMaterial3D_coverlow")
 
 [node name="CoverLow16" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, 1.1, -60)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -35, 1.1, -60)
 size = Vector3(4, 1.2, 0.8)
 material = SubResource("StandardMaterial3D_coverlow")
 
