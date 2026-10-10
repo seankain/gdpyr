@@ -676,8 +676,12 @@ public sealed class BotStrategist
 
 		ReadOnlySpan<int> free = _idleBuilders.AsSpan(0, idle);
 
-		// A site somebody paid for and nobody is building is money on the floor.
-		int abandoned = AbandonedSite(units);
+		// A site somebody paid for and nobody is building is money on the floor —
+		// except, for the commander, a sandbag wall: one is left unfinished when its
+		// builder was killed on the way, usually into the fight it was for, and the
+		// next builder walks the same way. Twenty-five points are not worth sixty
+		// (docs/COVER.md §7).
+		int abandoned = AbandonedSite(units, skipSandbags: _commander != null);
 		if (abandoned >= 0)
 		{
 			units.ServerAssist(_peerId, free, abandoned);
@@ -1017,12 +1021,13 @@ public sealed class BotStrategist
 	}
 
 	/// <summary>The slot of a site of its own that no builder is working on, or -1.</summary>
-	private static int AbandonedSite(UnitManager units)
+	private static int AbandonedSite(UnitManager units, bool skipSandbags)
 	{
 		for (int slot = 0; slot < SimConfig.MaxStructures; slot++)
 		{
 			Structure structure = units.StructureAt(slot);
-			if (structure == null || structure.IsBuilt || structure.IsDestroyed || structure.Team != Team.Strategist)
+			if (structure == null || structure.IsBuilt || structure.IsDestroyed || structure.Team != Team.Strategist
+				|| (skipSandbags && structure.Kind == StructureKinds.SandbagWall))
 			{
 				continue;
 			}

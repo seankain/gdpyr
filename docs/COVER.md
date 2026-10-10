@@ -223,7 +223,11 @@ when the garrison went first. For each squad, once a decision, the builder does 
    placement the server refuses is left for 30 s.
 
 It runs before the node fortification, after a site nobody is building. A wall is 25 points and
-five seconds of one builder. If the points are not there, it saves them as `Fortify` does. The
+five seconds of one builder. If the points are not there, it saves them as `Fortify` does. A
+sandbag site left unfinished is not sent another builder, as other sites are. One is left
+unfinished when its builder was killed on the way, usually into the fight it was for. In one
+bot-only round, before this rule, four more builders (240 points) died one after another walking
+the same way to finish a 25-point wall. The
 units on that ring move their posts behind the wall (§6), and `DigInTests` checks the geometry
 end to end: two walls laid by the rule give a four-man ring four spots against its threat.
 
