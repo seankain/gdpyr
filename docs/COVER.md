@@ -267,14 +267,52 @@ game already makes.
 
 ## 9. Verified
 
-- **`dotnet test`**: 1444 passed, 0 failed (1382 before). `CoverTests` covers the board, spots,
-  claims, firing over, blocks, a turned wall, determinism, the bands and zero allocation.
-  `DigInTests` covers the rule and a laid ring end to end. `GroundHtnTests`, `UnitHtnTests` and
-  `BotBrainTests` cover every new row, the pre-emptions, and every new operator ending when its
-  premise goes. The debugger's schema and family tables carry the new fact and goals.
+- **`dotnet test`**: 1446 passed, 0 failed (1382 before). `CoverTests` covers the board, spots,
+  claims, firing over, blocks, a turned wall, a snapped spot's height, the head margin,
+  determinism, the bands and zero allocation. `DigInTests` covers the rule and a laid ring end to
+  end. `GroundHtnTests`, `UnitHtnTests` and `BotBrainTests` cover every new row, the
+  pre-emptions, and every new operator ending when its premise goes. The debugger's schema and
+  family tables carry the new fact and goals.
 - **`dotnet build Gdpyr.csproj`**: 0 warnings, 0 errors.
-- **`htn_strategist_digs_in.json`** (new): passes under `htn` on both seeds, two walls finished at
-  the barracks each round; fails under `--bot-ai legacy` (no wall near the barracks).
+- **Scenarios** (Godot 4.6 .NET, headless, through the harness, default `htn`): the 18 that exist
+  pass on the unchanged code and on this branch, and `htn_strategist_digs_in` passes too, 19 of
+  19. The new scenario fails under `--bot-ai legacy`, as an `htn_*` claim should: the legacy
+  strategist lays no wall at home. Three scenarios failed on earlier cuts of this branch and
+  found real faults, each fixed rather than loosened:
+
+  | Scenario | Failed with | Fault | Fix |
+  |---|---|---|---|
+  | `htn_ground_denies_node` | far node retaken in 1/4 seeds (needs 2) | a wall on the edge of the barracks' ring trapped the denier (§4) | the map's walls kept off 105–122 m; 3/4 after |
+  | `htn_strategist_defends_node` | 2 nodes taken in one seed (needs 3) | the builder dug in at home before its first trip to a node, which is what took it | the garrison digs in after the first pillbox (§7); 6/6 seeds after |
+  | `sandbag_cover` | the crouched player hit once in one seed | a unit aimed at a crouched eye that a grazing line reached (§3) | the 0.2 m head margin; 2/2 seeds, and 8/8 on seeds 1–3 and 5–9 |
+
+- **Bot-only rounds**: 5 ground bots and the idle seat against one computer strategist, 6 minutes
+  each, read off the event stream and a temporary probe that was not committed. Nine seeds on each
+  side; the runs are not reproducible seed for seed (seed 1 gave 40 ground deaths in one run of a
+  build and 3 in the next), so these are samples, not a measurement of the seed.
+
+  | | unchanged code | this branch |
+  |---|---|---|
+  | Ground players killed, mean (range) | 18.2 (0–52) | 9.1 (0–22) |
+  | Strategist units lost, mean (range) | 9.6 (4–29) | 6.9 (4–14) |
+  | Rounds still fighting after 200 s | 3 of 9 | 3 of 9 |
+  | Rounds the strategist holds a node in | 3 of 9 | 3 of 9 |
+  | Ground bots taking or holding cover | — | 608 bot-seconds over 9 rounds, 17% of their time in Attack |
+  | Sandbag walls placed | 4, by `Fortify` | 8, all dig-ins within 10 m of the middle node; none finished |
+  | Builders lost | 9 | 3 |
+
+  **What that says.** The bots use cover: ground bots go to and fight from low walls, and units fight
+  from them. The commander lays sandbags in front of squads holding the middle node, and in
+  bot-only rounds none was finished: that node is where the fighting is, its builder is shot or
+  the site is, and an unfinished one is not sent another builder (§7). That costs about 22 points
+  a round. A finished dig-in is what `htn_strategist_digs_in` shows, at home and out of the
+  fight. Deaths on
+  both sides fall by about half in these samples. That is a large difference in a small,
+  high-variance sample, and not settled. **The stalemate the rounds settle into does not change.**
+  On both sides, two rounds in three are decided in the opening two minutes and then wait at the
+  barracks' ring for the clock. The commander's economy decides that (no node, no income), and so
+  does the ring the ground bots never enter (§10). Cover does not change either. Before the height
+  fix (§2.2), ground bots took cover in none of these rounds.
 
 ---
 
