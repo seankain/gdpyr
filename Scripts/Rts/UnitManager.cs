@@ -1013,13 +1013,15 @@ public partial class UnitManager : Node
 			// Anywhere on or just outside the ring, nearest its own post first, against
 			// the ring's threat however far off it is — a ring faces the spawns before
 			// anything has been seen. Across the ring, so that a wall laid on the threat's
-			// side is found from the posts behind it too (docs/COVER.md §7).
+			// side is found from the posts behind it too (docs/COVER.md §7); and no further
+			// out than a wall laid for it, so a squad holding a node stays on the node.
 			CoverQuery query = UnitCoverQuery(unit, ringThreat, mustFire: true,
 				(2f * ringMeters) + PostCoverSearchMeters);
 			query.From = plan.PostPoint;
 			query.MinThreatMeters = 0f;
 			query.MaxThreatMeters = 0f;
-			if (UpdateUnitCover(unit, query, out spot) && InLeash(order, spot.Position, unit))
+			if (UpdateUnitCover(unit, query, out spot)
+				&& Flat(order.Anchor, spot.Position) <= ringMeters + PostCoverSlackMeters)
 			{
 				plan.PostPoint = spot.Position;
 				return false;

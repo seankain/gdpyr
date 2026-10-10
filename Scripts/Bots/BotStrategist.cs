@@ -743,12 +743,18 @@ public sealed class BotStrategist
 		Vector3 spawns = PlayerManager.Instance?.SpawnCentroid ?? Vector3.Zero;
 		UnitPlanTraits posts = UnitPlanTraits.Default;
 
+		// The garrison's barracks has guns and a mortar of its own; a node has nothing
+		// until a pillbox goes up, and the builder's first trip there is often what
+		// takes it. So the garrison waits for the first pillbox; a squad reinforcing a
+		// threatened zone does not.
+		bool garrisonsTurn = OwnsAny(units, StructureKinds.Pillbox);
+
 		for (int s = 0; s < _commander.Capacity; s++)
 		{
 			CommandIntent intent = _commander.IntentOf(s);
 			int members = _commander.SquadAt(s).Members;
 			bool holds = intent.Order == OrderKind.Defend
-				&& (s == Commander.GarrisonSlot || intent.Goal == CommandGoal.Reinforce);
+				&& ((s == Commander.GarrisonSlot && garrisonsTurn) || intent.Goal == CommandGoal.Reinforce);
 			if (!holds || members == 0 || HeldByEarlierSquad(s, intent.Point)
 				|| EnemyWithin(contacts, intent.Point, DigIn.SafeMeters, tick))
 			{
@@ -894,6 +900,22 @@ public sealed class BotStrategist
 			walls++;
 			going += structure.IsBuilt ? 0 : 1;
 		}
+	}
+
+	/// <summary>Whether it has a structure of <paramref name="kind"/> on the field, finished or going up.</summary>
+	private static bool OwnsAny(UnitManager units, byte kind)
+	{
+		for (int slot = 0; slot < SimConfig.MaxStructures; slot++)
+		{
+			Structure structure = units.StructureAt(slot);
+			if (structure != null && !structure.IsDestroyed && structure.Team == Team.Strategist
+				&& structure.Kind == kind)
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/// <summary>Whether one of its own structures already stands within <paramref name="meters"/> of a point.</summary>

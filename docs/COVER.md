@@ -61,7 +61,10 @@ Best is the shortest walk, with a metre of falling back from the threat charged 
 (`RetreatWeight`). Ties go to the lower box and the earlier slot, so a query has one answer.
 `FindSpots` takes the best spots one after another, which is how a place is asked how many bodies
 it can hide: a 4 m wall hides three from one threat. `Protects` asks whether a box beside a body
-still hides it, which is what keeps a spot.
+still hides it, which is what keeps a spot. It measures the body up from the ground the box
+stands on, not from the height of the point it is given. A spot snapped to the navigation mesh
+comes back 0.2 m above the floor, which put a standing chest level with a 1.2 m wall's top.
+Before this was found, every spot a ground bot snapped failed the test (§9).
 
 One fact, `CoverState`, carries it into both domains: **None** (no spot in reach), **Near** (a spot
 it is not standing in), **In** (within 1.0 m of its spot, held to 1.6 m, and the box still hides it).
@@ -135,7 +138,7 @@ each lying across the line to the barracks, so its far side is cover from units 
 
 `GroundFact.Cover` is sensed on the bot's 10-tick scan (`BotPilot.SenseCover`). The threat is the
 unit it is shooting at when bullets hurt it, else the nearest such unit its scan found. The search
-uses a standing body's numbers, within 15 m of the bot and 8–55 m from the threat
+uses a standing body's numbers, within 25 m of the bot and 8–55 m from the threat
 (`GroundPlanTraits.Cover*Meters`). A spot it already has is kept while it is in reach, in the
 fight's range and its wall still hides it. A remembered fight (a ghost) keeps it too, and no fight
 lets it go. Bots share their spots through `BotDirector.GroundCover`, so two never take the same
@@ -175,7 +178,7 @@ What it is about depends on the order:
 |---|---|---|
 | Build | the nearest contact the side remembers within the unit's sensor | anything that hides it, low or high, within 15 m |
 | Attack, Defend, none, with a target | its target's feet | a low wall it can fire over, within 10 m, 6 m to its engage range from the target, inside its leash when it has one |
-| Defend, nothing to shoot | the ring's threat, as its posts face it: the nearest remembered contact within 80 m of the anchor, else the ground spawns | a low wall anywhere across its ring and 5 m beyond, nearest its own post first; it becomes the unit's post |
+| Defend, nothing to shoot | the ring's threat, as its posts face it: the nearest remembered contact within 80 m of the anchor, else the ground spawns | a low wall across its ring, nearest its own post first, no more than 2.6 m outside the ring (as far as a wall laid for the ring puts it), so a squad holding a node stays inside the capture radius; it becomes the unit's post |
 
 Units share their spots through `Unit.CoverSpot`, and keep one while its box still hides them
 from the threat. In the domain ([`HTN_BOTS.md`](HTN_BOTS.md) §5.2):
@@ -204,8 +207,10 @@ in it. A move order and a patrol are never second-guessed for cover. Supply truc
 
 Under `htn` the commander's builder lays sandbags for the squads it keeps holding ground
 (`BotStrategist.DigInSquads`, the rule in `DigIn`, `Scripts/Sim/StrategistBrain.cs`). Those squads
-are the garrison and every squad reinforcing a zone. For each one, once a decision, the builder
-does the following:
+are every squad reinforcing a zone, and the garrison once the side has a pillbox. A barracks has
+guns and a mortar of its own, and a node has nothing until a pillbox goes up. The builder's first
+trip to a node is also often what takes it: `htn_strategist_defends_node` lost a node in one seed
+when the garrison went first. For each squad, once a decision, the builder does the following:
 
 1. It skips the zone if the side remembers an enemy within 35 m: that is a fight, not a building
    site. A second squad within 16 m of one already counted is skipped too.
@@ -238,11 +243,11 @@ Legacy's strategist does not dig in (D5).
 | Claimed | within 1.1 m | `CoverBoard.ClaimMeters` |
 | Fire clearance over a wall | 0.15 m | `CoverBoard.FireClearanceMeters` |
 | In a spot | 1.0 m, held to 1.6 m | `CoverBands` |
-| Ground bot's search | 15 m; 8–55 m from the threat | `GroundPlanTraits` |
+| Ground bot's search | 25 m; 8–55 m from the threat | `GroundPlanTraits` |
 | Unit's search in a fight | 10 m; 6 m to its engage range | `UnitManager.UnitCoverSearchMeters`, `CoverMinThreatMeters` |
 | Builder's search | 15 m | `UnitManager.BuilderCoverSearchMeters` |
-| Defended ring's search | across the ring + 5 m | `UnitManager.PostCoverSearchMeters` |
-| Dig-in | a wall per 3 defenders short, ≤ 2, 1.6 m outside the ring, not within 35 m of an enemy | `DigIn` |
+| Defended ring's search | across the ring + 5 m, at most 2.6 m outside the ring | `UnitManager.PostCoverSearchMeters`, `PostCoverSlackMeters` |
+| Dig-in | a wall per 3 defenders short, ≤ 2, 1.6 m outside the ring, not within 35 m of an enemy; the garrison after the first pillbox | `DigIn`, `BotStrategist.DigInSquads` |
 
 What it costs: the board answers from boxes, so a spot costs no ray. Exposure costs one ray more
 per bot per tick while its target's middle is hidden, and one per unit scan. Both are on scans the
@@ -270,5 +275,7 @@ game already makes.
   still wait outside it (`OutsideDefences`).
 - **No peeking round a block.** A block is somewhere to hide, not to fight from.
 - **The fog still tests the chest** (§3).
-- **`builder_fortifies.json`** still passes, but under `htn` the first structure is now a sandbag
-  wall at home rather than one at a node; the scenario counts structures and does not say where.
+- **A structure on the edge of the barracks' ring can still trap a bot's path** (§4). That is a
+  weakness of `OutsideDefences`, not of cover, and `Fortify`'s structures at the middle node,
+  which is 119 m from the barracks, could always do it. The map's cover is kept off that edge,
+  but nothing stops the strategist building there.

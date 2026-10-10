@@ -646,9 +646,9 @@ them. §5.1 gains a `Cover` fact and a "fight from cover" method in Attack, abov
 `TakeCover` → `HoldCover`, behind a low wall from the unit it is fighting. §5.2 gains a `Cover` fact,
 "engage from cover" (`HoldCover`) above "engage focus" and "engage in leash", and "hide behind
 cover" above Build's "take cover". A defended ring's posts move behind a wall when there is one. The
-commander's builder lays sandbags for the garrison and every squad reinforcing a zone before it
-fortifies a node (`DigIn`, COVER.md §7). Under `htn` a bot or unit whose target's middle is hidden
-aims at its head (COVER.md §3). Legacy is unchanged (D5).
+commander's builder lays sandbags for every squad reinforcing a zone before it fortifies a
+node, and for the garrison once it has a pillbox (`DigIn`, COVER.md §7). Under `htn` a bot or
+unit whose target's middle is hidden aims at its head (COVER.md §3). Legacy is unchanged (D5).
 
 ### 5.4 The five tasks at each layer
 

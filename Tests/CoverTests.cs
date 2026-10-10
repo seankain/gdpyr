@@ -162,6 +162,19 @@ public class CoverTests
 	}
 
 	[Fact]
+	public void ABodyIsMeasuredFromTheGroundTheWallStandsOn()
+	{
+		// A spot snapped to the navigation mesh comes back a cell above the floor; the
+		// chest it hides is still the chest of somebody standing on that floor.
+		var board = WallAtOrigin(LowWall);
+		CoverQuery query = Rifleman(new Vector3(0f, 0f, -6f), new Vector3(0f, 0f, 20f));
+		Assert.True(board.TryFindSpot(query, default, out CoverSpot spot));
+
+		Assert.True(board.Protects(spot.Position + new Vector3(0f, 0.2f, 0f), query));
+		Assert.True(board.Protects(spot.Position + new Vector3(0f, 1.5f, 0f), query));
+	}
+
+	[Fact]
 	public void TheThreatsSideOfTheWallIsNoCover()
 	{
 		var board = WallAtOrigin(LowWall);

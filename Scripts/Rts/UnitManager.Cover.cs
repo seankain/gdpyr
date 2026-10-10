@@ -204,6 +204,13 @@ public partial class UnitManager
 	/// <summary>How far past its ring's far side a unit on a defended ring looks for a wall to stand behind.</summary>
 	public const float PostCoverSearchMeters = 5f;
 
+	/// <summary>
+	/// How far outside its ring a post may move to stand behind a wall: as far as the
+	/// spots behind a wall the commander lays for the ring (<see cref="DigIn"/>), and no
+	/// further, so a squad holding a node stays inside its capture radius.
+	/// </summary>
+	public const float PostCoverSlackMeters = DigIn.OutsideRingMeters + 1f;
+
 	private static float Flat(Vector3 a, Vector3 b)
 	{
 		float x = a.X - b.X;

@@ -1,8 +1,8 @@
 {
-  "name": "the HTN strategist's builder lays sandbags in front of its garrison at home",
+  "name": "the HTN strategist's builder puts up a pillbox at a node, then lays sandbags in front of its garrison at home",
   "bot_ai": "htn",
   "seeds": [1, 2],
-  "duration_ticks": 7200,
+  "duration_ticks": 14400,
   "warmup_ticks": 60,
   "roster": { "ground": 1, "strategists": 1 },
 
@@ -16,6 +16,7 @@
 
   "assert": [
     { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.structure_placed[type=0].count", "op": ">=", "value": 1 },
     { "metric": "events.structure_placed[type=1,x>80].count", "op": ">=", "value": 1 },
     { "metric": "events.structure_built[type=1,x>80].count", "op": ">=", "value": 1 },
     { "metric": "events.structure_lost.count", "op": "==", "value": 0 }

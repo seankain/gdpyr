@@ -243,7 +243,7 @@ round full of bots starts without waiting for anybody.
   a 200 ms reaction. `BotTraits.Default` in `Scripts/Sim/BotBrain.cs` is the whole difficulty dial.
   Six carry two rifles, two DMRs and two launchers. Only the launchers take on a tank, a pillbox or a
   tower, and they hold fire while the blast would reach a teammate or themselves. Under the HTN
-  bots, one with a low wall within 15 m of a fight walks to the side of it away from the enemy,
+  bots, one with a low wall within 25 m of a fight walks to the side of it away from the enemy,
   fights from there, and crouches behind it to reload. A unit whose chest is behind a wall is
   shot at by its head.
 - **In the strategist's chair** one queues infantry at every barracks while the points last, keeps
@@ -251,8 +251,9 @@ round full of bots starts without waiting for anybody.
   it gets no free knowledge of where anybody is. Once it has four fighting units it buys a builder,
   and fortifies the resource nodes with a pillbox, a wall in front of it and a tower behind, facing
   the ground force's spawn. Ground bots shoot a pillbox or a tower only when no unit is in sight.
-  Under the HTN commander its builder first lays sandbags across the bearing its garrison, and any
-  squad reinforcing a zone, faces: up to two walls, a wall for every three units without a spot.
+  Under the HTN commander its builder also lays sandbags across the bearing a squad reinforcing a
+  zone faces, and, once it has a pillbox, the bearing its garrison faces: up to two walls, a wall
+  for every three units without a spot.
   Its units fight from behind low walls, move their posts behind them, and a builder that is
   shot at hides behind cover.
 

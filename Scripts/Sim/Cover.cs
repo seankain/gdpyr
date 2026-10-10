@@ -259,16 +259,28 @@ public sealed class CoverBoard
 	/// </summary>
 	public bool Protects(Vector3 position, in CoverQuery query) => ProtectingBox(position, query) >= 0;
 
-	/// <summary>The box hiding a body at <paramref name="position"/> from the threat, or -1.</summary>
+	/// <summary>
+	/// The box hiding a body at <paramref name="position"/> from the threat, or -1.
+	///
+	/// The body is measured up from the ground the box stands on, not from the
+	/// height <paramref name="position"/> carries: a point snapped to the navigation
+	/// mesh sits a cell above the floor, and a character's origin is wherever its
+	/// collider put it. Both stand on the same ground as the box beside them.
+	/// </summary>
 	public int ProtectingBox(Vector3 position, in CoverQuery query)
 	{
 		Vector3 eye = query.Threat + (Vector3.Up * query.ThreatEyeMeters);
-		Vector3 body = position + (Vector3.Up * query.ProtectMeters);
 		float reach = AdjacentMeters + MathF.Max(query.BodyRadiusMeters, 0f);
 
 		for (int i = 0; i < Capacity; i++)
 		{
-			if (_active[i] && FootprintOf(i).DistanceTo(position) <= reach && Occludes(i, eye, body))
+			if (!_active[i] || FootprintOf(i).DistanceTo(position) > reach)
+			{
+				continue;
+			}
+
+			var body = new Vector3(position.X, _base[i].Y + query.ProtectMeters, position.Z);
+			if (Occludes(i, eye, body))
 			{
 				return i;
 			}

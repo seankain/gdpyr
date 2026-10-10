@@ -259,7 +259,7 @@ public readonly struct GroundPlanTraits
 	public GroundPlanTraits(float healthOkFraction, float healthCriticalFraction, float healthHysteresis,
 		float alliesNearMeters, float alliesNearHoldMeters, float investigateRadiusMeters, float lockerArriveMeters,
 		int pathToLockerTimeoutTicks, int useLockerTimeoutTicks, int useTapIntervalTicks, float buddyLeashMeters,
-		float coverSearchMeters = 15f, float coverMinThreatMeters = 8f, float coverMaxThreatMeters = 55f)
+		float coverSearchMeters = 25f, float coverMinThreatMeters = 8f, float coverMaxThreatMeters = 55f)
 	{
 		HealthOkFraction = healthOkFraction;
 		HealthCriticalFraction = healthCriticalFraction;
@@ -281,7 +281,7 @@ public readonly struct GroundPlanTraits
 	/// §5.1's numbers. The locker gets two seconds of tapping — a DMR needs two swaps
 	/// to reach the launcher (rifle → launcher → DMR → rifle), a quarter-second apart —
 	/// and thirty seconds of walking, the length of the map at a jog. Cover is looked
-	/// for within 15 m, between 8 m and 55 m of the fight (docs/COVER.md §5).
+	/// for within 25 m, between 8 m and 55 m of the fight (docs/COVER.md §5).
 	/// </summary>
 	public static GroundPlanTraits Default => new(
 		healthOkFraction: 0.6f,
@@ -295,7 +295,7 @@ public readonly struct GroundPlanTraits
 		useLockerTimeoutTicks: SimConfig.TickRate * 2,
 		useTapIntervalTicks: SimConfig.TickRate / 4,
 		buddyLeashMeters: 12f,
-		coverSearchMeters: 15f,
+		coverSearchMeters: 25f,
 		coverMinThreatMeters: 8f,
 		coverMaxThreatMeters: 55f);
 }
