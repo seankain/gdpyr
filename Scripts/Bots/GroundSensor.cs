@@ -134,7 +134,8 @@ public static class GroundSensor
 			Vector3 at = unit.Hitbox.Center;
 			float distance = eye.DistanceTo(at);
 			if (distance > sensorRadiusMeters
-				|| (!HasLineOfSight(space, eye, at) && !(exposedHeads && HasLineOfSight(space, eye, unit.EyePosition))))
+				|| (!HasLineOfSight(space, eye, at)
+					&& !(exposedHeads && HasLineOfSight(space, eye, Exposure.Below(unit.EyePosition)))))
 			{
 				continue;
 			}

@@ -574,3 +574,18 @@ public sealed class CoverClaims
 
 	public void Clear() => Array.Clear(_held);
 }
+
+/// <summary>
+/// How much of a body has to show over cover before it is aimed at by its head
+/// (docs/COVER.md §3). A crouched player's eye is a few centimetres under a sandbag
+/// wall's top; a line that just clears it is a line to the top of a skull, and
+/// rounds aimed there clip the wall or go over. So a head counts as showing only
+/// when a point <see cref="HeadMeters"/> below the eye can be seen as well.
+/// </summary>
+public static class Exposure
+{
+	public const float HeadMeters = 0.2f;
+
+	/// <summary>The point under <paramref name="eye"/> a shooter has to see for the head to count as showing.</summary>
+	public static Vector3 Below(Vector3 eye) => eye - (Vector3.Up * HeadMeters);
+}

@@ -472,7 +472,7 @@ public sealed class BotPilot
 		{
 			sightChecked = true;
 			inSight = HasLineOfSight(eye, targetPosition);
-			if (!inSight && HasLineOfSight(eye, head))
+			if (!inSight && HasLineOfSight(eye, Exposure.Below(head)))
 			{
 				inSight = true;
 				targetPosition = head;

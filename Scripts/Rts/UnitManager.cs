@@ -631,7 +631,7 @@ public partial class UnitManager : Node
 				&& UnitBrain.CanAcquire(eye.DistanceTo(named.Character.EyePosition), unit.Traits))
 			{
 				unit.TargetOwnerId = unit.Order.TargetOwnerId;
-				unit.AimsHigh = AimsHigh(unit, eye, named, eyeClear: false);
+				unit.AimsHigh = AimsHigh(unit, eye, named);
 				return;
 			}
 		}
@@ -649,7 +649,7 @@ public partial class UnitManager : Node
 			if (HasLineOfSight(eye, focus.Character.EyePosition))
 			{
 				unit.TargetOwnerId = OwnerId.ForPeer(focused);
-				unit.AimsHigh = AimsHigh(unit, eye, focus, eyeClear: true);
+				unit.AimsHigh = AimsHigh(unit, eye, focus);
 				return;
 			}
 
@@ -684,18 +684,19 @@ public partial class UnitManager : Node
 		}
 
 		unit.TargetOwnerId = best != null ? OwnerId.ForPeer(best.PeerId) : OwnerId.None;
-		unit.AimsHigh = best != null && AimsHigh(unit, eye, best, eyeClear: true);
+		unit.AimsHigh = best != null && AimsHigh(unit, eye, best);
 	}
 
 	/// <summary>
 	/// Whether a planning unit should aim at its target's head rather than its chest
-	/// (docs/COVER.md §3): the chest is behind something and the head is not. Under
-	/// <c>--bot-ai htn</c> only — legacy aims where it always has. One ray on the
-	/// scan, two when the head has not been looked at yet.
+	/// (docs/COVER.md §3): the chest is behind something and the head is not — a point
+	/// <see cref="Exposure.HeadMeters"/> under the eye can be seen, so a crouched head
+	/// whose crown clears a wall does not count. Under <c>--bot-ai htn</c> only: legacy
+	/// aims where it always has. Two rays on the scan, and only for a planning unit.
 	/// </summary>
-	private bool AimsHigh(Unit unit, Vector3 eye, PlayerCombat target, bool eyeClear) =>
+	private bool AimsHigh(Unit unit, Vector3 eye, PlayerCombat target) =>
 		unit.Plan != null && !HasLineOfSight(eye, target.Character.Hitbox.Center)
-		&& (eyeClear || HasLineOfSight(eye, target.Character.EyePosition));
+		&& HasLineOfSight(eye, Exposure.Below(target.Character.EyePosition));
 
 	/// <summary>
 	/// Where this unit's current target is right now, if it still has one worth

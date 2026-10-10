@@ -88,13 +88,19 @@ Without one more rule, low cover would be absolute against the bots. A ground bo
 line to a unit's middle, and a unit's rounds went at a player's chest. A body behind a low wall was
 therefore invisible to the one and soaked every round of the other into the wall. Under `htn`:
 
-- **A ground bot sees a unit by its head** when the line to its middle is blocked and the line to
-  its eye is not (`GroundSensor.Scan(exposedHeads: true)`). It **aims at the head** while that
-  holds (`BotPilot.TryResolveTarget`). This costs one extra ray, and only while the middle is
-  hidden.
-- **A unit aims at a player's head** when its target's chest is hidden and the head is not
-  (`Unit.AimsHigh`, decided on the unit's scan; `UnitManager.AimsHigh`). That is one more ray per
-  scan, two for an attack order's named target.
+- **A ground bot sees a unit by its head** when the line to its middle is blocked and the head
+  shows (`GroundSensor.Scan(exposedHeads: true)`). It **aims at the head** while that holds
+  (`BotPilot.TryResolveTarget`). This costs one extra ray, and only while the middle is hidden.
+- **A unit aims at a player's head** when its target's chest is hidden and the head shows
+  (`Unit.AimsHigh`, decided on the unit's scan; `UnitManager.AimsHigh`). That is two more rays
+  per scan for a planning unit.
+
+A head **shows** when a point 0.2 m below the eye can be seen (`Exposure.Below`), not just the eye.
+A crouched player's eye is about 1.05 m, a few centimetres under a sandbag wall's 1.1 m top. A
+line that grazes the wall reaches only the crown, and aiming at the eye along it sent some rounds
+over the wall into the head. `sandbag_cover` caught that: the crouched player took a hit in one
+seed. With the margin, a standing head (eye 1.5 m) behind a 1.1–1.2 m wall shows and a crouched
+one does not.
 
 The shooter's error cone does the rest: at 30 m a rifleman's 2.5° is about 1.3 m, so most rounds
 aimed at a head over a wall hit the wall or go over. Cover reduces exposure; it does not make a

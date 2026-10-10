@@ -387,6 +387,25 @@ public class CoverTests
 		}
 	}
 
+	// ---- exposure ----------------------------------------------------------------
+
+	[Fact]
+	public void AStandingHeadShowsOverASandbagWallAndACrouchedOneDoesNot()
+	{
+		// sandbag_cover.json's numbers: a 1.1 m wall 1.4 m in front of the player, a
+		// rifleman's eye at 1.5 m 28 m off. A crouched eye sits at about 1.05 m: its
+		// crown may clear the wall, the head under it does not.
+		var board = new CoverBoard();
+		board.SetStructure(0, new Vector3(0f, 0f, 1.4f), 0f, new Vector3(4f, 1.1f, 0.8f));
+		var shooter = new Vector3(0f, 1.5f, 30f);
+
+		Vector3 standing = new(0f, 1.5f, 0f);
+		Assert.False(board.Occludes(CoverBoard.StructureIndex(0), shooter, Exposure.Below(standing)));
+
+		Vector3 crouched = new(0f, 1.05f, 0f);
+		Assert.True(board.Occludes(CoverBoard.StructureIndex(0), shooter, Exposure.Below(crouched)));
+	}
+
 	// ---- bands -------------------------------------------------------------------
 
 	[Fact]
