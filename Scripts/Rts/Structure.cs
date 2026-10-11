@@ -8,16 +8,18 @@ namespace Gdpyr.Rts;
 /// A pillbox, a sandbag wall or a sniper tower a builder has put up, or is putting
 /// up (docs/NETCODE.md §10.5).
 ///
-/// Server-authoritative like a unit, but not a unit: it cannot be selected, ordered
-/// or moved, and it counts for nothing in the strategist's defeat condition — a
-/// pillbox holds no ground and earns nothing, so a strategist with only concrete
-/// left has nothing left to play with. What it is, is solid. Once it is finished
+/// Server-authoritative like a unit, but not a unit: it cannot be ordered or moved,
+/// and it counts for nothing in the strategist's defeat condition — a pillbox holds
+/// no ground and earns nothing, so a strategist with only concrete left has nothing
+/// left to play with. A finished sniper tower or pillbox can be selected, for the
+/// one thing it does besides shoot: train a unit from a queue of its own, as a
+/// barracks does (docs/NETCODE.md §10.8). What it is, is solid. Once it is finished
 /// its boxes are a static collider on the world layer on every peer, so rounds,
 /// sight lines, bodies and the navigation bake all stop against it without being
 /// taught a new layer; while it is going up it is a squashed, see-through site
 /// that stops only the rounds low enough to hit what has been built of it.
 ///
-/// A body and a gun post and nothing else. What it does each tick is
+/// A body, a gun post and a queue and nothing else. What it does each tick is
 /// <see cref="UnitManager"/>'s, which owns the table it lives in; the rules it goes
 /// up and comes down by are <see cref="Construction"/>, and its gun runs through
 /// the same <see cref="DefenseBattery.StepGun"/> a barracks' does.
@@ -161,6 +163,35 @@ public partial class Structure : Node3D, IGunPost
 	ref WeaponState IGunPost.Belt => ref Weapon;
 
 	int IGunPost.ScanStagger => Slot;
+
+	// ---- training, for the two that train a unit (docs/NETCODE.md §10.8) --------
+
+	/// <summary>True for a structure with a training queue: the sniper tower and the pillbox.</summary>
+	public bool Trains => Definition?.Trains ?? false;
+
+	/// <summary>What it trains, as a <c>UnitCatalog</c> id. Meaningful only when <see cref="Trains"/>.</summary>
+	public byte TrainsUnit => Definition?.TrainsUnit ?? 0;
+
+	/// <summary>
+	/// Server: its training queue, which owns the money as a barracks' does. Empty and
+	/// never ticked for a structure that trains nothing, or one that is not finished.
+	/// </summary>
+	public BuildQueue Queue { get; } = new();
+
+	/// <summary>Server: where its fresh units are sent, once somebody has said; until then they walk out from the door.</summary>
+	public Vector3 RallyPoint { get; set; }
+
+	/// <summary>Server: whether <see cref="RallyPoint"/> has been set.</summary>
+	public bool HasRally { get; set; }
+
+	/// <summary>Units on its queue: the server's own count, a client's from the last report.</summary>
+	public int TrainingQueued => IsSimulated ? Queue.Count : _replicatedQueued;
+
+	/// <summary>How far the head of its queue is, 0 to 1: the server's own, a client's from the last report.</summary>
+	public float TrainingProgress(uint tick) => IsSimulated ? Queue.Progress(tick) : _replicatedTraining;
+
+	private int _replicatedQueued;
+	private float _replicatedTraining;
 
 	private float _replicatedProgress;
 	private Node3D _model;
@@ -306,6 +337,13 @@ public partial class Structure : Node3D, IGunPost
 		_replicatedProgress = progress / (float)byte.MaxValue;
 		SetFlags(flags);
 		RefreshModel();
+	}
+
+	/// <summary>Takes the server's word for what is on its training queue and how far the head is.</summary>
+	public void ApplyRemoteTraining(byte queued, byte progress)
+	{
+		_replicatedQueued = queued;
+		_replicatedTraining = progress / (float)byte.MaxValue;
 	}
 
 	/// <summary>

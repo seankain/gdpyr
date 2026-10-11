@@ -31,9 +31,19 @@ public partial class UnitDefinition : Resource
 	[Export]
 	public int Cost = 50;
 
-	/// <summary>Seconds one takes to come out of a barracks.</summary>
+	/// <summary>Seconds one takes to come out of a barracks, or of the structure that trains it.</summary>
 	[Export]
 	public float BuildSeconds = 4f;
+
+	/// <summary>
+	/// Whether a barracks trains it. False for a unit only a structure trains — the
+	/// sniper a sniper tower turns out, the heavy gunner a pillbox does
+	/// (<see cref="StructureDefinition.TrainsUnitId"/>, docs/NETCODE.md §10.8): what
+	/// makes it worth building the structure, and what keeps the barracks' card the
+	/// five things it always was.
+	/// </summary>
+	[Export]
+	public bool TrainedInBarracks = true;
 
 	[ExportCategory("Body")]
 
@@ -115,6 +125,19 @@ public partial class UnitDefinition : Resource
 	/// </summary>
 	[Export]
 	public float AccuracyConeDegrees = 2.5f;
+
+	/// <summary>
+	/// Seconds it keeps firing at the place it last saw its target after losing sight
+	/// of it (<see cref="Suppression"/>): the heavy gunner's trait, which is what makes
+	/// its long belt suppressive fire rather than only a lot of it — a player who
+	/// ducks behind a wall finds the wall still being shot at when they look up. Zero
+	/// for everything else, which stops shooting when it stops seeing.
+	/// </summary>
+	[Export]
+	public float SuppressSeconds;
+
+	/// <summary><see cref="SuppressSeconds"/> in ticks; zero for a unit that does not suppress.</summary>
+	public int SuppressTicks => WeaponStats.SecondsToTicks(SuppressSeconds);
 
 	/// <summary>
 	/// Whether it can put up structures (docs/NETCODE.md §10.5). The builder's one

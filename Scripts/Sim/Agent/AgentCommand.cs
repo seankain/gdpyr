@@ -54,6 +54,16 @@ public struct AgentCommand
 	/// <summary>Barracks index for build, cancel and rally.</summary>
 	public int Barracks;
 
+	/// <summary>
+	/// True when a build, cancel or rally means the sniper tower or pillbox in
+	/// <see cref="Slot"/> rather than a barracks (docs/NETCODE.md §10.8). A structure
+	/// trains one kind of unit, so a build at one ignores <see cref="Tier"/>.
+	/// </summary>
+	public bool AtStructure;
+
+	/// <summary>The structure slot, when <see cref="AtStructure"/>.</summary>
+	public int Slot;
+
 	/// <summary>Unit tier for build.</summary>
 	public byte Tier;
 

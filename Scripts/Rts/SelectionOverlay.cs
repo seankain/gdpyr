@@ -37,6 +37,9 @@ public partial class SelectionOverlay : Control
 
 	private const int BarracksRingSegments = 32;
 
+	/// <summary>Metres outside a selected structure's corners its ring is drawn.</summary>
+	private const float StructureRingClearanceMeters = 0.8f;
+
 	private static readonly Color SelectionColor = new(0.45f, 0.95f, 0.55f);
 	private static readonly Color DragColor = new(0.45f, 0.95f, 0.55f, 0.85f);
 	private static readonly Color DragFillColor = new(0.45f, 0.95f, 0.55f, 0.12f);
@@ -70,6 +73,7 @@ public partial class SelectionOverlay : Control
 	private readonly List<Contact> _contacts = new();
 
 	private Barracks _barracks;
+	private Structure _structure;
 
 	private Camera3D _camera;
 	private Vector2 _dragFrom;
@@ -123,6 +127,9 @@ public partial class SelectionOverlay : Control
 
 	/// <summary>The barracks the strategist has clicked on, or null.</summary>
 	public void SetSelectedBarracks(Barracks barracks) => _barracks = barracks;
+
+	/// <summary>The sniper tower or pillbox the strategist has clicked on for its training queue, or null (docs/NETCODE.md §10.8).</summary>
+	public void SetSelectedStructure(Structure structure) => _structure = structure;
 
 	/// <summary>
 	/// Takes a copy of what the strategist can see, rebuilt every simulation tick by
@@ -222,25 +229,36 @@ public partial class SelectionOverlay : Control
 	}
 
 	/// <summary>
-	/// A ring on the ground round the selected barracks, in the selection colour.
+	/// A ring on the ground round the selected barracks or structure, in the selection colour.
 	/// On the ground rather than a bracket on the screen, because a building is
 	/// big enough for the camera to be close to one side of it; drawn a segment at a
 	/// time so the part behind a low camera drops out on its own.
 	/// </summary>
 	private void DrawSelectedBarracks()
 	{
-		if (_barracks == null || !IsInstanceValid(_barracks))
+		if (_barracks != null && IsInstanceValid(_barracks))
 		{
-			return;
+			DrawGroundRing(_barracks.GlobalPosition, BarracksRingMeters);
 		}
 
-		Vector3 centre = _barracks.GlobalPosition + (Vector3.Up * 0.1f);
-		bool previousOnScreen = TryScreen(centre + (Vector3.Right * BarracksRingMeters), out Vector2 previous);
+		// A selected structure gets the same ring, just clear of its corners.
+		if (_structure != null && IsInstanceValid(_structure) && !_structure.IsDestroyed)
+		{
+			Footprint footprint = _structure.Footprint;
+			float radius = new Vector2(footprint.HalfWidth, footprint.HalfDepth).Length() + StructureRingClearanceMeters;
+			DrawGroundRing(_structure.Pose.Base, radius);
+		}
+	}
+
+	private void DrawGroundRing(Vector3 middle, float radius)
+	{
+		Vector3 centre = middle + (Vector3.Up * 0.1f);
+		bool previousOnScreen = TryScreen(centre + (Vector3.Right * radius), out Vector2 previous);
 
 		for (int i = 1; i <= BarracksRingSegments; i++)
 		{
 			float angle = Mathf.Tau * i / BarracksRingSegments;
-			Vector3 point = centre + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * BarracksRingMeters;
+			Vector3 point = centre + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * radius;
 			bool onScreen = TryScreen(point, out Vector2 screen);
 
 			if (onScreen && previousOnScreen)

@@ -13,6 +13,7 @@ namespace Gdpyr.Rts;
 /// their behaviour. The gun's numbers are the ones a barracks defence authors
 /// (<see cref="DefenseMount"/>), because the gun is one: it runs through the same
 /// <see cref="DefenseSim"/> rules, and only the thing it is mounted on differs.
+/// The two with a gun also train a unit, once finished (<see cref="TrainsUnitId"/>).
 /// </summary>
 [GlobalClass]
 public partial class StructureDefinition : Resource
@@ -97,6 +98,22 @@ public partial class StructureDefinition : Resource
 	/// <summary>Half-angle of its accuracy cone, as a unit's and a defence's are.</summary>
 	[Export]
 	public float AccuracyConeDegrees = 2f;
+
+	[ExportCategory("Training")]
+
+	/// <summary>
+	/// The <c>UnitCatalog</c> id of the unit it trains once it is finished, or -1 for
+	/// none (docs/NETCODE.md §10.8): the sniper tower trains snipers and the pillbox
+	/// heavy gunners, each from a queue of its own, as a barracks does.
+	/// </summary>
+	[Export]
+	public int TrainsUnitId = -1;
+
+	/// <summary>True for a structure with a training queue.</summary>
+	public bool Trains => TrainsUnitId >= 0 && TrainsUnitId < SimConfig.MaxUnitDefinitions;
+
+	/// <summary>What it trains, as a catalog id. Meaningful only when <see cref="Trains"/>.</summary>
+	public byte TrainsUnit => (byte)Mathf.Clamp(TrainsUnitId, 0, SimConfig.MaxUnitDefinitions - 1);
 
 	[ExportCategory("Presentation")]
 

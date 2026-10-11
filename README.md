@@ -47,7 +47,8 @@ Scripts/Ui/     Main menu and server browser, role select, pause menu, reticle, 
                 net debug HUD, the `~` console and the demo camera
 Scripts/Ui/Spectator/ The spectator's camera, and the AI debugger's panel, graph and world overlay
 Scenes/         Main menu, greybox map, player, weapon, pause menu
-Units/          UnitDefinition resources: three fighting tiers, the builder and the supply truck
+Units/          UnitDefinition resources: three fighting tiers, the builder, the supply truck, and the
+                sniper and heavy gunner a sniper tower and a pillbox train
 Structures/     StructureDefinition resources: pillbox, sandbag wall, sniper tower
 Tests/          xUnit over the engine-free sources — `dotnet test`, no Godot needed
 Tests/Scenarios/ Playtest scenario files: data, and authoring one needs no Godot install
@@ -173,6 +174,7 @@ map:
 | `X` `C` `B` `Z` | attack-move · patrol · defend · stop, applied by the next right-click |
 | `1` `2` `3` `4` `8`, Backspace | queue an infantryman, a technical, a tank, a builder or a supply truck; cancel the last one |
 | `5` `6` `7` | with builders selected: put a pillbox, a sandbag wall or a sniper tower where the next right-click lands |
+| `9` `0` | queue a sniper at a sniper tower, a heavy gunner at a pillbox (the selected one, else the one with the shortest queue) |
 
 Right-clicking an enemy player orders an attack on that player rather than on the ground under
 them. Units are server-simulated and never predicted; the order marker appears immediately and the
@@ -187,6 +189,15 @@ while builders stand beside it — two build twice as fast — and cannot finish
 ground force is standing where it goes. Right-clicking builders onto one of your own sites or damaged
 structures finishes or mends it. Finished, it is solid for everybody: it stops bullets, bodies and
 sight lines, and a crouched player behind a sandbag wall is hidden from a rifleman in front of it.
+
+**Towers and pillboxes train units** ([`docs/NETCODE.md`](docs/NETCODE.md) §10.8). Click a finished
+one and the card is its queue, as a barracks' is; a right-click on the ground with no units selected
+moves its rally point. A **sniper tower** trains **snipers** (60 points, `9`): the tower's marksman on
+foot, shooting as far as it sees, 70 m, two hits to a kill, on a body softer than a rifleman's. A
+**pillbox** trains **heavy gunners** (90 points, `0`): slow, tougher, with a 150-round belt, and they
+fire suppressively — a gunner that loses sight of a target keeps firing for four seconds at the
+place it last saw it, so a player who ducks behind a wall finds the wall still being shot at when they
+look up. Neither comes out of a barracks. A knocked-down structure refunds what was still on its queue.
 
 **Cover** ([`docs/COVER.md`](docs/COVER.md)): the map has 18 low walls, 1.2 m high, that a
 standing body fires over and a crouched one hides behind, and 8 blocks nothing sees through. A

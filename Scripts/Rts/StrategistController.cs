@@ -115,6 +115,13 @@ public partial class StrategistController : Node3D
 	/// </summary>
 	private int _selectedBarracks = -1;
 
+	/// <summary>
+	/// The slot of the sniper tower or pillbox the strategist clicked on, or -1
+	/// (docs/NETCODE.md §10.8). While one is selected the card is its queue, the card's
+	/// buttons and Backspace mean it, and a right-click with no units sets its rally point.
+	/// </summary>
+	private int _selectedStructure = -1;
+
 	/// <summary>What the next right-click means. Reset to Move after each order is given.</summary>
 	private OrderKind _pendingOrder = OrderKind.Move;
 
@@ -145,7 +152,7 @@ public partial class StrategistController : Node3D
 		_hud = new StrategistHud { Name = "StrategistHud" };
 		AddChild(_hud);
 		_hud.Overlay.Attach(_camera);
-		_hud.BuildPressed += QueueUnit;
+		_hud.BuildPressed += CardBuild;
 		_hud.CancelPressed += CancelUnit;
 
 		// A strategist needs a pointer. The first-person rig takes the mouse back when
@@ -181,11 +188,18 @@ public partial class StrategistController : Node3D
 			SelectBarracks(-1);
 		}
 
+		Team side = CombatManager.Instance?.Local?.Team ?? Team.Strategist;
+		if (_selectedStructure >= 0 && !IsTrainer(UnitManager.Instance?.StructureAt(_selectedStructure), side))
+		{
+			// Knocked down, or the slot is somebody else's now.
+			SelectStructure(-1);
+		}
+
 		if (CombatManager.Instance is { } combat)
 		{
 			RefreshContacts(combat, tick);
 			_hud.Refresh(combat.Match, UnitManager.Instance, tick, _selected.Count, _pendingOrder, combat.Economy,
-				BuildTarget, _selectedBarracks >= 0);
+				BuildTarget, _selectedBarracks >= 0, SelectedStructure);
 			_hud.RefreshBuilders(UnitManager.Instance, combat.Local?.Team ?? Team.Strategist, _placing,
 				CountSelectedBuilders());
 		}
@@ -209,6 +223,8 @@ public partial class StrategistController : Node3D
 		else if (@event.IsActionPressed("rts_build_tank")) { QueueUnit(UnitCatalog.Tank); }
 		else if (@event.IsActionPressed("rts_build_builder")) { QueueUnit(UnitCatalog.Builder); }
 		else if (@event.IsActionPressed("rts_build_supply")) { QueueUnit(UnitCatalog.SupplyTruck); }
+		else if (@event.IsActionPressed("rts_build_sniper")) { Train(UnitCatalog.Sniper); }
+		else if (@event.IsActionPressed("rts_build_gunner")) { Train(UnitCatalog.HeavyGunner); }
 		else if (@event.IsActionPressed("rts_place_pillbox")) { ArmPlacement(StructureKinds.Pillbox); }
 		else if (@event.IsActionPressed("rts_place_sandbags")) { ArmPlacement(StructureKinds.SandbagWall); }
 		else if (@event.IsActionPressed("rts_place_tower")) { ArmPlacement(StructureKinds.SniperTower); }
@@ -555,6 +571,7 @@ public partial class StrategistController : Node3D
 	{
 		_selected.Clear();
 		int barracks = -1;
+		int structure = -1;
 
 		UnitManager units = UnitManager.Instance;
 		Team team = CombatManager.Instance?.Local?.Team ?? Team.Strategist;
@@ -571,8 +588,10 @@ public partial class StrategistController : Node3D
 				else
 				{
 					// Units first, because they stand in front of the door; the building
-					// behind them is what a click that finds none of them meant.
+					// behind them is what a click that finds none of them meant — a
+					// barracks, or a structure that trains something.
 					barracks = PickBarracks(to, team);
+					structure = barracks < 0 ? PickTrainer(to, team) : -1;
 				}
 			}
 			else
@@ -592,12 +611,14 @@ public partial class StrategistController : Node3D
 
 		_hud.Overlay.SetSelection(_selected);
 		SelectBarracks(barracks);
+		SelectStructure(structure);
 	}
 
 	private void SelectAll()
 	{
 		_selected.Clear();
 		SelectBarracks(-1);
+		SelectStructure(-1);
 
 		UnitManager units = UnitManager.Instance;
 		Team team = CombatManager.Instance?.Local?.Team ?? Team.Strategist;
@@ -671,11 +692,19 @@ public partial class StrategistController : Node3D
 		{
 			// No units selected: a right-click on the ground moves the rally point, so
 			// that queueing twenty riflemen and pointing them somewhere is two clicks
-			// rather than two clicks per rifleman. The selected barracks' if there is
-			// one, which is how every RTS sets a rally point.
+			// rather than two clicks per rifleman. The selected structure's or barracks'
+			// if there is one, which is how every RTS sets a rally point.
 			if (kind != OrderKind.Stop)
 			{
-				units.RequestRally(BuildTarget, point);
+				if (_selectedStructure >= 0)
+				{
+					units.RequestTrainingRally(_selectedStructure, point);
+				}
+				else
+				{
+					units.RequestRally(BuildTarget, point);
+				}
+
 				_hud.Overlay.FlashOrder(point, OrderKind.Move);
 			}
 			return;
@@ -706,12 +735,111 @@ public partial class StrategistController : Node3D
 
 	private void QueueUnit(byte definitionId) => UnitManager.Instance?.RequestBuild(BuildTarget, definitionId);
 
-	private void CancelUnit() => UnitManager.Instance?.RequestCancelBuild(BuildTarget);
+	/// <summary>Backspace and the card's cancel: the selected structure's last unit, else the barracks'.</summary>
+	private void CancelUnit()
+	{
+		if (_selectedStructure >= 0)
+		{
+			UnitManager.Instance?.RequestCancelTrain(_selectedStructure);
+			return;
+		}
+
+		UnitManager.Instance?.RequestCancelBuild(BuildTarget);
+	}
+
+	/// <summary>A button on the card: trained where the card is up for — the selected structure, else the barracks.</summary>
+	private void CardBuild(byte definitionId)
+	{
+		if (_selectedStructure >= 0)
+		{
+			Train(definitionId);
+			return;
+		}
+
+		QueueUnit(definitionId);
+	}
 
 	private void SelectBarracks(int index)
 	{
 		_selectedBarracks = index;
 		_hud.Overlay.SetSelectedBarracks(UnitManager.Instance?.BarracksAt(index));
+	}
+
+	// ---- structures that train (docs/NETCODE.md §10.8) -----------------------------
+
+	/// <summary>The selected sniper tower or pillbox, or null.</summary>
+	private Structure SelectedStructure =>
+		_selectedStructure >= 0 ? UnitManager.Instance?.StructureAt(_selectedStructure) : null;
+
+	private void SelectStructure(int slot)
+	{
+		_selectedStructure = slot;
+		_hud.Overlay.SetSelectedStructure(SelectedStructure);
+	}
+
+	/// <summary>
+	/// Queues one <paramref name="definitionId"/> at a structure that trains it: the
+	/// selected one if it does, else whichever of this side's has the shortest queue —
+	/// so 9 means "a sniper, from a tower" without a click on the tower first. Nothing
+	/// when no finished structure trains it; the server would refuse it anyway.
+	/// </summary>
+	private void Train(byte definitionId)
+	{
+		UnitManager units = UnitManager.Instance;
+		Team team = CombatManager.Instance?.Local?.Team ?? Team.Strategist;
+		if (units == null)
+		{
+			return;
+		}
+
+		if (SelectedStructure is { } selected && IsTrainer(selected, team) && selected.TrainsUnit == definitionId)
+		{
+			units.RequestTrain(selected.Slot);
+			return;
+		}
+
+		Structure best = null;
+		for (int i = 0; i < SimConfig.MaxStructures; i++)
+		{
+			Structure structure = units.StructureAt(i);
+			if (IsTrainer(structure, team) && structure.TrainsUnit == definitionId
+				&& (best == null || structure.TrainingQueued < best.TrainingQueued))
+			{
+				best = structure;
+			}
+		}
+
+		if (best != null)
+		{
+			units.RequestTrain(best.Slot);
+		}
+	}
+
+	/// <summary>A finished, standing structure of <paramref name="team"/>'s that trains something.</summary>
+	private static bool IsTrainer(Structure structure, Team team) =>
+		structure != null && IsInstanceValid(structure) && !structure.IsDestroyed && structure.IsBuilt
+		&& structure.Team == team && structure.Trains;
+
+	/// <summary>
+	/// The slot of <paramref name="team"/>'s training structure under the cursor, or
+	/// -1: what a ray hits first, as for a barracks, else the nearest on screen — a
+	/// tower is thin, and its cabin is a long way above the ground it stands on.
+	/// </summary>
+	private int PickTrainer(Vector2 screen, Team team)
+	{
+		if (TryWorldHit(screen, out _, out Node collider))
+		{
+			for (Node node = collider; node != null; node = node.GetParent())
+			{
+				if (node is Structure hit)
+				{
+					return IsTrainer(hit, team) ? hit.Slot : -1;
+				}
+			}
+		}
+
+		Structure near = PickStructure(screen, team, trainersOnly: true);
+		return near != null ? near.Slot : -1;
 	}
 
 	// ---- builders (docs/NETCODE.md §10.5) -------------------------------------
@@ -845,8 +973,11 @@ public partial class StrategistController : Node3D
 		_hud.Overlay.SetGhost(true, ghost, clear && affordable && CountSelectedBuilders() > 0);
 	}
 
-	/// <summary>The structure of <paramref name="team"/>'s under the cursor, if any.</summary>
-	private Structure PickStructure(Vector2 screen, Team team)
+	/// <summary>
+	/// The structure of <paramref name="team"/>'s under the cursor, if any; with
+	/// <paramref name="trainersOnly"/>, only a finished one that trains something.
+	/// </summary>
+	private Structure PickStructure(Vector2 screen, Team team, bool trainersOnly = false)
 	{
 		UnitManager units = UnitManager.Instance;
 		Structure best = null;
@@ -856,7 +987,7 @@ public partial class StrategistController : Node3D
 		{
 			Structure structure = units.StructureAt(i);
 			if (structure == null || !IsInstanceValid(structure) || structure.IsDestroyed || structure.Team != team
-				|| !TryScreen(structure.AimPoint, out Vector2 at))
+				|| (trainersOnly && !IsTrainer(structure, team)) || !TryScreen(structure.AimPoint, out Vector2 at))
 			{
 				continue;
 			}

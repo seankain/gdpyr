@@ -587,10 +587,13 @@ public sealed partial class AgentServer
 	{
 		string kind = Text(element, "cmd", "noop");
 		Point(element, "target", out float x, out float z);
+		int slot = Int(element, "slot", -1);
 
 		var command = new AgentCommand
 		{
 			Barracks = Int(element, "barracks", 0),
+			AtStructure = slot >= 0,
+			Slot = slot,
 			Tier = (byte)Math.Clamp(Int(element, "tier", 0), 0, byte.MaxValue),
 			TargetOwnerId = Int(element, "target_owner", OwnerId.None),
 			X = x,
@@ -1036,6 +1039,8 @@ public sealed partial class AgentServer
 		"tank" or "2" => UnitCatalog.Tank,
 		"builder" or "3" => UnitCatalog.Builder,
 		"supply_truck" or "4" => UnitCatalog.SupplyTruck,
+		"sniper" or "5" => UnitCatalog.Sniper,
+		"heavy_gunner" or "6" => UnitCatalog.HeavyGunner,
 		_ => UnitCatalog.Infantry,
 	};
 

@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="UnitDefinition" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Rts/UnitDefinition.cs" id="1_unitdef"]
+
+[resource]
+script = ExtResource("1_unitdef")
+Name = &"heavy_gunner"
+Cost = 90
+BuildSeconds = 7.0
+TrainedInBarracks = false
+MaxHealth = 140.0
+RegenPerSecond = 7.0
+MoveSpeed = 3.6
+HeightMeters = 1.8
+RadiusMeters = 0.45
+EyeHeightMeters = 1.5
+SensorRadiusMeters = 45.0
+EngageRangeMeters = 45.0
+LeashRadiusMeters = 15.0
+ArrivalRadiusMeters = 1.5
+WeaponId = 11
+AccuracyConeDegrees = 3.0
+SuppressSeconds = 4.0
+Color = Color(0.55, 0.2, 0.5, 1)

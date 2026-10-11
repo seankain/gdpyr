@@ -95,6 +95,13 @@ public partial class Unit : CharacterBody3D
 	/// <summary>What this unit is shooting at, as an <see cref="OwnerId"/>. 0 for nothing.</summary>
 	public int TargetOwnerId { get; set; }
 
+	/// <summary>
+	/// Server-side: where it last saw its target, for a unit that keeps firing there
+	/// after losing sight of it — the heavy gunner (<see cref="Suppression"/>,
+	/// docs/NETCODE.md §10.8). Empty for every other unit. Never replicated.
+	/// </summary>
+	public SuppressionMemory LastSeen;
+
 	/// <summary>The next tick it re-scans for a target on, so scans can be staggered.</summary>
 	public uint NextScanTick { get; set; }
 

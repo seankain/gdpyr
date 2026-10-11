@@ -27,16 +27,25 @@ public partial class StrategistHud : CanvasLayer
 		"WASD/edge pan · Space/Ctrl raise/lower · hold RMB and drag to look (Q/E also turn) · wheel zoom\n"
 		+ "LMB select · click the barracks to train units · RMB order · X attack-move · C patrol · B defend · Z stop · F select all\n"
 		+ "1/2/3 queue infantry/technical/tank · 4 queue builder · 8 queue supply truck · Backspace cancel · RMB with no units selected sets the rally point\n"
+		+ "9 queue a sniper at a sniper tower · 0 queue a heavy gunner at a pillbox · click a finished tower or pillbox for its queue and rally point\n"
 		+ "with builders selected: 5/6/7 then RMB places pillbox/sandbags/tower (turn the view to turn it) · RMB on a site finishes or mends it\n"
 		+ "units out of a fight for 3 s heal inside the barracks ring and a supply truck's ring: move them there\n"
 		+ "F1 ground force · F2 strategist";
 
-	/// <summary>What the barracks card offers, in the order the number keys are: the three tiers, the builder, the supply truck.</summary>
+	/// <summary>
+	/// Every unit a card can offer, in the order the number keys are: the three tiers,
+	/// the builder and the supply truck, which a barracks trains, then the sniper and
+	/// the heavy gunner, which a sniper tower and a pillbox do (docs/NETCODE.md §10.8).
+	/// A card shows the buttons for what the thing it is up for trains, and hides the rest.
+	/// </summary>
 	private static readonly byte[] CardUnits =
-		{ UnitCatalog.Infantry, UnitCatalog.Technical, UnitCatalog.Tank, UnitCatalog.Builder, UnitCatalog.SupplyTruck };
+	{
+		UnitCatalog.Infantry, UnitCatalog.Technical, UnitCatalog.Tank, UnitCatalog.Builder, UnitCatalog.SupplyTruck,
+		UnitCatalog.Sniper, UnitCatalog.HeavyGunner,
+	};
 
 	/// <summary>The key that queues each of <see cref="CardUnits"/>, printed on its button.</summary>
-	private static readonly string[] CardKeys = { "1", "2", "3", "4", "8" };
+	private static readonly string[] CardKeys = { "1", "2", "3", "4", "8", "9", "0" };
 
 	private static readonly Color CardBorderColor = new(0.35f, 0.45f, 0.55f, 0.9f);
 
@@ -55,10 +64,10 @@ public partial class StrategistHud : CanvasLayer
 
 	public SelectionOverlay Overlay { get; private set; }
 
-	/// <summary>A unit button on the barracks card was pressed. Carries the unit's catalog id.</summary>
+	/// <summary>A unit button on the card was pressed. Carries the unit's catalog id.</summary>
 	public event Action<byte> BuildPressed;
 
-	/// <summary>The barracks card's cancel button was pressed.</summary>
+	/// <summary>The card's cancel button was pressed.</summary>
 	public event Action CancelPressed;
 
 	public override void _Ready()
@@ -82,7 +91,7 @@ public partial class StrategistHud : CanvasLayer
 		_selection = NewLabel(root, new Vector2(24f, 80f), new Vector2(520f, 32f));
 		_economy = NewLabel(root, new Vector2(24f, 112f), new Vector2(640f, 32f));
 		_builders = NewLabel(root, new Vector2(24f, 144f), new Vector2(760f, 32f));
-		_keys = NewLabel(root, new Vector2(24f, -156f), new Vector2(1100f, 144f), anchorTop: 1f);
+		_keys = NewLabel(root, new Vector2(24f, -180f), new Vector2(1100f, 168f), anchorTop: 1f);
 		_keys.Text = Keys;
 
 		BuildCard(root);
@@ -92,10 +101,12 @@ public partial class StrategistHud : CanvasLayer
 	/// Called once per simulation tick by <see cref="StrategistController"/>.
 	/// <paramref name="barracks"/> is the one the build keys mean, and
 	/// <paramref name="barracksSelected"/> whether the strategist clicked on it,
-	/// which is what puts its card up.
+	/// which is what puts its card up. <paramref name="structure"/> is the sniper
+	/// tower or pillbox clicked on for its queue, or null; while there is one, the
+	/// card is its.
 	/// </summary>
 	public void Refresh(MatchState match, UnitManager units, uint tick, int selectedCount, OrderKind pendingOrder,
-		EconomyService economy, int barracks, bool barracksSelected)
+		EconomyService economy, int barracks, bool barracksSelected, Structure structure)
 	{
 		int live = units?.LiveUnitCount ?? 0;
 
@@ -109,20 +120,33 @@ public partial class StrategistHud : CanvasLayer
 				+ $"   queued {status.Queued}"
 			: "barracks: idle";
 
-		_selection.Text = barracksSelected
-			? "selected barracks   right-click the ground to set its rally point"
-			: $"selected {selectedCount}   next order: {Describe(pendingOrder)}";
+		_selection.Text = structure != null
+			? $"selected {NameOf(structure)}   right-click the ground to set its rally point"
+			: barracksSelected
+				? "selected barracks   right-click the ground to set its rally point"
+				: $"selected {selectedCount}   next order: {Describe(pendingOrder)}";
 		_economy.Text = Economy(economy);
 
-		RefreshCard(match, status, barracksSelected);
+		if (structure != null)
+		{
+			RefreshCard(match, shown: true, NameOf(structure), structure.TrainingQueued, structure.TrainsUnit,
+				structure.TrainingProgress(tick), only: structure.TrainsUnit);
+		}
+		else
+		{
+			RefreshCard(match, barracksSelected, "barracks", status.Queued, status.Head, status.Progress, only: -1);
+		}
 	}
 
 	/// <summary>
-	/// The card's live half: what is training, and which buttons can be pressed.
-	/// A button the strategist cannot afford is greyed out rather than hidden, so
-	/// the card always shows the whole menu and the price of each thing on it.
+	/// The card's live half: what is training, and which buttons can be pressed. It
+	/// offers what a barracks trains when <paramref name="only"/> is negative, and that
+	/// one unit when it is a structure's. A button the strategist cannot afford is
+	/// greyed out rather than hidden, so the card always shows the whole menu and the
+	/// price of each thing on it.
 	/// </summary>
-	private void RefreshCard(MatchState match, UnitManager.BarracksStatus status, bool shown)
+	private void RefreshCard(MatchState match, bool shown, string title, int queued, byte head, float progress,
+		int only)
 	{
 		_card.Visible = shown;
 		if (!shown)
@@ -130,18 +154,24 @@ public partial class StrategistHud : CanvasLayer
 			return;
 		}
 
-		_cardStatus.Text = status.Queued > 0
-			? $"barracks: training {UnitCatalog.NameOf(status.Head)} {Mathf.RoundToInt(status.Progress * 100f)}%"
-				+ $"   queued {status.Queued}"
-			: "barracks: idle, pick a unit to train";
-		_cardProgress.Value = status.Queued > 0 ? status.Progress : 0f;
+		_cardStatus.Text = queued > 0
+			? $"{title}: training {UnitCatalog.NameOf(head).Replace('_', ' ')} {Mathf.RoundToInt(progress * 100f)}%"
+				+ $"   queued {queued}"
+			: $"{title}: idle, pick a unit to train";
+		_cardProgress.Value = queued > 0 ? progress : 0f;
 
-		bool full = status.Queued >= SimConfig.MaxBuildQueue;
+		bool full = queued >= SimConfig.MaxBuildQueue;
 		for (int i = 0; i < CardUnits.Length; i++)
 		{
 			byte id = CardUnits[i];
 			int cost = UnitCatalog.CostOf(id);
 			Button button = _cardButtons[i];
+
+			button.Visible = only >= 0 ? id == only : UnitCatalog.IsTrainedInBarracks(id);
+			if (!button.Visible)
+			{
+				continue;
+			}
 
 			// Set every refresh rather than once, because the catalog is loaded by the
 			// unit manager and this HUD does not know which of them was ready first.
@@ -152,12 +182,18 @@ public partial class StrategistHud : CanvasLayer
 					+ (definition.IsSupply
 						? $"; heals friendly units within {definition.SupplyRadiusMeters:0} m that are out of a fight"
 						: string.Empty)
+					+ (definition.SuppressSeconds > 0f
+						? $"; keeps firing for {definition.SuppressSeconds:0.#} s where a target went to ground"
+						: string.Empty)
 				: string.Empty;
 			button.Disabled = full || !UnitCatalog.IsBuildable(id) || match.StrategistPoints < cost;
 		}
 
-		_cardCancel.Disabled = status.Queued == 0;
+		_cardCancel.Disabled = queued == 0;
 	}
+
+	/// <summary>A structure's name as a person reads it: "sniper tower", not "sniper_tower".</summary>
+	private static string NameOf(Structure structure) => StructureCatalog.NameOf(structure.Kind).Replace('_', ' ');
 
 	/// <summary>
 	/// The builders' line (docs/NETCODE.md §10.5): how many there are, what is
@@ -217,9 +253,9 @@ public partial class StrategistHud : CanvasLayer
 	}
 
 	/// <summary>
-	/// The barracks' command card: what it is training, a button per unit it can
-	/// train, and a way to take the last one back. Up only while a barracks is
-	/// selected, in the bottom-right corner above the key list.
+	/// The command card: what the selected barracks, sniper tower or pillbox is
+	/// training, a button per unit it can train, and a way to take the last one back.
+	/// Up only while one is selected, in the bottom-right corner above the key list.
 	/// </summary>
 	private void BuildCard(Control root)
 	{
@@ -300,8 +336,8 @@ public partial class StrategistHud : CanvasLayer
 		panel.GrowVertical = Control.GrowDirection.Begin;
 		panel.OffsetLeft = -16f;
 		panel.OffsetRight = -16f;
-		panel.OffsetTop = -164f;
-		panel.OffsetBottom = -164f;
+		panel.OffsetTop = -188f;
+		panel.OffsetBottom = -188f;
 
 		_card = panel;
 	}

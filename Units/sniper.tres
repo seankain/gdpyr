@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="UnitDefinition" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Rts/UnitDefinition.cs" id="1_unitdef"]
+
+[resource]
+script = ExtResource("1_unitdef")
+Name = &"sniper"
+Cost = 60
+BuildSeconds = 5.0
+TrainedInBarracks = false
+MaxHealth = 80.0
+RegenPerSecond = 4.0
+MoveSpeed = 4.5
+HeightMeters = 1.8
+RadiusMeters = 0.4
+EyeHeightMeters = 1.5
+SensorRadiusMeters = 70.0
+EngageRangeMeters = 70.0
+LeashRadiusMeters = 20.0
+ArrivalRadiusMeters = 1.5
+WeaponId = 10
+AccuracyConeDegrees = 0.45
+Color = Color(0.3, 0.5, 0.3, 1)

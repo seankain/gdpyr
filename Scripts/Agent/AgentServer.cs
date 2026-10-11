@@ -397,12 +397,26 @@ public sealed partial class AgentServer : IDisposable
 						command.TargetOwnerId);
 					break;
 
+				// A slot names a sniper tower or a pillbox instead of a barracks
+				// (docs/NETCODE.md §10.8).
+				case AgentCommandKind.Build when command.AtStructure:
+					units.ServerTrain(seat.PeerId, command.Slot);
+					break;
+
 				case AgentCommandKind.Build:
 					units.ServerQueueUnit(seat.PeerId, command.Barracks, command.Tier);
 					break;
 
+				case AgentCommandKind.Cancel when command.AtStructure:
+					units.ServerCancelTrain(seat.PeerId, command.Slot);
+					break;
+
 				case AgentCommandKind.Cancel:
 					units.ServerCancelBuild(seat.PeerId, command.Barracks);
+					break;
+
+				case AgentCommandKind.Rally when command.AtStructure:
+					units.ServerSetTrainingRally(seat.PeerId, command.Slot, at);
 					break;
 
 				case AgentCommandKind.Rally:

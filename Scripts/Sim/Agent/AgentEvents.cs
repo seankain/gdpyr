@@ -78,6 +78,8 @@ public static class AgentEventSchema
 		new[] { "outcome", "ground_tickets", "units_lost", "duration_minutes", "units_built" }, // RoundEnd
 		new[] { "attacker", "victim", "weapon", "distance", "" },                              // Kill
 		new[] { "attacker", "victim", "weapon", "amount", "remaining" },                       // Damage
+		// A unit a sniper tower or pillbox trained names it as barracks -(slot + 1)
+		// (docs/NETCODE.md §10.8): negative is "not a barracks" to a reader that only knows those.
 		new[] { "unit", "tier", "barracks", "x", "z" },                                        // UnitBuilt
 		new[] { "unit", "tier", "killer", "x", "z" },                                          // UnitLost
 		new[] { "node", "owner", "claimant", "x", "z" },                                       // NodeCaptured

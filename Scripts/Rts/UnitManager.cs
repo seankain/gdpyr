@@ -144,15 +144,16 @@ public partial class UnitManager : Node
 	public Barracks BarracksAt(int index) => index >= 0 && index < _barracks.Count ? _barracks[index] : null;
 
 	/// <summary>
-	/// Units on every barracks queue. Server-side: a queued unit has already been
-	/// paid for, so it is the difference between a strategist who is broke and one
-	/// who is out of the round (<see cref="Sim.WinConditions.IsStrategistEliminated"/>).
+	/// Units on every barracks queue and every structure's training queue
+	/// (docs/NETCODE.md §10.8). Server-side: a queued unit has already been paid for,
+	/// so it is the difference between a strategist who is broke and one who is out
+	/// of the round (<see cref="Sim.WinConditions.IsStrategistEliminated"/>).
 	/// </summary>
 	public int QueuedUnits
 	{
 		get
 		{
-			int queued = 0;
+			int queued = QueuedInStructures;
 			for (int i = 0; i < _barracks.Count; i++)
 			{
 				queued += _barracks[i].Queue.Count;
@@ -457,9 +458,19 @@ public partial class UnitManager : Node
 		bool hasTarget = TryResolveTarget(unit, out Vector3 targetPoint, out Vector3 targetVelocity,
 			out float targetDistance);
 
-		if (!hasTarget)
+		// A unit with a suppression window — the heavy gunner — that has just lost
+		// sight of a live target fights the place it last saw it as though the target
+		// were still there (docs/NETCODE.md §10.8). Everything below sees a target; the
+		// unit's own TargetOwnerId stays empty, so nobody takes it for a focus.
+		if (hasTarget)
+		{
+			Suppression.Remember(ref unit.LastSeen, unit.TargetOwnerId, targetPoint, tick,
+				unit.Definition?.SuppressTicks ?? 0);
+		}
+		else
 		{
 			unit.TargetOwnerId = OwnerId.None;
+			hasTarget = Suppress(unit, tick, ref targetPoint, ref targetVelocity, ref targetDistance);
 		}
 
 		// Resolved before the plan looks at the order: a finished site stands the
@@ -685,6 +696,34 @@ public partial class UnitManager : Node
 
 		unit.TargetOwnerId = best != null ? OwnerId.ForPeer(best.PeerId) : OwnerId.None;
 		unit.AimsHigh = best != null && AimsHigh(unit, eye, best);
+	}
+
+	/// <summary>
+	/// Where a unit that has lost sight of its target keeps firing, if it is one that
+	/// does (<see cref="Suppression"/>): the point it last aimed at, still, while its
+	/// window is open, the player is alive and the point is in range. The point is a
+	/// place and not a player, so it is not led.
+	/// </summary>
+	private static bool Suppress(Unit unit, uint tick, ref Vector3 point, ref Vector3 velocity, ref float distance)
+	{
+		if (!unit.LastSeen.IsSet)
+		{
+			return false;
+		}
+
+		int peer = PeerId(unit.LastSeen.OwnerId);
+		bool alive = peer != 0 && CombatManager.Instance?.Find(peer) is { IsAlive: true };
+		Vector3 eye = unit.EyePosition;
+		if (!Suppression.TryPoint(unit.LastSeen, tick, alive, eye, unit.Traits.EngageRangeMeters, out Vector3 at))
+		{
+			Suppression.Clear(ref unit.LastSeen);
+			return false;
+		}
+
+		point = at;
+		velocity = Vector3.Zero;
+		distance = eye.DistanceTo(at);
+		return true;
 	}
 
 	/// <summary>
@@ -1498,6 +1537,7 @@ public partial class UnitManager : Node
 			// reads as an order that was dropped. A new order is a new plan, too.
 			unit.NextScanTick = 0;
 			ResetPlan(unit);
+			Suppression.Clear(ref unit.LastSeen);
 
 			// A client chooses the list, so the same unit may be in it any number of
 			// times. Recorded once, every unit the order reached fits the scratch: there
@@ -1609,9 +1649,11 @@ public partial class UnitManager : Node
 			return false;
 		}
 
+		// A sniper or a heavy gunner comes out of the structure that trains it, never a
+		// barracks (docs/NETCODE.md §10.8).
 		UnitDefinition definition = UnitCatalog.Definition(id);
 		ResourceLedger ledger = CombatManager.Instance?.Match.Strategist;
-		if (definition == null || ledger == null)
+		if (definition == null || !definition.TrainedInBarracks || ledger == null)
 		{
 			RejectedOrders++;
 			return false;
