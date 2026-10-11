@@ -200,6 +200,10 @@ public partial class Debug : PanelContainer
 			{
 				SetProperty("unit plan", units.DescribeUnitPlans());
 			}
+
+			// Cover (docs/COVER.md): the boxes the planners know about, and how many units
+			// are holding a spot behind one.
+			SetProperty("cover", units.DescribeCover());
 		}
 
 		// Builders' work (docs/NETCODE.md §10.5). "0 built" across a session means the

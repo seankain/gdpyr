@@ -66,6 +66,13 @@ public enum UnitFact : byte
 	/// </summary>
 	Supplied,
 
+	/// <summary>
+	/// <see cref="CoverState"/>: a spot behind cover from its own target — a low wall
+	/// it can fire over — or, for a builder, from whatever is shooting at it, and
+	/// whether it is standing in it (docs/COVER.md §6).
+	/// </summary>
+	Cover,
+
 	Count,
 }
 
@@ -108,6 +115,9 @@ public enum UnitGoal : byte
 	HoldPost,
 	Patrol,
 	Obey,
+
+	/// <summary>To a spot behind a low wall from its target, firing on the way; in it, it stands and fights (docs/COVER.md §6).</summary>
+	HoldCover,
 }
 
 /// <summary>How the unit manager picks where to walk for an intent.</summary>
@@ -304,6 +314,12 @@ public struct UnitSense
 
 	/// <summary>How far outside the nearest source's reach the unit is, measured flat; negative inside.</summary>
 	public float SupplyEdgeMeters;
+
+	/// <summary>A spot behind cover from the fight it is in, or from what is shooting at a builder (docs/COVER.md §6).</summary>
+	public bool HasCover;
+
+	/// <summary>The box beside that spot hid it from the threat when the scan looked.</summary>
+	public bool CoverHides;
 }
 
 /// <summary>
@@ -321,6 +337,8 @@ public sealed class UnitContext : BaseContext
 	private readonly byte[] _facts = new byte[(int)UnitFact.Count];
 
 	private bool _sideKnown;
+	private bool _hasCover;
+	private bool _coverHides;
 	private bool _hasTarget;
 	private Vector3 _targetPoint;
 	private uint _paceTick = uint.MaxValue;
@@ -395,6 +413,10 @@ public sealed class UnitContext : BaseContext
 	/// <summary>The middle of the nearest friendly supply source's reach: where a resupply walks (D2).</summary>
 	public Vector3 SupplyPoint;
 
+	/// <summary>Its spot behind cover (docs/COVER.md §6). Only with <see cref="HasCoverPoint"/>.</summary>
+	public bool HasCoverPoint;
+	public Vector3 CoverPoint;
+
 	/// <summary>A resupply was given up on: <see cref="UnitFact.Supply"/> stays off until this tick.</summary>
 	public uint SupplyRetryTick;
 
@@ -450,8 +472,12 @@ public sealed class UnitContext : BaseContext
 		Sense(UnitFact.FriendNear, sense.FriendNear);
 		SenseSupply(sense);
 
+		_hasCover = sense.HasCover && HasCoverPoint;
+		_coverHides = sense.CoverHides;
+
 		SenseContact();
 		SenseLeash();
+		SenseCover();
 	}
 
 	/// <summary>
@@ -470,7 +496,16 @@ public sealed class UnitContext : BaseContext
 		Sense(UnitFact.Order, (byte)order.Kind);
 		SenseContact();
 		SenseLeash();
+		SenseCover();
 	}
+
+	/// <summary>
+	/// Cover against the fight, every tick: the spot and whether its box hides the
+	/// unit are the scan's, whether the unit has reached it is now's.
+	/// </summary>
+	private void SenseCover() =>
+		Sense(UnitFact.Cover, (byte)CoverBands.Band(_hasCover, Flat(Position, CoverPoint), _coverHides,
+			(CoverState)Get(UnitFact.Cover)));
 
 	/// <summary>
 	/// Resupply's three facts (D2), each with its hysteresis: wounded from the moment
@@ -562,7 +597,13 @@ public sealed class UnitContext : BaseContext
 				return Is(UnitFact.Supplied) ? Hold() : Go(SupplyPoint, stopToFight: true);
 
 			case UnitGoal.TakeCover:
-				return Go(FriendPoint, stopToFight: false);
+				// Behind a box from what is shooting at it when there is one in reach,
+				// else beside the nearest friend (docs/COVER.md §6).
+				return Go(Get(UnitFact.Cover) != (byte)CoverState.None ? CoverPoint : FriendPoint, stopToFight: false);
+
+			case UnitGoal.HoldCover:
+				// Walking to the spot it fires on the move; in it, it stands and fights.
+				return Get(UnitFact.Cover) == (byte)CoverState.In ? Hold() : Go(CoverPoint, stopToFight: false);
 
 			case UnitGoal.Work:
 			case UnitGoal.EngageInLeash:
@@ -841,6 +882,12 @@ public static class UnitDomain
 			.End()
 			.Select("build")
 				.If(UnitFact.Order, OrderKind.Build)
+				.Sequence("hide behind cover")
+					.If(UnitFact.UnderFire)
+					.IfNot(UnitFact.Cover, CoverState.None)
+					.Act(UnitGoal.TakeCover).While(UnitFact.UnderFire).WhileNot(UnitFact.Cover, CoverState.None)
+						.While(UnitFact.Order, OrderKind.Build).End()
+				.End()
 				.Sequence("take cover")
 					.If(UnitFact.UnderFire)
 					.If(UnitFact.FriendNear)
@@ -858,6 +905,12 @@ public static class UnitDomain
 					.Act(UnitGoal.WaitForSquad).While(UnitFact.SquadPhase, SquadPhase.Gathering)
 						.While(UnitFact.Order, OrderKind.Attack).End()
 				.End()
+				.Sequence("engage from cover")
+					.If(UnitFact.Contact, UnitContact.Own)
+					.IfNot(UnitFact.Cover, CoverState.None)
+					.Act(UnitGoal.HoldCover).While(UnitFact.Contact, UnitContact.Own)
+						.WhileNot(UnitFact.Cover, CoverState.None).While(UnitFact.Order, OrderKind.Attack).End()
+				.End()
 				.Sequence("engage focus")
 					.If(UnitFact.Contact, UnitContact.Own)
 					.Act(UnitGoal.EngageFocus).While(UnitFact.Contact, UnitContact.Own)
@@ -874,6 +927,14 @@ public static class UnitDomain
 			.End()
 			.Select("defend zone")
 				.IfAny(UnitFact.Order, OrderKind.Defend, OrderKind.None)
+				.Sequence("engage from cover")
+					.If(UnitFact.Contact, UnitContact.Own)
+					.If(UnitFact.InLeash)
+					.IfNot(UnitFact.Cover, CoverState.None)
+					.Act(UnitGoal.HoldCover).While(UnitFact.Contact, UnitContact.Own).While(UnitFact.InLeash)
+						.WhileNot(UnitFact.Cover, CoverState.None)
+						.WhileAny(UnitFact.Order, OrderKind.Defend, OrderKind.None).End()
+				.End()
 				.Sequence("engage in leash")
 					.If(UnitFact.Contact, UnitContact.Own)
 					.If(UnitFact.InLeash)

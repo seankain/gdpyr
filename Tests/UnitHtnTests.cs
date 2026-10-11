@@ -87,6 +87,21 @@ public class UnitHtnTests
 			SupplyEdgeMeters = supplyEdge,
 		});
 
+		/// <summary>One scan that found a spot behind cover at <paramref name="spot"/> (docs/COVER.md §6), or none.</summary>
+		public void ScanCover(Vector3? spot, bool autonomous = false)
+		{
+			C.HasCoverPoint = spot.HasValue;
+			C.CoverPoint = spot ?? Vector3.Zero;
+			C.Encode(new UnitSense
+			{
+				HealthFraction = 1f,
+				Autonomous = autonomous,
+				Odds = OddsBand.Even,
+				HasCover = spot.HasValue,
+				CoverHides = spot.HasValue,
+			});
+		}
+
 		public void Tick(int times = 1)
 		{
 			for (int i = 0; i < times; i++)
@@ -699,6 +714,132 @@ public class UnitHtnTests
 	/// For every operator, an order and a situation that plan it, the change that must
 	/// end it, and what the unit does next (§3.4, P3).
 	/// </summary>
+	/// <summary>A spot behind a wall four metres from the anchor, inside a rifleman's leash.</summary>
+	private static readonly Vector3 CoverSpot = Anchor + new Vector3(0f, 0f, 4f);
+
+	// ---- cover (docs/COVER.md §6) ---------------------------------------------
+
+	[Fact]
+	public void AnAttackerWithATargetAndCoverNear_WalksToItFiringThenStandsInIt()
+	{
+		Squaddie unit = Ordered(OrderKind.Attack, Objective);
+		unit.ScanCover(CoverSpot);
+		unit.See(Anchor + new Vector3(0f, 0.5f, 20f));
+		unit.Tick();
+
+		Assert.Equal("[HoldCover]", unit.LastPlan);
+		Assert.Equal(UnitMove.Point, unit.C.Intent.Move);
+		Assert.Equal(CoverSpot, unit.C.Intent.Point);
+		Assert.False(unit.C.Intent.StopToFight);
+
+		unit.C.Position = CoverSpot + new Vector3(0.3f, 0f, 0f);
+		unit.Tick();
+
+		Assert.Equal(UnitGoal.HoldCover, unit.Goal);
+		Assert.Equal(UnitMove.Hold, unit.C.Intent.Move);
+		Assert.True(unit.C.Intent.StopToFight);
+		Assert.Equal((byte)CoverState.In, unit.C.Get(UnitFact.Cover));
+	}
+
+	[Fact]
+	public void ADefenderFightsFromCoverInsideItsLeash()
+	{
+		Squaddie unit = Ordered(OrderKind.Defend, Anchor);
+		unit.ScanCover(CoverSpot);
+		unit.See(Anchor + new Vector3(0f, 0.5f, 15f));
+		unit.Tick();
+
+		Assert.Equal(UnitGoal.HoldCover, unit.Goal);
+	}
+
+	[Fact]
+	public void WithoutCover_TheFightIsAsItWas()
+	{
+		Squaddie attacker = Ordered(OrderKind.Attack, Objective);
+		attacker.ScanCover(null);
+		attacker.See(Anchor + new Vector3(0f, 0.5f, 20f));
+		attacker.Tick();
+		Assert.Equal(UnitGoal.EngageFocus, attacker.Goal);
+
+		Squaddie defender = Ordered(OrderKind.Defend, Anchor);
+		defender.ScanCover(null);
+		defender.See(Anchor + new Vector3(0f, 0.5f, 15f));
+		defender.Tick();
+		Assert.Equal(UnitGoal.EngageInLeash, defender.Goal);
+	}
+
+	[Fact]
+	public void ABuilderUnderFire_HidesBehindCoverRatherThanBesideAFriend()
+	{
+		Squaddie unit = Ordered(OrderKind.Build, Objective);
+		unit.C.FriendPoint = Anchor + new Vector3(-6f, 0f, 0f);
+		unit.ScanCover(CoverSpot);
+		unit.Sense(UnitFact.UnderFire, true);
+		unit.Sense(UnitFact.FriendNear, true);
+		unit.Tick();
+
+		Assert.Equal("[TakeCover]", unit.LastPlan);
+		Assert.Equal(CoverSpot, unit.C.Intent.Point);
+
+		// No cover in reach: beside the friend, as before.
+		Squaddie other = Ordered(OrderKind.Build, Objective);
+		other.C.FriendPoint = Anchor + new Vector3(-6f, 0f, 0f);
+		other.ScanCover(null);
+		other.Sense(UnitFact.UnderFire, true);
+		other.Sense(UnitFact.FriendNear, true);
+		other.Tick();
+
+		Assert.Equal(UnitGoal.TakeCover, other.Goal);
+		Assert.Equal(other.C.FriendPoint, other.C.Intent.Point);
+	}
+
+	[Fact]
+	public void Retreat_ReplacesFightingFromCover()
+	{
+		Squaddie unit = Ordered(OrderKind.Attack, Objective);
+		unit.ScanCover(CoverSpot, autonomous: true);
+		unit.See(Anchor + new Vector3(0f, 0.5f, 20f));
+		unit.Tick();
+		Assert.Equal(UnitGoal.HoldCover, unit.Goal);
+
+		unit.Sense(UnitFact.Health, HealthBand.Critical);
+		unit.Sense(UnitFact.Odds, OddsBand.Outnumbered);
+		unit.Tick();
+
+		Assert.Equal(UnitGoal.Retreat, unit.Goal);
+	}
+
+	[Fact]
+	public void AMoveOrderIsNeverSecondGuessedForCover()
+	{
+		Squaddie unit = Ordered(OrderKind.Move, Objective);
+		unit.ScanCover(CoverSpot);
+		unit.See(Anchor + new Vector3(0f, 0.5f, 20f));
+		unit.Tick();
+
+		Assert.Equal(UnitGoal.Obey, unit.Goal);
+	}
+
+	[Fact]
+	public void InCover_IsHeldUntilShovedClearOfTheSpot()
+	{
+		Squaddie unit = Ordered(OrderKind.Attack, Objective);
+		unit.C.Position = CoverSpot;
+		unit.ScanCover(CoverSpot);
+		unit.See(Anchor + new Vector3(0f, 0.5f, 20f));
+		unit.Tick();
+		Assert.Equal((byte)CoverState.In, unit.C.Get(UnitFact.Cover));
+
+		unit.C.Position = CoverSpot + new Vector3(1.4f, 0f, 0f);
+		unit.Tick();
+		Assert.Equal((byte)CoverState.In, unit.C.Get(UnitFact.Cover));
+
+		unit.C.Position = CoverSpot + new Vector3(2f, 0f, 0f);
+		unit.Tick();
+		Assert.Equal((byte)CoverState.Near, unit.C.Get(UnitFact.Cover));
+		Assert.Equal(UnitMove.Point, unit.C.Intent.Move);
+	}
+
 	public static IEnumerable<object[]> Premises()
 	{
 		yield return new object[] { OrderKind.Attack, UnitGoal.Retreat, "losing", "odds even", UnitGoal.Advance };
@@ -706,6 +847,10 @@ public class UnitHtnTests
 		yield return new object[] { OrderKind.Defend, UnitGoal.Resupply, "wounded", "supply gone", UnitGoal.HoldPost };
 		yield return new object[] { OrderKind.Attack, UnitGoal.Resupply, "wounded", "order move", UnitGoal.Obey };
 		yield return new object[] { OrderKind.Build, UnitGoal.TakeCover, "under fire", "fire stops", UnitGoal.Work };
+		yield return new object[] { OrderKind.Build, UnitGoal.TakeCover, "under fire, cover", "fire stops", UnitGoal.Work };
+		yield return new object[] { OrderKind.Attack, UnitGoal.HoldCover, "target, cover", "target lost", UnitGoal.Advance };
+		yield return new object[] { OrderKind.Attack, UnitGoal.HoldCover, "target, cover", "cover gone", UnitGoal.EngageFocus };
+		yield return new object[] { OrderKind.Defend, UnitGoal.HoldCover, "target, cover", "target lost", UnitGoal.HoldPost };
 		yield return new object[] { OrderKind.Build, UnitGoal.Work, "", "order none", UnitGoal.HoldPost };
 		yield return new object[] { OrderKind.Attack, UnitGoal.WaitForSquad, "gathering", "moving", UnitGoal.Advance };
 		yield return new object[] { OrderKind.Attack, UnitGoal.EngageFocus, "target", "target lost", UnitGoal.Advance };
@@ -736,6 +881,14 @@ public class UnitHtnTests
 			case "under fire":
 				unit.Sense(UnitFact.UnderFire, true);
 				unit.Sense(UnitFact.FriendNear, true);
+				break;
+			case "under fire, cover":
+				unit.ScanCover(CoverSpot);
+				unit.Sense(UnitFact.UnderFire, true);
+				break;
+			case "target, cover":
+				unit.ScanCover(CoverSpot);
+				unit.See(Anchor + new Vector3(0f, 0.5f, 15f));
 				break;
 			case "gathering":
 				unit.Sense(UnitFact.SquadPhase, SquadPhase.Gathering);
@@ -769,6 +922,9 @@ public class UnitHtnTests
 				break;
 			case "target lost":
 				unit.LoseTarget();
+				break;
+			case "cover gone":
+				unit.ScanCover(null);
 				break;
 			case "friend done":
 				unit.Sense(UnitFact.FriendEngaged, false);

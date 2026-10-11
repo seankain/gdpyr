@@ -144,10 +144,20 @@ public readonly struct BotSituation
 	/// <summary>Press the use key this tick. The pilot releases it on the next, which makes it a tap (<see cref="UseTracker"/>).</summary>
 	public readonly bool Use;
 
+	/// <summary>
+	/// Standing in its spot behind a low wall (docs/COVER.md §5): it does not strafe
+	/// out from behind it, it reloads there whenever the fight is out of its sight, and
+	/// it crouches below the wall while it does.
+	/// </summary>
+	public readonly bool InCover;
+
+	/// <summary>The weapon in hand is reloading.</summary>
+	public readonly bool Reloading;
+
 	public BotSituation(bool alive, float yaw, float pitch, float speed, bool hasTarget, Vector3 aimDirection,
 		float targetDistance, bool targetVisible, int ticksOnTarget, bool hasDestination, Vector3 moveDirection,
 		float destinationDistance, bool stuck, bool needsReload, bool semiAutomatic = false, bool holdFire = false,
-		bool keepMoving = false, bool use = false)
+		bool keepMoving = false, bool use = false, bool inCover = false, bool reloading = false)
 	{
 		Alive = alive;
 		Yaw = yaw;
@@ -167,6 +177,8 @@ public readonly struct BotSituation
 		HoldFire = holdFire;
 		KeepMoving = keepMoving;
 		Use = use;
+		InCover = inCover;
+		Reloading = reloading;
 	}
 }
 
@@ -269,6 +281,20 @@ public static class BotBrain
 	/// </summary>
 	private static Vector3 WalkDirection(uint tick, int peerId, in BotSituation situation, in BotTraits traits)
 	{
+		// In cover the wall is the defence, not the strafe: it stays behind it, and
+		// only walks to step back into its spot.
+		if (situation.InCover)
+		{
+			if (!situation.HasDestination)
+			{
+				return Vector3.Zero;
+			}
+
+			Vector3 back = situation.MoveDirection;
+			back.Y = 0f;
+			return back.LengthSquared() < 0.0001f ? Vector3.Zero : back.Normalized();
+		}
+
 		if (situation.HasTarget && situation.TargetVisible && !situation.KeepMoving
 			&& situation.TargetDistance <= traits.PreferredRangeMeters)
 		{
@@ -355,12 +381,21 @@ public static class BotBrain
 				buttons |= InputButtons.Fire;
 			}
 		}
-		else if (situation.NeedsReload && !situation.HasTarget)
+		else if (situation.NeedsReload && (!situation.HasTarget || (situation.InCover && !situation.TargetVisible)))
 		{
 			// Between fights only: a reload started with something in the open is how
 			// a bot dies holding an empty rifle. An empty magazine under fire reloads
 			// itself through WeaponSim, which is the behaviour a player would get.
+			// Behind a wall, a fight it cannot see this tick is between fights.
 			buttons |= InputButtons.Reload;
+		}
+
+		if (situation.InCover && situation.Reloading)
+		{
+			// Down behind the wall while the magazine goes in: a crouched body behind
+			// one is hidden from whoever is in front of it (docs/NETCODE.md §10.5).
+			// Released when the reload is done, which stands it back up to fire.
+			buttons |= InputButtons.Crouch;
 		}
 
 		if (situation.Use)

@@ -48,7 +48,8 @@ public sealed class HtnSchema
 		typeof(bool), // AtZone
 		typeof(bool), // InsideDefences
 		typeof(bool), // MagazineLow
-		typeof(bool)); // Sweep
+		typeof(bool), // Sweep
+		typeof(CoverState)); // Cover
 
 	public static readonly HtnSchema Unit = new(HtnDomainKind.Unit, typeof(UnitFact), typeof(UnitGoal),
 		typeof(OrderKind), // Order
@@ -63,7 +64,8 @@ public sealed class HtnSchema
 		typeof(bool), // FriendNear
 		typeof(bool), // Wounded
 		typeof(bool), // Supply
-		typeof(bool)); // Supplied
+		typeof(bool), // Supplied
+		typeof(CoverState)); // Cover
 
 	public static readonly HtnSchema Squad = new(HtnDomainKind.Squad, typeof(CommandFact), typeof(CommandGoal),
 		typeof(CommandTask), // Task

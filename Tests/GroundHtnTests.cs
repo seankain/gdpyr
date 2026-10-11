@@ -20,6 +20,7 @@ public class GroundHtnTests
 {
 	private static readonly Vector3 Locker = new(8f, 0.5f, 11f);
 	private static readonly Vector3 Node = new(-30f, 0.5f, -15f);
+	private static readonly Vector3 CoverSpot = new(4f, 0.5f, -44f);
 
 	private sealed class Bot
 	{
@@ -46,6 +47,10 @@ public class GroundHtnTests
 			C.HasLocker = true;
 			C.LockerPoint = Locker;
 			C.Position = new Vector3(0f, 0.5f, -40f);
+
+			// A spot the pilot found; the Cover fact says whether it is in play.
+			C.HasCoverPoint = true;
+			C.CoverPoint = CoverSpot;
 		}
 
 		public void Sense(GroundFact fact, Enum value) => C.Sense(fact, Convert.ToByte(value));
@@ -455,6 +460,148 @@ public class GroundHtnTests
 		Assert.Equal("[FallBack]", bot.LastPlan);
 	}
 
+	// ---- cover (docs/COVER.md §5) ---------------------------------------------
+
+	[Fact]
+	public void AFightWithCoverNear_TakesCoverThenHoldsIt()
+	{
+		Bot bot = Seeing(Threat.Infantry);
+		bot.Sense(GroundFact.Cover, CoverState.Near);
+		bot.Tick();
+
+		Assert.Equal("[TakeCover, HoldCover]", bot.LastPlan);
+		Assert.Equal(GroundGoal.TakeCover, bot.Goal);
+		Assert.Equal(GroundMove.Cover, bot.C.Intent.Move);
+		Assert.Equal(CoverSpot, bot.C.Intent.Point);
+
+		bot.Sense(GroundFact.Cover, CoverState.In);
+		bot.Tick(2);
+
+		Assert.Equal(GroundGoal.HoldCover, bot.Goal);
+		Assert.Equal(GroundMove.Cover, bot.C.Intent.Move);
+		Assert.Equal(CoverSpot, bot.C.Intent.Point);
+	}
+
+	[Fact]
+	public void CoverComesBeforePressingWithAllies()
+	{
+		Bot bot = Seeing(Threat.Infantry);
+		bot.Sense(GroundFact.AlliesNear, true);
+		bot.Sense(GroundFact.Cover, CoverState.Near);
+		bot.Tick();
+
+		Assert.Equal(GroundGoal.TakeCover, bot.Goal);
+	}
+
+	[Fact]
+	public void CoverComingIntoReach_ReplacesAFightInTheOpen()
+	{
+		Bot bot = Seeing(Threat.Infantry);
+		bot.Tick(5);
+		Assert.Equal(GroundGoal.Engage, bot.Goal);
+
+		bot.Sense(GroundFact.Cover, CoverState.Near);
+		bot.Tick();
+
+		Assert.Equal(GroundGoal.TakeCover, bot.Goal);
+		Assert.Equal(1, bot.Replacements);
+	}
+
+	[Fact]
+	public void HoldingCover_OutlastsTheFightGoingOutOfSight()
+	{
+		// Crouched to reload, it cannot see what it was shooting at; the team still
+		// remembers it, and the spot is still the place to be when it stands up.
+		Bot bot = Seeing(Threat.Infantry);
+		bot.Sense(GroundFact.Cover, CoverState.In);
+		bot.Tick(3);
+		Assert.Equal(GroundGoal.HoldCover, bot.Goal);
+
+		bot.Sense(GroundFact.Contact, ContactLevel.Ghost);
+		bot.Tick(3);
+
+		Assert.Equal(GroundGoal.HoldCover, bot.Goal);
+	}
+
+	[Fact]
+	public void ASpotTheWallNoLongerHides_IsWalkedOutOfToTheNextOne()
+	{
+		Bot bot = Seeing(Threat.Infantry);
+		bot.Sense(GroundFact.Cover, CoverState.In);
+		bot.Tick(3);
+		Assert.Equal(GroundGoal.HoldCover, bot.Goal);
+
+		bot.Sense(GroundFact.Cover, CoverState.Near);
+		bot.Tick();
+		Assert.Equal(GroundGoal.TakeCover, bot.Goal);
+
+		bot.Sense(GroundFact.Cover, CoverState.None);
+		bot.Tick();
+		Assert.Equal(GroundGoal.Engage, bot.Goal);
+	}
+
+	[Fact]
+	public void Retreat_ReplacesHoldingCover()
+	{
+		Bot bot = Seeing(Threat.Infantry);
+		bot.C.FallbackPoint = new Vector3(2f, 0.5f, 7f);
+		bot.Sense(GroundFact.Cover, CoverState.In);
+		bot.Tick(3);
+		Assert.Equal(GroundGoal.HoldCover, bot.Goal);
+
+		bot.Sense(GroundFact.Health, HealthBand.Critical);
+		bot.Sense(GroundFact.Odds, OddsBand.Outnumbered);
+		bot.Tick();
+
+		Assert.Equal(GroundGoal.FallBack, bot.Goal);
+	}
+
+	[Fact]
+	public void ArmourIsNotFoughtFromCover()
+	{
+		Bot bot = Seeing(Threat.Armour, explosive: true);
+		bot.Sense(GroundFact.Cover, CoverState.Near);
+		bot.Tick();
+
+		Assert.Equal(GroundGoal.EngageArmour, bot.Goal);
+	}
+
+	[Fact]
+	public void AGhostAloneIsNotAFightToTakeCoverFrom()
+	{
+		var bot = new Bot();
+		bot.Sense(GroundFact.Contact, ContactLevel.Ghost);
+		bot.Sense(GroundFact.Cover, CoverState.Near);
+		bot.Tick();
+
+		Assert.Equal(GroundGoal.InvestigateGhost, bot.Goal);
+	}
+
+	[Fact]
+	public void ReloadingInItsSpot_IsStillInItsSpot()
+	{
+		// Resupply sits above Attack: a magazine running low once the fight is out of
+		// sight reloads where it stands, and the pilot keeps it down behind the wall.
+		Bot bot = Seeing(Threat.Infantry);
+		bot.Sense(GroundFact.Cover, CoverState.In);
+		bot.Tick(3);
+
+		bot.Sense(GroundFact.Contact, ContactLevel.Ghost);
+		bot.Sense(GroundFact.MagazineLow, true);
+		bot.Tick();
+
+		Assert.Equal(GroundGoal.Reload, bot.Goal);
+		Assert.Equal(GroundMove.Stay, bot.C.Intent.Move);
+		Assert.Equal((byte)CoverState.In, bot.C.Get(GroundFact.Cover));
+	}
+
+	[Fact]
+	public void Cover_IsEncodedFromTheSense()
+	{
+		Assert.Equal((byte)CoverState.Near, Encoded(new GroundSense { Cover = CoverState.Near }).Get(GroundFact.Cover));
+		Assert.Equal((byte)CoverState.None, Encoded(new GroundSense()).Get(GroundFact.Cover));
+	}
+
 	[Theory]
 	[InlineData(false, GroundGoal.Engage)]
 	[InlineData(true, GroundGoal.TakeNode)]
@@ -509,6 +656,12 @@ public class GroundHtnTests
 			(GroundFact.Role, (byte)GroundRole.Assault) };
 		yield return new object[] { GroundGoal.SweepZone, new[] { (GroundFact.Sweep, (byte)1) },
 			(GroundFact.Sweep, (byte)0) };
+		yield return new object[] { GroundGoal.TakeCover,
+			new[] { (GroundFact.Contact, (byte)ContactLevel.Visible), (GroundFact.Cover, (byte)CoverState.Near) },
+			(GroundFact.Contact, (byte)ContactLevel.None) };
+		yield return new object[] { GroundGoal.HoldCover,
+			new[] { (GroundFact.Contact, (byte)ContactLevel.Visible), (GroundFact.Cover, (byte)CoverState.In) },
+			(GroundFact.Contact, (byte)ContactLevel.None) };
 	}
 
 	[Theory]

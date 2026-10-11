@@ -28,9 +28,10 @@ public class BotBrainTests
 		bool hasTarget = false, Vector3 aimDirection = default, float targetDistance = 999f,
 		bool targetVisible = false, int ticksOnTarget = 0, bool hasDestination = false,
 		Vector3 moveDirection = default, float destinationDistance = 0f, bool stuck = false,
-		bool needsReload = false, bool semiAutomatic = false) =>
+		bool needsReload = false, bool semiAutomatic = false, bool inCover = false, bool reloading = false) =>
 		new(alive, yaw, pitch, speed, hasTarget, aimDirection, targetDistance, targetVisible, ticksOnTarget,
-			hasDestination, moveDirection, destinationDistance, stuck, needsReload, semiAutomatic);
+			hasDestination, moveDirection, destinationDistance, stuck, needsReload, semiAutomatic,
+			inCover: inCover, reloading: reloading);
 
 	// ---- movement axes -----------------------------------------------------
 
@@ -304,6 +305,64 @@ public class BotBrainTests
 
 		Assert.NotEqual(Vector3.Zero, world);
 		Assert.Equal(0f, world.Dot(Vector3.Right), precision: 1);
+	}
+
+	// ---- cover (docs/COVER.md §5) --------------------------------------------
+
+	[Fact]
+	public void InCoverItHoldsItsSpotRatherThanStrafingOutOfIt()
+	{
+		float yaw = YawTowards(Vector3.Right);
+		InputFrame frame = BotBrain.Frame(0, BotPeerId,
+			Situation(yaw: yaw, hasTarget: true, aimDirection: Vector3.Right, targetDistance: 10f,
+				targetVisible: true, ticksOnTarget: 30, inCover: true),
+			Steady);
+
+		Assert.Equal(Vector2.Zero, frame.MoveAxes);
+		Assert.True(frame.Held(InputButtons.Fire));
+		Assert.False(frame.Held(InputButtons.Crouch));
+	}
+
+	[Fact]
+	public void InCoverItStepsBackIntoItsSpotWhenShovedOff()
+	{
+		InputFrame frame = BotBrain.Frame(0, BotPeerId,
+			Situation(hasTarget: true, aimDirection: Vector3.Right, targetDistance: 10f, targetVisible: true,
+				ticksOnTarget: 30, hasDestination: true, moveDirection: Vector3.Back, destinationDistance: 0.8f,
+				inCover: true),
+			Steady);
+
+		Vector3 world = Movement.Direction(frame.MoveAxes, frame.YawRadians);
+		Assert.True(world.Dot(Vector3.Back) > 0.9f);
+	}
+
+	[Fact]
+	public void InCoverItReloadsWhenTheFightIsOutOfSightAndNotWhileItIsIn()
+	{
+		InputFrame hidden = BotBrain.Frame(0, BotPeerId,
+			Situation(hasTarget: true, aimDirection: Vector3.Right, targetDistance: 30f, targetVisible: false,
+				needsReload: true, inCover: true),
+			Steady);
+		Assert.True(hidden.Held(InputButtons.Reload));
+
+		InputFrame open = BotBrain.Frame(0, BotPeerId,
+			Situation(hasTarget: true, aimDirection: Vector3.Right, targetDistance: 30f, targetVisible: false,
+				needsReload: true),
+			Steady);
+		Assert.False(open.Held(InputButtons.Reload));
+	}
+
+	[Fact]
+	public void InCoverItCrouchesBehindTheWallWhileItReloads()
+	{
+		InputFrame down = BotBrain.Frame(0, BotPeerId, Situation(inCover: true, reloading: true), Steady);
+		Assert.True(down.Held(InputButtons.Crouch));
+
+		InputFrame up = BotBrain.Frame(0, BotPeerId, Situation(inCover: true), Steady);
+		Assert.False(up.Held(InputButtons.Crouch));
+
+		InputFrame open = BotBrain.Frame(0, BotPeerId, Situation(reloading: true), Steady);
+		Assert.False(open.Held(InputButtons.Crouch));
 	}
 
 	// ---- one round per pull ------------------------------------------------
