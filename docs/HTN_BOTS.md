@@ -667,6 +667,16 @@ its own (400) each hold against a node three players hold (450 needed), though t
 | After | The squad still forming is ready once sent, so production forms another. A squad that depletes, falls back or loses its target leaves the assault and the rest go on. | |
 | Garrison | Out on an assault: no production joins it (a unit produced at home would walk out after it alone); Retreat applies to it as to any squad; the moment home is not quiet it is ordered home, and when the assault ends it goes home. | §5.3's garrison is a standing defence; it leaves only while nothing threatens what it defends. |
 
+**A new round starts unseen.** `BotStrategist` cleared the commander when a decision saw a round
+end, but kept its `ZoneBoard`, and an agent's `reset` starts the next round with no decision in
+between. So each round began with when the last one had seen each node: Recon's "a node unseen for
+60 s" at the first decision depended on the round before, which on a fresh server it does not. In
+the baseline every later seed of `htn_recon_finds_contact` still scouted at once, because some
+node had gone unseen for 60 s by the end of the seed before; with combined assaults every node had
+been seen, recon waited 20 s for quiet, and in seeds 2 to 6 of six infantry found the hider before
+the technical did. A round with a new `MatchState.StartTick` now clears the commander, its
+announcements and the board, whichever way the last one ended.
+
 The spectator's squad table shows such a squad as `combined` (`AiSquadFlags.Combined`). Tests:
 thirteen in `CommanderHtnTests`. Checked to fail, then reverted: without the pass, 10 fail; with each
 squad assembling on its own, 1; with production joining a garrison that is out, 1; with the garrison
