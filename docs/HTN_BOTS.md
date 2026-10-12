@@ -662,16 +662,17 @@ its own (400) each hold against a node three players hold (450 needed), though t
 |---|---|---|
 | Who | Squads free to go, in turn: idle assault squads that are ready and not depleted; then the squad still forming; then the garrison, at home, while home is quiet — its barracks not contested and no enemy remembered within 60 m (`ThreatMeters`, Defend Zone's threat). | Ready squads first because they are what Attack is for. The squad still forming is a group of units holding at home, as the garrison is; the garrison last, because it is home's defence. |
 | Where to | The nearest node to the pool's centroid, a denied one before a neutral one, that no squad attacks and that all of them together are 1.5 times (`AttackRatio`, the single-squad rule). Live contacts are not: a pooled stage on a target that moves is a stage that never assembles. | Control points are what income comes from, and the H6 rounds were lost on income. |
-| How many | The fewest that beat it, nearest the node first in each turn; then again with the squads left, for another node. At least two squads and at least `AssaultSquadSize` units, or none go: the squad still forming never goes alone, and the garrison never goes where that squad would do alone. | A squad left at home is one fewer to send elsewhere; and "forms at four before it attacks" (§5.3) still holds of what is sent. |
+| How many | The fewest that beat it, nearest the node first in each turn; then again with the squads left, for another node. At least two squads and at least `AssaultSquadSize` units: when the fewest that beat it are one squad, or fewer units, the next in turn goes too — so the squad still forming never goes alone, but with the garrison. | A squad left at home is one fewer to send elsewhere; and "forms at four before it attacks" (§5.3) still holds of what is sent. A first version sent nothing when the fewest were the squad still forming alone; in a bot-only round that kept a tank, alone in that squad, and the garrison at home from 39 s for the rest of the round, every node estimated at 0 — the fog saw nobody at any of them. |
 | Together | One staging point, short of the node from the squads' centroid, and the same attack order, so on the `SquadBoard` they are one squad (§4.3) whose units keep pace with each other. Each carries the lowest slot among them (`Lead`); `Assembled` counts all their units, so they strike on the same decision, or all after the stage's 30 s. | Two squads striking a decision apart arrive a squad at a time. |
 | After | The squad still forming is ready once sent, so production forms another. A squad that depletes, falls back or loses its target leaves the assault and the rest go on. | |
 | Garrison | Out on an assault: no production joins it (a unit produced at home would walk out after it alone); Retreat applies to it as to any squad; the moment home is not quiet it is ordered home, and when the assault ends it goes home. | §5.3's garrison is a standing defence; it leaves only while nothing threatens what it defends. |
 
 The spectator's squad table shows such a squad as `combined` (`AiSquadFlags.Combined`). Tests:
-eleven in `CommanderHtnTests`. Checked to fail, then reverted: without the pass, 8 fail; with each
+twelve in `CommanderHtnTests`. Checked to fail, then reverted: without the pass, 10 fail; with each
 squad assembling on its own, 1; with production joining a garrison that is out, 1; with the garrison
-never retreating, 1; with it not recalled when home is threatened, 1; without the two-squad and
-unit-count rule, 2.
+never retreating, 1; with it not recalled when home is threatened, 1; with it joining while home is
+threatened, 1; stopping at the fewest that beat the node, 1; without the two-squad and unit-count
+rule, 1.
 
 ### 5.4 The five tasks at each layer
 

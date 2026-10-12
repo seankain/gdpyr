@@ -1165,8 +1165,8 @@ public sealed class Commander
 	/// the squad still forming, then the garrison, the nearest the node first in each.
 	/// They stage at one point and strike when the assault as a whole has assembled
 	/// (<see cref="Assembled"/>). It takes two squads at least, and as many units as a
-	/// squad forms with, so the squad still forming never goes alone and the garrison
-	/// never goes where that squad would do alone. Then again with the squads left.
+	/// squad forms with: the squad still forming never goes alone, but with the next
+	/// in turn. Then again with the squads left.
 	/// </summary>
 	private void Combine(uint tick, ZoneBoard zones, ContactMemory contacts, bool quiet)
 	{
@@ -1263,7 +1263,7 @@ public sealed class Commander
 	/// <summary>
 	/// Marks in <see cref="_picked"/> the fewest squads, taken in <see cref="Joins"/>'
 	/// turns and nearest <paramref name="point"/> first in each, that together beat
-	/// <paramref name="estimate"/>; true when they do and make a combined assault.
+	/// <paramref name="estimate"/> and make a combined assault; true when there are.
 	/// </summary>
 	private bool Pick(Vector3 point, float estimate, bool quiet)
 	{
@@ -1271,9 +1271,9 @@ public sealed class Commander
 		float strength = 0f;
 		int picked = 0;
 		int members = 0;
-		for (int turn = 0; turn < 3 && !Beats(strength, estimate); turn++)
+		for (int turn = 0; turn < 3 && !Combined(strength, estimate, picked, members); turn++)
 		{
-			while (!Beats(strength, estimate))
+			while (!Combined(strength, estimate, picked, members))
 			{
 				int next = -1;
 				float nearest = float.MaxValue;
@@ -1299,8 +1299,16 @@ public sealed class Commander
 			}
 		}
 
-		return Beats(strength, estimate) && picked >= 2 && members >= _traits.AssaultSquadSize;
+		return Combined(strength, estimate, picked, members);
 	}
+
+	/// <summary>
+	/// Squads that beat the estimate together and are a combined assault: two at
+	/// least, and as many units as a squad forms with. A squad still forming that
+	/// would beat a node alone does not go alone; the next in turn goes with it.
+	/// </summary>
+	private bool Combined(float strength, float estimate, int squads, int members) =>
+		Beats(strength, estimate) && squads >= 2 && members >= _traits.AssaultSquadSize;
 
 	/// <summary>Gives the picked squads the node, led by the lowest slot, staging at one point short of it.</summary>
 	private void Send(uint tick, int zone, Vector3 point)

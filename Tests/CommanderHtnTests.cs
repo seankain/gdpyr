@@ -643,18 +643,53 @@ public class CommanderHtnTests
 		}
 	}
 
-	[Fact]
-	public void TheSquadStillForming_NeverGoesAlone_NorTakesTheGarrisonWithIt_WhereItWouldDoAlone()
+	/// <summary>
+	/// What a bot-only round came to from 39 s in: a garrison of four, and a tank on its
+	/// own in the squad still forming; every node the ground force's, and nobody seen at
+	/// any of them.
+	/// </summary>
+	private static (Rig rig, ushort tank) GarrisonAndALoneTank()
 	{
 		var rig = new Rig();
+		rig.AddRiflemen(4);
+		ushort tank = rig.Add(Vector3.Zero, Tank, armour: true);
+		rig.Zones.SetHolder(NearZone, NodeHolder.GroundForce, contested: false);
 		rig.Zones.SetHolder(FarZone, NodeHolder.GroundForce, contested: false);
-		rig.AddRiflemen(7);
+		return (rig, tank);
+	}
+
+	[Fact]
+	public void TheSquadStillForming_WouldDoAlone_ButGoesWithTheGarrison()
+	{
+		(Rig rig, ushort tank) = GarrisonAndALoneTank();
 		rig.Decide();
 
-		// Three riflemen forming, nobody on the node: they wait to be four, as before.
-		int forming = rig.Find(CommandRole.Assault, ready: false);
-		Assert.Equal(CommandGoal.Hold, rig.Intent(forming).Goal);
+		int forming = rig.Commander.SquadOf(tank);
+		Assert.True(rig.Squad(forming).Ready);
+		Assert.Equal(CommandTask.Attack, rig.Squad(forming).Task);
+		Assert.Equal(NearZone, rig.Squad(forming).Zone);
+		Assert.Equal(OrderKind.Attack, rig.Intent(forming).Order);
+		Assert.Equal(NearNode, rig.Intent(forming).Point);
+
+		CommandSquad garrison = rig.Squad(Commander.GarrisonSlot);
+		Assert.Equal(CommandTask.Attack, garrison.Task);
+		Assert.Equal(NearZone, garrison.Zone);
+		Assert.Equal(garrison.Lead, rig.Squad(forming).Lead);
+	}
+
+	[Fact]
+	public void TheSquadStillForming_NeverGoesAlone()
+	{
+		(Rig rig, ushort tank) = GarrisonAndALoneTank();
+
+		// A player 30 m from home: the garrison stays, and the tank waits for infantry.
+		rig.See(9, new Vector3(0f, 0f, -30f));
+		rig.Decide();
+
 		Assert.Equal(CommandTask.Defend, rig.Squad(Commander.GarrisonSlot).Task);
+		int forming = rig.Commander.SquadOf(tank);
+		Assert.False(rig.Squad(forming).Ready);
+		Assert.Equal(CommandGoal.Hold, rig.Intent(forming).Goal);
 	}
 
 	// ---- Defend Zone ---------------------------------------------------------
@@ -996,6 +1031,9 @@ public class CommanderHtnTests
 		Assert.Equal(CommandGoal.Refill, rig.Intent(assault).Goal);
 
 		// Nothing produced: it walks home, and there it stops being a squad of its own.
+		// The far node is taken meanwhile, so nothing calls the two out again with the
+		// garrison (a combined assault).
+		rig.Zones.SetHolder(FarZone, NodeHolder.Strategist, contested: false);
 		rig.Move(assault, Home);
 		rig.Decide();
 		rig.Decide();
