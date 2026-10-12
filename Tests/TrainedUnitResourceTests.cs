@@ -82,9 +82,9 @@ public class TrainedUnitResourceTests
 
 	private static readonly Regex PathLine = new("\"(res://[^\"]+)\"", RegexOptions.Compiled);
 
-	private static string UnitPath(int id) => CatalogPaths("Scripts/Core/UnitCatalog.cs")[id];
+	internal static string UnitPath(int id) => CatalogPaths("Scripts/Core/UnitCatalog.cs")[id];
 
-	private static string WeaponPath(int id) => CatalogPaths("Scripts/Core/WeaponCatalog.cs")[id];
+	internal static string WeaponPath(int id) => CatalogPaths("Scripts/Core/WeaponCatalog.cs")[id];
 
 	/// <summary>The <c>res://</c> paths in a catalog's table, in order: index is the wire id.</summary>
 	private static List<string> CatalogPaths(string source)
@@ -101,7 +101,7 @@ public class TrainedUnitResourceTests
 	}
 
 	/// <summary>The <c>key = value</c> lines of a resource's <c>[resource]</c> section.</summary>
-	private static Dictionary<string, string> Resource(string path)
+	internal static Dictionary<string, string> Resource(string path)
 	{
 		var values = new Dictionary<string, string>();
 		bool inResource = false;
@@ -122,10 +122,10 @@ public class TrainedUnitResourceTests
 		return values;
 	}
 
-	private static int Int(Dictionary<string, string> values, string key) =>
+	internal static int Int(Dictionary<string, string> values, string key) =>
 		int.Parse(values[key], CultureInfo.InvariantCulture);
 
-	private static float Float(Dictionary<string, string> values, string key) =>
+	internal static float Float(Dictionary<string, string> values, string key) =>
 		float.Parse(values[key], CultureInfo.InvariantCulture);
 
 	private static string Repo(string relative)

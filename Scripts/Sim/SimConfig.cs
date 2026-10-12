@@ -184,9 +184,17 @@ public static class SimConfig
 	/// How many large weapons a player can choose between, at the loadout menu or a
 	/// weapon locker. Bounded by the two bits of the snapshot's weapon byte that say
 	/// which one a player is carrying (<see cref="WeaponFlags"/>): a fourth needs
-	/// another bit, and there are two left.
+	/// another bit, and since hand grenades took the last two there are none left.
 	/// </summary>
 	public const int LargeWeaponChoices = 3;
+
+	/// <summary>
+	/// The most hand grenades a body carries (<see cref="GrenadeSim"/>). Bounded by the
+	/// two bits of the snapshot's weapon byte that say how many a player has left
+	/// (<see cref="WeaponFlags"/>), which is what lets the owning client's count be
+	/// corrected rather than only predicted.
+	/// </summary>
+	public const int MaxGrenades = 3;
 
 	// ---- units (docs/NETCODE.md §6.1) --------------------------------------
 

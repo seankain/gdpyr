@@ -3,9 +3,9 @@ using System;
 namespace Gdpyr.Sim;
 
 /// <summary>
-/// The equipped slot, the reload state, the player's team and which large weapon
-/// they are carrying, packed into the snapshot's one spare byte
-/// (docs/NETCODE.md §7).
+/// The equipped slot, the reload state, the player's team, which large weapon
+/// they are carrying and how many hand grenades they have left, packed into the
+/// snapshot's one spare byte (docs/NETCODE.md §7).
 ///
 /// One byte rather than four fields because it is per player per snapshot at
 /// 30 Hz, and because everything in it is either two bits wide or a flag.
@@ -21,6 +21,11 @@ namespace Gdpyr.Sim;
 /// be missed. It is an index into the large-weapon choices plus one, so that a
 /// zero — every byte written before it existed, including every demo — means "not
 /// said" rather than "the first choice".
+///
+/// The grenade count came with hand grenades (docs/NETCODE.md §10.9) and took the
+/// last two bits. The owner predicts its own throws, so this is what corrects its
+/// count when the server refused one; zero in an old byte reads as none left, which
+/// is harmless for a demo that never had any.
 /// </summary>
 public static class WeaponFlags
 {
@@ -29,12 +34,15 @@ public static class WeaponFlags
 	private const int StrategistBit = 1 << 3;
 	private const int LargeShift = 4;
 	private const int LargeMask = 0b11 << LargeShift;
+	private const int GrenadeShift = 6;
+	private const int GrenadeMask = 0b11 << GrenadeShift;
 
 	/// <param name="largeChoice">
 	/// Which of the large weapons the player is carrying, as an index into the
 	/// choices (<c>WeaponCatalog.LargeWeapons</c>), or -1 to say nothing.
 	/// </param>
-	public static byte Pack(int slot, bool reloading, Team team, int largeChoice = -1)
+	/// <param name="grenades">Hand grenades left, clamped to <see cref="SimConfig.MaxGrenades"/>.</param>
+	public static byte Pack(int slot, bool reloading, Team team, int largeChoice = -1, int grenades = 0)
 	{
 		int packed = Math.Clamp(slot, 0, SimConfig.WeaponSlots - 1) & SlotMask;
 		if (reloading)
@@ -49,6 +57,7 @@ public static class WeaponFlags
 		{
 			packed |= ((largeChoice + 1) << LargeShift) & LargeMask;
 		}
+		packed |= (Math.Clamp(grenades, 0, SimConfig.MaxGrenades) << GrenadeShift) & GrenadeMask;
 		return (byte)packed;
 	}
 
@@ -68,4 +77,7 @@ public static class WeaponFlags
 		int choice = ((flags & LargeMask) >> LargeShift) - 1;
 		return choice < SimConfig.LargeWeaponChoices ? choice : -1;
 	}
+
+	/// <summary>Hand grenades the player has left.</summary>
+	public static int Grenades(byte flags) => (flags & GrenadeMask) >> GrenadeShift;
 }

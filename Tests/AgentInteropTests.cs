@@ -56,6 +56,7 @@ public class AgentInteropTests
 		Assert.Equal((ushort)InputButtons.Weapon1, (ushort)ClientButtons.Weapon1);
 		Assert.Equal((ushort)InputButtons.Weapon2, (ushort)ClientButtons.Weapon2);
 		Assert.Equal((ushort)InputButtons.Weapon3, (ushort)ClientButtons.Weapon3);
+		Assert.Equal((ushort)InputButtons.Grenade, (ushort)ClientButtons.Grenade);
 	}
 
 	[Fact]

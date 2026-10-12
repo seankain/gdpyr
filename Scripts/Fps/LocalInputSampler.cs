@@ -11,9 +11,9 @@ namespace Gdpyr.Fps;
 /// server — works from the recorded frames alone.
 ///
 /// The combat buttons M1 reserved on the wire (fire, aim, reload, melee) are
-/// sampled from M2 on, and the use bit from M5, when heavy guns gave it something
-/// to mean (docs/IMPLEMENTATION_PLAN.md §M5); nothing else about the boundary
-/// changed.
+/// sampled from M2 on, the use bit from M5, when heavy guns gave it something
+/// to mean (docs/IMPLEMENTATION_PLAN.md §M5), and the grenade bit since hand
+/// grenades (docs/NETCODE.md §10.9); nothing else about the boundary changed.
 ///
 /// Look angles are accumulated here and sent as absolute, already-quantized
 /// values. Absolute, because replaying a delta would apply it again; quantized,
@@ -107,6 +107,7 @@ public partial class LocalInputSampler : Node
 		if (Input.IsActionPressed("weapon_melee")) { buttons |= InputButtons.Weapon1; }
 		if (Input.IsActionPressed("weapon_sidearm")) { buttons |= InputButtons.Weapon2; }
 		if (Input.IsActionPressed("weapon_large")) { buttons |= InputButtons.Weapon3; }
+		if (Input.IsActionPressed("throw_grenade")) { buttons |= InputButtons.Grenade; }
 
 		InputFrame frame = InputFrame.Create(tick, axes.X, axes.Y, Yaw, Pitch, buttons);
 

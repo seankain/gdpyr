@@ -716,9 +716,13 @@ public partial class UnitManager
 	/// Applies a hit to a structure, scaled for what it was hit with
 	/// (<see cref="Armour.DamageTaken"/>), and reports what that came to.
 	/// Returns true when it brought the structure down.
+	///
+	/// <paramref name="structureScale"/> is the round's own share against a structure
+	/// (<see cref="ProjectileStats.StructureDamageScale"/>): one for everything but the
+	/// hand grenade (docs/NETCODE.md §10.9).
 	/// </summary>
-	public bool DamageStructure(Structure structure, float amount, bool explosive, int attackerOwnerId, uint tick,
-		out float dealt)
+	public bool DamageStructure(Structure structure, float amount, bool explosive, float structureScale,
+		int attackerOwnerId, uint tick, out float dealt)
 	{
 		dealt = 0f;
 		if (structure == null || structure.IsDestroyed)
@@ -726,7 +730,7 @@ public partial class UnitManager
 			return false;
 		}
 
-		dealt = Armour.DamageTaken(amount, explosive, structure.Definition?.BulletDamageScale ?? 1f);
+		dealt = Armour.DamageTaken(amount, explosive, structure.Definition?.BulletDamageScale ?? 1f, structureScale);
 		bool wasBuilt = structure.IsBuilt;
 		if (!structure.ApplyDamage(dealt))
 		{

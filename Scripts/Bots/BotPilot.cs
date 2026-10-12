@@ -139,6 +139,11 @@ public sealed class BotPilot
 	private bool _hasObjective;
 	private uint _objectiveBucket = uint.MaxValue;
 
+	/// <summary>The last throw decision (<see cref="GrenadeAim"/>): where to look, or zero; whom at; and when to decide again.</summary>
+	private Vector3 _throwAim;
+	private int _throwTargetOwnerId;
+	private uint _nextThrowDecisionTick;
+
 	private Vector3 _lastProgressPosition;
 	private uint _nextProgressTick;
 	private uint _stuckUntilTick;
@@ -262,7 +267,7 @@ public sealed class BotPilot
 
 		Vector3 eye = character.EyePosition;
 		bool hasTarget = TryResolveTarget(eye, combat, out Vector3 aimDirection, out Vector3 targetPosition,
-			out float targetDistance, out bool sightChecked, out bool inSight);
+			out float targetDistance, out bool sightChecked, out bool inSight, out bool middleHidden);
 
 		if (!hasTarget)
 		{
@@ -277,6 +282,23 @@ public sealed class BotPilot
 		// that fired it from too close.
 		bool holdFire = visible && explosive
 			&& BlastEndangersFriends(targetPosition, targetDistance, round.ExplosionRadiusMeters, combat.Team);
+
+		// A hand grenade, for a unit on foot behind a wall or standing still
+		// (docs/NETCODE.md §10.9). Zero for no throw. Decided at the scan rate, or when
+		// the target changes: working out the arc is a few thousand integration steps,
+		// and a target slow enough to throw at does not go far in a sixth of a second.
+		Vector3 grenadeAim = Vector3.Zero;
+		if (hasTarget && GrenadeSim.AiReady(combat.Grenades, tick))
+		{
+			if (tick >= _nextThrowDecisionTick || _throwTargetOwnerId != _targetOwnerId)
+			{
+				_throwAim = GrenadeAim(combat, eye, targetInCover: middleHidden || !visible);
+				_throwTargetOwnerId = _targetOwnerId;
+				_nextThrowDecisionTick = tick + (uint)ScanIntervalTicks;
+			}
+
+			grenadeAim = _throwAim;
+		}
 
 		// A bot with something to shoot at walks towards it; the brain stops it and
 		// strafes once it is inside its preferred range.
@@ -334,7 +356,8 @@ public sealed class BotPilot
 			keepMoving: keepMoving,
 			use: use,
 			inCover: inCover,
-			reloading: combat.Equipped.IsReloading);
+			reloading: combat.Equipped.IsReloading,
+			grenadeAim: grenadeAim);
 
 		_wantedToMove = hasGoal || (hasTarget && visible);
 
@@ -451,13 +474,15 @@ public sealed class BotPilot
 	/// unlike acquisition, because a target's position is the thing being aimed at.
 	/// </summary>
 	private bool TryResolveTarget(Vector3 eye, PlayerCombat combat, out Vector3 aimDirection,
-		out Vector3 targetPosition, out float distance, out bool sightChecked, out bool inSight)
+		out Vector3 targetPosition, out float distance, out bool sightChecked, out bool inSight,
+		out bool middleHidden)
 	{
 		aimDirection = Vector3.Zero;
 		targetPosition = Vector3.Zero;
 		distance = float.MaxValue;
 		sightChecked = false;
 		inSight = false;
+		middleHidden = false;
 
 		if (_targetOwnerId == OwnerId.None
 			|| !TryTargetState(out targetPosition, out Vector3 targetVelocity, out Vector3 head))
@@ -472,6 +497,7 @@ public sealed class BotPilot
 		{
 			sightChecked = true;
 			inSight = HasLineOfSight(eye, targetPosition);
+			middleHidden = !inSight;
 			if (!inSight && HasLineOfSight(eye, Exposure.Below(head)))
 			{
 				inSight = true;
@@ -1273,6 +1299,39 @@ public sealed class BotPilot
 	/// so without this check a bot will eventually shoot the person it is supposed to
 	/// be helping — the fastest way to make a playtester stop wanting bots.
 	/// </summary>
+	/// <summary>
+	/// Where to look to throw a hand grenade at the current target, or zero for no
+	/// throw (docs/NETCODE.md §10.9). Only a unit on foot: a vehicle takes a quarter of
+	/// the blast and a structure is not people, so both are left to the guns. The rest
+	/// is <see cref="GrenadeSim.ShouldThrow"/>, with the friends a launcher minds
+	/// (<see cref="BlastEndangersFriends"/>) — a grenade's blast spares nobody on the
+	/// ground force either — and an arc that reaches its feet.
+	/// </summary>
+	private Vector3 GrenadeAim(PlayerCombat combat, Vector3 eye, bool targetInCover)
+	{
+		if (!OwnerId.IsUnit(_targetOwnerId)
+			|| UnitManager.Instance?.Find(OwnerId.UnitOf(_targetOwnerId)) is not { IsAlive: true } unit
+			|| unit.Definition?.IsVehicle == true)
+		{
+			return Vector3.Zero;
+		}
+
+		Vector3 feet = unit.GlobalPosition;
+		float distance = eye.DistanceTo(feet);
+		ProjectileStats round = WeaponCatalog.RoundFor(WeaponCatalog.HandGrenade);
+		var situation = new ThrowSituation(
+			hasGrenade: true,
+			ready: true,
+			distanceMeters: distance,
+			targetSpeed: new Vector2(unit.Velocity.X, unit.Velocity.Z).Length(),
+			targetInCover: targetInCover,
+			endangersFriends: BlastEndangersFriends(feet, distance, round.ExplosionRadiusMeters, combat.Team));
+
+		return GrenadeSim.ShouldThrow(situation) && GrenadeSim.TrySolve(eye, feet, round, out Vector3 throwDirection)
+			? GrenadeSim.LookFor(throwDirection)
+			: Vector3.Zero;
+	}
+
 	/// <summary>The round the bot's equipped weapon fires. Default for a swing, which is no round at all.</summary>
 	private static ProjectileStats EquippedRound(PlayerCombat combat)
 	{

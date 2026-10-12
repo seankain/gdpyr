@@ -28,6 +28,18 @@ public static class Armour
 		amount <= 0f ? 0f : explosive ? amount : amount * MathF.Max(bulletScale, 0f);
 
 	/// <summary>
+	/// The same, and then the round's own share for what it hit
+	/// (<see cref="ProjectileStats.VehicleDamageScale"/>,
+	/// <see cref="ProjectileStats.StructureDamageScale"/>): one for every round but the
+	/// hand grenade, whose blast is meant for people and does a quarter of itself to a
+	/// truck, a tank or a pillbox (docs/NETCODE.md §10.9). It is applied after the
+	/// bullet rule, so a grenade is still an explosive to the armour that only
+	/// explosives hurt — just a weak one.
+	/// </summary>
+	public static float DamageTaken(float amount, bool explosive, float bulletScale, float roundScale) =>
+		DamageTaken(amount, explosive, bulletScale) * MathF.Max(roundScale, 0f);
+
+	/// <summary>
 	/// True for something bullets cannot hurt at all. What a ground bot asks before it
 	/// spends a magazine on a target (<c>GroundSensor.NearestHostileTarget</c>).
 	/// </summary>

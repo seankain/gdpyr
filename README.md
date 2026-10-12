@@ -209,6 +209,15 @@ the green ring round a **supply truck** (120 points, `8`), once nothing has hit 
 seconds — a rifleman at half health is whole again ten seconds later. The truck is soft, carries a
 pistol and does not heal itself; move it up behind a fight and send the wounded back to it.
 
+**Hand grenades** ([`docs/NETCODE.md`](docs/NETCODE.md) §10.9): three a life, thrown with `G`
+whatever is in your hands, 10° above where you are looking — 17 m looking level, 33 m looking 35° up.
+They go off three seconds after the throw, lying where they landed; anything that would stop a
+bullet stops one, and one that hits somebody drops at their feet. They are anti-personnel: a blast
+that kills within 2 m and reaches 7 m, and a quarter of that to a vehicle or a structure. The blast
+hurts you and your teammates too. Strategist units on foot carry three as well and throw them at a
+player who is behind a wall or standing still 6–28 m away; the technical, the tank and the supply
+truck carry none.
+
 On the ground, right mouse raises the sights. What that gets you is the weapon's:
 
 | Weapon | Aiming |
@@ -225,7 +234,7 @@ recorded input frame the rest of the simulation runs on, and nothing about them 
 
 **Armour, and the weapon locker.** The tank, the pillbox and the sniper tower are armour: rifle, DMR,
 pistol and heavy-gun rounds stop against them and do nothing, and only the launcher's grenade — by its
-impact or its blast — hurts them. The answer when one turns up is the **weapon locker** at the spawn:
+impact or its blast — hurts them properly; a hand grenade does a quarter of its blast. The answer when one turns up is the **weapon locker** at the spawn:
 stand at it and tap `E` to swap the large weapon in your hands for the next one, with a full
 magazine — rifle, launcher, DMR, and round again. The swap is for that life; what you spawn with is
 still the loadout menu's (`1`/`2`/`3` while dead). A hit on armour that did nothing shows no hit
@@ -253,7 +262,9 @@ round full of bots starts without waiting for anybody.
   They are deliberately mediocre shots — a 3° aim error held for a third of a second at a time, and
   a 200 ms reaction. `BotTraits.Default` in `Scripts/Sim/BotBrain.cs` is the whole difficulty dial.
   Six carry two rifles, two DMRs and two launchers. Only the launchers take on a tank, a pillbox or a
-  tower, and they hold fire while the blast would reach a teammate or themselves. Under the HTN
+  tower, and they hold fire while the blast would reach a teammate or themselves. Every bot throws
+  its grenades at a unit on foot that is behind a wall or standing still 9–28 m away, under the same
+  check for teammates. Under the HTN
   bots, one with a low wall within 25 m of a fight walks to the side of it away from the enemy,
   fights from there, and crouches behind it to reload. A unit whose chest is behind a wall is
   shot at by its head.

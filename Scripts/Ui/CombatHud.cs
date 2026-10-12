@@ -146,7 +146,7 @@ public partial class CombatHud : CanvasLayer
 		string weapon = WeaponCatalog.NameOf(mounted ? gun.WeaponDefinitionId : combat.EquippedDefinitionId);
 		short ammo = mounted ? gun.Weapon.Ammo : combat.Equipped.Ammo;
 
-		_status.Text = $"HP {combat.Health}\nK {combat.Kills}  D {combat.Deaths}";
+		_status.Text = $"HP {combat.Health}   grenades {combat.Grenades.Count}\nK {combat.Kills}  D {combat.Deaths}";
 		_ammo.Text = stats.HasUnlimitedAmmo
 			? $"{weapon}\n--"
 			: $"{weapon}\n{ammo} / {stats.MagazineSize}"

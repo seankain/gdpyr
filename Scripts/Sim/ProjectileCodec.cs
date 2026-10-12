@@ -52,6 +52,13 @@ public enum HitFlags : byte
 
 	/// <summary>A melee swing rather than a projectile; <see cref="ProjectileHit.Id"/> is 0.</summary>
 	Melee = 1 << 2,
+
+	/// <summary>
+	/// A fused round — a hand grenade — came to rest at <see cref="ProjectileHit.Point"/>
+	/// and has not gone off yet (docs/NETCODE.md §10.9). A client puts its copy down
+	/// there rather than taking it out of the air; the detonation is a second message.
+	/// </summary>
+	Landed = 1 << 3,
 }
 
 /// <summary>
