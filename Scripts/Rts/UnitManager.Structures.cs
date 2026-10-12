@@ -11,7 +11,8 @@ namespace Gdpyr.Rts;
 
 /// <summary>
 /// The structures the strategist's builders put up: pillboxes, sandbag walls and
-/// sniper towers (docs/NETCODE.md §10.5).
+/// sniper towers (docs/NETCODE.md §10.5). What the tower and the pillbox train is
+/// the third file, UnitManager.Training.cs (§10.8).
 ///
 /// Here rather than in a manager of their own because everything about them is
 /// the unit manager's already: builders are units, a structure is placed by the
@@ -614,9 +615,12 @@ public partial class UnitManager
 			{
 				DefenseBattery.StepGun(structure, tick, combat, space);
 			}
+
+			ServerTraining(structure, tick);
 		}
 
 		BroadcastStructureState(tick);
+		BroadcastTrainingState(tick);
 		ServerNavigation();
 	}
 
@@ -732,6 +736,7 @@ public partial class UnitManager
 		StructuresLost++;
 		structure.DespawnTick = tick + RubbleTicks;
 		structure.TargetPeerId = 0;
+		RefundTraining(structure);
 		if (wasBuilt)
 		{
 			RequestNavigationRebake();
@@ -924,6 +929,8 @@ public partial class UnitManager
 			RpcId(peerId, MethodName.ServerStructureState, slot, structure.HealthPercent, structure.ProgressByte,
 				(byte)structure.Flags);
 		}
+
+		SendTrainingTo(peerId, NetworkManager.Instance?.Tick ?? 0);
 	}
 
 	[Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,

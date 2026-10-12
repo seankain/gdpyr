@@ -13,9 +13,10 @@ namespace Gdpyr.Core;
 /// unit. Appending is safe; reordering or removing is a wire break that will
 /// silently turn somebody's riflemen into tanks.
 ///
-/// One entry today. M5's three tiers — Infantry, Technical, Tank
-/// (docs/IMPLEMENTATION_PLAN.md §M5) — are two more lines in the table and two
-/// more resource files, which is the point of the table.
+/// M5's three tiers — Infantry, Technical, Tank (docs/IMPLEMENTATION_PLAN.md §M5)
+/// — were two more lines in the table and two more resource files, which is the
+/// point of the table; so were the builder, the supply truck, and the two units a
+/// structure trains (docs/NETCODE.md §10.8).
 /// </summary>
 public static class UnitCatalog
 {
@@ -27,6 +28,8 @@ public static class UnitCatalog
 		"res://Units/tank.tres",      // 2 — T2 tank
 		"res://Units/builder.tres",   // 3 — builder, not a tier
 		"res://Units/supply_truck.tres", // 4 — supply truck, not a tier
+		"res://Units/sniper.tres",       // 5 — sniper, trained by a sniper tower
+		"res://Units/heavy_gunner.tres", // 6 — heavy gunner, trained by a pillbox
 	};
 
 	public const byte Infantry = 0;
@@ -56,6 +59,21 @@ public static class UnitCatalog
 	/// is for is where it stands, not what it kills.
 	/// </summary>
 	public const byte SupplyTruck = 4;
+
+	/// <summary>
+	/// The sniper tower's marksman on foot (docs/NETCODE.md §10.8): the tower's gun,
+	/// a tighter cone than any other unit and the furthest reach, on a body softer
+	/// than a rifleman's. Trained only by a finished sniper tower, never by a
+	/// barracks (<see cref="UnitDefinition.TrainedInBarracks"/>).
+	/// </summary>
+	public const byte Sniper = 5;
+
+	/// <summary>
+	/// A gunner with a belt-fed gun (<see cref="WeaponCatalog.Lmg"/>) who keeps firing
+	/// where a target went to ground (<see cref="UnitDefinition.SuppressSeconds"/>):
+	/// suppressive fire. Trained only by a finished pillbox.
+	/// </summary>
+	public const byte HeavyGunner = 6;
 
 	/// <summary>The three fighting tiers in order, which is the order the strategist's build keys are in.</summary>
 	public static readonly byte[] Tiers = { Infantry, Technical, Tank };
@@ -119,13 +137,18 @@ public static class UnitCatalog
 	/// <summary>Whether units of this kind resupply the units round them (<see cref="UnitDefinition.SupplyRadiusMeters"/>).</summary>
 	public static bool IsSupply(byte id) => Definition(id)?.IsSupply ?? false;
 
+	/// <summary>Whether a barracks trains units of this kind, rather than only a structure (docs/NETCODE.md §10.8).</summary>
+	public static bool IsTrainedInBarracks(byte id) => Definition(id)?.TrainedInBarracks ?? false;
+
 	/// <summary>
-	/// What the cheapest buildable unit costs, or <see cref="int.MaxValue"/> when
-	/// nothing can be built at all.
+	/// What the cheapest unit a barracks trains costs, or <see cref="int.MaxValue"/>
+	/// when nothing can be built at all.
 	///
 	/// This is half of the strategist's defeat condition — "points below the
 	/// cheapest unit" (docs/IMPLEMENTATION_PLAN.md §M5) — and it is derived rather
 	/// than authored so that adding a fourth tier cannot leave a constant behind.
+	/// A unit only a structure trains is left out: the structure may not be standing,
+	/// and a strategist who can afford only that has nothing a barracks will sell.
 	/// </summary>
 	public static int CheapestCost
 	{
@@ -135,7 +158,7 @@ public static class UnitCatalog
 			for (int i = 0; i < Definitions.Length; i++)
 			{
 				UnitDefinition definition = Definitions[i];
-				if (definition != null && definition.Cost < cheapest)
+				if (definition != null && definition.TrainedInBarracks && definition.Cost < cheapest)
 				{
 					cheapest = definition.Cost;
 				}

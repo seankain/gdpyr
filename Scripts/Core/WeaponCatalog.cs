@@ -32,7 +32,8 @@ public static class WeaponCatalog
 		"res://Weapons/heavy/heavy.tres",       // 7 — deployed emplacement (M5)
 		"res://Weapons/turret/turret.tres",     // 8 — barracks gun
 		"res://Weapons/mortar/mortar.tres",     // 9 — barracks mortar
-		"res://Weapons/marksman/marksman.tres", // 10 — sniper tower
+		"res://Weapons/marksman/marksman.tres", // 10 — sniper tower, sniper
+		"res://Weapons/lmg/lmg.tres",           // 11 — heavy gunner
 	};
 
 	public const byte Hammer = 0;
@@ -73,8 +74,17 @@ public static class WeaponCatalog
 	/// The marksman in a sniper tower (docs/NETCODE.md §10.5): the DMR's round, one
 	/// every two seconds, from a belt with no bottom. Slow enough that a player who
 	/// has been seen has a moment to get behind something, and two hits to a kill.
+	/// The sniper a tower trains carries the same gun on foot (docs/NETCODE.md §10.8).
 	/// </summary>
 	public const byte Marksman = 10;
+
+	/// <summary>
+	/// The heavy gunner's belt-fed gun (docs/NETCODE.md §10.8): the rifle's round,
+	/// faster than a rifle fires it and a hundred and fifty of them before a reload,
+	/// which is sixteen seconds of fire. What the gunner is for is how long it keeps
+	/// shooting, not how hard (<see cref="Sim.Suppression"/>).
+	/// </summary>
+	public const byte Lmg = 11;
 
 	/// <summary>
 	/// The large-weapon choice a ground-force player makes before each spawn, and

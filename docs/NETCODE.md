@@ -409,6 +409,8 @@ route, so there is no second behaviour to write.
 | `ServerSpawnStructure` / `ServerDespawnStructure` | S→C | Reliable | per structure per life | ~26 B / ~8 B |
 | `ServerStructureState` | S→C | Reliable | on a flag change, else 5 Hz while it changes | ~8 B |
 | `ClientConstruct` / `ClientAssist` | C→S | Reliable | per placement | ~24 B / ~8 B + 4 B/builder |
+| `ClientTrain` / `ClientCancelTrain` / `ClientTrainingRally` | C→S | Reliable | per click | ~5 B / ~5 B / ~17 B |
+| `ServerTrainingState` | S→C | Reliable | 5 Hz per training structure while its queue changes | ~6 B |
 | `ServerRoundSummary` (scoreboard) | S→C | Reliable | once per round | 16 B + 9 B/player |
 | `ServerRequestRoleChoice` | S→C | Reliable | per person per round | ~4 B |
 | `ClientSelectTeam` / `ClientSelectLoadout` | C→S | Reliable | per choice | ~4 B |
@@ -535,7 +537,7 @@ exists to be.
 
 ---
 
-## 10. Economy, emplacements, the scoreboard, barracks defences, structures, armour and resupply
+## 10. Economy, emplacements, the scoreboard, barracks defences, structures, armour, resupply and training
 
 M5 added three things that are neither a per-tick sample nor a projectile, and all three are on the
 wire as **state**: sent when it changes, reliable, and absent the rest of the time.
@@ -944,6 +946,79 @@ healing can bring back heals at the nearest source instead of being merged, and 
 ordered, with nothing in sight, walks to a source within 60 m of its reach and stands in it until it
 is back to 95 % ([`HTN_BOTS.md`](HTN_BOTS.md) §5.2, §5.3). Legacy's strategist never buys one; its
 garrison heals where it stands, inside the ring.
+
+### 10.8 Units a structure trains: the sniper and the heavy gunner
+
+A finished **sniper tower** trains **snipers** and a finished **pillbox** trains **heavy
+gunners**, each from a queue of its own, as a barracks trains from its. Neither unit comes out of a
+barracks (`UnitDefinition.TrainedInBarracks` is false), which is what makes the structure worth
+putting up for something besides its gun, and keeps the barracks' card the five things it was.
+
+| | rifleman | sniper | heavy gunner |
+|---|---|---|---|
+| catalog id, key | 0, `1` | 5, `9` | 6, `0` |
+| trained by | barracks | sniper tower | pillbox |
+| cost, seconds | 50, 4 | 60, 5 | 90, 7 |
+| health, regen /s | 100, 5 | 80, 4 | 140, 7 |
+| speed | 4.5 m/s | 4.5 m/s | 3.6 m/s |
+| sees, shoots | 45 m, 40 m | 70 m, 70 m | 45 m, 45 m |
+| weapon | rifle: 600 rpm, 30 rounds, 2.2 s reload | the tower's marksman: 30 rpm, no reload | `lmg`: 550 rpm, 150 rounds, 6 s reload |
+| round | 5.56, 20 | 7.62, 60 | 5.56, 20 |
+| cone | 2.5° | 0.45° | 3° |
+| suppresses for | — | — | 4 s |
+
+**The sniper** is the tower's marksman on foot: the tower's gun (`WeaponCatalog.Marksman`, one
+7.62 round every two seconds, two hits to a kill), the tightest cone of any unit and the longest
+reach: it shoots as far as it sees, 70 m, which is as far as the technical sees and so as far as any
+unit lifts the fog (§6.2). It is softer than a rifleman and slightly dearer, and it is not armour:
+rifles kill it.
+
+**The heavy gunner** carries a belt-fed gun (`WeaponCatalog.Lmg`, id 11: the rifle's round, faster,
+and 150 of them — sixteen seconds of fire — before a six-second reload) and fires **suppressively**:
+a gunner that loses sight of a live target keeps firing at the point it last saw it for
+`UnitDefinition.SuppressSeconds`, as though the target were still there. A player who goes to
+ground behind a wall finds the wall still being shot at, and one who stands up to shoot back inside
+the window stands up into the burst. The rule (`Scripts/Sim/Suppression.cs`, engine-free,
+`Tests/SuppressionTests.cs`) works on what the gunner saw, not on what is true — it keeps firing at
+the spot when the player has crawled away from it, which is what fire on a position is. It ends
+when the window does, when the player dies, when the point is out of range, when the gunner sees
+somebody again, or when it is given an order. While it lasts, the gunner's FSM, its HTN and its
+trigger see a target at that point and it holds and fires as it would at a player; its
+`TargetOwnerId` stays empty, so no squad-mate takes a wall for a focus. **It is not a status on the
+player**: nothing touches a player's aim or view, because a ground-force client predicts its own
+shots and a spread the server widened without saying so would be a misprediction on every round.
+
+**Training** (`Scripts/Rts/UnitManager.Training.cs`) is a barracks' rule pointed at a structure:
+`Structure.Queue` is the same `BuildQueue`, so a unit is charged for when it is queued, cancelling
+the last one refunds it, and one comes out at a time. A site trains nothing and cannot be queued at.
+The door is worked out rather than authored (`Scripts/Sim/StructureTraining.cs`,
+`Tests/StructureTrainingTests.cs`): the wall facing the nearest friendly barracks — the side away
+from what the structure was put up to face — or the next wall round that no other structure's
+footprint is on. Fresh units stand in rows along it and walk to the structure's rally point, six
+metres straight out until the strategist moves it. **A knocked-down structure refunds its queue**:
+the strategist paid for units and gets the units or the points. The defeat condition counts units
+on a structure's queue as it counts a barracks', and its "cheapest unit" is the cheapest a barracks
+trains — a unit only a standing structure can train is not one a broke strategist can count on.
+
+**For the strategist:** click a finished tower or pillbox and the card is its queue — one button,
+the queue, the progress bar, cancel — and a right-click on the ground with no units selected moves
+its rally point. `9` and `0` queue a sniper or a heavy gunner without a click: at the selected
+structure if it trains that unit, else at whichever of the side's has the shortest queue.
+
+**On the wire:** three requests, and one report. `ClientTrain(slot)`, `ClientCancelTrain(slot)` and
+`ClientTrainingRally(slot, point)` are validated as a barracks' are — the sender is a strategist,
+the structure is theirs, standing, finished and trains something. `ServerTrainingState(slot,
+queued, progress)` goes out at the structure report rate (5 Hz) while a queue's depth or its head's
+progress changes, and to a joining peer for every queue with something on it; what the head is
+needs no saying, because a structure trains one kind of unit. The units themselves are units: the
+roster message spawns them and the unit snapshot carries them. The two catalog lines and the weapon
+line are appends, so every older id still means what it did. A unit-built event names a structure
+as `barracks = -(slot + 1)` ([`AGENT_API.md`](AGENT_API.md) §8).
+
+**Not in it:** the computer strategist — legacy and HTN alike — trains neither; it is a person's
+and a policy's choice for now. A strategist policy can train with `{"cmd":"build","slot":n}`
+([`AGENT_API.md`](AGENT_API.md) §7.4), and its observation has no tier bit for either unit and no
+structure block, as for the builder and the truck.
 
 ---
 

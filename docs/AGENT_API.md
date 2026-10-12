@@ -404,7 +404,9 @@ barracks building one reads a head tier of 1, the same as a tank. A **supply tru
 ([`HTN_BOTS.md`](HTN_BOTS.md) §8, D2) is the same case again: catalog id 4, no tier bit, a head tier
 of 1, queued with `{"cmd":"build","tier":4}`. What it does — units heal within its 12 m and inside a
 barracks' ring, three seconds after they were last hit — shows in the vector only as the health
-fraction of the units it heals. What a policy's builders put up is
+fraction of the units it heals. The **sniper** and the **heavy gunner** ([`NETCODE.md`](NETCODE.md)
+§10.8) are the same case: catalog ids 5 and 6, no tier bit. A structure's training queue is not in
+the barracks block; the round block's queued-unit count includes it. What a policy's builders put up is
 not in the vector at all: a strategist policy can build (§7.4) but cannot see what it built. That is
 the first thing to add when somebody trains one that wants to — a structure block, and a schema
 version.
@@ -534,6 +536,17 @@ is charged, placed and refused by the same rules:
 `structure` is one of the names `welcome` publishes under `strategist_action.structures` —
 `pillbox`, `sandbag_wall`, `sniper_tower` — or its index; `yaw` is the way its front faces, in
 radians, and the server finds the ground under `target` itself.
+
+`build`, `cancel` and `rally` with a `slot` mean the finished sniper tower or pillbox in that
+structure slot instead of a barracks ([`NETCODE.md`](NETCODE.md) §10.8): a sniper tower trains
+snipers and a pillbox heavy gunners, so `tier` is ignored. They land in `UnitManager.ServerTrain`,
+`ServerCancelTrain` and `ServerSetTrainingRally`, the same checks a human strategist's
+`ClientTrain` gets. A slot is the number `structure_placed` reported. A `build` at a barracks asking
+for one of the two (`tier` 5 or 6) is refused: neither comes out of a barracks.
+
+```json
+{"cmd":"build","slot":3}
+```
 Unit ids that the seat does not own are rejected by `ApplyOrder` exactly as a client's would be,
 and the rejection is counted in `UnitManager.RejectedOrders` — so a policy emitting garbage shows
 up on the debug HUD rather than silently doing nothing.
@@ -607,7 +620,7 @@ from position deltas and gets it slightly wrong.
 | `round_start` / `round_end` | seed, outcome, duration, the whole `RoundSummary` |
 | `kill` / `death` | attacker, victim, weapon, distance |
 | `damage` | attacker, victim, amount, remaining |
-| `unit_built` / `unit_lost` | unit id, tier, barracks, position |
+| `unit_built` / `unit_lost` | unit id, tier, barracks, position — a unit a sniper tower or pillbox trained has `barracks` = −(slot + 1) ([`NETCODE.md`](NETCODE.md) §10.8) |
 | `node_captured` | node, owner, claimant — `claimant` is the side that held it before, `NodeHolder` numbered: 0 neutral, 1 ground force, 2 strategist; x, z |
 | `seat_attached` / `seat_released` | seat, policy, and `step_mul` or a reason |
 | `structure_placed` | structure (its slot), type, builders sent, x, z |
@@ -686,7 +699,7 @@ of assertions. It is checked into the repo beside the tests.
 ```
 
 A spawn names exactly one of a `peer` (a seat to place), a `unit` (`infantry`, `technical`,
-`tank`, `builder` or `supply_truck`) or a `structure` (`pillbox`, `sandbag_wall`, `sniper_tower`, with a `yaw`). A
+`tank`, `builder`, `supply_truck`, `sniper` or `heavy_gunner`) or a `structure` (`pillbox`, `sandbag_wall`, `sniper_tower`, with a `yaw`). A
 structure is put up finished and free, and the server refuses one that does not fit where it was put
 rather than guessing — a pillbox inside a wall is a typo in the scenario, not a test.
 

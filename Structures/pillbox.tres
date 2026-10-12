@@ -21,4 +21,5 @@ ReactionSeconds = 0.6
 TraverseDegreesPerSecond = 120.0
 OnTargetDegrees = 2.0
 AccuracyConeDegrees = 2.0
+TrainsUnitId = 6
 Color = Color(0.55, 0.55, 0.52, 1)
