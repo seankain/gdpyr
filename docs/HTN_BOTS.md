@@ -650,13 +650,36 @@ commander's builder lays sandbags for every squad reinforcing a zone before it f
 node, and for the garrison once it has a pillbox (`DigIn`, COVER.md §7). Under `htn` a bot or
 unit whose target's middle is hidden aims at its head (COVER.md §3). Legacy is unchanged (D5).
 
+**Combined assaults, after H6** (`Commander.Combine`). Before this, Attack went only to an idle,
+ready squad that alone was 1.5 times the estimate at a target, and two squads never shared one; every
+other squad got a Defend order — Hold at the reserve point, or the garrison's at home — so its units
+planned "hold post" and "engage in leash" round a point that took nothing, and a strategist whose
+squads were each too weak alone never attacked again — a garrison of four (200) and a tank left on
+its own (400) each hold against a node three players hold (450 needed), though together they are
+600. The assignment now has a second pass, after the single-squad one:
+
+| Where | Built | Why |
+|---|---|---|
+| Who | Squads free to go, in turn: idle assault squads that are ready and not depleted; then the squad still forming; then the garrison, at home, while home is quiet — its barracks not contested and no enemy remembered within 60 m (`ThreatMeters`, Defend Zone's threat). | Ready squads first because they are what Attack is for. The squad still forming is a group of units holding at home, as the garrison is; the garrison last, because it is home's defence. |
+| Where to | The nearest node to the pool's centroid, a denied one before a neutral one, that no squad attacks and that all of them together are 1.5 times (`AttackRatio`, the single-squad rule). Live contacts are not: a pooled stage on a target that moves is a stage that never assembles. | Control points are what income comes from, and the H6 rounds were lost on income. |
+| How many | The fewest that beat it, nearest the node first in each turn; then again with the squads left, for another node. At least two squads and at least `AssaultSquadSize` units, or none go: the squad still forming never goes alone, and the garrison never goes where that squad would do alone. | A squad left at home is one fewer to send elsewhere; and "forms at four before it attacks" (§5.3) still holds of what is sent. |
+| Together | One staging point, short of the node from the squads' centroid, and the same attack order, so on the `SquadBoard` they are one squad (§4.3) whose units keep pace with each other. Each carries the lowest slot among them (`Lead`); `Assembled` counts all their units, so they strike on the same decision, or all after the stage's 30 s. | Two squads striking a decision apart arrive a squad at a time. |
+| After | The squad still forming is ready once sent, so production forms another. A squad that depletes, falls back or loses its target leaves the assault and the rest go on. | |
+| Garrison | Out on an assault: no production joins it (a unit produced at home would walk out after it alone); Retreat applies to it as to any squad; the moment home is not quiet it is ordered home, and when the assault ends it goes home. | §5.3's garrison is a standing defence; it leaves only while nothing threatens what it defends. |
+
+The spectator's squad table shows such a squad as `combined` (`AiSquadFlags.Combined`). Tests:
+eleven in `CommanderHtnTests`. Checked to fail, then reverted: without the pass, 8 fail; with each
+squad assembling on its own, 1; with production joining a garrison that is out, 1; with the garrison
+never retreating, 1; with it not recalled when home is threatened, 1; without the two-squad and
+unit-count rule, 2.
+
 ### 5.4 The five tasks at each layer
 
 | Task | Ground bot | RTS unit | Strategist commander |
 |---|---|---|---|
 | **Defend Zone** | Hold a strategist node to stop its income (denier role) | Spread to posts round the anchor, answer friends' fights inside the leash | Send a squad sized to the threat to a contested node or barracks |
 | **Recon** | Sweep the least-recently-seen node; investigate ghosts | Patrol without stopping for contacts it can report | One technical through stale zones on a patrol |
-| **Attack** | Focus the coordinator's target with a buddy; armour only with an explosive | Wait for the squad, then focus fire; support engaged friends | Stage out of sight, strike when assembled, escort armour |
+| **Attack** | Focus the coordinator's target with a buddy; armour only with an explosive | Wait for the squad, then focus fire; support engaged friends | Stage out of sight, strike when assembled, escort armour; squads too weak alone take a node together |
 | **Retreat** | Leave barracks defences; fall back to teammates when critical and outnumbered | Back to friends when critical and outnumbered (autonomous stance only) | Pull a losing squad back to a held zone and merge |
 | **Resupply** | Locker run for a launcher when armour is known; reload between fights | Heal inside the barracks ring or at a supply truck (D2, H5) | Refill a depleted squad from production, or heal it at the nearest supply source; station the supply trucks (D2, H5) |
 

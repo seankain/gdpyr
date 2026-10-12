@@ -225,7 +225,8 @@ public sealed class AiDebugPublisher
 				| (squad.Healable ? AiSquadFlags.Healable : AiSquadFlags.None)
 				| (squad.FallingBack ? AiSquadFlags.FallingBack : AiSquadFlags.None)
 				| (squad.Short ? AiSquadFlags.Short : AiSquadFlags.None)
-				| (squad.Engaging > 0 ? AiSquadFlags.Engaged : AiSquadFlags.None),
+				| (squad.Engaging > 0 ? AiSquadFlags.Engaged : AiSquadFlags.None)
+				| (squad.Lead >= 0 && squad.Task == CommandTask.Attack ? AiSquadFlags.Combined : AiSquadFlags.None),
 			Zone = squad.Zone,
 			TargetOwnerId = squad.TargetOwnerId,
 			Strength = squad.Strength,

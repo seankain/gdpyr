@@ -369,6 +369,294 @@ public class CommanderHtnTests
 		Assert.Equal(assault, rig.Commander.SquadOf(fresh));
 	}
 
+	// ---- Attack: combined assaults ----------------------------------------------
+
+	/// <summary>Players the side sees round a point, a metre apart: each is worth two riflemen.</summary>
+	private static void Guard(Rig rig, Vector3 at, int players)
+	{
+		for (int p = 1; p <= players; p++)
+		{
+			rig.See(p, at + new Vector3(p, 0f, 0f));
+		}
+	}
+
+	/// <summary>The ready assault squads, lowest slot first.</summary>
+	private static int[] Assaults(Rig rig) => Enumerable.Range(0, rig.Commander.Capacity)
+		.Where(s => rig.Squad(s).Active && rig.Squad(s).Role == CommandRole.Assault && rig.Squad(s).Ready)
+		.ToArray();
+
+	[Fact]
+	public void TwoSquadsTooWeakAlone_AssaultADeniedNodeTogether_FromOneStagingPoint()
+	{
+		var rig = new Rig();
+		rig.Zones.SetHolder(FarZone, NodeHolder.GroundForce, contested: false);
+		rig.AddRiflemen(12);
+
+		// Two players on the far node, 200: each squad of 200 needs 300 alone.
+		Guard(rig, FarNode, 2);
+		rig.Decide();
+
+		int[] assaults = Assaults(rig);
+		Assert.Equal(2, assaults.Length);
+		foreach (int s in assaults)
+		{
+			CommandSquad squad = rig.Squad(s);
+			Assert.Equal(CommandTask.Attack, squad.Task);
+			Assert.Equal(CommandTarget.Zone, squad.Target);
+			Assert.Equal(FarZone, squad.Zone);
+			Assert.False(squad.Short);
+			Assert.Equal(assaults[0], squad.Lead);
+
+			CommandIntent intent = rig.Intent(s);
+			Assert.Equal(CommandGoal.Stage, intent.Goal);
+			Assert.Equal(OrderKind.Attack, intent.Order);
+			Assert.Equal(FarNode, intent.Point);
+			Assert.Equal(OwnerId.None, intent.TargetOwnerId);
+		}
+
+		// One staging point for both, and the same order: one squad on the board.
+		Assert.Equal(rig.Intent(assaults[0]).StagingPoint, rig.Intent(assaults[1]).StagingPoint);
+
+		// 400 was enough without the garrison, which stays at home.
+		Assert.Equal(CommandTask.Defend, rig.Squad(Commander.GarrisonSlot).Task);
+		Assert.Equal(CommandGoal.Reinforce, rig.Intent(Commander.GarrisonSlot).Goal);
+	}
+
+	[Fact]
+	public void ACombinedAssault_StrikesOnlyOnceTheWholeOfItHasAssembled_AndThenAllAtOnce()
+	{
+		var rig = new Rig();
+		rig.Zones.SetHolder(FarZone, NodeHolder.GroundForce, contested: false);
+		rig.AddRiflemen(12);
+		Guard(rig, FarNode, 2);
+		rig.Decide();
+
+		int[] assaults = Assaults(rig);
+		Vector3 staging = rig.Intent(assaults[0]).StagingPoint;
+
+		// Half of it there: under 80 % of the assault, so neither squad strikes.
+		rig.Move(assaults[0], staging);
+		Guard(rig, FarNode, 2);
+		rig.Decide();
+		Assert.All(assaults, s => Assert.Equal(CommandGoal.Stage, rig.Intent(s).Goal));
+
+		// All of it there: both strike on the same decision.
+		rig.Move(assaults[1], staging);
+		Guard(rig, FarNode, 2);
+		rig.Decide();
+		Assert.All(assaults, s => Assert.Equal(CommandGoal.Strike, rig.Intent(s).Goal));
+		Assert.All(assaults, s => Assert.Equal(FarNode, rig.Intent(s).Point));
+	}
+
+	[Fact]
+	public void TheSquadStillForming_JoinsACombinedAssault_AndProductionFormsANewOne()
+	{
+		var rig = new Rig();
+		rig.Zones.SetHolder(FarZone, NodeHolder.GroundForce, contested: false);
+		rig.AddRiflemen(10);
+		Guard(rig, FarNode, 2);
+		rig.Decide();
+
+		// The garrison, a ready squad of 200 and two riflemen still forming, 100: 300
+		// between the two squads, which is what two players need.
+		int[] assaults = Assaults(rig);
+		Assert.Equal(2, assaults.Length);
+		CommandSquad formed = rig.Squad(assaults[1]);
+		Assert.Equal(2, formed.Members);
+		Assert.All(assaults, s => Assert.Equal(CommandTask.Attack, rig.Squad(s).Task));
+		Assert.All(assaults, s => Assert.Equal(FarZone, rig.Squad(s).Zone));
+
+		// Committed, it is no longer the squad production fills.
+		ushort fresh = rig.Add(Vector3.Zero);
+		Guard(rig, FarNode, 2);
+		rig.Decide();
+		int squad = rig.Commander.SquadOf(fresh);
+		Assert.DoesNotContain(squad, assaults);
+		Assert.Equal(CommandRole.Assault, rig.Squad(squad).Role);
+		Assert.False(rig.Squad(squad).Ready);
+	}
+
+	[Fact]
+	public void ATankLeftOnItsOwn_AndTheGarrison_TakeANodeTogether()
+	{
+		// docs/HTN_BOTS.md §6, H6: a strategist with no income left with a garrison of
+		// four and a tank whose infantry died, each holding where it was.
+		var rig = new Rig();
+		rig.AddRiflemen(4);
+		ushort tank = rig.Add(Vector3.Zero, Tank, armour: true);
+		rig.AddRiflemen(3);
+		rig.Decide();
+		int armour = rig.Commander.SquadOf(tank);
+		Assert.True(rig.Squad(armour).Ready);
+
+		foreach (ushort id in rig.Members(armour).Where(id => id != tank))
+		{
+			rig.Kill(id);
+		}
+
+		// 400 of 550 left: not depleted. Three players on the denied node, 300, need 450.
+		rig.Zones.SetHolder(FarZone, NodeHolder.GroundForce, contested: false);
+		Guard(rig, FarNode, 3);
+		rig.Decide();
+
+		Assert.False(rig.Squad(armour).Depleted);
+		Assert.Equal(CommandTask.Attack, rig.Squad(armour).Task);
+		Assert.Equal(FarZone, rig.Squad(armour).Zone);
+
+		CommandSquad garrison = rig.Squad(Commander.GarrisonSlot);
+		Assert.Equal(CommandRole.Garrison, garrison.Role);
+		Assert.Equal(CommandTask.Attack, garrison.Task);
+		Assert.Equal(FarZone, garrison.Zone);
+		Assert.Equal(garrison.Lead, rig.Squad(armour).Lead);
+		Assert.Equal(CommandGoal.Stage, rig.Intent(Commander.GarrisonSlot).Goal);
+		Assert.Equal(rig.Intent(armour).StagingPoint, rig.Intent(Commander.GarrisonSlot).StagingPoint);
+	}
+
+	[Fact]
+	public void TheGarrison_GoesOnlyWhenTheSquadsAreNotEnoughWithoutIt()
+	{
+		var rig = new Rig();
+		rig.Zones.SetHolder(FarZone, NodeHolder.GroundForce, contested: false);
+		rig.AddRiflemen(12);
+
+		// Three players, 300, need 450: the two squads make 400, and the garrison 600.
+		Guard(rig, FarNode, 3);
+		rig.Decide();
+
+		Assert.All(Assaults(rig), s => Assert.Equal(CommandTask.Attack, rig.Squad(s).Task));
+		Assert.Equal(CommandTask.Attack, rig.Squad(Commander.GarrisonSlot).Task);
+		Assert.Equal(CommandGoal.Stage, rig.Intent(Commander.GarrisonSlot).Goal);
+	}
+
+	[Fact]
+	public void TheGarrison_StaysHome_WhileHomeIsThreatened()
+	{
+		var rig = new Rig();
+		rig.Zones.SetHolder(FarZone, NodeHolder.GroundForce, contested: false);
+		rig.AddRiflemen(12);
+		Guard(rig, FarNode, 3);
+
+		// A player 30 m from home: the garrison is home's defence. One squad goes after
+		// the player, whom it beats alone; the other cannot take the node without the
+		// garrison, so it waits.
+		rig.See(9, new Vector3(0f, 0f, -30f));
+		rig.Decide();
+
+		Assert.Equal(CommandTask.Defend, rig.Squad(Commander.GarrisonSlot).Task);
+		Assert.Equal(CommandGoal.Reinforce, rig.Intent(Commander.GarrisonSlot).Goal);
+		Assert.DoesNotContain(Enumerable.Range(0, rig.Commander.Capacity),
+			s => rig.Squad(s).Task == CommandTask.Attack && rig.Squad(s).Zone == FarZone);
+		Assert.Single(Assaults(rig), s => rig.Squad(s).Short);
+	}
+
+	[Fact]
+	public void AGarrisonOnAnAssault_IsCalledHome_WhenHomeIsThreatened_AndTheOthersGoOn()
+	{
+		var rig = new Rig();
+		rig.Zones.SetHolder(FarZone, NodeHolder.GroundForce, contested: false);
+		rig.AddRiflemen(12);
+		Guard(rig, FarNode, 3);
+		rig.Decide();
+		Assert.Equal(CommandTask.Attack, rig.Squad(Commander.GarrisonSlot).Task);
+
+		Guard(rig, FarNode, 3);
+		rig.See(9, new Vector3(0f, 0f, -30f));
+		rig.Decide();
+
+		Assert.Equal(CommandTask.Defend, rig.Squad(Commander.GarrisonSlot).Task);
+		CommandIntent home = rig.Intent(Commander.GarrisonSlot);
+		Assert.Equal(CommandGoal.Reinforce, home.Goal);
+		Assert.Equal(Home, home.Point);
+		Assert.All(Assaults(rig), s => Assert.Equal(CommandTask.Attack, rig.Squad(s).Task));
+	}
+
+	[Fact]
+	public void AGarrisonOnAnAssault_IsNotSentProduction_AndGoesHomeOnceTheNodeIsTaken()
+	{
+		var rig = new Rig();
+		rig.Zones.SetHolder(FarZone, NodeHolder.GroundForce, contested: false);
+		rig.AddRiflemen(12);
+		Guard(rig, FarNode, 3);
+		rig.Decide();
+		ushort[] garrison = rig.Members(Commander.GarrisonSlot);
+		Assert.Equal(CommandTask.Attack, rig.Squad(Commander.GarrisonSlot).Task);
+
+		// One of it dies on the way: a unit produced now does not walk out after it.
+		rig.Kill(garrison[0]);
+		ushort fresh = rig.Add(Vector3.Zero);
+		Guard(rig, FarNode, 3);
+		rig.Decide();
+		Assert.NotEqual(Commander.GarrisonSlot, rig.Commander.SquadOf(fresh));
+		Assert.Equal(3, rig.Squad(Commander.GarrisonSlot).Members);
+
+		// Taken: the garrison goes back to defending home.
+		rig.Zones.SetHolder(FarZone, NodeHolder.Strategist, contested: false);
+		rig.Decide();
+		Assert.Equal(CommandTask.Defend, rig.Squad(Commander.GarrisonSlot).Task);
+		Assert.Equal(CommandGoal.Reinforce, rig.Intent(Commander.GarrisonSlot).Goal);
+		Assert.Equal(Home, rig.Intent(Commander.GarrisonSlot).Point);
+	}
+
+	[Fact]
+	public void AGarrisonLosingItsAssault_FallsBack()
+	{
+		var rig = new Rig();
+		rig.Zones.SetHolder(FarZone, NodeHolder.GroundForce, contested: false);
+		rig.AddRiflemen(12);
+		Guard(rig, FarNode, 3);
+		rig.Decide();
+		Assert.Equal(CommandTask.Attack, rig.Squad(Commander.GarrisonSlot).Task);
+
+		// At the node, 30 % left, against two players: more than 1.5 times 60.
+		Vector3 fight = FarNode + new Vector3(0f, 0f, -20f);
+		rig.Move(Commander.GarrisonSlot, fight);
+		foreach (ushort id in rig.Members(Commander.GarrisonSlot))
+		{
+			rig.Set(id, u => u with { Strength = Rifleman * 0.3f });
+		}
+
+		rig.See(1, fight + new Vector3(10f, 0f, 0f));
+		rig.See(2, fight + new Vector3(-10f, 0f, 0f));
+		rig.Decide();
+
+		Assert.True(rig.Squad(Commander.GarrisonSlot).FallingBack);
+		Assert.Equal(CommandGoal.FallBack, rig.Intent(Commander.GarrisonSlot).Goal);
+	}
+
+	[Fact]
+	public void SquadsTooWeakEvenTogether_Hold()
+	{
+		var rig = new Rig();
+		rig.Zones.SetHolder(FarZone, NodeHolder.GroundForce, contested: false);
+		rig.AddRiflemen(12);
+
+		// Five players, 500, need 750: the whole side is 600.
+		Guard(rig, FarNode, 5);
+		rig.Decide();
+
+		Assert.Equal(CommandTask.Defend, rig.Squad(Commander.GarrisonSlot).Task);
+		foreach (int s in Assaults(rig))
+		{
+			Assert.Equal(CommandTask.None, rig.Squad(s).Task);
+			Assert.True(rig.Squad(s).Short);
+			Assert.Equal(CommandGoal.Hold, rig.Intent(s).Goal);
+		}
+	}
+
+	[Fact]
+	public void TheSquadStillForming_NeverGoesAlone_NorTakesTheGarrisonWithIt_WhereItWouldDoAlone()
+	{
+		var rig = new Rig();
+		rig.Zones.SetHolder(FarZone, NodeHolder.GroundForce, contested: false);
+		rig.AddRiflemen(7);
+		rig.Decide();
+
+		// Three riflemen forming, nobody on the node: they wait to be four, as before.
+		int forming = rig.Find(CommandRole.Assault, ready: false);
+		Assert.Equal(CommandGoal.Hold, rig.Intent(forming).Goal);
+		Assert.Equal(CommandTask.Defend, rig.Squad(Commander.GarrisonSlot).Task);
+	}
+
 	// ---- Defend Zone ---------------------------------------------------------
 
 	[Fact]
@@ -1256,7 +1544,7 @@ public class CommanderHtnTests
 				for (int s = 0; s < rig.Commander.Capacity; s++)
 				{
 					CommandIntent intent = rig.Commander.IntentOf(s);
-					trace.Add($"{d}:{s}:{intent.Goal}:{intent.Order}:{intent.Point}:{intent.TargetOwnerId}:{rig.Squad(s).Members}");
+					trace.Add($"{d}:{s}:{intent.Goal}:{intent.Order}:{intent.Point}:{intent.TargetOwnerId}:{rig.Squad(s).Members}:{rig.Squad(s).Lead}");
 				}
 			}
 		}
@@ -1286,6 +1574,9 @@ public class CommanderHtnTests
 		}
 
 		Assert.Empty(missing);
+
+		// Combined assaults among them.
+		Assert.Contains(first, line => line.Contains($":{CommandGoal.Stage}:") && !line.EndsWith(":-1"));
 	}
 
 	[Fact]
