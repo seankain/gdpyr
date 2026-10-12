@@ -677,6 +677,39 @@ been seen, recon waited 20 s for quiet, and in seeds 2 to 6 of six infantry foun
 the technical did. A round with a new `MatchState.StartTick` now clears the commander, its
 announcements and the board, whichever way the last one ended.
 
+**Measured.** Bot-only rounds: five `htn` ground bots and the idle seat in the far corner against
+one `htn` computer strategist, 5 minutes, seeds 1–4, headless Godot 4.6 .NET, read off the event
+stream (a scenario not committed). "Squad time" is the commanders' squads' time on each goal, from
+`squad_task`. The middle column is the baseline with only the new-round reset above, so the last two
+differ by the combined assaults alone:
+
+| Per seed | Baseline (`8372bc6`) | Baseline + new-round reset | Combined assaults + reset |
+|---|---|---|---|
+| Nodes the strategist took | 0, 0, 0, 0 | 0, 0, 0, 0 | 1, 0, 2, 3 |
+| Share of node-time it held | 0 % in every seed | 0 % in every seed | 21.6, 0, 16.2, 14.9 % |
+| Strikes (`squad_task` goal 4) | 1, 1, 0, 0 | 1, 1, 0, 1 | 9, 2, 9, 6 |
+| Last stage or strike | 73 s, 74 s, none, none | 73 s, 80 s, none, 73 s | 287 s, 48 s, 298 s, 154 s |
+| Squad time on stage and strike | 14, 8, 0, 0 % | 5, 6, 0, 3 % | 56, 25, 39, 37 % |
+| Squad time on hold | 28, 34, 32, 42 % | 37, 36, 43, 39 % | 5, 46, 7, 4 % |
+| Units built | 10 each | 10 each | 24, 10, 26, 22 |
+| Ground players killed | 12, 10, 0, 1 | 3, 7, 0, 2 | 34, 10, 32, 10 |
+| Strategist units lost | 4, 4, 1, 4 | 4 each | 16, 8, 13, 17 |
+
+In seed 2 the assaults it made by 48 s took no node, so no income came, and what it had left held
+for the rest of the round. Rounds are real time and the bots are
+not deterministic; four seeds a column say the direction, not the size.
+
+**`htn_strategist_defends_node` and fresh rounds.** Its seeds 2 and 3 passed because they began
+with seed 1's commander state; seed 1, always fresh, passes on every build. With every seed fresh
+(the reset above) it takes all three nodes in 60 s in 3 of 6 seeds on the baseline — the west node
+is not taken in the other three — and in 2 of 6 with combined assaults, where the far node is not.
+With combined assaults the west node falls at about 14 s, before the builder is out, so `Fortify`,
+which puts held nodes first, sends the builder there rather than on the trip to the far node that
+takes it in the baseline; and the squad given the far node at 14 s stays 50–60 m short of it for
+the rest of the minute, its units engaging the raider each time it respawns — killed nine times
+between 19 s and 59 s — because "engage focus" is above "advance" in the unit's Attack (§5.2). The
+scenario was not changed.
+
 The spectator's squad table shows such a squad as `combined` (`AiSquadFlags.Combined`). Tests:
 thirteen in `CommanderHtnTests`. Checked to fail, then reverted: without the pass, 10 fail; with each
 squad assembling on its own, 1; with production joining a garrison that is out, 1; with the garrison
