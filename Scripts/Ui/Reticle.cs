@@ -30,9 +30,23 @@ public partial class Reticle : CenterContainer
 	/// </summary>
 	private const float HiddenFromProgress = 0.4f;
 
+	/// <summary>
+	/// Where the reticle is drawn, in this control's own space: the middle of its
+	/// rect, which the scene anchors on the middle of the screen. A control draws
+	/// from its top-left corner, and drawing from there put the reticle half the
+	/// rect up and to the left of the line every round actually flies down — the
+	/// camera's forward axis, through the screen's centre.
+	/// </summary>
+	private Vector2 Centre => Size * 0.5f;
+
 	// Called when the node enters the scene tree for the first time.
 	public override void _Ready()
 	{
+		Resized += QueueRedraw;
+		foreach (Line2D line in ReticleLines)
+		{
+			line.Position = Centre;
+		}
 		QueueRedraw();
 	}
 
@@ -53,7 +67,7 @@ public partial class Reticle : CenterContainer
 
 	public override void _Draw()
 	{
-		DrawCircle(Vector2.Zero, DotRadius, DotColor);
+		DrawCircle(Centre, DotRadius, DotColor);
 		//base._Draw();
 	}
 
@@ -61,7 +75,7 @@ public partial class Reticle : CenterContainer
 	{
 		var velocity = PlayerController.GetRealVelocity();
 		var origin = Vector3.Zero;
-		var pos = Vector2.Zero;
+		var pos = Centre;
 		var speed = origin.DistanceTo(velocity);
 
 		//Top

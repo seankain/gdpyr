@@ -4,13 +4,13 @@
 [ext_resource type="Resource" path="res://Weapons/projectiles/rifle_556.tres" id="2_projectile"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_rifle"]
-size = Vector3(0.8, 0.12, 0.10)
+size = Vector3(0.10, 0.12, 0.8)
 
 [resource]
 script = ExtResource("1_weapondef")
 Name = &"rifle"
 Slot = 2
-Position = Vector3(-2.0, -0.05, -0.2)
+Position = Vector3(0.2, -0.2, -0.55)
 Rotation = Vector3(0, 0, 0)
 Scale = Vector3(1, 1, 1)
 Mesh = SubResource("BoxMesh_rifle")
@@ -22,5 +22,5 @@ ReloadSeconds = 2.2
 IsMelee = false
 AimMagnification = 1.25
 AimSeconds = 0.18
-AimPosition = Vector3(0, -0.1, -0.42)
+AimPosition = Vector3(0, -0.1, -0.5)
 Projectile = ExtResource("2_projectile")

@@ -4,13 +4,13 @@
 [ext_resource type="Resource" path="res://Weapons/projectiles/dmr_762.tres" id="2_projectile"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_dmr"]
-size = Vector3(1.0, 0.09, 0.11)
+size = Vector3(0.11, 0.09, 1.0)
 
 [resource]
 script = ExtResource("1_weapondef")
 Name = &"dmr"
 Slot = 2
-Position = Vector3(-2.0, -0.05, -0.2)
+Position = Vector3(0.2, -0.2, -0.65)
 Rotation = Vector3(0, 0, 0)
 Scale = Vector3(1, 1, 1)
 Mesh = SubResource("BoxMesh_dmr")
@@ -23,5 +23,5 @@ IsMelee = false
 Scoped = true
 AimMagnification = 4.0
 AimSeconds = 0.35
-AimPosition = Vector3(0, -0.1, -0.45)
+AimPosition = Vector3(0, -0.1, -0.6)
 Projectile = ExtResource("2_projectile")

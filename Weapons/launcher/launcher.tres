@@ -4,13 +4,13 @@
 [ext_resource type="Resource" path="res://Weapons/projectiles/grenade_40mm.tres" id="2_projectile"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_launcher"]
-size = Vector3(0.6, 0.16, 0.16)
+size = Vector3(0.16, 0.16, 0.6)
 
 [resource]
 script = ExtResource("1_weapondef")
 Name = &"launcher"
 Slot = 2
-Position = Vector3(-2.0, -0.05, -0.2)
+Position = Vector3(0.22, -0.24, -0.45)
 Rotation = Vector3(0, 0, 0)
 Scale = Vector3(1, 1, 1)
 Mesh = SubResource("BoxMesh_launcher")
@@ -22,5 +22,5 @@ ReloadSeconds = 2.5
 IsMelee = false
 AimMagnification = 1.2
 AimSeconds = 0.3
-AimPosition = Vector3(0, -0.12, -0.5)
+AimPosition = Vector3(0, -0.14, -0.42)
 Projectile = ExtResource("2_projectile")
