@@ -34,6 +34,7 @@ public static class WeaponCatalog
 		"res://Weapons/mortar/mortar.tres",     // 9 — barracks mortar
 		"res://Weapons/marksman/marksman.tres", // 10 — sniper tower, sniper
 		"res://Weapons/lmg/lmg.tres",           // 11 — heavy gunner
+		"res://Weapons/grenade/grenade.tres",   // 12 — hand grenade, thrown
 	};
 
 	public const byte Hammer = 0;
@@ -85,6 +86,14 @@ public static class WeaponCatalog
 	/// shooting, not how hard (<see cref="Sim.Suppression"/>).
 	/// </summary>
 	public const byte Lmg = 11;
+
+	/// <summary>
+	/// The hand grenade (docs/NETCODE.md §10.9). Not a slot: it is thrown from the off
+	/// hand by its own key, whatever is in the other, by a ground-force player and by
+	/// a strategist's unit on foot. Its round is on a fuse and its blast is meant for
+	/// people — a quarter of it reaches a vehicle or a structure.
+	/// </summary>
+	public const byte HandGrenade = 12;
 
 	/// <summary>
 	/// The large-weapon choice a ground-force player makes before each spawn, and
@@ -170,6 +179,9 @@ public static class WeaponCatalog
 		id < Definitions.Length ? Definitions[id] : null;
 
 	public static WeaponStats StatsFor(byte id) => id < Stats.Length ? Stats[id] : default;
+
+	/// <summary>The round a weapon fires; default for an id this build does not have, or a swing.</summary>
+	public static ProjectileStats RoundFor(byte id) => id < Projectiles.Length ? Projectiles[id] : default;
 
 	/// <summary>
 	/// What raising this weapon's sights does. <see cref="AimStats.None"/> for an id

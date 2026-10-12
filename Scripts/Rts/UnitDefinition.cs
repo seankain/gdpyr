@@ -63,6 +63,15 @@ public partial class UnitDefinition : Resource
 	public bool IsBulletProof => Armour.IsBulletProof(BulletDamageScale);
 
 	/// <summary>
+	/// True for a truck or a tank: what an anti-personnel round does only its
+	/// <see cref="ProjectileStats.VehicleDamageScale"/> to — a hand grenade a quarter of
+	/// itself (docs/NETCODE.md §10.9). Separate from armour on purpose: the technical
+	/// and the supply truck are vehicles that a bullet hurts.
+	/// </summary>
+	[Export]
+	public bool IsVehicle;
+
+	/// <summary>
 	/// Health it gets back per second while it is resupplied: inside a friendly
 	/// barracks' defended ring or a supply truck's reach, and not hit for
 	/// <see cref="Resupply.DamageLockoutTicks"/> (docs/HTN_BOTS.md §8, D2). Zero is a
@@ -138,6 +147,15 @@ public partial class UnitDefinition : Resource
 
 	/// <summary><see cref="SuppressSeconds"/> in ticks; zero for a unit that does not suppress.</summary>
 	public int SuppressTicks => WeaponStats.SecondsToTicks(SuppressSeconds);
+
+	/// <summary>
+	/// Hand grenades it carries for its life (docs/NETCODE.md §10.9): three for anything
+	/// on foot, which is what a file that says nothing gets, and none for a vehicle,
+	/// whose crew does not lean out to throw one. It throws at a target in throwing
+	/// range that is behind something or standing still (<see cref="GrenadeSim"/>).
+	/// </summary>
+	[Export]
+	public int Grenades = GrenadeSim.Carried;
 
 	/// <summary>
 	/// Whether it can put up structures (docs/NETCODE.md §10.5). The builder's one

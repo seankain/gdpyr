@@ -43,6 +43,13 @@ public partial class UnitManager : Node
 	/// <summary>Ticks a dead unit stays on the field before it is freed. Two seconds.</summary>
 	private const int CorpseTicks = SimConfig.TickRate * 2;
 
+	/// <summary>
+	/// How far above a player's feet the point a gunner suppresses is taken to be: the
+	/// chest it last aimed at. Where a unit throws a grenade at a player it can no
+	/// longer see (<see cref="ServerThrow"/>).
+	/// </summary>
+	private const float SuppressedChestMeters = 1f;
+
 	/// <summary>How often a barracks tells everyone what it is building. 5 Hz is a progress bar.</summary>
 	private const int BarracksReportIntervalTicks = SimConfig.TickRate / 5;
 
@@ -520,6 +527,7 @@ public partial class UnitManager : Node
 		unit.FaceTowards(hasTarget ? targetPoint : working ? site.Pose.Base : destination, SimConfig.TickDelta);
 
 		ServerFire(unit, tick, hasTarget, targetPoint, targetVelocity);
+		ServerThrow(unit, tick, hasTarget, targetPoint, targetVelocity);
 		ServerResupply(unit, tick);
 	}
 
@@ -615,6 +623,69 @@ public partial class UnitManager : Node
 
 		// No lag compensation: a unit has no client and therefore no latency to owe.
 		combat.SpawnProjectile(tick, owner, unit.Weapon.DefinitionId, muzzle, direction, catchUpTicks: 0);
+	}
+
+	/// <summary>
+	/// A unit's hand grenade (docs/NETCODE.md §10.9): thrown at the player it is
+	/// fighting when they are in throwing range and either behind something — their
+	/// middle hidden with their head over a wall, or gone to ground where a gunner is
+	/// still firing (<see cref="Suppression"/>) — or slow enough to still be there when
+	/// the fuse runs out (<see cref="GrenadeSim.ShouldThrow"/>). Aimed at their feet on
+	/// the low arc, with the unit's own cone, as its gun is. A reflex of the unit's
+	/// hands, like the trigger: the same under either AI, and whoever gave the order.
+	///
+	/// Its own blast spares its own side (<c>CombatManager.Explode</c>), so a unit has
+	/// no friend near the target to mind.
+	/// </summary>
+	private void ServerThrow(Unit unit, uint tick, bool hasTarget, Vector3 targetPoint, Vector3 targetVelocity)
+	{
+		// Decided at the scan rate, staggered by id as the scans are: working out the
+		// arc is a few thousand integration steps, and a throw a sixth of a second late
+		// at somebody standing still lands in the same place.
+		if (!hasTarget || unit.State != UnitStateId.Engaging || !unit.Grenades.HasAny
+			|| (tick + unit.UnitId) % (uint)SimConfig.UnitTargetRefreshTicks != 0
+			|| CombatManager.Instance is not { } combat)
+		{
+			return;
+		}
+
+		// A target it can still see stands where the player's feet are. One it is
+		// suppressing has no player any more, only a point: their middle, as last seen.
+		bool suppressing = unit.TargetOwnerId == OwnerId.None;
+		Vector3 feet;
+		if (suppressing)
+		{
+			feet = targetPoint + (Vector3.Down * SuppressedChestMeters);
+		}
+		else if (combat.Find(PeerId(unit.TargetOwnerId)) is { Character: { } character })
+		{
+			feet = character.SimPosition;
+		}
+		else
+		{
+			return;
+		}
+
+		Vector3 eye = unit.EyePosition;
+		var situation = new ThrowSituation(
+			hasGrenade: true,
+			ready: GrenadeSim.AiReady(unit.Grenades, tick),
+			distanceMeters: eye.DistanceTo(feet),
+			targetSpeed: new Vector2(targetVelocity.X, targetVelocity.Z).Length(),
+			targetInCover: suppressing || unit.AimsHigh,
+			endangersFriends: false);
+
+		ProjectileStats round = WeaponCatalog.RoundFor(WeaponCatalog.HandGrenade);
+		if (!GrenadeSim.ShouldThrow(situation) || !GrenadeSim.TrySolve(eye, feet, round, out Vector3 aim)
+			|| !GrenadeSim.TrySpend(ref unit.Grenades, tick, GrenadeSim.ThrowIntervalTicks))
+		{
+			return;
+		}
+
+		int owner = OwnerId.ForUnit(unit.UnitId);
+		Vector3 direction = Spread.Apply(aim, unit.Definition?.AccuracyConeRadians ?? 0f,
+			Spread.Seed(owner, WeaponCatalog.HandGrenade, unit.Grenades.Thrown));
+		combat.SpawnProjectile(tick, owner, WeaponCatalog.HandGrenade, eye, direction, catchUpTicks: 0);
 	}
 
 	/// <summary>
@@ -1306,8 +1377,14 @@ public partial class UnitManager : Node
 	/// <paramref name="attackerOwnerId"/> is carried only so that the agent API's
 	/// <c>unit_lost</c> record can name who did it (docs/AGENT_API.md §8); nothing
 	/// in the simulation reads it.
+	///
+	/// <paramref name="vehicleScale"/> is the round's own share against a vehicle
+	/// (<see cref="ProjectileStats.VehicleDamageScale"/>), applied only to a unit that
+	/// is one (<see cref="UnitDefinition.IsVehicle"/>): a hand grenade does a quarter of
+	/// itself to a truck or a tank (docs/NETCODE.md §10.9).
 	/// </summary>
-	public bool Damage(Unit unit, float amount, bool explosive, int attackerOwnerId, uint tick, out float dealt)
+	public bool Damage(Unit unit, float amount, bool explosive, float vehicleScale, int attackerOwnerId, uint tick,
+		out float dealt)
 	{
 		dealt = 0f;
 		if (unit == null || !unit.IsAlive)
@@ -1315,7 +1392,9 @@ public partial class UnitManager : Node
 			return false;
 		}
 
-		dealt = Armour.DamageTaken(amount, explosive, unit.Definition?.BulletDamageScale ?? 1f);
+		UnitDefinition definition = unit.Definition;
+		dealt = Armour.DamageTaken(amount, explosive, definition?.BulletDamageScale ?? 1f,
+			definition?.IsVehicle == true ? vehicleScale : 1f);
 		if (dealt > 0f)
 		{
 			unit.LastDamagedTick = tick;

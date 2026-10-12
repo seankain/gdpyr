@@ -455,6 +455,11 @@ predicting with. The same two bits close a gap that predates the locker: before 
 never told which large weapon a respawn had given it, so a remote player who picked the DMR drew and
 predicted a rifle for as long as they played.
 
+**Hand grenades are not a message either** (§10.9). A throw is a `ProjectileSpawn`; a grenade
+coming to rest is a `ProjectileHit` with `HitFlags.Landed`, and its blast another; and how many a
+player has left is the last two bits of the same flag byte (bits 6–7). The record stays 29 B, and
+the input frame stays twelve bytes — the key is bit 11 of its button field.
+
 **LAN discovery is not on this wire at all.** The server browser answers "who is listening?" before
 there is a connection to ask it over, so it is its own datagram on its own UDP socket
 (`Scripts/Net/DiscoveryCodec.cs`, [`LAN.md`](LAN.md) §4) and the transport knows nothing about it.
@@ -537,7 +542,7 @@ exists to be.
 
 ---
 
-## 10. Economy, emplacements, the scoreboard, barracks defences, structures, armour, resupply and training
+## 10. Economy, emplacements, the scoreboard, barracks defences, structures, armour, resupply, training and grenades
 
 M5 added three things that are neither a per-tick sample nor a projectile, and all three are on the
 wire as **state**: sent when it changes, reliable, and absent the rest of the time.
@@ -826,6 +831,7 @@ one navigation mesh still serves every unit (§M5 of the plan).
 **Three of the strategist's builds are armour: the tank, the pillbox and the sniper tower.** Small
 arms do nothing to them — not the rifle, not the DMR, not the pistol, and not the heavy gun's
 12.7 mm either — and only an explosive does: the launcher's grenade, by its impact or its blast.
+(A hand grenade is an explosive too, but an anti-personnel one: a quarter of its blast, §10.9.)
 Everything else the strategist fields is soft and takes a bullet whole, and a wall of sandbags
 still takes 0.3 of one.
 
@@ -1019,6 +1025,92 @@ as `barracks = -(slot + 1)` ([`AGENT_API.md`](AGENT_API.md) §8).
 and a policy's choice for now. A strategist policy can train with `{"cmd":"build","slot":n}`
 ([`AGENT_API.md`](AGENT_API.md) §7.4), and its observation has no tier bit for either unit and no
 structure block, as for the builder and the truck.
+
+
+### 10.9 Hand grenades
+
+Every ground-force player and every strategist unit on foot carries **three hand grenades**
+(`GrenadeSim.Carried`; a unit's is `UnitDefinition.Grenades`, which the technical, the tank and the
+supply truck set to 0). They are **anti-personnel**: a wide blast that kills a person near it, and a
+quarter of that to a vehicle or a structure.
+
+| | hand grenade | launcher grenade (§10.6) |
+|---|---|---|
+| catalog id | 12 (`WeaponCatalog.HandGrenade`) | 4 |
+| leaves at | 18 m/s, 10° above the sights | 90 m/s, along them |
+| goes off | on a 3 s fuse, from the throw | on contact |
+| direct hit | nothing — it drops at their feet | 40 |
+| blast | 140 at the centre, to nothing at 7 m | 90, to nothing at 5 m |
+| a person (100) | killed within 2 m; 80 at 3 m, 40 at 5 m | 40 from a direct hit, or up to 90 from the blast |
+| a vehicle, a structure | a quarter: at most 35 | all of it |
+
+**Throwing.** `G` (`throw_grenade`, `InputButtons.Grenade` — bit 11 of the frame, which was spare,
+so the frame is still twelve bytes). It is the off hand's: it throws whatever slot is up, while
+reloading, and without lowering the sights, and a trigger pulled on the same tick fires too. A
+mounted gunner cannot throw. One throw per press, at most one a second, three a life; a respawn
+refills them and a weapon locker does not. The grenade leaves the eye 10° above where the player is
+looking (`GrenadeSim.ThrowDirection`): from a standing eye on flat ground, looking level puts it 17 m
+off a second later, and looking 35° up puts it 33 m off with 0.3 s of fuse to spare; much higher
+than that and it goes off in the air. It is lag-compensated as a shot is (§4.3).
+
+**The fuse** is the round's `LifetimeSeconds`, on a round marked `Fused` (`ProjectileStats.Fused`,
+`Weapons/projectiles/hand_grenade.tres`). Anything that would stop a bullet stops a grenade — the
+world, a player, a unit, a structure — and it comes to rest there: ten centimetres back along its
+flight, then straight down to the first floor (`CombatManager.Settle`, one ray). So a grenade that
+hits a wall lies at its foot, one that hits the top of a low wall lies on it, and one that hits
+somebody lies at their feet and hurts nobody until it goes off. It does not bounce or roll. While it
+lies there it flies no chord and touches nothing (`ProjectileSim.Land`, `Projectile.Resting`); when
+the fuse runs out its last chord is marked `Detonates` and it goes off where it is — in the air if it
+is still flying — with nobody as its direct victim (`CombatManager.Detonate`). The blast is the
+launcher's rule (`CombatManager.Explode`): it reaches through walls, it hurts every player in reach,
+the thrower and their teammates included, and it spares units on the thrower's own side.
+
+**Against vehicles and structures** it is the round's own share, applied after the armour rule of
+§10.6 (`Armour.DamageTaken(amount, explosive, bulletScale, roundScale)`): a grenade is an explosive,
+so it does hurt a tank, a pillbox and a tower, but its `VehicleDamageScale` and `StructureDamageScale`
+are 0.25. A vehicle is a unit whose definition says `IsVehicle` — the technical, the tank and the
+supply truck — which is a separate flag from armour on purpose: two of the three are vehicles a
+bullet hurts. Every other round's shares are 1, so nothing else changed.
+
+**Units throw** (`UnitManager.ServerThrow`) at the player they are fighting when they are 6–28 m off
+and either behind something or slower than 2.5 m/s — standing or crouched, not walking — and at most
+once every six seconds (`GrenadeSim.ShouldThrow`, `GrenadeSim.AiReady`). "Behind something" is a
+target whose chest is hidden and head is not (`Unit.AimsHigh`, under `--bot-ai htn`), or the point a
+heavy gunner is suppressing after its target went to ground (§10.8) — the gunner throws at the place
+the player ducked. It is aimed at the player's feet on the low arc, solved in a vacuum and then
+corrected against the integrator the round flies with (`GrenadeSim.TrySolve`), with the unit's own
+accuracy cone. A reflex, like the trigger: the same under either AI and whoever gave the order. A
+unit's blast spares its own side, so it has nobody near the target to mind. It is decided at the
+scan rate, staggered by unit id (six times a second): solving the arc costs about 140 µs, and a
+target slow enough to throw at is where it was a sixth of a second later.
+
+**Ground bots throw** (`BotPilot.GrenadeAim`) at the unit they are fighting by the same rule, when it
+is on foot — never at a vehicle or a structure — and when the blast would reach neither the bot nor a
+teammate (`BotPilot.BlastEndangersFriends`, the launcher's check, with the grenade's 7 m). The pilot
+works out the arc and the look that throws along it (`GrenadeSim.LookFor`); the brain turns to it at
+its own rate, with its own held error, holds its fire meanwhile, and presses the key once it has
+reacted and is pointed within its fire angle (`BotBrain.ShouldThrow`). Unlike a shot, a throw needs
+no clear line: a target behind a wall is what it is for. The decision is remade at the scan rate, or
+when the target changes.
+
+**On the wire:** no new message. A throw is a `ProjectileSpawn` with weapon id 12, and the owner
+predicts it as it predicts a shot — the grenade leaves the hand and the count drops on the tick the
+key went down. Its spawn is matched to the prediction by kind as well as tick, so a grenade and a
+rifle round fired together each find their own. Landing is a `ProjectileHit` with the new
+`HitFlags.Landed` (bit 3) and the rest point: a client puts its copy down there rather than taking
+it out of the air, and it lies there until the blast, which is a second `ProjectileHit` with
+`Exploded`. The count a player has left is in the last two bits of the snapshot's flag byte (bits
+6–7, `WeaponFlags.Grenades`, so the most a body carries is `SimConfig.MaxGrenades`, 3), applied to
+the owner's prediction once it acknowledges its last throw, as the magazine is. The record stays
+29 B. A unit's grenades are server-side and not replicated. On the agent stream
+([`AGENT_API.md`](AGENT_API.md) §8) a player's grenade's `damage` and `kill` records name weapon 12.
+
+**Not in it:** the agent's ground observation has no grenade count, so the schema is unchanged and a
+policy that throws has to count its own; the RL action space in `tools/` has no grenade head (the
+raw `grenade` button works on the socket); a unit does not get out of the way of a grenade, and
+neither does a bot; and the computer strategist does not plan with grenades — its units throw them
+on their own. Not run in Godot here: everything above that is engine-free is in
+`Tests/GrenadeTests.cs` and `Tests/BotBrainTests.cs`.
 
 ---
 

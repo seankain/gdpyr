@@ -57,6 +57,13 @@ public partial class Unit : CharacterBody3D
 	public WeaponState Weapon;
 
 	/// <summary>
+	/// Server-side: the hand grenades it has left (docs/NETCODE.md §10.9) —
+	/// <see cref="UnitDefinition.Grenades"/> at birth, none for a vehicle. A unit is not
+	/// resupplied with them. Never replicated.
+	/// </summary>
+	public GrenadeState Grenades;
+
+	/// <summary>
 	/// Server-side: the peer whose order it is carrying out — a person, a computer
 	/// strategist or an agent's seat — or 0 for one nobody gave: a fresh unit walking
 	/// to its rally point, one a scenario placed. What tells a human's unit from a
@@ -141,6 +148,7 @@ public partial class Unit : CharacterBody3D
 
 		byte weaponId = Definition?.WeaponDefinitionId ?? WeaponCatalog.Rifle;
 		Weapon = WeaponState.Ready(weaponId, WeaponCatalog.StatsFor(weaponId));
+		Grenades = GrenadeState.Full(Definition?.Grenades ?? 0);
 
 		CollisionLayer = CollisionLayers.Units;
 		CollisionMask = CollisionLayers.UnitMask;

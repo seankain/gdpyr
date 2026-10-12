@@ -108,6 +108,7 @@ public enum AgentButtons : ushort
 	Weapon1 = 1 << 8,
 	Weapon2 = 1 << 9,
 	Weapon3 = 1 << 10,
+	Grenade = 1 << 11,
 }
 
 /// <summary>

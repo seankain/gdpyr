@@ -88,6 +88,13 @@ public sealed class PlayerCombat
 	public readonly WeaponState[] Weapons = new WeaponState[SimConfig.WeaponSlots];
 
 	/// <summary>
+	/// Hand grenades this life (docs/NETCODE.md §10.9): <see cref="GrenadeSim.Carried"/>
+	/// at every spawn, thrown by their own key whatever slot is up. Stepped from the
+	/// recorded frames on the server and the owning client alike, as a weapon is.
+	/// </summary>
+	public GrenadeState Grenades;
+
+	/// <summary>
 	/// How far up this player's sights are (<see cref="Ads"/>). Advanced by the same
 	/// pure step on the server and on the owning client, from the same recorded
 	/// frames, so it needs no room in the snapshot: nobody but the player behind them
@@ -128,6 +135,13 @@ public sealed class PlayerCombat
 	/// </summary>
 	public uint LastPredictedWeaponTick { get; set; }
 
+	/// <summary>
+	/// Client-side only: the last tick this client predicted a throw on, for the reason
+	/// <see cref="LastPredictedWeaponTick"/> exists — the snapshot's grenade count is a
+	/// round trip old.
+	/// </summary>
+	public uint LastPredictedThrowTick { get; set; }
+
 	public ref WeaponState Equipped => ref Weapons[Slot];
 
 	public byte EquippedDefinitionId => Weapons[Slot].DefinitionId;
@@ -149,6 +163,9 @@ public sealed class PlayerCombat
 
 		// Sights come down with the weapons they were on: a life starts at the hip.
 		Aim = default;
+
+		// A life starts with a full belt of grenades, as it does with full magazines.
+		Grenades = GrenadeState.Full(GrenadeSim.Carried);
 
 		// Spawning with the large weapon up is what a player wants every time; the
 		// alternative is a keypress at the start of every life.
@@ -220,7 +237,7 @@ public sealed class PlayerCombat
 		Equip(PendingLoadout);
 	}
 
-	/// <summary>Client-side: takes the server's word for health, ammunition, side and large weapon.</summary>
+	/// <summary>Client-side: takes the server's word for health, ammunition, side, large weapon and grenades.</summary>
 	public void ApplyAuthoritative(byte health, byte ammo, byte flags, uint ackTick, bool isLocal)
 	{
 		Health = health;
@@ -237,6 +254,14 @@ public sealed class PlayerCombat
 		}
 
 		int slot = WeaponFlags.Slot(flags);
+
+		// The owner predicts its own throws, so the server's count waits until it
+		// accounts for every one of them, as the magazine's does below.
+		if (!isLocal || ackTick >= LastPredictedThrowTick)
+		{
+			Grenades.Count = (byte)WeaponFlags.Grenades(flags);
+		}
+
 		if (!isLocal)
 		{
 			// A remote player's weapon is only ever the server's to say, and its
@@ -257,7 +282,7 @@ public sealed class PlayerCombat
 	}
 
 	public byte SnapshotFlags => WeaponFlags.Pack(Slot, Weapons[Slot].IsReloading, Team,
-		WeaponCatalog.LargeChoiceOf(Weapons[SimConfig.LargeSlot].DefinitionId));
+		WeaponCatalog.LargeChoiceOf(Weapons[SimConfig.LargeSlot].DefinitionId), Grenades.Count);
 
 	public byte SnapshotAmmo => (byte)Mathf.Clamp(Weapons[Slot].Ammo, 0, byte.MaxValue);
 

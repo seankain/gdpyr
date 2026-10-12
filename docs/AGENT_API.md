@@ -495,6 +495,12 @@ JSON:
 needs — or `{"dyaw","dpitch"}` deltas, which is the parameterization a policy should be learning in.
 Deltas are **clamped server-side** to the attached seat's turn-rate ceiling.
 
+The button names are the ones `welcome` publishes: `jump`, `crouch`, `sprint`, `fire`, `ads`,
+`reload`, `use`, `melee`, `weapon1`–`weapon3`, and since hand grenades `grenade` (bit 11), which
+throws one on the press ([`NETCODE.md`](NETCODE.md) §10.9) — three a life, one a second. Held, it is
+one throw, as a held trigger on a semi-automatic weapon is one shot. The ground observation has no
+grenade count, so a policy that throws counts its own.
+
 ### 7.3 The fairness ceilings are on by default
 
 An agent that snap-aims across 180° in one tick and fires at the exact instant its crosshair
@@ -657,6 +663,11 @@ what it actually took after its armour, not what the round would have done to a 
 unit's. A hit that took nothing — any bullet into a tank, a pillbox or a sniper tower, which only
 explosives hurt ([`NETCODE.md`](NETCODE.md) §10.6) — is no record at all. Either one's
 `weapon` field reads 0, as a unit's does.
+
+A player's `weapon` is the weapon whose round did it, not whatever the player is holding when it
+lands: 12 for a hand grenade ([`NETCODE.md`](NETCODE.md) §10.9), 7 for a mounted heavy gun's
+round, and for a swing the hammer. Before hand grenades it was the weapon in hand at the moment of
+the hit, which named the large weapon for a mounted gunner's kills.
 
 **This event stream is most of M8's per-round CSV.** The columns that milestone names — round
 length, ticket curve, strategist income against spending, units built and lost by tier, nodes held

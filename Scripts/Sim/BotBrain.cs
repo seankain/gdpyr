@@ -154,10 +154,19 @@ public readonly struct BotSituation
 	/// <summary>The weapon in hand is reloading.</summary>
 	public readonly bool Reloading;
 
+	/// <summary>
+	/// Where to look to throw a hand grenade at the target, or zero for no throw
+	/// (docs/NETCODE.md §10.9). The pilot has decided the throw is worth making and
+	/// worked out the arc (<see cref="GrenadeSim.LookFor"/>); the brain looks there,
+	/// holds its fire, and presses the key once it is pointed well enough.
+	/// </summary>
+	public readonly Vector3 GrenadeAim;
+
 	public BotSituation(bool alive, float yaw, float pitch, float speed, bool hasTarget, Vector3 aimDirection,
 		float targetDistance, bool targetVisible, int ticksOnTarget, bool hasDestination, Vector3 moveDirection,
 		float destinationDistance, bool stuck, bool needsReload, bool semiAutomatic = false, bool holdFire = false,
-		bool keepMoving = false, bool use = false, bool inCover = false, bool reloading = false)
+		bool keepMoving = false, bool use = false, bool inCover = false, bool reloading = false,
+		Vector3 grenadeAim = default)
 	{
 		Alive = alive;
 		Yaw = yaw;
@@ -179,6 +188,7 @@ public readonly struct BotSituation
 		Use = use;
 		InCover = inCover;
 		Reloading = reloading;
+		GrenadeAim = grenadeAim;
 	}
 }
 
@@ -253,11 +263,13 @@ public static class BotBrain
 	/// </summary>
 	private static Vector3 LookDirection(uint tick, int peerId, in BotSituation situation, in BotTraits traits)
 	{
-		if (situation.HasTarget && situation.AimDirection != Vector3.Zero)
+		// A throw is aimed above the target, along the arc the pilot worked out, and
+		// missed by the same held error a shot is.
+		Vector3 aim = situation.GrenadeAim != Vector3.Zero ? situation.GrenadeAim : situation.AimDirection;
+		if (situation.HasTarget && aim != Vector3.Zero)
 		{
 			uint bucket = tick / (uint)traits.AimJitterTicks;
-			return Spread.Apply(situation.AimDirection, traits.AimConeRadians,
-				Spread.Seed(peerId, AimSeedSalt, bucket));
+			return Spread.Apply(aim, traits.AimConeRadians, Spread.Seed(peerId, AimSeedSalt, bucket));
 		}
 
 		if (situation.HasDestination && situation.MoveDirection != Vector3.Zero)
@@ -368,7 +380,17 @@ public static class BotBrain
 	{
 		InputButtons buttons = InputButtons.None;
 
-		if (ShouldFire(situation, traits, yaw, pitch))
+		if (situation.GrenadeAim != Vector3.Zero)
+		{
+			// Winding up a throw, it holds its fire: it is looking above the target.
+			// The key fires on the press, so it is let go of on odd ticks, as a
+			// semi-automatic trigger is.
+			if (ShouldThrow(situation, traits, yaw, pitch) && (tick & 1u) == 0u)
+			{
+				buttons |= InputButtons.Grenade;
+			}
+		}
+		else if (ShouldFire(situation, traits, yaw, pitch))
 		{
 			// A weapon that fires on the press needs the trigger let go of between
 			// rounds, or the first round is the only one: pressed on even ticks and
@@ -422,6 +444,22 @@ public static class BotBrain
 		}
 
 		return buttons;
+	}
+
+	/// <summary>
+	/// Whether to let a grenade go: a target held long enough to have reacted to, and
+	/// the arc the pilot worked out near enough to the middle of the screen. Unlike a
+	/// shot it needs no clear line — a target behind a wall is what it is for.
+	/// </summary>
+	public static bool ShouldThrow(in BotSituation situation, in BotTraits traits, float yaw, float pitch)
+	{
+		if (!situation.HasTarget || situation.GrenadeAim == Vector3.Zero
+			|| situation.TicksOnTarget < traits.ReactionTicks)
+		{
+			return false;
+		}
+
+		return Aim.Direction(yaw, pitch).Dot(situation.GrenadeAim) >= MathF.Cos(traits.FireAngleRadians);
 	}
 
 	/// <summary>

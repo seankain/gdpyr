@@ -28,10 +28,11 @@ public class BotBrainTests
 		bool hasTarget = false, Vector3 aimDirection = default, float targetDistance = 999f,
 		bool targetVisible = false, int ticksOnTarget = 0, bool hasDestination = false,
 		Vector3 moveDirection = default, float destinationDistance = 0f, bool stuck = false,
-		bool needsReload = false, bool semiAutomatic = false, bool inCover = false, bool reloading = false) =>
+		bool needsReload = false, bool semiAutomatic = false, bool inCover = false, bool reloading = false,
+		Vector3 grenadeAim = default) =>
 		new(alive, yaw, pitch, speed, hasTarget, aimDirection, targetDistance, targetVisible, ticksOnTarget,
 			hasDestination, moveDirection, destinationDistance, stuck, needsReload, semiAutomatic,
-			inCover: inCover, reloading: reloading);
+			inCover: inCover, reloading: reloading, grenadeAim: grenadeAim);
 
 	// ---- movement axes -----------------------------------------------------
 
@@ -435,5 +436,89 @@ public class BotBrainTests
 	{
 		Aim.Angles(direction, out float yaw, out _);
 		return yaw;
+	}
+
+	// ---- hand grenades (docs/NETCODE.md §10.9) ---------------------------------------
+
+	[Fact]
+	public void AThrowItIsPointedAt_IsThrown_AndHoldsItsFire()
+	{
+		// Looking along the arc the pilot worked out, at a target it has reacted to.
+		Vector3 arc = GrenadeSim.LookFor(GrenadeSim.ThrowDirection(0f, 0.2f));
+		Aim.Angles(arc, out float yaw, out float pitch);
+		BotSituation situation = Situation(yaw: yaw, pitch: pitch, hasTarget: true,
+			aimDirection: Vector3.Forward, targetDistance: 18f, targetVisible: true, ticksOnTarget: 60,
+			grenadeAim: arc);
+
+		var even = (InputButtons)BotBrain.Frame(100, 7, situation, Steady).Buttons;
+		var odd = (InputButtons)BotBrain.Frame(101, 7, situation, Steady).Buttons;
+
+		Assert.True(even.HasFlag(InputButtons.Grenade));
+		Assert.False(odd.HasFlag(InputButtons.Grenade));
+		Assert.False(even.HasFlag(InputButtons.Fire));
+		Assert.False(odd.HasFlag(InputButtons.Fire));
+	}
+
+	[Fact]
+	public void ABotPressesAndReleases_SoAWholeLifesGrenadesGo()
+	{
+		// The key fires on the press (GrenadeSim.Step): held for good, one grenade a life.
+		Vector3 arc = Aim.Direction(0f, 0.25f);
+		BotSituation situation = Situation(yaw: 0f, pitch: 0.25f, hasTarget: true, aimDirection: Vector3.Forward,
+			targetDistance: 18f, targetVisible: false, ticksOnTarget: 60, grenadeAim: arc);
+
+		GrenadeState grenades = GrenadeState.Full(GrenadeSim.Carried);
+		ushort previous = 0;
+		for (uint tick = 0; tick < 600; tick++)
+		{
+			InputFrame frame = BotBrain.Frame(tick, 7, situation, Steady);
+			GrenadeSim.Step(ref grenades, new InputContext(frame, previous, SimConfig.TickDelta), tick);
+			previous = frame.Buttons;
+		}
+
+		Assert.Equal(0, grenades.Count);
+	}
+
+	[Fact]
+	public void AThrowWaitsForTheBotToReact_AndToBePointedRight()
+	{
+		Vector3 arc = Aim.Direction(0f, 0.3f);
+
+		BotSituation early = Situation(yaw: 0f, pitch: 0.3f, hasTarget: true, aimDirection: Vector3.Forward,
+			targetDistance: 18f, ticksOnTarget: Steady.ReactionTicks - 1, grenadeAim: arc);
+		Assert.False(BotBrain.ShouldThrow(early, Steady, 0f, 0.3f));
+
+		BotSituation reacted = Situation(yaw: 0f, pitch: 0.3f, hasTarget: true, aimDirection: Vector3.Forward,
+			targetDistance: 18f, ticksOnTarget: Steady.ReactionTicks, grenadeAim: arc);
+		Assert.True(BotBrain.ShouldThrow(reacted, Steady, 0f, 0.3f));
+
+		// Still looking level, twenty degrees under the arc.
+		Assert.False(BotBrain.ShouldThrow(reacted, Steady, 0f, -0.05f));
+	}
+
+	[Fact]
+	public void WithNoThrowToMake_ABotShootsAsItAlwaysHas()
+	{
+		BotSituation situation = Situation(yaw: 0f, pitch: 0f, hasTarget: true, aimDirection: Vector3.Forward,
+			targetDistance: 18f, targetVisible: true, ticksOnTarget: 60);
+
+		var buttons = (InputButtons)BotBrain.Frame(100, 7, situation, Steady).Buttons;
+
+		Assert.True(buttons.HasFlag(InputButtons.Fire));
+		Assert.False(buttons.HasFlag(InputButtons.Grenade));
+	}
+
+	[Fact]
+	public void WindingUpAThrow_ABotLooksUpTheArc()
+	{
+		Vector3 arc = Aim.Direction(0f, 0.35f);
+		BotSituation situation = Situation(yaw: 0f, pitch: 0f, hasTarget: true, aimDirection: Vector3.Forward,
+			targetDistance: 18f, ticksOnTarget: 60, grenadeAim: arc);
+
+		InputFrame frame = BotBrain.Frame(100, 7, situation, Steady);
+
+		// Turning towards it at the bot's own rate, not snapping to it.
+		Assert.True(frame.PitchRadians > 0f);
+		Assert.True(frame.PitchRadians <= Steady.TurnRateRadians * SimConfig.TickDelta + 0.001f);
 	}
 }

@@ -64,6 +64,25 @@ public partial class ProjectileDefinition : Resource
 	[Export]
 	public float SweepRadiusMeters;
 
+	/// <summary>
+	/// True for a round on a fuse — the hand grenade (docs/NETCODE.md §10.9). It stops
+	/// where it lands instead of going off, and detonates when
+	/// <see cref="LifetimeSeconds"/> runs out, which is then its fuse.
+	/// </summary>
+	[Export]
+	public bool Fused;
+
+	/// <summary>
+	/// Share of its damage — direct and blast — a vehicle takes, on top of the
+	/// vehicle's own armour. One for everything but the anti-personnel hand grenade.
+	/// </summary>
+	[Export]
+	public float VehicleDamageScale = 1f;
+
+	/// <summary>The same share for a structure.</summary>
+	[Export]
+	public float StructureDamageScale = 1f;
+
 	[ExportCategory("Tracer")]
 
 	[Export]
@@ -82,5 +101,8 @@ public partial class ProjectileDefinition : Resource
 		ExplosionRadiusMeters,
 		ExplosionDamage,
 		LifetimeSeconds,
-		SweepRadiusMeters);
+		SweepRadiusMeters,
+		Fused,
+		VehicleDamageScale,
+		StructureDamageScale);
 }

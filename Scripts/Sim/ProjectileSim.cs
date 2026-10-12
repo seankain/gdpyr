@@ -31,9 +31,27 @@ public readonly struct ProjectileStats
 	/// </summary>
 	public readonly float SweepRadiusMeters;
 
+	/// <summary>
+	/// True for a round on a fuse — the hand grenade (docs/NETCODE.md §10.9). It does
+	/// not go off on contact: it stops where it lands, and detonates where it is when
+	/// <see cref="LifetimeSeconds"/>, which is then its fuse, runs out.
+	/// </summary>
+	public readonly bool Fused;
+
+	/// <summary>
+	/// The share of its damage a vehicle takes from it — direct and blast alike, on top
+	/// of the vehicle's own armour (<see cref="Armour"/>). One for every round but the
+	/// hand grenade, which is anti-personnel.
+	/// </summary>
+	public readonly float VehicleDamageScale;
+
+	/// <summary>The same share for a structure. One for every round but the hand grenade.</summary>
+	public readonly float StructureDamageScale;
+
 	public ProjectileStats(in ProjectileParams physics, float muzzleVelocity, float damage,
 		float explosionRadiusMeters = 0f, float explosionDamage = 0f,
-		float lifetimeSeconds = SimConfig.MaxProjectileLifetimeSeconds, float sweepRadiusMeters = 0f)
+		float lifetimeSeconds = SimConfig.MaxProjectileLifetimeSeconds, float sweepRadiusMeters = 0f,
+		bool fused = false, float vehicleDamageScale = 1f, float structureDamageScale = 1f)
 	{
 		Physics = physics;
 		MuzzleVelocity = MathF.Max(muzzleVelocity, 0f);
@@ -42,6 +60,9 @@ public readonly struct ProjectileStats
 		ExplosionDamage = explosionDamage;
 		LifetimeSeconds = lifetimeSeconds > 0f ? lifetimeSeconds : SimConfig.MaxProjectileLifetimeSeconds;
 		SweepRadiusMeters = MathF.Max(sweepRadiusMeters, 0f);
+		Fused = fused;
+		VehicleDamageScale = MathF.Max(vehicleDamageScale, 0f);
+		StructureDamageScale = MathF.Max(structureDamageScale, 0f);
 	}
 
 	public bool IsExplosive => ExplosionRadiusMeters > 0f && ExplosionDamage != 0f;
@@ -80,6 +101,12 @@ public struct Projectile
 	/// <summary>Ticks still owed to this projectile before it is where it should be.</summary>
 	public int PendingCatchUpTicks;
 
+	/// <summary>
+	/// A fused round that has landed (<see cref="ProjectileSim.Land"/>): it stays where
+	/// it is, flying no chord, until its fuse runs out.
+	/// </summary>
+	public bool Resting;
+
 	public bool Alive;
 }
 
@@ -100,7 +127,18 @@ public readonly struct ProjectileSegment
 	/// <summary>The projectile's own radius, for a swept rather than a thin test.</summary>
 	public readonly float SweepRadius;
 
-	public ProjectileSegment(uint id, int ownerPeerId, byte definitionId, Vector3 from, Vector3 to, float sweepRadius)
+	/// <summary>
+	/// A fused round whose fuse runs out at the end of this chord: it detonates at
+	/// <see cref="To"/>, or wherever the chord stopped first. Never set for a round that
+	/// goes off on contact.
+	/// </summary>
+	public readonly bool Detonates;
+
+	/// <summary>The chord of a round lying where it landed: no length, and nothing to hit.</summary>
+	public readonly bool Resting;
+
+	public ProjectileSegment(uint id, int ownerPeerId, byte definitionId, Vector3 from, Vector3 to, float sweepRadius,
+		bool detonates = false, bool resting = false)
 	{
 		Id = id;
 		OwnerPeerId = ownerPeerId;
@@ -108,6 +146,8 @@ public readonly struct ProjectileSegment
 		From = from;
 		To = to;
 		SweepRadius = sweepRadius;
+		Detonates = detonates;
+		Resting = resting;
 	}
 
 	public Vector3 Delta => To - From;
@@ -231,7 +271,9 @@ public sealed class ProjectileSim
 	///
 	/// A projectile that expires on this tick still contributes its chord: the tick
 	/// it runs out on is a tick it was flying, and a round that reaches its target
-	/// on the last tick of its life has hit.
+	/// on the last tick of its life has hit. A fused round's last chord is marked
+	/// <see cref="ProjectileSegment.Detonates"/>; one lying where it landed flies no
+	/// chord at all until then, when it gets one of no length to go off on.
 	/// </summary>
 	public int Step(float dt)
 	{
@@ -251,22 +293,48 @@ public sealed class ProjectileSim
 
 			int ticks = 1 + p.PendingCatchUpTicks;
 			p.PendingCatchUpTicks = 0;
-			for (int t = 0; t < ticks; t++)
+			for (int t = 0; !p.Resting && t < ticks; t++)
 			{
 				Ballistics.Integrate(dt, SimConfig.ProjectileSubSteps, ref p.Position, ref p.Velocity, stats.Physics);
 			}
 			p.Age += dt * ticks;
 
-			_segments[_segmentCount++] = new ProjectileSegment(p.Id, p.OwnerPeerId, p.DefinitionId, start,
-				p.Position, stats.SweepRadiusMeters);
+			bool expired = p.Age >= stats.LifetimeSeconds;
+			bool detonates = expired && stats.Fused;
+			if (!p.Resting || detonates)
+			{
+				_segments[_segmentCount++] = new ProjectileSegment(p.Id, p.OwnerPeerId, p.DefinitionId, start,
+					p.Position, stats.SweepRadiusMeters, detonates, p.Resting);
+			}
 
-			if (p.Age >= stats.LifetimeSeconds || p.Position.Y < SimConfig.ProjectileKillPlaneY)
+			if (expired || p.Position.Y < SimConfig.ProjectileKillPlaneY)
 			{
 				p.Alive = false;
 			}
 		}
 
 		return _segmentCount;
+	}
+
+	/// <summary>
+	/// Puts a fused round down where it landed (docs/NETCODE.md §10.9): it stops there
+	/// and stays until its fuse runs out. The server decides where, and a client is
+	/// told the same point in a hit message, so the two agree on where it lies. False
+	/// for an id that is not in the air.
+	/// </summary>
+	public bool Land(uint id, Vector3 point)
+	{
+		for (int i = 0; i < _count; i++)
+		{
+			if (_items[i].Alive && _items[i].Id == id)
+			{
+				_items[i].Position = point;
+				_items[i].Velocity = Vector3.Zero;
+				_items[i].Resting = true;
+				return true;
+			}
+		}
+		return false;
 	}
 
 	public bool TryGet(uint id, out Projectile projectile)

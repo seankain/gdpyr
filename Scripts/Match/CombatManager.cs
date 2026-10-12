@@ -60,6 +60,19 @@ public partial class CombatManager : Node
 	/// <summary>Bytes counted for one resource node's state RPC.</summary>
 	private const int NodeStateBytes = 8;
 
+	/// <summary>
+	/// How far back along its flight a grenade that struck something is put before it
+	/// drops to the floor (<see cref="Settle"/>): off the face of a wall, and above the
+	/// top of one it landed on.
+	/// </summary>
+	private const float SettleBackoffMeters = 0.1f;
+
+	/// <summary>How far below that a grenade looks for a floor to come to rest on.</summary>
+	private const float SettleDropMeters = 40f;
+
+	/// <summary>A grenade at rest sits this far above the floor it found, so it is drawn on it rather than in it.</summary>
+	private const float SettleLiftMeters = 0.06f;
+
 	private readonly Dictionary<int, PlayerCombat> _players = new();
 	private readonly List<PlayerCombat> _ordered = new();
 	private readonly List<byte[]> _pendingSpawns = new();
@@ -298,6 +311,14 @@ public partial class CombatManager : Node
 		// raise this tick counts against.
 		Ads.Step(ref combat.Aim, combat.EquippedAim, input);
 
+		// The off hand's, whatever is in the other one: a throw does not wait for a
+		// reload or a trigger, and a trigger does not wait for a throw
+		// (docs/NETCODE.md §10.9).
+		if (GrenadeSim.Step(ref combat.Grenades, input, tick))
+		{
+			Throw(combat, tick);
+		}
+
 		WeaponStats stats = combat.EquippedStats;
 		if (WeaponSim.Step(ref combat.Equipped, stats, input, tick) != WeaponAction.Fire)
 		{
@@ -383,6 +404,18 @@ public partial class CombatManager : Node
 		// aimed rather than where they would have had to lead to allow for the link.
 		SpawnProjectile(tick, OwnerId.ForPeer(combat.PeerId), definitionId, combat.Character.EyePosition,
 			direction, combat.LagCompensationTicks);
+	}
+
+	/// <summary>
+	/// Puts a player's hand grenade in the air (docs/NETCODE.md §10.9): from the eye,
+	/// lofted above where they are looking (<see cref="GrenadeSim.ThrowDirection"/>),
+	/// and compensated for their latency as a shot is.
+	/// </summary>
+	private void Throw(PlayerCombat combat, uint tick)
+	{
+		fps_controller character = combat.Character;
+		SpawnProjectile(tick, OwnerId.ForPeer(combat.PeerId), WeaponCatalog.HandGrenade, character.EyePosition,
+			GrenadeSim.ThrowDirection(character.Yaw, character.Pitch), combat.LagCompensationTicks);
 	}
 
 	/// <summary>
@@ -519,12 +552,13 @@ public partial class CombatManager : Node
 		HitFlags flags = HitFlags.Melee;
 		if (victim != null)
 		{
-			flags |= Damage(victim, stats.Damage, attacker, OwnerId.ForPeer(attacker.PeerId), tick);
+			flags |= Damage(victim, stats.Damage, attacker, OwnerId.ForPeer(attacker.PeerId),
+				attacker.EquippedDefinitionId, tick);
 		}
 		else if (unitVictim != null)
 		{
-			flags |= DamageUnit(unitVictim, stats.Damage, explosive: false, attacker, OwnerId.ForPeer(attacker.PeerId),
-				tick);
+			flags |= DamageUnit(unitVictim, stats.Damage, explosive: false, vehicleScale: 1f, attacker,
+				OwnerId.ForPeer(attacker.PeerId), attacker.EquippedDefinitionId, tick);
 		}
 		else if (!blocked)
 		{
@@ -572,8 +606,74 @@ public partial class CombatManager : Node
 		int ownerId = segment.OwnerPeerId;
 		Team ownerTeam = TeamOfOwner(ownerId);
 
-		float nearest = WorldHitFraction(segment.From, segment.To, out Vector3 point, out bool blocked);
-		PlayerCombat victim = null;
+		if (stats.Fused)
+		{
+			ResolveFused(segment, stats, ownerTeam, tick);
+			return;
+		}
+
+		if (!FirstContact(segment, ownerId, ownerTeam, tick, out Vector3 point, out PlayerCombat victim,
+			out Unit unitVictim, out Structure structureVictim))
+		{
+			return;
+		}
+
+		_projectiles.Kill(segment.Id);
+		HitsResolved++;
+
+		PlayerCombat attacker = Find(OwnerId.PeerOf(ownerId));
+		byte weapon = WeaponOnStream(attacker, segment.DefinitionId);
+		HitFlags flags = HitFlags.None;
+
+		if (victim != null)
+		{
+			flags |= Damage(victim, stats.Damage, attacker, ownerId, weapon, tick);
+		}
+		else if (unitVictim != null)
+		{
+			flags |= DamageUnit(unitVictim, stats.Damage, stats.IsExplosive, stats.VehicleDamageScale, attacker,
+				ownerId, weapon, tick);
+		}
+		else if (structureVictim != null)
+		{
+			flags |= DamageStructure(structureVictim, stats.Damage, stats.IsExplosive, stats.StructureDamageScale,
+				attacker, ownerId, weapon, tick);
+		}
+
+		if (stats.IsExplosive)
+		{
+			flags |= HitFlags.Exploded;
+			flags |= Explode(point, stats, attacker, ownerId, ownerTeam, weapon, victim, unitVictim, structureVictim,
+				tick);
+		}
+
+		Broadcast(MethodName.ServerProjectileHit, ProjectileCodec.EncodeHit(new ProjectileHit
+		{
+			Id = segment.Id,
+			Point = point,
+			VictimPeerId = victim?.PeerId
+				?? (unitVictim != null ? OwnerId.ForUnit(unitVictim.UnitId)
+					: structureVictim?.ShooterId ?? 0),
+			Flags = flags,
+		}), point);
+	}
+
+	/// <summary>
+	/// The first thing a chord runs into, if anything: the world, a player, a unit or a
+	/// structure, whichever the round reaches first.
+	///
+	/// World geometry is the engine's problem — a ray query against the world layer —
+	/// and players are ours, tested analytically against the capsules recorded this
+	/// tick (docs/NETCODE.md §5). Exactly one of the three victims is set when
+	/// something with a body was hit, and none when it was the world.
+	/// </summary>
+	private bool FirstContact(in ProjectileSegment segment, int ownerId, Team ownerTeam, uint tick,
+		out Vector3 point, out PlayerCombat victim, out Unit unitVictim, out Structure structureVictim)
+	{
+		float nearest = WorldHitFraction(segment.From, segment.To, out point, out bool blocked);
+		victim = null;
+		unitVictim = null;
+		structureVictim = null;
 
 		for (int i = 0; i < _ordered.Count; i++)
 		{
@@ -603,8 +703,6 @@ public partial class CombatManager : Node
 
 		// Units are resolved after players and against the same fraction, so whichever
 		// the round reaches first wins however they are ordered in memory.
-		Unit unitVictim = null;
-		Structure structureVictim = null;
 		if (UnitManager.Instance is { } units)
 		{
 			unitVictim = units.QuerySegment(segment.From, segment.To, segment.SweepRadius, ownerId, ownerTeam,
@@ -633,46 +731,98 @@ public partial class CombatManager : Node
 			}
 		}
 
-		if (!blocked)
+		return blocked;
+	}
+
+	/// <summary>
+	/// A fused round — the hand grenade (docs/NETCODE.md §10.9). Whatever would stop a
+	/// bullet stops it, and it drops to the floor there and lies still: a grenade that
+	/// strikes a body hurts nobody, and goes off at their feet. It detonates where it
+	/// is when its fuse runs out, in the air if it is still flying.
+	///
+	/// Landing is a hit message of its own (<see cref="HitFlags.Landed"/>), so every
+	/// client puts its copy down where the server did rather than letting it fall
+	/// through the floor until the blast; the blast is a second one.
+	/// </summary>
+	private void ResolveFused(in ProjectileSegment segment, in ProjectileStats stats, Team ownerTeam, uint tick)
+	{
+		Vector3 point = segment.To;
+		bool stopped = false;
+		if (!segment.Resting && FirstContact(segment, segment.OwnerPeerId, ownerTeam, tick, out Vector3 contact,
+			out _, out _, out _))
 		{
+			stopped = true;
+			point = Settle(segment, contact);
+		}
+
+		if (segment.Detonates)
+		{
+			Detonate(segment, stats, ownerTeam, point, tick);
 			return;
 		}
 
-		_projectiles.Kill(segment.Id);
-		HitsResolved++;
-
-		PlayerCombat attacker = Find(OwnerId.PeerOf(ownerId));
-		HitFlags flags = HitFlags.None;
-
-		if (victim != null)
+		if (!stopped || !_projectiles.Land(segment.Id, point))
 		{
-			flags |= Damage(victim, stats.Damage, attacker, ownerId, tick);
-		}
-		else if (unitVictim != null)
-		{
-			flags |= DamageUnit(unitVictim, stats.Damage, stats.IsExplosive, attacker, ownerId, tick);
-		}
-		else if (structureVictim != null)
-		{
-			flags |= DamageStructure(structureVictim, stats.Damage, stats.IsExplosive, attacker, ownerId, tick);
-		}
-
-		if (stats.IsExplosive)
-		{
-			flags |= HitFlags.Exploded;
-			flags |= Explode(point, stats, attacker, ownerId, ownerTeam, victim, unitVictim, structureVictim, tick);
+			return;
 		}
 
 		Broadcast(MethodName.ServerProjectileHit, ProjectileCodec.EncodeHit(new ProjectileHit
 		{
 			Id = segment.Id,
 			Point = point,
-			VictimPeerId = victim?.PeerId
-				?? (unitVictim != null ? OwnerId.ForUnit(unitVictim.UnitId)
-					: structureVictim?.ShooterId ?? 0),
+			VictimPeerId = 0,
+			Flags = HitFlags.Landed,
+		}), point);
+	}
+
+	/// <summary>
+	/// Where a grenade that struck something comes to rest: a little way back along
+	/// its flight from what it hit, then straight down to the first floor below. One
+	/// ray. A grenade that hit a wall lies at its foot, one that hit the top of a low
+	/// wall lies on it, and one that hit somebody lies at their feet.
+	/// </summary>
+	private Vector3 Settle(in ProjectileSegment segment, Vector3 contact)
+	{
+		Vector3 travel = segment.Delta;
+		float length = travel.Length();
+		Vector3 from = length > 1e-4f ? contact - (travel / length * SettleBackoffMeters) : contact;
+
+		WorldHitFraction(from, from + (Vector3.Down * SettleDropMeters), out Vector3 floor, out bool found);
+		return found ? floor + (Vector3.Up * SettleLiftMeters) : from;
+	}
+
+	/// <summary>
+	/// A fused round's fuse has run out: its blast, at <paramref name="point"/>, to
+	/// everyone in reach — nobody is its direct victim — and the hit message that draws
+	/// it.
+	/// </summary>
+	private void Detonate(in ProjectileSegment segment, in ProjectileStats stats, Team ownerTeam, Vector3 point,
+		uint tick)
+	{
+		_projectiles.Kill(segment.Id);
+		HitsResolved++;
+
+		int ownerId = segment.OwnerPeerId;
+		PlayerCombat attacker = Find(OwnerId.PeerOf(ownerId));
+		HitFlags flags = HitFlags.Exploded | Explode(point, stats, attacker, ownerId, ownerTeam,
+			WeaponOnStream(attacker, segment.DefinitionId), null, null, null, tick);
+
+		Broadcast(MethodName.ServerProjectileHit, ProjectileCodec.EncodeHit(new ProjectileHit
+		{
+			Id = segment.Id,
+			Point = point,
+			VictimPeerId = 0,
 			Flags = flags,
 		}), point);
 	}
+
+	/// <summary>
+	/// What the agent stream says a round was fired from (docs/AGENT_API.md §8): the
+	/// weapon whose round it is, for a player — the grenade for a grenade, the heavy
+	/// gun for a mounted gunner's — and 0 for anything the strategist's side fired.
+	/// </summary>
+	private static byte WeaponOnStream(PlayerCombat attacker, byte definitionId) =>
+		attacker != null ? definitionId : (byte)0;
 
 	/// <summary>
 	/// Whose round this is. A projectile carries one owner id across both id spaces
@@ -704,7 +854,7 @@ public partial class CombatManager : Node
 	/// deliberate: a launcher that is safe at point blank is a shotgun.
 	/// </summary>
 	private HitFlags Explode(Vector3 point, in ProjectileStats stats, PlayerCombat attacker, int attackerOwnerId,
-		Team attackerTeam, PlayerCombat direct, Unit directUnit, Structure directStructure, uint tick)
+		Team attackerTeam, byte weapon, PlayerCombat direct, Unit directUnit, Structure directStructure, uint tick)
 	{
 		HitFlags flags = HitFlags.None;
 
@@ -720,7 +870,7 @@ public partial class CombatManager : Node
 			float damage = stats.SplashDamageAt(distance);
 			if (damage > 0f)
 			{
-				flags |= Damage(target, damage, attacker, attackerOwnerId, tick);
+				flags |= Damage(target, damage, attacker, attackerOwnerId, weapon, tick);
 			}
 		}
 
@@ -740,11 +890,14 @@ public partial class CombatManager : Node
 			float damage = stats.SplashDamageAt(UnitManager.DistanceToBlast(unit, point));
 			if (damage > 0f)
 			{
-				flags |= DamageUnit(unit, damage, explosive: true, attacker, attackerOwnerId, tick);
+				flags |= DamageUnit(unit, damage, explosive: true, stats.VehicleDamageScale, attacker, attackerOwnerId,
+					weapon, tick);
 			}
 		}
 
-		// Structures take a blast whole: explosives are what they are weak to.
+		// Structures take a blast whole — explosives are what they are weak to — but for
+		// the round's own share, which only a hand grenade's is short of
+		// (docs/NETCODE.md §10.9).
 		for (int i = 0; units != null && i < SimConfig.MaxStructures; i++)
 		{
 			Structure structure = units.StructureAt(i);
@@ -757,7 +910,8 @@ public partial class CombatManager : Node
 			float damage = stats.SplashDamageAt(UnitManager.DistanceToBlast(structure, point));
 			if (damage > 0f)
 			{
-				flags |= DamageStructure(structure, damage, explosive: true, attacker, attackerOwnerId, tick);
+				flags |= DamageStructure(structure, damage, explosive: true, stats.StructureDamageScale, attacker,
+					attackerOwnerId, weapon, tick);
 			}
 		}
 
@@ -770,8 +924,8 @@ public partial class CombatManager : Node
 	/// with, and the stream records what it actually took. Knocking one down counts
 	/// as a kill, because it is the strategist's points destroyed.
 	/// </summary>
-	private HitFlags DamageStructure(Structure structure, float amount, bool explosive, PlayerCombat attacker,
-		int attackerOwnerId, uint tick)
+	private HitFlags DamageStructure(Structure structure, float amount, bool explosive, float structureScale,
+		PlayerCombat attacker, int attackerOwnerId, byte weapon, uint tick)
 	{
 		UnitManager units = UnitManager.Instance;
 		if (units == null || structure == null || structure.IsDestroyed || amount <= 0f)
@@ -779,7 +933,8 @@ public partial class CombatManager : Node
 			return HitFlags.None;
 		}
 
-		bool killed = units.DamageStructure(structure, amount, explosive, attackerOwnerId, tick, out float dealt);
+		bool killed = units.DamageStructure(structure, amount, explosive, structureScale, attackerOwnerId, tick,
+			out float dealt);
 		if (dealt <= 0f)
 		{
 			// Armour that took nothing (docs/NETCODE.md §10.6). No hit marker and no
@@ -798,7 +953,6 @@ public partial class CombatManager : Node
 
 		if (AgentEventBus.Active != null)
 		{
-			byte weapon = attacker?.EquippedDefinitionId ?? (byte)0;
 			int victimId = structure.ShooterId;
 			AgentEventBus.Emit(AgentEventKind.Damage, tick, attackerOwnerId, victimId, weapon, dealt,
 				structure.Health);
@@ -826,8 +980,8 @@ public partial class CombatManager : Node
 	/// strategist's points. What it takes depends on what it was hit with, as a
 	/// structure's does: a tank takes nothing from a bullet (docs/NETCODE.md §10.6).
 	/// </summary>
-	private HitFlags DamageUnit(Unit unit, float amount, bool explosive, PlayerCombat attacker, int attackerOwnerId,
-		uint tick)
+	private HitFlags DamageUnit(Unit unit, float amount, bool explosive, float vehicleScale, PlayerCombat attacker,
+		int attackerOwnerId, byte weapon, uint tick)
 	{
 		UnitManager units = UnitManager.Instance;
 		if (units == null || unit == null || !unit.IsAlive || amount <= 0f)
@@ -835,7 +989,7 @@ public partial class CombatManager : Node
 			return HitFlags.None;
 		}
 
-		bool killed = units.Damage(unit, amount, explosive, attackerOwnerId, tick, out float dealt);
+		bool killed = units.Damage(unit, amount, explosive, vehicleScale, attackerOwnerId, tick, out float dealt);
 		if (dealt <= 0f)
 		{
 			// Armour that took nothing, as for a structure above.
@@ -855,7 +1009,6 @@ public partial class CombatManager : Node
 		// only recorded player damage would be a stream nothing could learn from.
 		if (AgentEventBus.Active != null)
 		{
-			byte weapon = attacker?.EquippedDefinitionId ?? (byte)0;
 			int victimId = OwnerId.ForUnit(unit.UnitId);
 			AgentEventBus.Emit(AgentEventKind.Damage, tick, attackerOwnerId, victimId, weapon, dealt,
 				unit.Health);
@@ -885,7 +1038,7 @@ public partial class CombatManager : Node
 	/// useless the moment the strategist starts winning.
 	/// </summary>
 	private HitFlags Damage(PlayerCombat victim, float amount, PlayerCombat attacker, int attackerOwnerId,
-		uint tick)
+		byte weapon, uint tick)
 	{
 		if (victim == null || !victim.IsAlive || amount <= 0f)
 		{
@@ -900,7 +1053,6 @@ public partial class CombatManager : Node
 		// null check on a round nobody has attached to.
 		if (AgentEventBus.Active != null)
 		{
-			byte weapon = attacker?.EquippedDefinitionId ?? (byte)0;
 			float range = Separation(attacker, victim);
 			AgentEventBus.Emit(AgentEventKind.Damage, tick, attackerOwnerId, victim.PeerId, weapon,
 				amount, victim.Health);
@@ -1506,6 +1658,14 @@ public partial class CombatManager : Node
 		combat.Slot = WeaponSim.SelectSlot(combat.Slot, input);
 		Ads.Step(ref combat.Aim, combat.EquippedAim, input);
 
+		// The same throw the server will make from the same frame, so the grenade leaves
+		// the hand and the count drops on the tick the key went down.
+		if (GrenadeSim.Step(ref combat.Grenades, input, tick))
+		{
+			combat.LastPredictedThrowTick = tick;
+			PredictThrow(combat, tick);
+		}
+
 		WeaponStats stats = combat.EquippedStats;
 		WeaponAction action = WeaponSim.Step(ref combat.Equipped, stats, input, tick);
 		if (action == WeaponAction.None)
@@ -1538,6 +1698,23 @@ public partial class CombatManager : Node
 		uint id = PredictedIdBit | _nextPredictedId++;
 		if (_projectiles.TrySpawn(id, tick, OwnerId.ForPeer(combat.PeerId), combat.EquippedDefinitionId,
 			combat.Character.EyePosition, direction, 0, out _))
+		{
+			_predicted.Add((id, tick));
+		}
+	}
+
+	/// <summary>
+	/// The owning client's copy of its own throw, adopted by the server's spawn when it
+	/// arrives as a predicted tracer is.
+	/// </summary>
+	private void PredictThrow(PlayerCombat combat, uint tick)
+	{
+		ShotsFired++;
+
+		fps_controller character = combat.Character;
+		uint id = PredictedIdBit | _nextPredictedId++;
+		if (_projectiles.TrySpawn(id, tick, OwnerId.ForPeer(combat.PeerId), WeaponCatalog.HandGrenade,
+			character.EyePosition, GrenadeSim.ThrowDirection(character.Yaw, character.Pitch), 0, out _))
 		{
 			_predicted.Add((id, tick));
 		}
@@ -1670,6 +1847,13 @@ public partial class CombatManager : Node
 				continue;
 			}
 
+			// A grenade thrown on the tick a rifle fired is two predictions in one
+			// window; each is adopted by the spawn of its own kind.
+			if (_projectiles.TryGet(id, out Projectile predicted) && predicted.DefinitionId != spawn.DefinitionId)
+			{
+				continue;
+			}
+
 			_predicted.RemoveAt(i);
 			return _projectiles.Rekey(id, spawn.Id);
 		}
@@ -1679,13 +1863,20 @@ public partial class CombatManager : Node
 
 	private void ApplyHit(in ProjectileHit hit)
 	{
+		// A grenade that has landed is put down where the server put it, and goes on
+		// lying there until its own blast arrives (docs/NETCODE.md §10.9).
+		if (hit.Flags.HasFlag(HitFlags.Landed))
+		{
+			_projectiles.Land(hit.Id, hit.Point);
+			return;
+		}
+
 		if (hit.Id != 0)
 		{
 			_projectiles.Kill(hit.Id);
 		}
 
 		_view?.Impact(hit.Point, hit.Flags);
-
 	}
 
 	/// <summary>

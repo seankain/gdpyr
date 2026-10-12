@@ -183,6 +183,7 @@ public static class AgentActionCodec
 		"weapon1" => InputButtons.Weapon1,
 		"weapon2" => InputButtons.Weapon2,
 		"weapon3" => InputButtons.Weapon3,
+		"grenade" => InputButtons.Grenade,
 		_ => InputButtons.None,
 	};
 
@@ -190,5 +191,6 @@ public static class AgentActionCodec
 	public static readonly string[] ButtonNames =
 	{
 		"jump", "crouch", "sprint", "fire", "ads", "reload", "use", "melee", "weapon1", "weapon2", "weapon3",
+		"grenade",
 	};
 }

@@ -23,6 +23,12 @@ public enum InputButtons : ushort
 	Weapon1 = 1 << 8,
 	Weapon2 = 1 << 9,
 	Weapon3 = 1 << 10,
+
+	/// <summary>
+	/// Throw a hand grenade (<see cref="GrenadeSim"/>). Bit 11 was spare, so the frame
+	/// is still twelve bytes and every frame written before it means what it did.
+	/// </summary>
+	Grenade = 1 << 11,
 }
 
 /// <summary>

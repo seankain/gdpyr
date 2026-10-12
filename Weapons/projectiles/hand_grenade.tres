@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="ProjectileDefinition" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Fps/ProjectileDefinition.cs" id="1_projdef"]
+
+[resource]
+script = ExtResource("1_projdef")
+Name = &"hand_grenade"
+MassGrams = 400.0
+RadiusMillimeters = 30.0
+DragCoefficient = 0.47
+MuzzleVelocity = 18.0
+LifetimeSeconds = 3.0
+Damage = 0.0
+ExplosionRadiusMeters = 7.0
+ExplosionDamage = 140.0
+SweepRadiusMeters = 0.05
+Fused = true
+VehicleDamageScale = 0.25
+StructureDamageScale = 0.25
+TracerColor = Color(0.3, 0.38, 0.2, 1)
+TracerLengthMeters = 0.12
+TracerRadiusMeters = 0.06
