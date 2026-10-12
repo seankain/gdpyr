@@ -708,7 +708,8 @@ which puts held nodes first, sends the builder there rather than on the trip to 
 takes it in the baseline; and the squad given the far node at 14 s stays 50–60 m short of it for
 the rest of the minute, its units engaging the raider each time it respawns — killed nine times
 between 19 s and 59 s — because "engage focus" is above "advance" in the unit's Attack (§5.2). The
-scenario was not changed.
+scenario was not changed: on this build `./scripts/playtest.sh Tests/Scenarios/*.json` passes 18 of
+19, and it is the one that fails (seed 2, two nodes).
 
 The spectator's squad table shows such a squad as `combined` (`AiSquadFlags.Combined`). Tests:
 thirteen in `CommanderHtnTests`. Checked to fail, then reverted: without the pass, 10 fail; with each
