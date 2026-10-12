@@ -678,6 +678,25 @@ public class CommanderHtnTests
 	}
 
 	[Fact]
+	public void ATechnicalOnItsOwnInTheSquadForming_IsKeptForRecon_NotSentWithTheGarrison()
+	{
+		// htn_recon_finds_contact, seed 2: before recon is wanted, a technical alone in
+		// the squad forming went out with the garrison, and was never the scout.
+		var rig = new Rig();
+		rig.AddRiflemen(4);
+		ushort technical = rig.Add(Vector3.Zero, Technical, scout: true);
+		rig.Zones.SetHolder(FarZone, NodeHolder.GroundForce, contested: false);
+		rig.Decide();
+
+		Assert.False(rig.Commander.ReconWanted);
+		Assert.Equal(CommandTask.Defend, rig.Squad(Commander.GarrisonSlot).Task);
+		Assert.Equal(CommandGoal.Hold, rig.Intent(rig.Commander.SquadOf(technical)).Goal);
+
+		rig.Decide(times: SimConfig.TickRate * 20 / 30);
+		Assert.Equal(CommandRole.Scout, rig.Squad(rig.Commander.SquadOf(technical)).Role);
+	}
+
+	[Fact]
 	public void TheSquadStillForming_NeverGoesAlone()
 	{
 		(Rig rig, ushort tank) = GarrisonAndALoneTank();

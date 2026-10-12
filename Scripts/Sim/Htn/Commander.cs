@@ -96,6 +96,12 @@ public struct CommandSquad
 
 	public int Armour;
 
+	/// <summary>
+	/// Technicals in it. A squad still forming with nothing else in it is the side's
+	/// next scout (§5.3, Recon), and is kept out of a combined assault.
+	/// </summary>
+	public int Scouts;
+
 	public int Engaging;
 
 	public float Strength;
@@ -469,6 +475,7 @@ public sealed class Commander
 		{
 			_squads[s].Members = 0;
 			_squads[s].Armour = 0;
+			_squads[s].Scouts = 0;
 			_squads[s].Engaging = 0;
 			_squads[s].Strength = 0f;
 			_squads[s].FullStrength = 0f;
@@ -486,6 +493,7 @@ public sealed class Commander
 			ref CommandSquad squad = ref _squads[s];
 			squad.Members++;
 			squad.Armour += units[i].Armour ? 1 : 0;
+			squad.Scouts += units[i].Scout ? 1 : 0;
 			squad.Engaging += units[i].Engaging ? 1 : 0;
 			squad.Strength += MathF.Max(units[i].Strength, 0f);
 			squad.FullStrength += MathF.Max(units[i].FullStrength, 0f);
@@ -630,6 +638,7 @@ public sealed class Commander
 		float strength = MathF.Max(units[i].Strength, 0f);
 		left.Members--;
 		left.Armour -= units[i].Armour ? 1 : 0;
+		left.Scouts -= units[i].Scout ? 1 : 0;
 		left.Strength -= strength;
 		left.StrengthAtFormation = MathF.Max(left.StrengthAtFormation - strength, 0f);
 		if (left.Members == 0)
@@ -781,6 +790,7 @@ public sealed class Commander
 		ref CommandSquad joined = ref _squads[squad];
 		joined.Members++;
 		joined.Armour += units[i].Armour ? 1 : 0;
+		joined.Scouts += units[i].Scout ? 1 : 0;
 		joined.Strength += MathF.Max(units[i].Strength, 0f);
 
 		// The most it has been: a unit refilling a depleted squad makes up what it lost
@@ -1239,8 +1249,9 @@ public sealed class Commander
 
 	/// <summary>
 	/// Whether a squad may go on a combined assault, and in which turn: 0, an idle
-	/// assault squad that is ready and not depleted; 1, the squad still forming; 2, the
-	/// garrison, at home, while home is quiet. -1 for none.
+	/// assault squad that is ready and not depleted; 1, the squad still forming, unless
+	/// it is technicals only — the side's next scout, as the garrison keeps them out
+	/// for; 2, the garrison, at home, while home is quiet. -1 for none.
 	/// </summary>
 	private int Joins(int s, bool quiet)
 	{
@@ -1252,7 +1263,7 @@ public sealed class Commander
 
 		if (squad.Role == CommandRole.Assault && squad.Task == CommandTask.None)
 		{
-			return !squad.Ready ? 1 : squad.Depleted ? -1 : 0;
+			return squad.Ready ? (squad.Depleted ? -1 : 0) : squad.Members > squad.Scouts ? 1 : -1;
 		}
 
 		return s == GarrisonSlot && squad.Role == CommandRole.Garrison && squad.Task == CommandTask.Defend && quiet
