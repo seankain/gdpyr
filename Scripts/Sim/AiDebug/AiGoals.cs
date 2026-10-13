@@ -50,7 +50,8 @@ public static class AiGoals
 			UnitGoal.Resupply => AiTaskFamily.Resupply,
 			UnitGoal.TakeCover or UnitGoal.Work => AiTaskFamily.Build,
 			UnitGoal.WaitForSquad or UnitGoal.EngageFocus or UnitGoal.Support or UnitGoal.Advance
-				or UnitGoal.HoldCover => AiTaskFamily.Attack,
+				or UnitGoal.HoldCover or UnitGoal.TakePoint or UnitGoal.HoldPoint or UnitGoal.HoldPointCover
+				=> AiTaskFamily.Attack,
 			UnitGoal.EngageInLeash or UnitGoal.AnswerCall or UnitGoal.HoldPost => AiTaskFamily.DefendZone,
 			UnitGoal.Patrol => AiTaskFamily.Recon,
 			UnitGoal.Obey => AiTaskFamily.Obey,

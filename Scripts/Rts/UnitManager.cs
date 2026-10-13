@@ -945,6 +945,25 @@ public partial class UnitManager : Node
 		float sensor = unit.Traits.SensorRadiusMeters;
 		bool attackNamed = order.Kind == OrderKind.Attack && order.TargetOwnerId != OwnerId.None;
 
+		// An attack on a control point (docs/HTN_BOTS.md §5.2, "take the point"): one
+		// that names no contact, at a point on a resource node, by the rule the economy
+		// counts bodies with.
+		bool objective = false;
+		Vector3 node = Vector3.Zero;
+		float nodeRadius = 0f;
+		EconomyService economy = CombatManager.Instance?.Economy;
+		for (int i = 0; order.Kind == OrderKind.Attack && !attackNamed && economy != null && i < economy.NodeCount
+			&& !objective; i++)
+		{
+			ResourceNode candidate = economy.NodeAt(i);
+			if (candidate != null && candidate.Covers(order.Target))
+			{
+				objective = true;
+				node = candidate.GlobalPosition;
+				nodeRadius = candidate.CaptureRadiusMeters;
+			}
+		}
+
 		// What the side remembers: anything within this unit's sensor range of it or
 		// of its anchor; where the target an attack order named was last seen; and
 		// the contact nearest the anchor, which a defended ring turns to face.
@@ -957,6 +976,9 @@ public partial class UnitManager : Node
 		float nearestMeters = sensor;
 		bool nearest = false;
 		Vector3 nearestPoint = Vector3.Zero;
+		bool pointThreatened = false;
+		float pointThreatMeters = traits.ThreatBearingMeters;
+		Vector3 pointThreat = Vector3.Zero;
 		for (int i = 0; memory != null && i < memory.Count; i++)
 		{
 			if (!memory.IsRemembered(i, tick))
@@ -987,6 +1009,16 @@ public partial class UnitManager : Node
 				threat = true;
 				threatMeters = fromAnchor;
 				threatPoint = known.Position;
+			}
+
+			// The threat to the point: measured from the point, not from where the unit
+			// stood when it was ordered, which is what an attack order's anchor is.
+			float fromPoint = objective ? node.DistanceTo(known.Position) : float.MaxValue;
+			if (fromPoint <= pointThreatMeters)
+			{
+				pointThreatened = true;
+				pointThreatMeters = fromPoint;
+				pointThreat = known.Position;
 			}
 		}
 
@@ -1050,8 +1082,35 @@ public partial class UnitManager : Node
 			ringMeters = radius;
 		}
 
+		// Its post on the point its attack is on: k of n round the centre, as a defended
+		// ring is, facing the threat to the point; in from the edge by what keeps it on
+		// the point however far short of its post it stops. And whether it is one of
+		// those that must stand on the point, or may fight from cover beside it.
+		bool holds = false;
+		if (objective)
+		{
+			if (!pointThreatened)
+			{
+				pointThreat = PlayerManager.Instance?.SpawnCentroid ?? order.Anchor;
+			}
+
+			int count = hasSquad ? _census.AliveIn(squad) : 1;
+			int rank = hasSquad ? Math.Max(_census.Rank(squad, unit.UnitId), 0) : 0;
+			float limit = ControlPoint.PostLimit(nodeRadius, traits.ObjectiveEnterMeters,
+				unit.Traits.ArrivalRadiusMeters, traits.PointPostMarginMeters);
+			float radius = DefendPosts.Radius(count, traits.PostSpacingMeters, MathF.Min(traits.PostMinRadiusMeters, limit),
+				limit);
+			plan.ObjectivePost = DefendPosts.Post(node, rank, count, DefendPosts.Bearing(node, pointThreat), radius);
+			holds = ControlPoint.Holds(unit.UnitId, at, node, nodeRadius, _neighbours.AsSpan(0, _neighbourCount),
+				traits.HoldersPerPoint);
+		}
+
+		plan.ObjectivePoint = node;
+		plan.ObjectiveRadius = nodeRadius;
+
 		bool hasCover = SenseCover(unit, plan, order, nearest, nearestPoint,
-			threat ? threatPoint : PlayerManager.Instance?.SpawnCentroid ?? order.Anchor, ringMeters);
+			threat ? threatPoint : PlayerManager.Instance?.SpawnCentroid ?? order.Anchor, ringMeters,
+			objective, node, nodeRadius, holds, pointThreat);
 
 		plan.FallbackPoint = plan.HasStaging ? plan.StagingPoint
 			: TryNearestRally(unit.Team, at, out Vector3 rally) ? rally
@@ -1079,6 +1138,7 @@ public partial class UnitManager : Node
 			SupplyEdgeMeters = supplyEdge,
 			HasCover = hasCover,
 			CoverHides = hasCover,
+			Objective = objective,
 		});
 	}
 
@@ -1087,12 +1147,15 @@ public partial class UnitManager : Node
 	/// builder hides from the nearest contact the side remembers, behind anything; a
 	/// unit with a target takes a low wall it can fire over at it, inside its leash
 	/// when it has one; a unit on a defended ring with nothing to shoot moves its post
-	/// to a spot beside it with a wall between it and the ring's threat. Returns true
-	/// for a spot to fight or hide from — what the <see cref="UnitFact.Cover"/> fact
-	/// is about; a post behind cover is just where its post is.
+	/// to a spot beside it with a wall between it and the ring's threat; a unit taking
+	/// a control point takes a low wall on the point, or just off it when it need not
+	/// stand on it, against the threat to the point. Returns true for a spot to fight
+	/// or hide from — what the <see cref="UnitFact.Cover"/> fact is about; a post behind
+	/// cover is just where its post is.
 	/// </summary>
 	private bool SenseCover(Unit unit, UnitContext plan, in UnitOrder order, bool nearest, Vector3 nearestPoint,
-		Vector3 ringThreat, float ringMeters)
+		Vector3 ringThreat, float ringMeters, bool objective, Vector3 point, float pointRadius, bool holds,
+		Vector3 pointThreat)
 	{
 		plan.HasCoverPoint = false;
 		if (Cover.Count == 0 || (unit.Definition?.IsSupply ?? false))
@@ -1108,6 +1171,29 @@ public partial class UnitManager : Node
 				BuilderCoverSearchMeters), out spot))
 			{
 				return Use(spot);
+			}
+		}
+		else if (objective)
+		{
+			// Against the threat to the point rather than whatever it is shooting, so the
+			// spot does not move with each target; inside the radius for a unit that must
+			// stand on the point, up to a few metres outside it for one that need not; and
+			// only once near enough to walk to, so a squad still on its way keeps pace
+			// rather than running for a wall (docs/HTN_BOTS.md §5.2, "take the point").
+			UnitPlanTraits traits = plan.Traits;
+			float bound = holds
+				? pointRadius - traits.ObjectiveEnterMeters - traits.PointPostMarginMeters
+				: pointRadius + traits.PointCoverSlackMeters;
+			if (bound > 0f && Flat(unit.GlobalPosition, point) <= bound + UnitCoverSearchMeters)
+			{
+				CoverQuery query = UnitCoverQuery(unit, pointThreat, mustFire: true, bound);
+				query.From = point;
+				query.MinThreatMeters = 0f;
+				query.MaxThreatMeters = 0f;
+				if (UpdateUnitCover(unit, query, out spot))
+				{
+					return Use(spot);
+				}
 			}
 		}
 		else if (order.Kind is OrderKind.Attack or OrderKind.Defend or OrderKind.None
@@ -1275,7 +1361,7 @@ public partial class UnitManager : Node
 			return string.Empty;
 		}
 
-		Span<int> goals = stackalloc int[(int)UnitGoal.HoldCover + 1];
+		Span<int> goals = stackalloc int[(int)UnitGoal.HoldPointCover + 1];
 		int waiting = 0;
 		for (int i = 0; i < _ordered.Count; i++)
 		{
@@ -1283,7 +1369,7 @@ public partial class UnitManager : Node
 			if (unit.IsAlive && unit.Plan != null)
 			{
 				goals[(int)unit.Plan.Intent.Goal]++;
-				waiting += unit.Plan.Intent.Goal == UnitGoal.Advance && unit.Plan.Waiting ? 1 : 0;
+				waiting += UnitContext.Paces(unit.Plan.Intent.Goal) && unit.Plan.Waiting ? 1 : 0;
 			}
 		}
 

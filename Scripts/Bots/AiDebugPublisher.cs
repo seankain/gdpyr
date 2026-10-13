@@ -140,7 +140,7 @@ public sealed class AiDebugPublisher
 				Goal = (byte)plan.Intent.Goal,
 				Detail = (byte)unit.Order.Kind,
 				Flags = (hasPoint ? AiLabelFlags.HasPoint : AiLabelFlags.None)
-					| (plan.Waiting && plan.Intent.Goal == UnitGoal.Advance ? AiLabelFlags.Waiting : AiLabelFlags.None)
+					| (plan.Waiting && UnitContext.Paces(plan.Intent.Goal) ? AiLabelFlags.Waiting : AiLabelFlags.None)
 					| (unit.TargetOwnerId != OwnerId.None ? AiLabelFlags.Engaging : AiLabelFlags.None),
 				Point = point,
 				TargetOwnerId = unit.TargetOwnerId,

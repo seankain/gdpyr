@@ -27,6 +27,12 @@ public class UnitHtnTests
 	private static readonly Vector3 Objective = new(10f, 0.5f, 110f);
 	private static readonly Vector3 Supply = new(10f, 0.5f, -60f);
 
+	/// <summary>A control point's capture radius, as the test map's two smaller nodes have.</summary>
+	private const float PointRadius = 10f;
+
+	/// <summary>Where a unit's post on a point is, from its centre.</summary>
+	private static readonly Vector3 PostOffset = new(3f, 0f, 0f);
+
 	private sealed class Squaddie
 	{
 		public readonly Domain<UnitContext> Domain;
@@ -99,6 +105,29 @@ public class UnitHtnTests
 				Odds = OddsBand.Even,
 				HasCover = spot.HasValue,
 				CoverHides = spot.HasValue,
+			});
+		}
+
+		/// <summary>
+		/// One scan that found its attack is on the control point at <paramref name="point"/>
+		/// (radius <see cref="PointRadius"/>, its post <see cref="PostOffset"/> from the centre),
+		/// with a spot behind cover there at <paramref name="cover"/>, or none.
+		/// </summary>
+		public void ScanPoint(Vector3 point, Vector3? cover = null, bool autonomous = false)
+		{
+			C.ObjectivePoint = point;
+			C.ObjectiveRadius = PointRadius;
+			C.ObjectivePost = point + PostOffset;
+			C.HasCoverPoint = cover.HasValue;
+			C.CoverPoint = cover ?? Vector3.Zero;
+			C.Encode(new UnitSense
+			{
+				HealthFraction = 1f,
+				Autonomous = autonomous,
+				Odds = OddsBand.Even,
+				HasCover = cover.HasValue,
+				CoverHides = cover.HasValue,
+				Objective = true,
 			});
 		}
 
@@ -861,6 +890,12 @@ public class UnitHtnTests
 		yield return new object[] { OrderKind.Defend, UnitGoal.HoldPost, "", "order move", UnitGoal.Obey };
 		yield return new object[] { OrderKind.Patrol, UnitGoal.Patrol, "", "order defend", UnitGoal.HoldPost };
 		yield return new object[] { OrderKind.Move, UnitGoal.Obey, "", "order attack", UnitGoal.Advance };
+		yield return new object[] { OrderKind.Attack, UnitGoal.TakePoint, "point", "order defend", UnitGoal.HoldPost };
+		yield return new object[] { OrderKind.Attack, UnitGoal.TakePoint, "point", "order elsewhere", UnitGoal.Advance };
+		yield return new object[] { OrderKind.Attack, UnitGoal.HoldPoint, "on the point", "pushed off", UnitGoal.TakePoint };
+		yield return new object[] { OrderKind.Attack, UnitGoal.HoldPoint, "on the point", "order defend", UnitGoal.HoldPost };
+		yield return new object[] { OrderKind.Attack, UnitGoal.HoldPointCover, "point, cover", "point cover gone", UnitGoal.TakePoint };
+		yield return new object[] { OrderKind.Attack, UnitGoal.HoldPointCover, "point, cover", "order defend", UnitGoal.HoldPost };
 	}
 
 	[Theory]
@@ -903,6 +938,16 @@ public class UnitHtnTests
 				unit.Sense(UnitFact.Stance, UnitStance.Autonomous);
 				unit.Sense(UnitFact.Wounded, true);
 				unit.Sense(UnitFact.Supply, true);
+				break;
+			case "point":
+				unit.ScanPoint(Objective);
+				break;
+			case "on the point":
+				unit.C.Position = Objective + new Vector3(2f, 0f, 0f);
+				unit.ScanPoint(Objective);
+				break;
+			case "point, cover":
+				unit.ScanPoint(Objective, Objective + new Vector3(0f, 0f, -6f));
 				break;
 		}
 
@@ -947,6 +992,15 @@ public class UnitHtnTests
 			case "order attack":
 				unit.Order(OrderKind.Attack, Objective);
 				break;
+			case "order elsewhere":
+				unit.Order(OrderKind.Attack, Objective + new Vector3(40f, 0f, 0f));
+				break;
+			case "point cover gone":
+				unit.ScanPoint(Objective);
+				break;
+			case "pushed off":
+				unit.C.Position = Objective + new Vector3(PointRadius + 1f, 0f, 0f);
+				break;
 		}
 
 		unit.Tick(3);
@@ -965,6 +1019,203 @@ public class UnitHtnTests
 		planning.Reset(c);
 
 		Assert.Equal(UnitGoal.None, c.Intent.Goal);
+	}
+
+	// ---- taking a control point -----------------------------------------------
+
+	/// <summary>A unit on an attack order on the control point at <see cref="Objective"/>, at <paramref name="at"/>.</summary>
+	private static Squaddie TakingThePoint(Vector3 at, Vector3? cover = null, bool autonomous = false)
+	{
+		var unit = new Squaddie();
+		unit.C.Position = at;
+		unit.Order(OrderKind.Attack, Objective);
+		unit.ScanPoint(Objective, cover, autonomous);
+		return unit;
+	}
+
+	[Fact]
+	public void AnAttackOnAControlPoint_GoesOntoIt_FiringOnTheWay()
+	{
+		Squaddie unit = TakingThePoint(Anchor);
+		unit.Tick();
+
+		Assert.True(unit.C.Is(UnitFact.Objective));
+		Assert.False(unit.C.Is(UnitFact.OnObjective));
+		Assert.Equal(UnitGoal.TakePoint, unit.Goal);
+		Assert.Equal(UnitMove.Point, unit.C.Intent.Move);
+		Assert.Equal(Objective + PostOffset, unit.C.Intent.Point);
+		Assert.False(unit.C.Intent.StopToFight);
+	}
+
+	[Fact]
+	public void SomethingSeenOnTheWay_DoesNotStopIt_OrPullItOff()
+	{
+		// docs/HTN_BOTS.md §5.3: a squad sent at the far node stood 50-60 m short of it
+		// for a minute, engaging a player each time he respawned. Taking the point is
+		// above "engage focus": the unit fires as it goes, and goes.
+		Squaddie unit = TakingThePoint(Anchor);
+		unit.Tick();
+		unit.See(Anchor + new Vector3(30f, 0.5f, 0f));
+		unit.Sense(UnitFact.FriendEngaged, true);
+		unit.Tick(3);
+
+		Assert.Equal(UnitGoal.TakePoint, unit.Goal);
+		Assert.Equal(UnitMove.Point, unit.C.Intent.Move);
+		Assert.Equal(Objective + PostOffset, unit.C.Intent.Point);
+		Assert.False(unit.C.Intent.StopToFight);
+
+		// The same order on a place that is not a control point fights as it always has.
+		Squaddie plain = Ordered(OrderKind.Attack, Objective);
+		plain.See(Anchor + new Vector3(30f, 0.5f, 0f));
+		plain.Tick();
+		Assert.Equal(UnitGoal.EngageFocus, plain.Goal);
+	}
+
+	[Fact]
+	public void OnThePoint_ItHoldsItsPost_StandingToFight()
+	{
+		Squaddie unit = TakingThePoint(Objective + new Vector3(4f, 0f, 4f));
+		unit.See(Objective + new Vector3(30f, 0.5f, 0f));
+		unit.Tick();
+
+		Assert.True(unit.C.Is(UnitFact.OnObjective));
+		Assert.Equal(UnitGoal.HoldPoint, unit.Goal);
+		Assert.Equal(UnitMove.Point, unit.C.Intent.Move);
+		Assert.Equal(Objective + PostOffset, unit.C.Intent.Point);
+		Assert.True(unit.C.Intent.StopToFight);
+	}
+
+	[Fact]
+	public void ArrivingOnThePoint_TurnsTheTakeIntoAHold()
+	{
+		Squaddie unit = TakingThePoint(Anchor);
+		unit.Tick();
+		Assert.Equal(UnitGoal.TakePoint, unit.Goal);
+
+		unit.C.Position = Objective + new Vector3(0f, 0f, -5f);
+		unit.Tick();
+		Assert.Equal(UnitGoal.HoldPoint, unit.Goal);
+	}
+
+	[Theory]
+	[InlineData(false, 8.9f, true)]
+	[InlineData(false, 9.5f, false)]
+	[InlineData(true, 9.5f, true)]
+	[InlineData(true, 10f, true)]
+	[InlineData(true, 10.5f, false)]
+	public void OnThePoint_IsEnteredAMetreInside_AndHeldToTheEdge(bool wasOn, float metres, bool expected)
+	{
+		Squaddie unit = TakingThePoint(wasOn ? Objective : Anchor);
+		unit.Tick();
+		Assert.Equal(wasOn, unit.C.Is(UnitFact.OnObjective));
+
+		unit.C.Position = Objective + new Vector3(metres, 0f, 0f);
+		unit.Tick();
+		Assert.Equal(expected, unit.C.Is(UnitFact.OnObjective));
+	}
+
+	[Fact]
+	public void CoverOnThePoint_IsWhereItFightsFrom()
+	{
+		Vector3 spot = Objective + new Vector3(0f, 0f, -6f);
+		Squaddie unit = TakingThePoint(Objective + new Vector3(0f, 0f, -12f), spot);
+		unit.See(Objective + new Vector3(0f, 0.5f, 30f));
+		unit.Tick();
+
+		Assert.Equal(UnitGoal.HoldPointCover, unit.Goal);
+		Assert.Equal(UnitMove.Point, unit.C.Intent.Move);
+		Assert.Equal(spot, unit.C.Intent.Point);
+		Assert.False(unit.C.Intent.StopToFight);
+
+		unit.C.Position = spot;
+		unit.Tick();
+		Assert.Equal(UnitGoal.HoldPointCover, unit.Goal);
+		Assert.Equal(UnitMove.Hold, unit.C.Intent.Move);
+		Assert.True(unit.C.Intent.StopToFight);
+	}
+
+	[Fact]
+	public void ASquadStillGathering_WaitsForItself_BeforeTakingThePoint()
+	{
+		Squaddie unit = TakingThePoint(Anchor);
+		unit.Sense(UnitFact.SquadPhase, SquadPhase.Gathering);
+		unit.Tick();
+		Assert.Equal(UnitGoal.WaitForSquad, unit.Goal);
+
+		unit.Sense(UnitFact.SquadPhase, SquadPhase.Moving);
+		unit.Tick();
+		Assert.Equal(UnitGoal.TakePoint, unit.Goal);
+	}
+
+	[Fact]
+	public void ALosingUnit_StillFallsBack_FromTakingThePoint()
+	{
+		Squaddie unit = TakingThePoint(Anchor, autonomous: true);
+		unit.Tick();
+		Assert.Equal(UnitGoal.TakePoint, unit.Goal);
+
+		unit.Sense(UnitFact.Health, HealthBand.Critical);
+		unit.Sense(UnitFact.Odds, OddsBand.Outnumbered);
+		unit.Tick();
+		Assert.Equal(UnitGoal.Retreat, unit.Goal);
+	}
+
+	[Fact]
+	public void AnAttackThatNamesAContact_IsNotATakeOfThePoint_EvenOnOne()
+	{
+		Squaddie unit = TakingThePoint(Anchor);
+		unit.C.Track(unit.C.Position, new UnitOrder
+		{
+			Kind = OrderKind.Attack,
+			Target = Objective,
+			Anchor = Anchor,
+			TargetOwnerId = OwnerId.ForPeer(3),
+		}, false, Vector3.Zero);
+		unit.Tick();
+
+		Assert.False(unit.C.Is(UnitFact.Objective));
+		Assert.Equal(UnitGoal.Advance, unit.Goal);
+	}
+
+	[Fact]
+	public void ANewOrder_EndsTheTake_OnTheTickItComes_NotAtTheNextScan()
+	{
+		Squaddie unit = TakingThePoint(Anchor);
+		unit.Tick();
+		Assert.Equal(UnitGoal.TakePoint, unit.Goal);
+
+		// An attack somewhere else: the scan that would say so is up to ten ticks off.
+		unit.Order(OrderKind.Attack, Objective + new Vector3(40f, 0f, 0f));
+		unit.Tick();
+		Assert.False(unit.C.Is(UnitFact.Objective));
+		Assert.Equal(UnitGoal.Advance, unit.Goal);
+	}
+
+	[Fact]
+	public void TakingThePoint_KeepsPaceWithTheSquad()
+	{
+		Squaddie unit = TakingThePoint(new Vector3(10f, 0.5f, 60f));
+		unit.C.HasSquad = true;
+		unit.C.SquadAlive = 4;
+		unit.C.SquadCentroid = unit.C.Position - new Vector3(0f, 0f, 12f);
+		unit.Tick();
+
+		Assert.Equal(UnitGoal.TakePoint, unit.Goal);
+		Assert.Equal(UnitMove.Hold, unit.C.Intent.Move);
+		Assert.True(unit.C.Waiting);
+		Assert.True(UnitContext.Paces(unit.Goal));
+	}
+
+	[Fact]
+	public void APersonsAttackMoveOntoAPoint_EndsHoldingIt()
+	{
+		// Nothing re-orders a person's units when the point is taken (a computer
+		// strategist's are re-ordered at its next decision): they stay on it.
+		Squaddie unit = TakingThePoint(Objective + new Vector3(2f, 0f, 2f));
+		Assert.Equal((byte)UnitStance.Obey, unit.C.Get(UnitFact.Stance));
+		unit.Tick(30);
+
+		Assert.Equal(UnitGoal.HoldPoint, unit.Goal);
 	}
 
 	// ---- keeping pace with the squad ---------------------------------------
@@ -1240,12 +1491,28 @@ public class UnitHtnTests
 
 	// ---- sharing and allocation --------------------------------------------
 
-	/// <summary>Fourteen situations, one per operator of §5.2 and two for Advance, as an order and facts.</summary>
+	/// <summary>
+	/// Seventeen situations, one per operator of §5.2 and two for Advance, as an order and
+	/// facts. The last three are an attack on a control point: on its way, on the point,
+	/// and with cover there; a unit on the point has the point where it stands.
+	/// </summary>
 	private static void Situation(UnitContext c, int phase, out OrderKind order, out bool hasTarget)
 	{
+		bool point = phase >= 14;
+		c.ObjectivePoint = phase == 15 ? c.Position : Objective;
+		c.HasCoverPoint = phase == 16;
+		c.CoverPoint = Objective + new Vector3(0f, 0f, -6f);
+		c.Encode(new UnitSense
+		{
+			HealthFraction = 1f,
+			HasCover = phase == 16,
+			CoverHides = phase == 16,
+			Objective = point,
+		});
+
 		order = phase switch
 		{
-			0 or 4 or 5 or 6 or 7 or 13 => OrderKind.Attack,
+			0 or 4 or 5 or 6 or 7 or 13 or 14 or 15 or 16 => OrderKind.Attack,
 			1 or 2 => OrderKind.Build,
 			3 => OrderKind.Attack,
 			8 or 9 or 10 => OrderKind.Defend,
@@ -1272,10 +1539,10 @@ public class UnitHtnTests
 		c.Tick = t;
 		if ((t + i) % interval == 0)
 		{
-			Situation(c, (int)(((t + i) / (uint)interval + (uint)i) % 14), out order, out hasTarget);
+			Situation(c, (int)(((t + i) / (uint)interval + (uint)i) % 17), out order, out hasTarget);
 		}
 
-		c.Track(c.Position, new UnitOrder { Kind = order, Target = Objective, Anchor = Anchor }, hasTarget,
+		c.Track(c.Position, new UnitOrder { Kind = order, Target = c.ObjectivePoint, Anchor = Anchor }, hasTarget,
 			Anchor + new Vector3(0f, 0.5f, 5f));
 		bool dirty = c.IsDirty;
 		planning.Tick(c);
@@ -1300,6 +1567,9 @@ public class UnitHtnTests
 			c.HasPost = true;
 			c.PostPoint = Anchor + new Vector3(4f, 0f, 0f);
 			c.SupplyPoint = Supply;
+			c.ObjectivePoint = Objective;
+			c.ObjectiveRadius = PointRadius;
+			c.ObjectivePost = Objective + PostOffset;
 			contexts[i] = c;
 		}
 
@@ -1345,14 +1615,15 @@ public class UnitHtnTests
 		{
 			UnitGoal.Retreat, UnitGoal.TakeCover, UnitGoal.Work, UnitGoal.Advance, UnitGoal.WaitForSquad,
 			UnitGoal.EngageFocus, UnitGoal.Support, UnitGoal.Advance, UnitGoal.EngageInLeash, UnitGoal.AnswerCall,
-			UnitGoal.HoldPost, UnitGoal.Patrol, UnitGoal.Obey, UnitGoal.Resupply,
+			UnitGoal.HoldPost, UnitGoal.Patrol, UnitGoal.Obey, UnitGoal.Resupply, UnitGoal.TakePoint,
+			UnitGoal.HoldPoint, UnitGoal.HoldPointCover,
 		};
 
 		for (int phase = 0; phase < expected.Length; phase++)
 		{
 			planning.Reset(c);
 			Situation(c, phase, out OrderKind order, out bool hasTarget);
-			c.Track(c.Position, new UnitOrder { Kind = order, Target = Objective, Anchor = Anchor }, hasTarget,
+			c.Track(c.Position, new UnitOrder { Kind = order, Target = c.ObjectivePoint, Anchor = Anchor }, hasTarget,
 				Anchor + new Vector3(0f, 0.5f, 5f));
 			planning.Tick(c);
 
