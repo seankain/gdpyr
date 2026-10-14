@@ -124,6 +124,10 @@ public class AiDebugTextTests
 
 		string rich = SquadText.Table(commander, HtnTextStyle.Rich, link: true);
 		Assert.Contains($"[url=squad:{commander.PeerId}:3]", rich);
+
+		// One of several squads sent at the node together.
+		assault.Flags |= AiSquadFlags.Combined;
+		Assert.Equal("combined engaged", SquadText.Flags(assault));
 	}
 
 	// ---- an inspection --------------------------------------------------------

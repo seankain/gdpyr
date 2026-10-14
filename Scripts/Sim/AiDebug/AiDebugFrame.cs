@@ -294,6 +294,9 @@ public enum AiSquadFlags : byte
 
 	/// <summary>A member is in a fight.</summary>
 	Engaged = 32,
+
+	/// <summary>Attacking as one of several squads sent at a node together.</summary>
+	Combined = 64,
 }
 
 /// <summary>One commander squad, as the last decision left it (docs/HTN_BOTS.md §5.3).</summary>

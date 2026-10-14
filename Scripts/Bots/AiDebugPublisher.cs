@@ -140,7 +140,7 @@ public sealed class AiDebugPublisher
 				Goal = (byte)plan.Intent.Goal,
 				Detail = (byte)unit.Order.Kind,
 				Flags = (hasPoint ? AiLabelFlags.HasPoint : AiLabelFlags.None)
-					| (plan.Waiting && plan.Intent.Goal == UnitGoal.Advance ? AiLabelFlags.Waiting : AiLabelFlags.None)
+					| (plan.Waiting && UnitContext.Paces(plan.Intent.Goal) ? AiLabelFlags.Waiting : AiLabelFlags.None)
 					| (unit.TargetOwnerId != OwnerId.None ? AiLabelFlags.Engaging : AiLabelFlags.None),
 				Point = point,
 				TargetOwnerId = unit.TargetOwnerId,
@@ -225,7 +225,8 @@ public sealed class AiDebugPublisher
 				| (squad.Healable ? AiSquadFlags.Healable : AiSquadFlags.None)
 				| (squad.FallingBack ? AiSquadFlags.FallingBack : AiSquadFlags.None)
 				| (squad.Short ? AiSquadFlags.Short : AiSquadFlags.None)
-				| (squad.Engaging > 0 ? AiSquadFlags.Engaged : AiSquadFlags.None),
+				| (squad.Engaging > 0 ? AiSquadFlags.Engaged : AiSquadFlags.None)
+				| (squad.Lead >= 0 && squad.Task == CommandTask.Attack ? AiSquadFlags.Combined : AiSquadFlags.None),
 			Zone = squad.Zone,
 			TargetOwnerId = squad.TargetOwnerId,
 			Strength = squad.Strength,

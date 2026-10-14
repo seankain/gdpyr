@@ -86,12 +86,21 @@ public struct CommandSquad
 
 	public CommandRole Role;
 
-	/// <summary>An assault squad that has reached <see cref="CommanderTraits.AssaultSquadSize"/> once, and may be given a target.</summary>
+	/// <summary>
+	/// An assault squad that has reached <see cref="CommanderTraits.AssaultSquadSize"/>
+	/// once, or has been sent on a combined assault, and may be given a target.
+	/// </summary>
 	public bool Ready;
 
 	public int Members;
 
 	public int Armour;
+
+	/// <summary>
+	/// Technicals in it. A squad still forming with nothing else in it is the side's
+	/// next scout (§5.3, Recon), and is kept out of a combined assault.
+	/// </summary>
+	public int Scouts;
 
 	public int Engaging;
 
@@ -118,6 +127,13 @@ public struct CommandSquad
 	public Vector3 TaskPoint;
 
 	public Vector3 StagingPoint;
+
+	/// <summary>
+	/// In a combined assault, the slot of the squad leading it — the lowest slot of the
+	/// squads sent together — which each of them carries: they stage at one point and
+	/// strike together. -1 for a squad attacking alone, or not attacking.
+	/// </summary>
+	public int Lead;
 
 	/// <summary>The tick the task was given.</summary>
 	public uint TaskTick;
@@ -225,8 +241,9 @@ public sealed class CommanderPlanning
 /// Two halves, as the ground side has (§5.1): an assignment, which is a plain
 /// function because it assigns rather than sequences — squads formed from
 /// production, a threatened zone given the nearest squad strong enough for it, an
-/// idle squad given the nearest target it is strong enough for, one scout, the supply
-/// trucks stationed — and a planner per squad, which sequences: stage then strike,
+/// idle squad given the nearest target it is strong enough for, squads too weak
+/// alone sent at a node together, one scout, the supply trucks stationed — and a
+/// planner per squad, which sequences: stage then strike,
 /// fall back when losing, refill when depleted — at a supply source when healing can
 /// bring the squad back (D2, H5), else at home where it is merged.
 ///
@@ -267,8 +284,11 @@ public sealed class Commander
 
 	private readonly Vector3[] _sum;
 
-	/// <summary>Per zone, this decision: already given a defender.</summary>
+	/// <summary>Per zone, this decision: already given a defender; or, for a combined assault, already weighed.</summary>
 	private readonly bool[] _zoneDone = new bool[ZoneBoard.DefaultCapacity];
+
+	/// <summary>Per squad, this decision: picked for the combined assault being put together.</summary>
+	private readonly bool[] _picked;
 
 	/// <summary>The last tick a contact was live; the first decision's until one is, so a quiet start counts as quiet.</summary>
 	private uint _lastLiveTick;
@@ -291,10 +311,12 @@ public sealed class Commander
 		_boundOwner = new int[squads];
 		_boundTarget = new CommandTarget[squads];
 		_sum = new Vector3[squads];
+		_picked = new bool[squads];
 		for (int s = 0; s < squads; s++)
 		{
 			_contexts[s] = planning.CreateContext();
 			_boundZone[s] = -1;
+			_squads[s].Lead = -1;
 		}
 
 		_memberUnit = new ushort[members];
@@ -411,9 +433,10 @@ public sealed class Commander
 		}
 
 		BuyTimeZone = -1;
-		AssignGarrison(world, zones);
+		bool quiet = HomeQuiet(world, zones, contacts);
+		AssignGarrison(world, zones, quiet);
 		AssignDefence(world, zones, contacts);
-		AssignAttacks(tick, zones, contacts);
+		AssignAttacks(world, zones, contacts, quiet);
 		AssignScout(tick, zones);
 		AssignSupply(world, contacts);
 
@@ -452,6 +475,7 @@ public sealed class Commander
 		{
 			_squads[s].Members = 0;
 			_squads[s].Armour = 0;
+			_squads[s].Scouts = 0;
 			_squads[s].Engaging = 0;
 			_squads[s].Strength = 0f;
 			_squads[s].FullStrength = 0f;
@@ -469,6 +493,7 @@ public sealed class Commander
 			ref CommandSquad squad = ref _squads[s];
 			squad.Members++;
 			squad.Armour += units[i].Armour ? 1 : 0;
+			squad.Scouts += units[i].Scout ? 1 : 0;
 			squad.Engaging += units[i].Engaging ? 1 : 0;
 			squad.Strength += MathF.Max(units[i].Strength, 0f);
 			squad.FullStrength += MathF.Max(units[i].FullStrength, 0f);
@@ -487,10 +512,12 @@ public sealed class Commander
 	/// <summary>
 	/// Puts every unit in no squad into one, in the unit manager's order: a supply
 	/// truck into the trucks' squad, and never anywhere else; the garrison while it is
-	/// short, riflemen only — a tank goes with infantry, and a technical's 70 m sensor
-	/// is wasted at home; one scout when recon is wanted; then a depleted squad that is
-	/// refilling; then, for a tank, an infantry squad to escort it; then an idle squad
-	/// too weak for its target; then the squad forming from production.
+	/// short and at home, riflemen only — a tank goes with infantry, a technical's
+	/// 70 m sensor is wasted at home, and a unit produced while the garrison is out on
+	/// an assault would walk out after it alone; one scout when recon is wanted; then a
+	/// depleted squad that is refilling; then, for a tank, an infantry squad to escort
+	/// it; then an idle squad too weak for its target; then the squad forming from
+	/// production.
 	/// </summary>
 	private void Route(uint tick, ReadOnlySpan<CommandUnit> units)
 	{
@@ -509,9 +536,10 @@ public sealed class Commander
 			}
 		}
 
+		bool garrisonHome = _squads[GarrisonSlot].Task != CommandTask.Attack;
 		for (int i = 0; i < units.Length; i++)
 		{
-			if (Free(units, i) && !units[i].Armour && !units[i].Scout && !units[i].Supply
+			if (Free(units, i) && !units[i].Armour && !units[i].Scout && !units[i].Supply && garrisonHome
 				&& _squads[GarrisonSlot].Members < _traits.GarrisonUnits)
 			{
 				Join(Ensure(GarrisonSlot, CommandRole.Garrison, tick), units, i);
@@ -610,6 +638,7 @@ public sealed class Commander
 		float strength = MathF.Max(units[i].Strength, 0f);
 		left.Members--;
 		left.Armour -= units[i].Armour ? 1 : 0;
+		left.Scouts -= units[i].Scout ? 1 : 0;
 		left.Strength -= strength;
 		left.StrengthAtFormation = MathF.Max(left.StrengthAtFormation - strength, 0f);
 		if (left.Members == 0)
@@ -761,6 +790,7 @@ public sealed class Commander
 		ref CommandSquad joined = ref _squads[squad];
 		joined.Members++;
 		joined.Armour += units[i].Armour ? 1 : 0;
+		joined.Scouts += units[i].Scout ? 1 : 0;
 		joined.Strength += MathF.Max(units[i].Strength, 0f);
 
 		// The most it has been: a unit refilling a depleted squad makes up what it lost
@@ -801,7 +831,7 @@ public sealed class Commander
 
 		// The slot's next squad is another squad: its history starts empty.
 		_contexts[squad].History?.Clear();
-		_squads[squad] = new CommandSquad { Zone = -1 };
+		_squads[squad] = new CommandSquad { Zone = -1, Lead = -1 };
 		_boundTask[squad] = CommandTask.None;
 		_boundZone[squad] = -1;
 		_boundOwner[squad] = OwnerId.None;
@@ -864,7 +894,9 @@ public sealed class Commander
 			squad.Healable = squad.FullStrength >= (_traits.ResupplyShare + _traits.ResupplyHysteresis) * formation;
 		}
 
-		if (squad.Role != CommandRole.Garrison && !squad.FallingBack && squad.Strength < _traits.RetreatShare * formation)
+		// The garrison holds home whatever it costs; out on an assault it is a squad like any other.
+		bool retreats = squad.Role != CommandRole.Garrison || squad.Task == CommandTask.Attack;
+		if (retreats && !squad.FallingBack && squad.Strength < _traits.RetreatShare * formation)
 		{
 			float enemy = EnemyNear(contacts, world.Tick, squad.Centroid, _traits.EnemyNearMeters);
 			if (enemy > 0f && enemy >= _traits.RetreatEnemyRatio * squad.Strength)
@@ -1064,11 +1096,13 @@ public sealed class Commander
 	/// is at least <see cref="CommanderTraits.AttackRatio"/> times — a live contact,
 	/// then a node the ground force holds, then a neutral node — that no other squad
 	/// has. When nothing at all is known it sweeps the ground spawns in turn, as
-	/// legacy does. A squad too weak for every known target waits, and is sent the
-	/// next units produced.
+	/// legacy does. Squads too weak for every known target alone are sent at a node
+	/// together when together they are strong enough (<see cref="Combine"/>); one
+	/// still too weak waits, and is sent the next units produced.
 	/// </summary>
-	private void AssignAttacks(uint tick, ZoneBoard zones, ContactMemory contacts)
+	private void AssignAttacks(in CommanderWorld world, ZoneBoard zones, ContactMemory contacts, bool quiet)
 	{
+		uint tick = world.Tick;
 		bool known = false;
 		for (int i = 0; contacts != null && i < contacts.Count && !known; i++)
 		{
@@ -1105,6 +1139,9 @@ public sealed class Commander
 			}
 		}
 
+		// A garrison whose assault is over goes home.
+		AssignGarrison(world, zones, quiet);
+
 		for (int s = 0; s < _squads.Length; s++)
 		{
 			ref CommandSquad squad = ref _squads[s];
@@ -1125,6 +1162,212 @@ public sealed class Commander
 				squad.Short = known;
 			}
 		}
+
+		Combine(tick, zones, contacts, quiet);
+	}
+
+	/// <summary>
+	/// Combined assaults (§5.3): squads each too weak alone for every target are sent
+	/// at a control point together. Of the squads free to go (<see cref="Joins"/>), the
+	/// nearest node the side does not hold that all of them together are at least
+	/// <see cref="CommanderTraits.AttackRatio"/> times — a denied one first, then a
+	/// neutral one — is given to as few of them as beat it: ready assault squads, then
+	/// the squad still forming, then the garrison, the nearest the node first in each.
+	/// They stage at one point and strike when the assault as a whole has assembled
+	/// (<see cref="Assembled"/>). It takes two squads at least, and as many units as a
+	/// squad forms with: the squad still forming never goes alone, but with the next
+	/// in turn. Then again with the squads left.
+	/// </summary>
+	private void Combine(uint tick, ZoneBoard zones, ContactMemory contacts, bool quiet)
+	{
+		int count = zones == null ? 0 : Math.Min(zones.Count, _zoneDone.Length);
+		Array.Clear(_zoneDone);
+
+		// Each round weighs one node, so there are at most as many rounds as zones.
+		for (int round = 0; round < count; round++)
+		{
+			float pool = 0f;
+			int squads = 0;
+			int members = 0;
+			Vector3 sum = Vector3.Zero;
+			for (int s = 0; s < _squads.Length; s++)
+			{
+				if (Joins(s, quiet) >= 0)
+				{
+					pool += _squads[s].Strength;
+					squads++;
+					members += _squads[s].Members;
+					sum += _squads[s].Centroid * _squads[s].Members;
+				}
+			}
+
+			if (squads < 2 || members < _traits.AssaultSquadSize)
+			{
+				return;
+			}
+
+			Vector3 centre = sum / members;
+			int zone = -1;
+			float estimate = 0f;
+			float bestDistance = float.MaxValue;
+			for (int pass = 0; pass < 2 && zone < 0; pass++)
+			{
+				NodeHolder wanted = pass == 0 ? NodeHolder.GroundForce : NodeHolder.Neutral;
+				for (int z = 0; z < count; z++)
+				{
+					Zone candidate = zones.At(z);
+					if (_zoneDone[z] || candidate.Kind != ZoneKind.ResourceNode || candidate.Holder != wanted
+						|| Targeted(CommandTarget.Zone, z, OwnerId.None))
+					{
+						continue;
+					}
+
+					float distance = Flat(centre, candidate.Position);
+					float enemy = EnemyNear(contacts, tick, candidate.Position, candidate.RadiusMeters + _traits.ClusterMeters);
+					if (distance < bestDistance && Beats(pool, enemy))
+					{
+						bestDistance = distance;
+						zone = z;
+						estimate = enemy;
+					}
+				}
+			}
+
+			if (zone < 0)
+			{
+				return;
+			}
+
+			_zoneDone[zone] = true;
+			Vector3 point = zones.At(zone).Position;
+			if (Pick(point, estimate, quiet))
+			{
+				Send(tick, zone, point);
+			}
+		}
+	}
+
+	/// <summary>
+	/// Whether a squad may go on a combined assault, and in which turn: 0, an idle
+	/// assault squad that is ready and not depleted; 1, the squad still forming, unless
+	/// it is technicals only — the side's next scout, as the garrison keeps them out
+	/// for; 2, the garrison, at home, while home is quiet. -1 for none.
+	/// </summary>
+	private int Joins(int s, bool quiet)
+	{
+		ref CommandSquad squad = ref _squads[s];
+		if (!squad.Active || squad.Members == 0 || squad.Strength <= 0f || squad.FallingBack)
+		{
+			return -1;
+		}
+
+		if (squad.Role == CommandRole.Assault && squad.Task == CommandTask.None)
+		{
+			return squad.Ready ? (squad.Depleted ? -1 : 0) : squad.Members > squad.Scouts ? 1 : -1;
+		}
+
+		return s == GarrisonSlot && squad.Role == CommandRole.Garrison && squad.Task == CommandTask.Defend && quiet
+			? 2
+			: -1;
+	}
+
+	/// <summary>
+	/// Marks in <see cref="_picked"/> the fewest squads, taken in <see cref="Joins"/>'
+	/// turns and nearest <paramref name="point"/> first in each, that together beat
+	/// <paramref name="estimate"/> and make a combined assault; true when there are.
+	/// </summary>
+	private bool Pick(Vector3 point, float estimate, bool quiet)
+	{
+		Array.Clear(_picked);
+		float strength = 0f;
+		int picked = 0;
+		int members = 0;
+		for (int turn = 0; turn < 3 && !Combined(strength, estimate, picked, members); turn++)
+		{
+			while (!Combined(strength, estimate, picked, members))
+			{
+				int next = -1;
+				float nearest = float.MaxValue;
+				for (int s = 0; s < _squads.Length; s++)
+				{
+					float distance = Flat(_squads[s].Centroid, point);
+					if (!_picked[s] && Joins(s, quiet) == turn && distance < nearest)
+					{
+						next = s;
+						nearest = distance;
+					}
+				}
+
+				if (next < 0)
+				{
+					break;
+				}
+
+				_picked[next] = true;
+				strength += _squads[next].Strength;
+				members += _squads[next].Members;
+				picked++;
+			}
+		}
+
+		return Combined(strength, estimate, picked, members);
+	}
+
+	/// <summary>
+	/// Squads that beat the estimate together and are a combined assault: two at
+	/// least, and as many units as a squad forms with. A squad still forming that
+	/// would beat a node alone does not go alone; the next in turn goes with it.
+	/// </summary>
+	private bool Combined(float strength, float estimate, int squads, int members) =>
+		Beats(strength, estimate) && squads >= 2 && members >= _traits.AssaultSquadSize;
+
+	/// <summary>Gives the picked squads the node, led by the lowest slot, staging at one point short of it.</summary>
+	private void Send(uint tick, int zone, Vector3 point)
+	{
+		int lead = -1;
+		int members = 0;
+		Vector3 sum = Vector3.Zero;
+		for (int s = 0; s < _squads.Length; s++)
+		{
+			if (_picked[s])
+			{
+				lead = lead < 0 ? s : lead;
+				members += _squads[s].Members;
+				sum += _squads[s].Centroid * _squads[s].Members;
+			}
+		}
+
+		Vector3 staging = Staging(point, sum / members);
+		for (int s = 0; s < _squads.Length; s++)
+		{
+			if (!_picked[s])
+			{
+				continue;
+			}
+
+			ref CommandSquad squad = ref _squads[s];
+			Give(ref squad, CommandTask.Attack, CommandTarget.Zone, zone, OwnerId.None, point, tick);
+			squad.Lead = lead;
+			squad.StagingPoint = staging;
+			squad.Short = false;
+
+			// Committed: the squad still forming is no longer the one production fills.
+			squad.Ready |= squad.Role == CommandRole.Assault;
+		}
+	}
+
+	/// <summary>Whether two squads stage and strike as one: the same squad, or two in the same combined assault.</summary>
+	private bool Together(int a, int b)
+	{
+		if (a == b)
+		{
+			return true;
+		}
+
+		ref CommandSquad x = ref _squads[a];
+		ref CommandSquad y = ref _squads[b];
+		return x.Lead >= 0 && x.Lead == y.Lead && x.Task == CommandTask.Attack && y.Task == CommandTask.Attack
+			&& x.Target == y.Target && x.Zone == y.Zone;
 	}
 
 	private bool TryTarget(int s, uint tick, ZoneBoard zones, ContactMemory contacts, bool known,
@@ -1265,16 +1508,31 @@ public sealed class Commander
 	/// <summary>
 	/// The garrison is a standing Defend Zone squad at home (§5.3), counted as the
 	/// defence of the barracks zone it stands in, so that a threat there sends
-	/// another squad only when the garrison is not enough.
+	/// another squad only when the garrison is not enough. While home is quiet it may
+	/// go out on a combined assault (<see cref="Combine"/>), which keeps it until the
+	/// assault ends; the moment home is not quiet, it comes home.
 	/// </summary>
-	private void AssignGarrison(in CommanderWorld world, ZoneBoard zones)
+	private void AssignGarrison(in CommanderWorld world, ZoneBoard zones, bool quiet)
 	{
 		ref CommandSquad garrison = ref _squads[GarrisonSlot];
-		if (!garrison.Active)
+
+		// Falling back from an assault it was losing: Retreat has it, as it has any squad.
+		if (!garrison.Active || garrison.FallingBack || (garrison.Task == CommandTask.Attack && quiet))
 		{
 			return;
 		}
 
+		garrison.Task = CommandTask.Defend;
+		garrison.Target = CommandTarget.Zone;
+		garrison.Zone = HomeZone(world, zones);
+		garrison.TargetOwnerId = OwnerId.None;
+		garrison.TaskPoint = world.Home;
+		garrison.Lead = -1;
+	}
+
+	/// <summary>The barracks zone the garrison stands in: held, and home inside it; -1 for none.</summary>
+	private static int HomeZone(in CommanderWorld world, ZoneBoard zones)
+	{
 		int home = -1;
 		float nearest = float.MaxValue;
 		for (int z = 0; zones != null && z < zones.Count; z++)
@@ -1288,10 +1546,19 @@ public sealed class Commander
 			}
 		}
 
-		garrison.Task = CommandTask.Defend;
-		garrison.Target = CommandTarget.Zone;
-		garrison.Zone = home;
-		garrison.TaskPoint = world.Home;
+		return home;
+	}
+
+	/// <summary>
+	/// Nothing threatens home, as Defend Zone counts a threat: its barracks is not
+	/// contested, and the side remembers no enemy within
+	/// <see cref="CommanderTraits.ThreatMeters"/> of it.
+	/// </summary>
+	private bool HomeQuiet(in CommanderWorld world, ZoneBoard zones, ContactMemory contacts)
+	{
+		int home = HomeZone(world, zones);
+		return (home < 0 || !zones.At(home).Contested)
+			&& EnemyNear(contacts, world.Tick, world.Home, _traits.ThreatMeters) <= 0f;
 	}
 
 	/// <summary>The scout patrols to the zone the side has gone longest without seeing.</summary>
@@ -1475,6 +1742,7 @@ public sealed class Commander
 		squad.TargetOwnerId = owner;
 		squad.TaskPoint = point;
 		squad.TaskTick = tick;
+		squad.Lead = -1;
 	}
 
 	private static void Drop(ref CommandSquad squad)
@@ -1483,6 +1751,7 @@ public sealed class Commander
 		squad.Target = CommandTarget.None;
 		squad.Zone = -1;
 		squad.TargetOwnerId = OwnerId.None;
+		squad.Lead = -1;
 	}
 
 	// ---- planning ----------------------------------------------------------
@@ -1537,24 +1806,31 @@ public sealed class Commander
 		}
 	}
 
+	/// <summary>
+	/// At least <see cref="CommanderTraits.AssembleShare"/> of the assault is at its
+	/// staging point: of the squad, or of every squad in its combined assault, so that
+	/// they strike on the same decision.
+	/// </summary>
 	private bool Assembled(int s, Vector3 staging, ReadOnlySpan<CommandUnit> units)
 	{
-		int members = _squads[s].Members;
-		if (members == 0)
-		{
-			return false;
-		}
-
+		int members = 0;
 		int present = 0;
 		for (int i = 0; i < units.Length; i++)
 		{
-			if (_unitSquad[i] == s && Flat(units[i].Position, staging) <= _traits.AssembleMeters)
+			int squad = _unitSquad[i];
+			if (squad < 0 || !Together(s, squad))
+			{
+				continue;
+			}
+
+			members++;
+			if (Flat(units[i].Position, staging) <= _traits.AssembleMeters)
 			{
 				present++;
 			}
 		}
 
-		return present >= MathF.Ceiling(_traits.AssembleShare * members);
+		return members > 0 && present >= MathF.Ceiling(_traits.AssembleShare * members);
 	}
 
 	/// <summary>

@@ -35,6 +35,7 @@ public static class SquadText
 	public static string Flags(AiSquad squad)
 	{
 		var text = new StringBuilder();
+		Append(text, squad.Flags, AiSquadFlags.Combined, "combined");
 		Append(text, squad.Flags, AiSquadFlags.Engaged, "engaged");
 		Append(text, squad.Flags, AiSquadFlags.FallingBack, "falling back");
 		Append(text, squad.Flags, AiSquadFlags.Depleted, "depleted");

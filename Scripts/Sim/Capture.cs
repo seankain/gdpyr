@@ -1,4 +1,5 @@
 using System;
+using Godot;
 
 namespace Gdpyr.Sim;
 
@@ -16,6 +17,31 @@ public enum NodeHolder : byte
 	GroundForce = 1,
 
 	Strategist = 2,
+}
+
+/// <summary>
+/// Who is standing on a node: the one presence rule, which the economy counts bodies
+/// with and the unit planner reads to know a unit is on the point it was sent to take
+/// (docs/HTN_BOTS.md §5.2). Horizontal distance with a height tolerance rather than a
+/// sphere: the pad is flat, a player crouched on it and a player standing on it are
+/// both on it, and a player on a roof four metres above it is not.
+/// </summary>
+public static class CapturePad
+{
+	/// <summary>Height a body may be above or below the pad and still be standing on it.</summary>
+	public const float VerticalToleranceMeters = 4f;
+
+	public static bool Covers(Vector3 centre, float radiusMeters, Vector3 position)
+	{
+		Vector3 to = position - centre;
+		if (MathF.Abs(to.Y) > VerticalToleranceMeters)
+		{
+			return false;
+		}
+
+		to.Y = 0f;
+		return to.LengthSquared() <= radiusMeters * radiusMeters;
+	}
 }
 
 /// <summary>

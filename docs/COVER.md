@@ -183,6 +183,7 @@ What it is about depends on the order:
 | Order | Cover from | Spot |
 |---|---|---|
 | Build | the nearest contact the side remembers within the unit's sensor | anything that hides it, low or high, within 15 m |
+| Attack on a control point (an attack naming no contact, at a point on a resource node) | the threat to the point, whatever the unit is shooting: the remembered contact nearest the node within 80 m, else the ground spawns | a low wall it can fire over, nearest the node's centre first: no further out than 2 m inside the capture radius for a unit that must stand on the point (`ControlPoint.Holds`: on the pad, one of the two lowest ids there; off it, while fewer than two are on it), up to 4 m outside it for the rest; and only once the unit is within 10 m of that bound, so a squad on its way keeps pace rather than running for a wall |
 | Attack, Defend, none, with a target | its target's feet | a low wall it can fire over, within 10 m, 6 m to its engage range from the target, inside its leash when it has one |
 | Defend, nothing to shoot | the ring's threat, as its posts face it: the nearest remembered contact within 80 m of the anchor, else the ground spawns | a low wall across its ring, nearest its own post first, no more than 2.6 m outside the ring (as far as a wall laid for the ring puts it), so a squad holding a node stays inside the capture radius; it becomes the unit's post |
 
@@ -196,6 +197,9 @@ build                          [Order=Build]
 └─ work
 attack                         [Order=Attack]
 ├─ wait for squad
+├─ hold the point from cover   [Objective ∧ Cover≠none]  HoldPointCover {Objective, Cover≠none, Order}
+├─ hold the point              [Objective ∧ OnObjective]  HoldPoint: its post on the point, standing to fight
+├─ take the point              [Objective]  TakePoint: onto its post, firing on the way, keeping pace
 ├─ engage from cover           [Contact=own ∧ Cover≠none]  HoldCover {Contact=own, Cover≠none, Order}
 ├─ engage focus                …
 defend zone                    [Order∈{Defend,None}]
@@ -204,8 +208,10 @@ defend zone                    [Order∈{Defend,None}]
 └─ hold post                   the post, now behind a wall when there is one
 ```
 
-`HoldCover` walks to the spot firing (it does not stop to fight on the way) and stands to fight once
-in it. A move order and a patrol are never second-guessed for cover. Supply trucks take no part.
+`HoldCover` and `HoldPointCover` walk to the spot firing (they do not stop to fight on the way) and
+stand to fight once in it. On `Scenes/Test.tscn` no spot behind a map box lies inside any node's
+capture radius (the nearest are 2.4–5 m outside), so a unit that must stand on a point there has cover
+only behind a sandbag wall on it; the others fight from the walls just off it. A move order and a patrol are never second-guessed for cover. Supply trucks take no part.
 
 ---
 

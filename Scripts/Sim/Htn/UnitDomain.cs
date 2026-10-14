@@ -73,6 +73,20 @@ public enum UnitFact : byte
 	/// </summary>
 	Cover,
 
+	/// <summary>
+	/// Its order is an attack on a control point: an attack that names no contact,
+	/// at a point on a resource node (<see cref="CapturePad"/>). The point is to be
+	/// taken and held: the unit goes onto it, fights from cover there when there is
+	/// any, and does not chase what it sees off it.
+	/// </summary>
+	Objective,
+
+	/// <summary>
+	/// It is on that point: entered <see cref="UnitPlanTraits.ObjectiveEnterMeters"/>
+	/// inside the edge, held to the edge, which is where it stops counting.
+	/// </summary>
+	OnObjective,
+
 	Count,
 }
 
@@ -118,6 +132,15 @@ public enum UnitGoal : byte
 
 	/// <summary>To a spot behind a low wall from its target, firing on the way; in it, it stands and fights (docs/COVER.md §6).</summary>
 	HoldCover,
+
+	/// <summary>Onto the control point its attack is on, to its post there, firing on the way and keeping pace with its squad.</summary>
+	TakePoint,
+
+	/// <summary>On the point: to its post there, and standing to fight whatever it sees from it.</summary>
+	HoldPoint,
+
+	/// <summary>To its spot behind cover on or beside the point, firing on the way; in it, it stands and fights.</summary>
+	HoldPointCover,
 }
 
 /// <summary>How the unit manager picks where to walk for an intent.</summary>
@@ -225,11 +248,27 @@ public readonly struct UnitPlanTraits
 	/// <summary>…and how long after that the unit goes back to its order before it tries again.</summary>
 	public readonly int ResupplyRetryTicks;
 
+	/// <summary>How far inside a control point's edge a unit taking it counts as on it; it stays on it to the edge.</summary>
+	public readonly float ObjectiveEnterMeters;
+
+	/// <summary>
+	/// How many of the units taking a point must stand on it. Presence is boolean — one
+	/// body takes a node — so the rest may fight from cover just off it (<see cref="ControlPoint"/>).
+	/// </summary>
+	public readonly int HoldersPerPoint;
+
+	/// <summary>How far outside a point's edge a unit that need not stand on it may take cover to fight for it.</summary>
+	public readonly float PointCoverSlackMeters;
+
+	/// <summary>How much further in than it has to be a post or a holder's cover on the point is: what a shove does not undo.</summary>
+	public readonly float PointPostMarginMeters;
+
 	public UnitPlanTraits(float healthOkFraction, float healthCriticalFraction, float healthHysteresis,
 		float engagedFriendMeters, float paceAheadMeters, float paceResumeMeters, int paceMaxWaitTicks,
 		float postSpacingMeters, float postMinRadiusMeters, float postLeashShare, int underFireTicks,
 		float threatBearingMeters, float resupplyDoneFraction, float supplyRangeMeters,
-		float supplyRangeHysteresisMeters, float supplyMarginMeters, int resupplyMaxTicks, int resupplyRetryTicks)
+		float supplyRangeHysteresisMeters, float supplyMarginMeters, int resupplyMaxTicks, int resupplyRetryTicks,
+		float objectiveEnterMeters, int holdersPerPoint, float pointCoverSlackMeters, float pointPostMarginMeters)
 	{
 		HealthOkFraction = healthOkFraction;
 		HealthCriticalFraction = healthCriticalFraction;
@@ -249,6 +288,10 @@ public readonly struct UnitPlanTraits
 		SupplyMarginMeters = MathF.Max(supplyMarginMeters, 0f);
 		ResupplyMaxTicks = Math.Max(resupplyMaxTicks, 1);
 		ResupplyRetryTicks = Math.Max(resupplyRetryTicks, 0);
+		ObjectiveEnterMeters = MathF.Max(objectiveEnterMeters, 0f);
+		HoldersPerPoint = Math.Max(holdersPerPoint, 1);
+		PointCoverSlackMeters = MathF.Max(pointCoverSlackMeters, 0f);
+		PointPostMarginMeters = MathF.Max(pointPostMarginMeters, 0f);
 	}
 
 	/// <summary>
@@ -257,7 +300,9 @@ public readonly struct UnitPlanTraits
 	/// posts stand 4 m apart on a ring of at least 4 m and at most half the leash.
 	/// A unit out of ok health goes to a supply source within 60 m of its reach, stops
 	/// 3 m inside it and comes back at 95 %; a resupply that has not finished in 60 s
-	/// is dropped for 30 s.
+	/// is dropped for 30 s. A unit taking a point counts as on it 1 m inside its
+	/// edge; two stand on it, and the rest may take cover up to 4 m outside it; posts
+	/// and a holder's cover are a metre further in than they have to be.
 	/// </summary>
 	public static UnitPlanTraits Default => new(
 		healthOkFraction: 0.6f,
@@ -277,7 +322,11 @@ public readonly struct UnitPlanTraits
 		supplyRangeHysteresisMeters: 10f,
 		supplyMarginMeters: 3f,
 		resupplyMaxTicks: SimConfig.TickRate * 60,
-		resupplyRetryTicks: SimConfig.TickRate * 30);
+		resupplyRetryTicks: SimConfig.TickRate * 30,
+		objectiveEnterMeters: 1f,
+		holdersPerPoint: 2,
+		pointCoverSlackMeters: 4f,
+		pointPostMarginMeters: 1f);
 }
 
 /// <summary>
@@ -320,6 +369,12 @@ public struct UnitSense
 
 	/// <summary>The box beside that spot hid it from the threat when the scan looked.</summary>
 	public bool CoverHides;
+
+	/// <summary>
+	/// Its order is an attack on the control point at <see cref="UnitContext.ObjectivePoint"/>,
+	/// which the scan has filled in with the point's radius and the unit's post on it.
+	/// </summary>
+	public bool Objective;
 }
 
 /// <summary>
@@ -341,6 +396,7 @@ public sealed class UnitContext : BaseContext
 	private bool _coverHides;
 	private bool _hasTarget;
 	private Vector3 _targetPoint;
+	private bool _objective;
 	private uint _paceTick = uint.MaxValue;
 
 	public UnitContext(IFactory factory, in UnitPlanTraits traits, in UnitTraits unitTraits)
@@ -417,6 +473,13 @@ public sealed class UnitContext : BaseContext
 	public bool HasCoverPoint;
 	public Vector3 CoverPoint;
 
+	/// <summary>The control point its attack is on: the node's centre and capture radius. Only with <see cref="UnitFact.Objective"/>.</summary>
+	public Vector3 ObjectivePoint;
+	public float ObjectiveRadius;
+
+	/// <summary>Its post on that point, inside the radius by what keeps it counting there.</summary>
+	public Vector3 ObjectivePost;
+
 	/// <summary>A resupply was given up on: <see cref="UnitFact.Supply"/> stays off until this tick.</summary>
 	public uint SupplyRetryTick;
 
@@ -434,6 +497,9 @@ public sealed class UnitContext : BaseContext
 
 	/// <summary>A wait ran out: this advance no longer waits for its squad.</summary>
 	public bool PaceGivenUp;
+
+	/// <summary>The goals that keep pace with the squad, and whose <see cref="Waiting"/> means it is waiting for it.</summary>
+	public static bool Paces(UnitGoal goal) => goal is UnitGoal.Advance or UnitGoal.TakePoint;
 
 	/// <summary>What its planner has done lately, for the spectator's debugger (docs/AI_DEBUG.md §3.3). Null for a context made outside <see cref="UnitPlanning"/>.</summary>
 	public HtnHistory History { get; internal set; }
@@ -474,10 +540,12 @@ public sealed class UnitContext : BaseContext
 
 		_hasCover = sense.HasCover && HasCoverPoint;
 		_coverHides = sense.CoverHides;
+		_objective = sense.Objective;
 
 		SenseContact();
 		SenseLeash();
 		SenseCover();
+		SenseObjective();
 	}
 
 	/// <summary>
@@ -497,6 +565,23 @@ public sealed class UnitContext : BaseContext
 		SenseContact();
 		SenseLeash();
 		SenseCover();
+		SenseObjective();
+	}
+
+	/// <summary>
+	/// The point, every tick: the scan says which point the order is on, and the order
+	/// as it stands now must still be an attack on it — a new order is a new plan on the
+	/// tick it comes, not at the next scan. On it from <see cref="UnitPlanTraits.ObjectiveEnterMeters"/>
+	/// inside the edge, and to the edge, by the rule the economy counts bodies with.
+	/// </summary>
+	private void SenseObjective()
+	{
+		bool objective = _objective && Order.Kind == OrderKind.Attack && Order.TargetOwnerId == OwnerId.None
+			&& CapturePad.Covers(ObjectivePoint, ObjectiveRadius, Order.Target);
+		Sense(UnitFact.Objective, objective);
+
+		float edge = MathF.Max(Is(UnitFact.OnObjective) ? ObjectiveRadius : ObjectiveRadius - Traits.ObjectiveEnterMeters, 0f);
+		Sense(UnitFact.OnObjective, objective && CapturePad.Covers(ObjectivePoint, edge, Position));
 	}
 
 	/// <summary>
@@ -631,6 +716,17 @@ public sealed class UnitContext : BaseContext
 
 			case UnitGoal.HoldPost:
 				return Order.Kind == OrderKind.Defend && HasPost ? Go(PostPoint, stopToFight: true) : FollowOrder();
+
+			case UnitGoal.TakePoint:
+				// Onto the point without stopping for what it sees: it fires on the way, and
+				// it is on the point that it stands to fight.
+				return KeepsPace() ? Hold() : Go(ObjectivePost, stopToFight: false);
+
+			case UnitGoal.HoldPoint:
+				return Go(ObjectivePost, stopToFight: true);
+
+			case UnitGoal.HoldPointCover:
+				return Get(UnitFact.Cover) == (byte)CoverState.In ? Hold() : Go(CoverPoint, stopToFight: false);
 
 			default:
 				return TaskStatus.Failure;
@@ -904,6 +1000,24 @@ public static class UnitDomain
 					.If(UnitFact.SquadPhase, SquadPhase.Gathering)
 					.Act(UnitGoal.WaitForSquad).While(UnitFact.SquadPhase, SquadPhase.Gathering)
 						.While(UnitFact.Order, OrderKind.Attack).End()
+				.End()
+				// An attack on a control point takes it: onto it, from cover there when there
+				// is any, and without chasing what it sees off it — above the fights below.
+				.Sequence("hold the point from cover")
+					.If(UnitFact.Objective)
+					.IfNot(UnitFact.Cover, CoverState.None)
+					.Act(UnitGoal.HoldPointCover).While(UnitFact.Objective).WhileNot(UnitFact.Cover, CoverState.None)
+						.While(UnitFact.Order, OrderKind.Attack).End()
+				.End()
+				.Sequence("hold the point")
+					.If(UnitFact.Objective)
+					.If(UnitFact.OnObjective)
+					.Act(UnitGoal.HoldPoint).While(UnitFact.Objective).While(UnitFact.OnObjective)
+						.While(UnitFact.Order, OrderKind.Attack).End()
+				.End()
+				.Sequence("take the point")
+					.If(UnitFact.Objective)
+					.Act(UnitGoal.TakePoint).While(UnitFact.Objective).While(UnitFact.Order, OrderKind.Attack).End()
 				.End()
 				.Sequence("engage from cover")
 					.If(UnitFact.Contact, UnitContact.Own)

@@ -650,13 +650,81 @@ commander's builder lays sandbags for every squad reinforcing a zone before it f
 node, and for the garrison once it has a pillbox (`DigIn`, COVER.md §7). Under `htn` a bot or
 unit whose target's middle is hidden aims at its head (COVER.md §3). Legacy is unchanged (D5).
 
+**Combined assaults, after H6** (`Commander.Combine`). Before this, Attack went only to an idle,
+ready squad that alone was 1.5 times the estimate at a target, and two squads never shared one; every
+other squad got a Defend order — Hold at the reserve point, or the garrison's at home — so its units
+planned "hold post" and "engage in leash" round a point that took nothing, and a strategist whose
+squads were each too weak alone never attacked again — a garrison of four (200) and a tank left on
+its own (400) each hold against a node three players hold (450 needed), though together they are
+600. The assignment now has a second pass, after the single-squad one:
+
+| Where | Built | Why |
+|---|---|---|
+| Who | Squads free to go, in turn: idle assault squads that are ready and not depleted; then the squad still forming, unless it is technicals only; then the garrison, at home, while home is quiet — its barracks not contested and no enemy remembered within 60 m (`ThreatMeters`, Defend Zone's threat). | Ready squads first because they are what Attack is for. The squad still forming is a group of units holding at home, as the garrison is; the garrison last, because it is home's defence. A technical alone in the squad forming is the next scout, as the garrison keeps technicals out for: in `htn_recon_finds_contact` seed 2 one went out with the garrison before recon was wanted, could not be recruited from an attack, and the scenario failed. |
+| Where to | The nearest node to the pool's centroid, a denied one before a neutral one, that no squad attacks and that all of them together are 1.5 times (`AttackRatio`, the single-squad rule). Live contacts are not: a pooled stage on a target that moves is a stage that never assembles. | Control points are what income comes from, and the H6 rounds were lost on income. |
+| How many | The fewest that beat it, nearest the node first in each turn; then again with the squads left, for another node. At least two squads and at least `AssaultSquadSize` units: when the fewest that beat it are one squad, or fewer units, the next in turn goes too — so the squad still forming never goes alone, but with the garrison. | A squad left at home is one fewer to send elsewhere; and "forms at four before it attacks" (§5.3) still holds of what is sent. A first version sent nothing when the fewest were the squad still forming alone; in a bot-only round that kept a tank, alone in that squad, and the garrison at home from 39 s for the rest of the round, every node estimated at 0 — the fog saw nobody at any of them. |
+| Together | One staging point, short of the node from the squads' centroid, and the same attack order, so on the `SquadBoard` they are one squad (§4.3) whose units keep pace with each other. Each carries the lowest slot among them (`Lead`); `Assembled` counts all their units, so they strike on the same decision, or all after the stage's 30 s. | Two squads striking a decision apart arrive a squad at a time. |
+| After | The squad still forming is ready once sent, so production forms another. A squad that depletes, falls back or loses its target leaves the assault and the rest go on. | |
+| Garrison | Out on an assault: no production joins it (a unit produced at home would walk out after it alone); Retreat applies to it as to any squad; the moment home is not quiet it is ordered home, and when the assault ends it goes home. | §5.3's garrison is a standing defence; it leaves only while nothing threatens what it defends. |
+
+**A new round starts unseen.** `BotStrategist` cleared the commander when a decision saw a round
+end, but kept its `ZoneBoard`, and an agent's `reset` starts the next round with no decision in
+between. So each round began with when the last one had seen each node: Recon's "a node unseen for
+60 s" at the first decision depended on the round before, which on a fresh server it does not. In
+the baseline every later seed of `htn_recon_finds_contact` still scouted at once, because some
+node had gone unseen for 60 s by the end of the seed before; with combined assaults every node had
+been seen, recon waited 20 s for quiet, and in seeds 2 to 6 of six infantry found the hider before
+the technical did. A round with a new `MatchState.StartTick` now clears the commander, its
+announcements and the board, whichever way the last one ended.
+
+**Measured.** Bot-only rounds: five `htn` ground bots and the idle seat in the far corner against
+one `htn` computer strategist, 5 minutes, seeds 1–4, headless Godot 4.6 .NET, read off the event
+stream (a scenario not committed). "Squad time" is the commanders' squads' time on each goal, from
+`squad_task`. The middle column is the baseline with only the new-round reset above, so the last two
+differ by the combined assaults alone:
+
+| Per seed | Baseline (`8372bc6`) | Baseline + new-round reset | Combined assaults + reset |
+|---|---|---|---|
+| Nodes the strategist took | 0, 0, 0, 0 | 0, 0, 0, 0 | 1, 0, 2, 3 |
+| Share of node-time it held | 0 % in every seed | 0 % in every seed | 21.6, 0, 16.2, 14.9 % |
+| Strikes (`squad_task` goal 4) | 1, 1, 0, 0 | 1, 1, 0, 1 | 9, 2, 9, 6 |
+| Last stage or strike | 73 s, 74 s, none, none | 73 s, 80 s, none, 73 s | 287 s, 48 s, 298 s, 154 s |
+| Squad time on stage and strike | 14, 8, 0, 0 % | 5, 6, 0, 3 % | 56, 25, 39, 37 % |
+| Squad time on hold | 28, 34, 32, 42 % | 37, 36, 43, 39 % | 5, 46, 7, 4 % |
+| Units built | 10 each | 10 each | 24, 10, 26, 22 |
+| Ground players killed | 12, 10, 0, 1 | 3, 7, 0, 2 | 34, 10, 32, 10 |
+| Strategist units lost | 4, 4, 1, 4 | 4 each | 16, 8, 13, 17 |
+
+In seed 2 the assaults it made by 48 s took no node, so no income came, and what it had left held
+for the rest of the round. Rounds are real time and the bots are
+not deterministic; four seeds a column say the direction, not the size.
+
+**`htn_strategist_defends_node` and fresh rounds.** Its seeds 2 and 3 passed because they began
+with seed 1's commander state; seed 1, always fresh, passes on every build. With every seed fresh
+(the reset above) it takes all three nodes in 60 s in 3 of 6 seeds on the baseline — the west node
+is not taken in the other three — and in 2 of 6 with combined assaults, where the far node is not.
+With combined assaults the west node falls at about 14 s, before the builder is out, so `Fortify`,
+which puts held nodes first, sends the builder there rather than on the trip to the far node that
+takes it in the baseline; and the squad given the far node at 14 s stays 50–60 m short of it for
+the rest of the minute, its units engaging the raider each time it respawns — killed nine times
+between 19 s and 59 s — because "engage focus" is above "advance" in the unit's Attack (§5.2). The
+scenario was not changed: on this build `./scripts/playtest.sh Tests/Scenarios/*.json` passes 18 of
+19, and it is the one that fails (seed 2, two nodes).
+
+The spectator's squad table shows such a squad as `combined` (`AiSquadFlags.Combined`). Tests:
+thirteen in `CommanderHtnTests`. Checked to fail, then reverted: without the pass, 10 fail; with each
+squad assembling on its own, 1; with production joining a garrison that is out, 1; with the garrison
+never retreating, 1; with it not recalled when home is threatened, 1; with it joining while home is
+threatened, 1; stopping at the fewest that beat the node, 1; without the two-squad and unit-count
+rule, 1; with a squad forming of technicals only sent, 1.
+
 ### 5.4 The five tasks at each layer
 
 | Task | Ground bot | RTS unit | Strategist commander |
 |---|---|---|---|
 | **Defend Zone** | Hold a strategist node to stop its income (denier role) | Spread to posts round the anchor, answer friends' fights inside the leash | Send a squad sized to the threat to a contested node or barracks |
 | **Recon** | Sweep the least-recently-seen node; investigate ghosts | Patrol without stopping for contacts it can report | One technical through stale zones on a patrol |
-| **Attack** | Focus the coordinator's target with a buddy; armour only with an explosive | Wait for the squad, then focus fire; support engaged friends | Stage out of sight, strike when assembled, escort armour |
+| **Attack** | Focus the coordinator's target with a buddy; armour only with an explosive | Wait for the squad, then focus fire; support engaged friends | Stage out of sight, strike when assembled, escort armour; squads too weak alone take a node together |
 | **Retreat** | Leave barracks defences; fall back to teammates when critical and outnumbered | Back to friends when critical and outnumbered (autonomous stance only) | Pull a losing squad back to a held zone and merge |
 | **Resupply** | Locker run for a launcher when armour is known; reload between fights | Heal inside the barracks ring or at a supply truck (D2, H5) | Refill a depleted squad from production, or heal it at the nearest supply source; station the supply trucks (D2, H5) |
 

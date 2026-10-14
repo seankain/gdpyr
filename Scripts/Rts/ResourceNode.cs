@@ -45,9 +45,6 @@ public partial class ResourceNode : Node3D
 	/// <summary>The engine-free view of the four numbers above, in ticks.</summary>
 	public CaptureRules Rules { get; private set; }
 
-	/// <summary>Height a body may be above or below the pad and still be standing on it.</summary>
-	private const float VerticalToleranceMeters = 4f;
-
 	private MeshInstance3D _pad;
 	private StandardMaterial3D _material;
 	private NodeHolder _painted = NodeHolder.Neutral;
@@ -67,24 +64,8 @@ public partial class ResourceNode : Node3D
 		Repaint();
 	}
 
-	/// <summary>
-	/// Whether a body at <paramref name="position"/> is standing on this node.
-	///
-	/// Horizontal distance with a height tolerance rather than a sphere: the pad is
-	/// flat, a player crouched on it and a player standing on it are both on it, and
-	/// a player on a roof four metres above it is not.
-	/// </summary>
-	public bool Covers(Vector3 position)
-	{
-		Vector3 to = position - GlobalPosition;
-		if (Mathf.Abs(to.Y) > VerticalToleranceMeters)
-		{
-			return false;
-		}
-
-		to.Y = 0f;
-		return to.LengthSquared() <= CaptureRadiusMeters * CaptureRadiusMeters;
-	}
+	/// <summary>Whether a body at <paramref name="position"/> is standing on this node (<see cref="CapturePad"/>).</summary>
+	public bool Covers(Vector3 position) => CapturePad.Covers(GlobalPosition, CaptureRadiusMeters, position);
 
 	/// <summary>Colours the pad for whoever holds it. Presentation only; called on every process.</summary>
 	public void Repaint()

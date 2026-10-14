@@ -97,6 +97,9 @@ public sealed class BotStrategist
 	/// <summary>The zone the commander wants fortified first, as a node index; -1 for none.</summary>
 	private int _priorityNode = -1;
 
+	/// <summary>The round the commander's knowledge is from, by its start tick.</summary>
+	private uint _roundStart;
+
 	private readonly int _claimTicks;
 
 	public BotStrategist(int peerId, in StrategistTraits traits, CommanderPlanning planning = null)
@@ -169,6 +172,18 @@ public sealed class BotStrategist
 
 		if (_commander != null)
 		{
+			// A new round, whether or not a decision saw the last one end — an agent's
+			// reset starts the next at once. What the side saw last round it has not seen
+			// in this one: every zone is unseen again, as on a fresh server, and Recon
+			// reads that (docs/HTN_BOTS.md §5.3).
+			if (combat.Match.StartTick != _roundStart)
+			{
+				_roundStart = combat.Match.StartTick;
+				_commander.Clear();
+				_zones.Clear();
+				Array.Clear(_announced);
+			}
+
 			// The commander decides first, so the node it wants fortified is this
 			// decision's; the orders go out after the points are spent, as legacy's do.
 			Decide(tick, combat, units);
