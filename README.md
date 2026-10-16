@@ -23,6 +23,8 @@ dedicated-server authoritative.
   graph and lines in the world
 - [`docs/DEMOS.md`](docs/DEMOS.md) — recording a round and watching it back: the console, the
   journal, and what playback does with it
+- [`docs/VEHICLES.md`](docs/VEHICLES.md) — the plan for vehicles that carry units: the technical
+  with seats, boarding and unloading, and a vertical take-off and landing dropship (not built yet)
 - [`docs/LAN.md`](docs/LAN.md) — hosting a room of machines from a checkout, with a dev build
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — AWS EC2 dedicated-server runbook
 
