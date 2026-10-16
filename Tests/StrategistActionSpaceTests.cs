@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Gdpyr.AgentClient;
 using Xunit;
@@ -250,6 +251,45 @@ public class StrategistActionSpaceTests
 		// Column and row 0 is the bottom-left cell, which unit 11 is standing in.
 		Assert.Equal(new[] { 11 }, Assert.Single(Decode(0, 0, 3, 1, 0, 0)).Units);
 		Assert.Equal(new[] { 13 }, Assert.Single(Decode(0, 0, 4, 1, 0, 0)).Units);
+	}
+
+	[Theory]
+	[InlineData(1)] // all
+	[InlineData(2)] // idle
+	[InlineData(3)] // near the cell
+	[InlineData(4)] // far from it
+	[InlineData(5)] // damaged
+	[InlineData(6)] // armor
+	[InlineData(7)] // infantry
+	public void ARiderIsInNoGroup(int group)
+	{
+		// docs/VEHICLES.md §10: a passenger, damaged and idle so that every predicate
+		// would take it, beside its technical. No group names it; the truck it is in is
+		// named where its group says.
+		GdpyrSchema schema = Schema();
+		var army = new List<GdpyrUnit>
+		{
+			new() { Id = 31, Alive = true, Tier = 1, X = 0f, Z = 0f, Health = 0.3f, Order = 0, Seats = 4, Aboard = 1 },
+			new() { Id = 32, Alive = true, Tier = 0, X = 0f, Z = 0f, Health = 0.3f, Order = 7, RidingIn = 31 },
+		};
+		var into = new List<GdpyrCommand>();
+
+		new StrategistActionSpace(schema).Decode(new[] { 0, 0, group, 1, 4, 4 }, Map(schema), army, into);
+
+		Assert.DoesNotContain(into, command => command.Units != null && Array.IndexOf(command.Units, 32) >= 0);
+	}
+
+	[Fact]
+	public void TheVehicleCommandsWriteWhatTheServerParses()
+	{
+		GdpyrCommand embark = GdpyrCommand.Embark(new[] { 3, 4 }, 12);
+		Assert.Equal("embark", embark.Cmd);
+		Assert.Equal(12, embark.Vehicle);
+		Assert.Equal(new[] { 3, 4 }, embark.Units);
+
+		GdpyrCommand unload = GdpyrCommand.Unload(new[] { 12 });
+		Assert.Equal("unload", unload.Cmd);
+		Assert.Equal(new[] { 12 }, unload.Units);
 	}
 
 	[Fact]

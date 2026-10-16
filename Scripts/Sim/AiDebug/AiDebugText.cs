@@ -1,3 +1,4 @@
+using System;
 using System.Text;
 using Gdpyr.Sim.Htn;
 
@@ -98,6 +99,18 @@ public static class AiDebugText
 				inspect.TryValue(AiValueKey.Issuer, out int issuer);
 				text.Append($" · unit · {(OrderKind)order} order from {(issuer == 0 ? "nobody" : BotRoster.NameOf(issuer))}"
 					+ $" · health {health}%");
+
+				// docs/VEHICLES.md §10: a passenger plans nothing while it rides, so this is
+				// the line that says why its plan is empty.
+				if (inspect.TryValue(AiValueKey.RidingIn, out int vehicle))
+				{
+					text.Append($" · riding in {AiEntityRef.Unit((ushort)Math.Clamp(vehicle, 0, ushort.MaxValue))}");
+				}
+				else if (inspect.TryValue(AiValueKey.Seats, out int seats))
+				{
+					inspect.TryValue(AiValueKey.Aboard, out int aboard);
+					text.Append($" · aboard {aboard}/{seats}");
+				}
 				if (inspect.TryValue(AiValueKey.Commander, out int commander)
 					&& inspect.TryValue(AiValueKey.CommanderSquad, out int slot))
 				{

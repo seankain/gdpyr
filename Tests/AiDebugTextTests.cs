@@ -192,6 +192,45 @@ public class AiDebugTextTests
 	}
 
 	[Fact]
+	public void APassenger_SaysWhatItIsRidingIn_AndAVehicle_WhoIsAboard()
+	{
+		// docs/VEHICLES.md §10.
+		var rider = new AiInspect { Ref = AiEntityRef.Unit(8) };
+		rider.Add(AiValueKey.Order, (int)OrderKind.Embark);
+		rider.Add(AiValueKey.Health, 100);
+		rider.Add(AiValueKey.RidingIn, 12);
+
+		var truck = new AiInspect { Ref = AiEntityRef.Unit(12) };
+		truck.Add(AiValueKey.Order, (int)OrderKind.None);
+		truck.Add(AiValueKey.Health, 90);
+		truck.Add(AiValueKey.Seats, 4);
+		truck.Add(AiValueKey.Aboard, 3);
+
+		var walker = new AiInspect { Ref = AiEntityRef.Unit(9) };
+		walker.Add(AiValueKey.Order, (int)OrderKind.Embark);
+		walker.Add(AiValueKey.Health, 100);
+
+		Assert.Contains("riding in unit 12", AiDebugText.Header(rider, new AiDebugFrame(), HtnTextStyle.Plain));
+		Assert.Contains("aboard 3/4", AiDebugText.Header(truck, new AiDebugFrame(), HtnTextStyle.Plain));
+		string walking = AiDebugText.Header(walker, new AiDebugFrame(), HtnTextStyle.Plain);
+		Assert.Contains("Embark order", walking);
+		Assert.DoesNotContain("riding", walking);
+		Assert.DoesNotContain("aboard", walking);
+	}
+
+	[Fact]
+	public void TheVehicleKeys_AreAppended()
+	{
+		// Byte enums on the debug wire: appended, so AiDebugCodec.Version stays 1.
+		Assert.Equal(19, (int)AiMarkerKey.Vehicle);
+		Assert.Equal(17, (int)AiValueKey.RidingIn);
+		Assert.Equal(18, (int)AiValueKey.Aboard);
+		Assert.Equal(19, (int)AiValueKey.Seats);
+		Assert.Equal(20, (int)AiValueKey.Altitude);
+		Assert.Equal(1, AiDebugCodec.Version);
+	}
+
+	[Fact]
 	public void Owners_AreNamedByWhatTheyAre()
 	{
 		Assert.Equal("nothing", AiDebugText.Owner(OwnerId.None));

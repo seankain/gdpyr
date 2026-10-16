@@ -122,6 +122,8 @@ public sealed class EpisodeMetrics
 		"squad_task" => "goal",
 		"contact_spotted" => "observer",
 		"node_contested" => "ticks",
+		"unit_embarked" or "unit_disembarked" => "tier",
+		"dropship_landed" => "aboard",
 		_ => null,
 	};
 
@@ -290,7 +292,7 @@ public sealed class EpisodeMetrics
 	{
 		"round_start", "round_end", "kill", "damage", "unit_built", "unit_lost", "node_captured",
 		"seat_attached", "seat_released", "structure_placed", "structure_built", "structure_lost",
-		"squad_task", "contact_spotted", "node_contested",
+		"squad_task", "contact_spotted", "node_contested", "unit_embarked", "unit_disembarked", "dropship_landed",
 	};
 
 	/// <summary>
@@ -315,6 +317,9 @@ public sealed class EpisodeMetrics
 		["squad_task"] = new[] { "strategist", "squad", "goal", "x", "z" },
 		["contact_spotted"] = new[] { "peer", "observer", "first", "x", "z" },
 		["node_contested"] = new[] { "node", "owner", "contested", "ticks" },
+		["unit_embarked"] = new[] { "unit", "vehicle", "tier", "x", "z" },
+		["unit_disembarked"] = new[] { "unit", "vehicle", "tier", "x", "z" },
+		["dropship_landed"] = new[] { "unit", "aboard", "x", "z" },
 	};
 
 	/// <summary>

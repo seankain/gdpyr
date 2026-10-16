@@ -35,6 +35,15 @@ public enum AgentEventKind : byte
 	/// being, with how long it was (docs/IMPLEMENTATION_PLAN.md §M5, H6).
 	/// </summary>
 	NodeContested = 14,
+
+	/// <summary>A unit got into a vehicle (docs/VEHICLES.md §10).</summary>
+	UnitEmbarked = 15,
+
+	/// <summary>A unit got out of a vehicle: an unload, or thrown out alive from a wreck.</summary>
+	UnitDisembarked = 16,
+
+	/// <summary>A dropship touched down, with how many were aboard (V6).</summary>
+	DropshipLanded = 17,
 }
 
 /// <summary>
@@ -103,13 +112,18 @@ public static class AgentEventSchema
 		// Who holds the node; 1 when the contest starts and 0 when it ends; and for an
 		// end, the ticks it lasted. One that the round ends in the middle of has no end.
 		new[] { "node", "owner", "contested", "ticks", "" },                                  // NodeContested
+		// The passenger, the vehicle it got into or out of, the passenger's tier, and
+		// where it was: at the vehicle for a boarding, at the place it got out for the other.
+		new[] { "unit", "vehicle", "tier", "x", "z" },                                         // UnitEmbarked
+		new[] { "unit", "vehicle", "tier", "x", "z" },                                         // UnitDisembarked
+		new[] { "unit", "aboard", "", "x", "z" },                                              // DropshipLanded
 	};
 
 	private static readonly string[] Kinds =
 	{
 		"round_start", "round_end", "kill", "damage", "unit_built", "unit_lost", "node_captured",
 		"seat_attached", "seat_released", "structure_placed", "structure_built", "structure_lost",
-		"squad_task", "contact_spotted", "node_contested",
+		"squad_task", "contact_spotted", "node_contested", "unit_embarked", "unit_disembarked", "dropship_landed",
 	};
 
 	/// <summary>The highest kind there is. Everything from 0 to this has a name and a slate of fields.</summary>

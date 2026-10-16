@@ -4,6 +4,7 @@ using Gdpyr.Core;
 using Gdpyr.Match;
 using Gdpyr.Net;
 using Gdpyr.Sim;
+using Gdpyr.Sim.Agent;
 using Gdpyr.Sim.Htn;
 using Godot;
 
@@ -438,7 +439,7 @@ public partial class UnitManager
 		float unitRadius = RadiusOf(unit);
 		if (Cargo.InReach(vehicle.GlobalPosition, vehicleRadius, unit.GlobalPosition, unitRadius))
 		{
-			return Board(unit, vehicle);
+			return Board(unit, vehicle, tick);
 		}
 
 		unit.Order.Target = Cargo.StandOff(vehicle.GlobalPosition, unit.GlobalPosition, vehicleRadius, unitRadius);
@@ -468,8 +469,11 @@ public partial class UnitManager
 		return null;
 	}
 
-	/// <summary>Puts a unit in its seat: hidden, solid to nothing, out of its squad and its cover, shooting at nothing.</summary>
-	private bool Board(Unit unit, Unit vehicle)
+	/// <summary>
+	/// Puts a unit in its seat: hidden, solid to nothing, out of its squad and its cover,
+	/// shooting at nothing — and says so on the agent event stream (<c>unit_embarked</c>).
+	/// </summary>
+	private bool Board(Unit unit, Unit vehicle, uint tick)
 	{
 		if (!vehicle.Cargo.TryAdd(unit.UnitId))
 		{
@@ -490,6 +494,9 @@ public partial class UnitManager
 		unit.AimsHigh = false;
 		Suppression.Clear(ref unit.LastSeen);
 		unit.Order.Target = vehicle.GlobalPosition;
+
+		AgentEventBus.Emit(AgentEventKind.UnitEmbarked, tick, unit.UnitId, vehicle.UnitId, unit.DefinitionId,
+			vehicle.GlobalPosition.X, vehicle.GlobalPosition.Z);
 		return true;
 	}
 
@@ -630,7 +637,7 @@ public partial class UnitManager
 
 			if (TryExitSlot(vehicle, rider, tick, out Vector3 slot))
 			{
-				GetOut(vehicle, rider, slot, vehicle.OrderIssuer, tick);
+				GetOut(vehicle, rider, slot, vehicle.OrderIssuer, tick, announce: true);
 				continue;
 			}
 
@@ -643,9 +650,11 @@ public partial class UnitManager
 	/// shown, solid, still, holding there on <paramref name="issuer"/>'s word — so a
 	/// person's claim on it follows whoever let it out — and in no squad until its next
 	/// order, as a fresh unit at its door is. Its path is asked for afresh: the one it
-	/// had starts where it got in.
+	/// had starts where it got in. <paramref name="announce"/> puts a <c>unit_disembarked</c>
+	/// on the agent event stream: for every rider that gets out alive, and not for one put
+	/// at a wreck only to be killed there.
 	/// </summary>
-	private void GetOut(Unit vehicle, Unit rider, Vector3 at, int issuer, uint tick)
+	private void GetOut(Unit vehicle, Unit rider, Vector3 at, int issuer, uint tick, bool announce)
 	{
 		vehicle?.Cargo?.Remove(rider.UnitId);
 		rider.RidingIn = 0;
@@ -660,6 +669,12 @@ public partial class UnitManager
 		rider.ForceRepath();
 		ResetPlan(rider);
 		TakeExitSlot(at, RadiusOf(rider), tick);
+
+		if (announce)
+		{
+			AgentEventBus.Emit(AgentEventKind.UnitDisembarked, tick, rider.UnitId, vehicle?.UnitId ?? 0,
+				rider.DefinitionId, at.X, at.Z);
+		}
 	}
 
 	/// <summary>
@@ -684,12 +699,12 @@ public partial class UnitManager
 		Vector3 wreck = vehicle?.GlobalPosition ?? rider.GlobalPosition;
 		if (survivable && vehicle != null && TryExitSlot(vehicle, rider, tick, out Vector3 slot))
 		{
-			GetOut(vehicle, rider, slot, rider.OrderIssuer, tick);
+			GetOut(vehicle, rider, slot, rider.OrderIssuer, tick, announce: true);
 			placed = true;
 			return rider;
 		}
 
-		GetOut(vehicle, rider, GroundUnder(wreck), rider.OrderIssuer, tick);
+		GetOut(vehicle, rider, GroundUnder(wreck), rider.OrderIssuer, tick, announce: false);
 		return rider;
 	}
 

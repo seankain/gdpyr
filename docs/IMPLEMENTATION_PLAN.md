@@ -578,7 +578,7 @@ harness, which already runs a seeded episode headlessly ([`DEMOS.md`](DEMOS.md) 
 Swap `TransportFactory` to a Steam `MultiplayerPeer`, add lobby create/join. Re-evaluate the options
 in §2 at that time — that corner of the ecosystem moves.
 
-### M10 — Vehicles that carry units (8–9 days) *in progress: V1–V3 built*
+### M10 — Vehicles that carry units (8–9 days) *in progress: V1–V4 built*
 
 The technical gets seats: units right-clicked onto it board until it is full, ride, and get out
 when its card's **Unload** is pressed. A vertical take-off and landing **dropship** does the same

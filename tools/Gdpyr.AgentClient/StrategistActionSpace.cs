@@ -258,8 +258,10 @@ public sealed class StrategistActionSpace
 
 		for (int i = 0; i < army.Count; i++)
 		{
+			// A rider is in no group (docs/VEHICLES.md §10): the server would skip it, and
+			// "all" or "armor" ordering a passenger would spend an order on nobody.
 			GdpyrUnit unit = army[i];
-			if (unit == null || !unit.Alive)
+			if (unit == null || !unit.Alive || unit.IsRiding)
 			{
 				continue;
 			}

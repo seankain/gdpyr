@@ -254,6 +254,7 @@ public partial class AiDebugWorld : Node3D
 		AiMarkerKey.Staging => "staging",
 		AiMarkerKey.Friend => "cover",
 		AiMarkerKey.Supply => "supply",
+		AiMarkerKey.Vehicle => "vehicle",
 		_ => key.ToString(),
 	};
 

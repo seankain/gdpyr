@@ -355,6 +355,25 @@ public sealed class AiDebugPublisher
 			}
 		}
 
+		// Vehicles (docs/VEHICLES.md §10): what it is riding in, or who is aboard it, and
+		// for a unit walking to get in, where the vehicle is.
+		if (unit.IsRiding)
+		{
+			inspect.Add(AiValueKey.RidingIn, unit.RidingIn);
+		}
+
+		if (unit.HasSeats)
+		{
+			inspect.Add(AiValueKey.Seats, unit.Cargo.Seats);
+			inspect.Add(AiValueKey.Aboard, unit.AboardCount);
+		}
+
+		if (unit is { IsOnField: true, Order.Kind: OrderKind.Embark } && OwnerId.IsUnit(unit.Order.TargetOwnerId)
+			&& UnitManager.Instance.Find(OwnerId.UnitOf(unit.Order.TargetOwnerId)) is { } vehicle)
+		{
+			inspect.Add(AiMarkerKey.Vehicle, vehicle.GlobalPosition);
+		}
+
 		_bots.CollectStrategists(_strategists);
 		foreach (BotStrategist strategist in _strategists)
 		{

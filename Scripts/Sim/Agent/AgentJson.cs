@@ -185,7 +185,8 @@ public static class AgentJson
 	};
 
 	/// <summary>Every command a strategist seat may name (docs/AGENT_API.md §7.4).</summary>
-	public static readonly string[] CommandNames = { "order", "build", "cancel", "rally", "noop", "construct" };
+	public static readonly string[] CommandNames =
+		{ "order", "build", "cancel", "rally", "noop", "construct", "embark", "unload" };
 
 	/// <summary>
 	/// The structures a <c>construct</c> command may name, in structure-catalog order

@@ -190,6 +190,22 @@ public class UnitHtnTests
 		Assert.Equal(OwnerId.ForPeer(5), unit.C.Intent.TargetOwnerId);
 	}
 
+	[Theory]
+	[InlineData(OrderKind.Embark)]
+	[InlineData(OrderKind.Unload)]
+	public void AWalkToAVehicle_AndAnUnload_AreObeyed_ShootingOnTheWay(OrderKind order)
+	{
+		// The carry branch (docs/VEHICLES.md §9.2): the order as given, by UnitBrain, which
+		// sends a boarder beside its vehicle and keeps an unloading vehicle still.
+		Squaddie unit = Ordered(order, Objective);
+		unit.See(Objective + new Vector3(0f, 0f, 5f));
+		unit.Tick();
+
+		Assert.Equal("[Obey]", unit.LastPlan);
+		Assert.Equal(UnitMove.Order, unit.C.Intent.Move);
+		Assert.False(unit.C.Intent.StopToFight);
+	}
+
 	[Fact]
 	public void APatrol_IsToday_AndDoesNotStopForAContact()
 	{
@@ -445,6 +461,20 @@ public class UnitHtnTests
 		Assert.NotEqual(UnitGoal.Retreat, unit.Goal);
 	}
 
+	[Theory]
+	[InlineData(OrderKind.Embark)]
+	[InlineData(OrderKind.Unload)]
+	public void AWalkToAVehicle_OrAnUnload_IsNeverAbandoned_EvenByABotsUnit(OrderKind order)
+	{
+		// docs/VEHICLES.md §9.2: critical, outnumbered and autonomous, and still carried out.
+		Squaddie unit = Losing(order);
+		unit.See(Objective);
+		unit.Tick();
+
+		Assert.Equal(UnitGoal.Obey, unit.Goal);
+		Assert.Equal("[Obey]", unit.LastPlan);
+	}
+
 	[Fact]
 	public void AUnitAPersonOrdered_NeverRetreatsOnItsOwn()
 	{
@@ -572,6 +602,8 @@ public class UnitHtnTests
 	[Theory]
 	[InlineData(OrderKind.Move)]
 	[InlineData(OrderKind.Build)]
+	[InlineData(OrderKind.Embark)]
+	[InlineData(OrderKind.Unload)]
 	public void AMoveOrABuildOrder_IsNeverAbandonedForResupply(OrderKind order)
 	{
 		Squaddie unit = Hurt(order);
@@ -890,6 +922,8 @@ public class UnitHtnTests
 		yield return new object[] { OrderKind.Defend, UnitGoal.HoldPost, "", "order move", UnitGoal.Obey };
 		yield return new object[] { OrderKind.Patrol, UnitGoal.Patrol, "", "order defend", UnitGoal.HoldPost };
 		yield return new object[] { OrderKind.Move, UnitGoal.Obey, "", "order attack", UnitGoal.Advance };
+		yield return new object[] { OrderKind.Embark, UnitGoal.Obey, "", "order attack", UnitGoal.Advance };
+		yield return new object[] { OrderKind.Unload, UnitGoal.Obey, "", "order defend", UnitGoal.HoldPost };
 		yield return new object[] { OrderKind.Attack, UnitGoal.TakePoint, "point", "order defend", UnitGoal.HoldPost };
 		yield return new object[] { OrderKind.Attack, UnitGoal.TakePoint, "point", "order elsewhere", UnitGoal.Advance };
 		yield return new object[] { OrderKind.Attack, UnitGoal.HoldPoint, "on the point", "pushed off", UnitGoal.TakePoint };
@@ -1491,14 +1525,19 @@ public class UnitHtnTests
 
 	// ---- sharing and allocation --------------------------------------------
 
+	/// <summary>How many situations <see cref="Situation"/> has.</summary>
+	private const int Situations = 19;
+
 	/// <summary>
-	/// Seventeen situations, one per operator of §5.2 and two for Advance, as an order and
-	/// facts. The last three are an attack on a control point: on its way, on the point,
-	/// and with cover there; a unit on the point has the point where it stands.
+	/// Nineteen situations, one per operator of §5.2 and two for Advance, as an order and
+	/// facts. Fourteen to sixteen are an attack on a control point: on its way, on the
+	/// point, and with cover there; a unit on the point has the point where it stands. The
+	/// last two are a walk to a vehicle and an unload (docs/VEHICLES.md §9.2), the second
+	/// on a computer strategist's word and losing, which does not make it retreat.
 	/// </summary>
 	private static void Situation(UnitContext c, int phase, out OrderKind order, out bool hasTarget)
 	{
-		bool point = phase >= 14;
+		bool point = phase is >= 14 and <= 16;
 		c.ObjectivePoint = phase == 15 ? c.Position : Objective;
 		c.HasCoverPoint = phase == 16;
 		c.CoverPoint = Objective + new Vector3(0f, 0f, -6f);
@@ -1517,12 +1556,14 @@ public class UnitHtnTests
 			3 => OrderKind.Attack,
 			8 or 9 or 10 => OrderKind.Defend,
 			11 => OrderKind.Patrol,
+			17 => OrderKind.Embark,
+			18 => OrderKind.Unload,
 			_ => OrderKind.Move,
 		};
 		hasTarget = phase is 5 or 8;
-		c.Sense(UnitFact.Stance, (byte)(phase is 0 or 13 ? UnitStance.Autonomous : UnitStance.Obey));
-		c.Sense(UnitFact.Health, (byte)(phase == 0 ? HealthBand.Critical : HealthBand.Ok));
-		c.Sense(UnitFact.Odds, (byte)(phase == 0 ? OddsBand.Outnumbered : OddsBand.Even));
+		c.Sense(UnitFact.Stance, (byte)(phase is 0 or 13 or 18 ? UnitStance.Autonomous : UnitStance.Obey));
+		c.Sense(UnitFact.Health, (byte)(phase is 0 or 18 ? HealthBand.Critical : HealthBand.Ok));
+		c.Sense(UnitFact.Odds, (byte)(phase is 0 or 18 ? OddsBand.Outnumbered : OddsBand.Even));
 		c.Sense(UnitFact.UnderFire, phase == 1);
 		c.Sense(UnitFact.FriendNear, phase == 1);
 		c.Sense(UnitFact.SquadPhase, (byte)(phase == 4 ? SquadPhase.Gathering : SquadPhase.Moving));
@@ -1539,7 +1580,7 @@ public class UnitHtnTests
 		c.Tick = t;
 		if ((t + i) % interval == 0)
 		{
-			Situation(c, (int)(((t + i) / (uint)interval + (uint)i) % 17), out order, out hasTarget);
+			Situation(c, (int)(((t + i) / (uint)interval + (uint)i) % Situations), out order, out hasTarget);
 		}
 
 		c.Track(c.Position, new UnitOrder { Kind = order, Target = c.ObjectivePoint, Anchor = Anchor }, hasTarget,
@@ -1616,8 +1657,9 @@ public class UnitHtnTests
 			UnitGoal.Retreat, UnitGoal.TakeCover, UnitGoal.Work, UnitGoal.Advance, UnitGoal.WaitForSquad,
 			UnitGoal.EngageFocus, UnitGoal.Support, UnitGoal.Advance, UnitGoal.EngageInLeash, UnitGoal.AnswerCall,
 			UnitGoal.HoldPost, UnitGoal.Patrol, UnitGoal.Obey, UnitGoal.Resupply, UnitGoal.TakePoint,
-			UnitGoal.HoldPoint, UnitGoal.HoldPointCover,
+			UnitGoal.HoldPoint, UnitGoal.HoldPointCover, UnitGoal.Obey, UnitGoal.Obey,
 		};
+		Assert.Equal(Situations, expected.Length);
 
 		for (int phase = 0; phase < expected.Length; phase++)
 		{

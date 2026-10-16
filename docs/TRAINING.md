@@ -330,6 +330,11 @@ Three choices in there worth arguing with:
   bounding box of the resource nodes and this seat's barracks — map geometry,
   always visible, and it does not move during a round.
 
+**A passenger is in no group** ([`VEHICLES.md`](VEHICLES.md) §10): `list_units` says which units ride
+in what, and `Select` leaves a rider out of `all`, `armor` and the rest, since the server would skip
+it anyway. The action space has no embark or unload: those are commands a client can send
+(`GdpyrCommand.Embark`, `GdpyrCommand.Unload`), and a seventh, opt-in head is future work.
+
 **Unit ids are not in the observation, and an order names them.** That join is
 `list_units` (`AGENT_API.md` §7.5), one round trip per decision, and it returns
 the army in exactly the order the observation's unit block carries it. The
@@ -350,6 +355,11 @@ drifts the first time a corpse outlives its event, and silently.
 
 Same status as the ground seat's: every number is a hypothesis, in one file, and
 nothing in it is a fact about gdpyr.
+
+**A loaded vehicle's death is several units lost at once** ([`VEHICLES.md`](VEHICLES.md) V-D7): a
+technical destroyed with four aboard is up to five `unit_lost` on one tick, and the `unit lost` term
+feels all of them. That is what happened, and it is the lesson; a reward that wants it softer is the
+reward's change to make, not the game's.
 
 ### Differences that leak into the loop
 

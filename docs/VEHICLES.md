@@ -1,8 +1,8 @@
 # gdpyr — Vehicles that carry units: the technical, and a dropship
 
 **Status: in progress.** V1 (the engine-free cargo rules), V2 (the technical carries units, on the
-server) and V3 (the wire and the strategist's controls) are built; V2's and V3's engine-side checks
-are outstanding, and V4–V7 are not built. It replaces
+server), V3 (the wire and the strategist's controls) and V4 (bots, agents, debugger) are built; their
+engine-side checks are outstanding, and V5–V7 are not built. It replaces
 the "Dropships and troop carriers" scope cut in [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md)
 §5 with a design and a milestone list (M10 there).
 
@@ -817,13 +817,42 @@ the same change.
   does. A full vehicle's notice replaces the selection line for 1.5 s. `T` and the dropship's card
   button are V6's.
 
-### V4 — Bots, agents, debugger (1 day)
+### V4 — Bots, agents, debugger (1 day) — built; the engine-side checks are outstanding
 
 §9 and §10. `AgentEventTests`, `StrategistActionSpaceTests` (a rider is in no group),
 `AgentObservationTests` (order bytes 7–8 and tier 7 leave the one-hots zero), `UnitHtnTests`'
 Embark/Unload rows and zero-allocation run, and the existing `CommanderHtnTests` unchanged. On a
 listen host with a computer co-strategist: a riding builder does not make it buy another, and a
 quiet policy's loaded technical is not recruited by its fallback commander.
+
+- **Result:** `dotnet test` 1,650 passed, 0 failed (1,626 before; 24 new: 8 in `UnitHtnTests` — a walk
+  to a vehicle and an unload are never abandoned for a retreat, even critical, outnumbered and
+  autonomous, nor for a resupply; both are obeyed shooting on the way; both end on a new order — 3 in
+  `AgentEventTests`, 8 in `StrategistActionSpaceTests` (a rider is in none of the seven groups; the
+  two commands), 3 in `AgentObservationTests` (order bytes 7 and 8 and tier 7 set no bit), 2 in
+  `AiDebugTextTests`); the zero-allocation run and the determinism trace cycle nineteen situations,
+  two of them the new orders; `CommanderHtnTests` and the `HtnDebugTests` signature facts pass
+  unchanged. `dotnet build Gdpyr.csproj` 0 warnings, 0 errors. Removing the retreat guard or the
+  `carry` selector was checked to fail three and eight facts. Built: §9.2's guards and `carry`
+  selector; `AgentCommandKind.Embark = 6`/`Unload = 7`, `AgentCommand.Vehicle`, `embark`/`unload` in
+  `ParseCommand`, `CommandNames` and `ApplyCommands`; `list_units`' `riding_in`, `seats`, `aboard`, `y`;
+  `unit_embarked` (from `Board`) and `unit_disembarked` (from `GetOut`) emitted, `dropship_landed`
+  appended, all three in `EpisodeMetrics`; `state_hash` folds `RidingIn`; `GdpyrCommand.Embark`/`Unload`,
+  `GdpyrUnit`'s four fields, riders out of `StrategistActionSpace.Select`; `AiValueKey` `RidingIn`,
+  `Aboard`, `Seats`, `Altitude`, `AiMarkerKey.Vehicle`, the unit header's line, the world label;
+  `AGENT_API.md` §6.2, §7.4, §7.5, §8, `HTN_BOTS.md`'s tree and D1 row, `TRAINING.md`, `AI_DEBUG.md`.
+  §9.1's exclusions were built in V2.
+- **Not checked, and why:** as V2 and V3 — no Godot here. The listen-host checks above join V2's and
+  V3's, after the scenario baseline.
+- **Changed from the plan above:** a rider's header reads "riding in unit 12", not "technical 12":
+  the debugger names units by id everywhere, and its text is engine-free, with no catalog to name a
+  kind from. `unit_disembarked` is not emitted for a rider put at a wreck only to be killed there —
+  §5.5 gives the event to the placed ones, and a disembark followed by a loss on the same tick says
+  nothing the loss does not. `dropship_landed` and `AiValueKey.Altitude` are appended now and first
+  produced in V6. The scenario `spawn`'s `"dropship"` name waits for V6, which adds the kind, and its
+  `aboard` for V5. `AiDebugWorld` does not draw "aboard n/m" over a vehicle (the plan's "may"): the
+  strategist's overlay has the pips, and a spectator has the header. The reference action space's
+  centroid still counts riders, which stand where their vehicle does.
 
 ### V5 — Harness and the technical's scenarios (1 day)
 

@@ -319,6 +319,14 @@ public sealed partial class AgentServer
 				writer.WriteNumber("z", unit.GlobalPosition.Z);
 				writer.WriteNumber("health", maxHealth > 0f ? unit.Health / maxHealth : 0f);
 				writer.WriteNumber("order", (int)unit.Order.Kind);
+
+				// docs/VEHICLES.md §10: the vehicle a passenger is in (0 on foot) — a rider is
+				// listed where its vehicle is — a vehicle's seats and how many are aboard, and
+				// the height, which an aircraft makes worth knowing.
+				writer.WriteNumber("riding_in", (int)unit.RidingIn);
+				writer.WriteNumber("seats", unit.Cargo?.Seats ?? 0);
+				writer.WriteNumber("aboard", unit.AboardCount);
+				writer.WriteNumber("y", unit.GlobalPosition.Y);
 				writer.WriteEndObject();
 			}
 
@@ -630,6 +638,19 @@ public sealed partial class AgentServer
 				command.Yaw = element.TryGetProperty("yaw", out JsonElement yaw) && yaw.TryGetDouble(out double radians)
 					? (float)radians
 					: 0f;
+				list.AddWithUnits(command, UnitIds(element));
+				break;
+
+			case "embark":
+				// The passengers, and the vehicle they are to get into (docs/VEHICLES.md §10).
+				command.Kind = AgentCommandKind.Embark;
+				command.Vehicle = Int(element, "vehicle", 0);
+				list.AddWithUnits(command, UnitIds(element));
+				break;
+
+			case "unload":
+				// The vehicles, in "units", as every other command names units.
+				command.Kind = AgentCommandKind.Unload;
 				list.AddWithUnits(command, UnitIds(element));
 				break;
 
@@ -1208,6 +1229,7 @@ public sealed partial class AgentServer
 			hash.Add(unit.UnitId);
 			hash.Add(unit.Health, 0.01f);
 			hash.Add((int)unit.Order.Kind);
+			hash.Add((int)unit.RidingIn);
 			hash.AddPosition(unit.GlobalPosition);
 		}
 
