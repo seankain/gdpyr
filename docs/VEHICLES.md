@@ -1,8 +1,8 @@
 # gdpyr — Vehicles that carry units: the technical, and a dropship
 
-**Status: plan.** Nothing here is built yet. It replaces the "Dropships and troop carriers" scope
-cut in [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) §5 with a design and a milestone list
-(M10 there).
+**Status: in progress.** V1 (the engine-free cargo rules) is built; V2–V7 are not. It replaces the
+"Dropships and troop carriers" scope cut in [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) §5
+with a design and a milestone list (M10 there).
 
 Companion documents: [`NETCODE.md`](NETCODE.md) §6 (unit replication, commands), §10.5 (builders,
 the request pattern this copies), §10.7 (the supply truck, the precedent for "a unit kind is one
@@ -93,10 +93,10 @@ pattern.
   `CapturePad.VerticalToleranceMeters` (4 m) of the vehicle's: 2.4 m for a rifleman at the
   technical, 3.4 m at the dropship. Flat, so a slope does not matter; banded, so a rifleman on a
   roof above a parked truck does not board it and later get out at street level.
-- **`Cargo.StandOff(vehicle, unit, vehicleRadius, unitRadius)`** — where a boarder walks to: the
-  nearest point to it on a ring `vehicleRadius + unitRadius + 0.5 m` round the vehicle, inside
-  reach — at ground height for a vehicle off the ground, so a walker can arrive while a dropship is
-  still coming down (`InReach`'s band, measured against the vehicle, still keeps it from boarding
+- **`Cargo.StandOff(vehicle, unit, vehicleRadius, unitRadius, heightAboveGround = 0)`** — where a
+  boarder walks to: the nearest point to it on a ring `vehicleRadius + unitRadius + 0.5 m` round the
+  vehicle, inside reach — at ground height (`heightAboveGround` below the vehicle) for a vehicle off
+  the ground, so a walker can arrive while a dropship is still coming down (`InReach`'s band, measured against the vehicle, still keeps it from boarding
   until it lands). Never the vehicle's centre: an airborne dropship is solid to nothing, and
   boarders standing under its centre are the bodies its landing checks wait for (§8.2).
 - **`Cargo.InField(point)`** — |x|, |z| ≤ 115 m: the one bound for exit slots, landing spots and
@@ -105,7 +105,9 @@ pattern.
 - **`Cargo.ExitSlot(vehicle, yaw, vehicleRadius, passengerRadius, ordinal)`** — the `ordinal`-th
   candidate point: a row behind the vehicle first, then its sides, then its front, then a second
   ring further out, each `vehicleRadius + passengerRadius + 0.6 m` from the centre and 1.2 m apart
-  (`StructureTraining.Slot`'s spacing). Candidates only: the engine half checks each one (§5.4).
+  (`StructureTraining.Slot`'s spacing). `Cargo.ExitSlotCount` says how many there are before they
+  wrap: 26 for a rifleman round the technical (10 + 16), 36 round the dropship (15 + 21). Candidates
+  only: the engine half checks each one (§5.4).
 - **`Cargo.BoardTimeoutTicks`** (20 s) — how long a boarder walks before it gives up.
 - **`Cargo.WreckDamage(maxHealth)`** and **`Cargo.WreckKillsAll(heightAboveGround)`** — V-D7's two
   numbers, so the rule is one place.
@@ -707,9 +709,18 @@ failure — and recorded no suite result. So V2 starts by running `./scripts/pla
 Each ends with `dotnet test` green, the tests named here added, and the docs it touches updated in
 the same change.
 
-### V1 — Cargo rules (½ day)
+### V1 — Cargo rules (½ day) — done
 
 `Scripts/Sim/Cargo.cs`, `SimConfig.MaxPassengers`, `Tests/CargoTests.cs` (§4.1).
+
+- **Result:** `dotnet test` 1,602 passed, 0 failed (1,572 before; 30 new in `CargoTests`), no
+  warnings in the new files; `dotnet build Gdpyr.csproj` 0 warnings, 0 errors. The guards were
+  checked to fail: an exclusive 4 m wreck threshold, ties to the higher id, the first exit slot in
+  front, and a reach with no height band each fail one or two facts. Beyond §4.1: `ReachMeters`,
+  `StandOffMeters`, `ExitRingMeters` and `ExitSlotCount` are public so V2 and the tests share the
+  numbers; `CargoHold`'s ordinal accessor reads 0 past the last rider; `Admit` counts a missing or
+  NaN distance as furthest and never drops a candidate for want of room in its boarders span;
+  `WreckKillsAll` treats an unknown (NaN) height as high. Nothing in the game calls any of it yet.
 
 ### V2 — The technical carries units, on the server (2 days)
 

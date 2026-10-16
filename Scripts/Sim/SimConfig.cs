@@ -234,6 +234,14 @@ public static class SimConfig
 	public const int MaxBuildQueue = 24;
 
 	/// <summary>
+	/// Seats one vehicle may have (docs/VEHICLES.md V-D2): the dropship's eight, and
+	/// the technical's four inside it. Not a width on the wire — a rider's record names
+	/// its vehicle, not its seat — but the size every <see cref="CargoHold"/> is
+	/// allocated at, so a vehicle with more seats is a decision here first.
+	/// </summary>
+	public const int MaxPassengers = 8;
+
+	/// <summary>
 	/// Barracks one map may carry. A barracks is named by its index in the map's
 	/// <c>barracks</c> group on the wire, exactly as a resource node is, so this is
 	/// the width of that name rather than a level-design opinion — and it is the
