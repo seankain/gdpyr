@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Gdpyr.Match;
 using Gdpyr.Sim;
 using Godot;
 
@@ -84,6 +85,16 @@ public partial class SelectionOverlay : Control
 	private OrderKind _orderKind;
 	private float _orderAge = float.MaxValue;
 
+	/// <summary>The last marker was a refusal — a vehicle with no free seat — drawn as a cross.</summary>
+	private bool _orderRefused;
+
+	/// <summary>Pixels across one seat pip over a vehicle, and between two.</summary>
+	private const float SeatPipPixels = 6f;
+	private const float SeatPipGapPixels = 2f;
+
+	private static readonly Color SeatColor = new(0.4f, 0.9f, 1f);
+	private static readonly Color RefusedColor = new(1f, 0.35f, 0.3f);
+
 	private static readonly Color GhostColor = new(0.45f, 0.95f, 0.55f, 0.9f);
 	private static readonly Color BlockedGhostColor = new(1f, 0.35f, 0.3f, 0.9f);
 	private static readonly Color ProgressColor = new(1f, 0.85f, 0.35f);
@@ -162,6 +173,14 @@ public partial class SelectionOverlay : Control
 		_orderPoint = point;
 		_orderKind = kind;
 		_orderAge = 0f;
+		_orderRefused = false;
+	}
+
+	/// <summary>A cross where an order was not sent, because the client could see it would change nothing: a vehicle that is full (docs/VEHICLES.md V-D4).</summary>
+	public void FlashRefused(Vector3 point)
+	{
+		FlashOrder(point, OrderKind.None);
+		_orderRefused = true;
 	}
 
 	public override void _Process(double delta)
@@ -207,15 +226,24 @@ public partial class SelectionOverlay : Control
 		DrawSelectedBarracks();
 		DrawContacts();
 		DrawStructures();
+		DrawSeats();
 		DrawGhost();
 
 		if (_orderAge < OrderMarkerSeconds && TryScreen(_orderPoint, out Vector2 marker))
 		{
 			float fade = 1f - (_orderAge / OrderMarkerSeconds);
-			Color color = OrderColor(_orderKind);
+			Color color = _orderRefused ? RefusedColor : OrderColor(_orderKind);
 			color.A = fade;
-			DrawLine(marker - new Vector2(8f, 0f), marker + new Vector2(8f, 0f), color, 2f);
-			DrawLine(marker - new Vector2(0f, 8f), marker + new Vector2(0f, 8f), color, 2f);
+			if (_orderRefused)
+			{
+				DrawLine(marker - new Vector2(7f, 7f), marker + new Vector2(7f, 7f), color, 2f);
+				DrawLine(marker - new Vector2(7f, -7f), marker + new Vector2(7f, -7f), color, 2f);
+			}
+			else
+			{
+				DrawLine(marker - new Vector2(8f, 0f), marker + new Vector2(8f, 0f), color, 2f);
+				DrawLine(marker - new Vector2(0f, 8f), marker + new Vector2(0f, 8f), color, 2f);
+			}
 		}
 
 		if (!_dragging)
@@ -347,6 +375,45 @@ public partial class SelectionOverlay : Control
 		}
 	}
 
+	/// <summary>
+	/// A pip per seat over each of the strategist's vehicles that carry units, filled
+	/// for each one aboard (docs/VEHICLES.md §7) — drawn over every one of them, not only
+	/// the selected, as the structures' bars are, because a truck's load is what makes
+	/// it worth clicking.
+	/// </summary>
+	private void DrawSeats()
+	{
+		UnitManager units = UnitManager.Instance;
+		Team side = CombatManager.Instance?.Local?.Team ?? Team.Strategist;
+		for (int i = 0; units != null && i < units.SlotCount; i++)
+		{
+			Unit vehicle = units.UnitAt(i);
+			if (vehicle == null || !IsInstanceValid(vehicle) || !vehicle.HasSeats || !vehicle.IsOnField
+				|| vehicle.Team != side)
+			{
+				continue;
+			}
+
+			float height = vehicle.Definition?.HeightMeters ?? 2f;
+			if (!TryScreen(vehicle.GlobalPosition + (Vector3.Up * (height + 0.8f)), out Vector2 screen))
+			{
+				continue;
+			}
+
+			int seats = vehicle.Cargo.Seats;
+			int aboard = Mathf.Min(vehicle.AboardCount, seats);
+			float width = (seats * SeatPipPixels) + ((seats - 1) * SeatPipGapPixels);
+			Vector2 at = screen - new Vector2(width * 0.5f, SeatPipPixels * 0.5f);
+			for (int s = 0; s < seats; s++)
+			{
+				var pip = new Rect2(at + new Vector2(s * (SeatPipPixels + SeatPipGapPixels), 0f),
+					Vector2.One * SeatPipPixels);
+				DrawRect(pip, s < aboard ? SeatColor : BarBackColor);
+				DrawRect(pip, SeatColor, filled: false, width: 1f);
+			}
+		}
+	}
+
 	private void DrawGhost()
 	{
 		if (!_ghostActive)
@@ -383,6 +450,8 @@ public partial class SelectionOverlay : Control
 		OrderKind.Attack => new Color(1f, 0.4f, 0.3f),
 		OrderKind.Patrol => new Color(0.5f, 0.7f, 1f),
 		OrderKind.Defend => new Color(1f, 0.85f, 0.4f),
+		OrderKind.Embark => SeatColor,
+		OrderKind.Unload => new Color(0.85f, 0.6f, 1f),
 		_ => new Color(0.45f, 0.95f, 0.55f),
 	};
 }

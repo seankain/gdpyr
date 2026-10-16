@@ -291,6 +291,27 @@ Cost: ~180 lines of codec and roster plumbing, and a manual roster replay to joi
 Budget check at 50 units: 50 × 13 B × 20 Hz ≈ **13 KB/s** per client, against the ~25 KB/s §7
 budgets for everything.
 
+**Passengers cost nothing extra** ([`VEHICLES.md`](VEHICLES.md) §6). The flag byte packs the state in
+bits 0–1 and the team in bit 2; bit 3 says the unit is riding in a vehicle, bits 4–5 are an
+aircraft's flight phase (0 grounded, 1 taking off, 2 cruising, 3 landing) and bit 6 says an aircraft
+is holding for want of a landing spot; bit 7 is spare. A passenger's yaw field carries its vehicle's
+id instead of a heading, and its position is the vehicle's. A record marked aboard that names
+vehicle 0 decodes as a unit on foot, so decoding stays total. Still 13 bytes, still 837 for 64.
+Riders stay in the packet: leaving them out would make demo playback despawn them and freeze live
+puppets, visible, where they boarded.
+
+A client applies the new state with three rules. What a unit is doing — alive, aboard, flying — is
+taken only from a packet at or after the newest it has applied, though every packet still feeds the
+interpolators: an unreliable packet arriving late would otherwise show a passenger who boarded a
+moment ago, for one interval. (A packet more than five seconds older than the newest is a different
+server's clock, and resets it.) Getting in and out happens at the render clock, not at decode — the
+drawn transform is `InterpolationDelayTicks` behind — and a unit getting out has its samples from
+before then dropped, so it appears where it got out instead of sliding from the truck. And a puppet
+made by `ServerSpawnUnit`, which says nothing of riding, is hidden and solid to nothing until its
+first record, which is applied whole whatever it says: a passenger never flashes visible to a peer
+that joined while it was aboard. Each vehicle's passenger count on a client is the number of records
+in the newest snapshot that name it; units are never fogged or truncated, so it is exact.
+
 ### 6.2 Fog of war
 
 Fog of war is an **anti-cheat property, not a shader**. If the strategist client receives the

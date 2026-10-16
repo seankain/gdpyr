@@ -1,7 +1,8 @@
 # gdpyr — Vehicles that carry units: the technical, and a dropship
 
-**Status: in progress.** V1 (the engine-free cargo rules) and V2 (the technical carries units, on
-the server) are built; V2's engine-side checks are outstanding, and V3–V7 are not built. It replaces
+**Status: in progress.** V1 (the engine-free cargo rules), V2 (the technical carries units, on the
+server) and V3 (the wire and the strategist's controls) are built; V2's and V3's engine-side checks
+are outstanding, and V4–V7 are not built. It replaces
 the "Dropships and troop carriers" scope cut in [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md)
 §5 with a design and a milestone list (M10 there).
 
@@ -774,7 +775,7 @@ the same change.
   `FindPlan` each tick and moves by `UnitBrain.Destination`, which is the right behaviour at a
   planning cost.
 
-### V3 — The wire and the strategist's controls (1½ days)
+### V3 — The wire and the strategist's controls (1½ days) — built; the engine-side checks are outstanding
 
 - `UnitFlags` bits and the yaw-slot rule, `UnitSnapshot`'s fields, `UnitSnapshotCodec`, client
   apply on both paths with the newest-tick guard, hidden-until-first-record puppets, getting in and
@@ -785,6 +786,36 @@ the same change.
   the new bits share the byte; still 13 B and under one datagram), `DemoCodecTests` (version).
 - **Done when:** the same on a dedicated server with a remote strategist and a remote ground player,
   and a remote client sees a freshly built unit appear.
+- **Result:** `dotnet test` 1,626 passed, 0 failed (1,609 before; 17 new: 12 in
+  `UnitSnapshotCodecTests` — a passenger round-trips with its vehicle in the yaw field and its
+  neighbour untouched, an aboard record naming 0 decodes on foot, all four flight phases and
+  cannot-land round-trip, a ground record is the bytes it always was, state, team and the new bits
+  share the byte in four combinations, a full field of passengers is still 837 B — 1 in
+  `DemoCodecTests` (version 2, version 1 refused), 2 in `SnapshotInterpolatorTests` (`DropBefore`) and
+  2 in `VehicleControlsTests` (`U` is `rts_unload` and nothing else is on it; `T` is still free));
+  `dotnet build Gdpyr.csproj` 0 warnings, 0 errors. Built: `UnitFlags` bits 3–6, `FlightPhase`,
+  `UnitSnapshot.RidingIn`/`Phase`/`CannotLand`, the yaw-slot rule in `UnitSnapshotCodec`,
+  `DemoFormat.Version = 2`; on the client `Unit.ApplyRemoteState(record, tick)` (first record whole,
+  getting in and out deferred to the render clock through `TryTakeRidingChange`, death at once),
+  `HideUntilFirstRecord`, `AboardCount`, `UnitManager`'s newest-tick guard, `PushRecord`'s own-yaw
+  rule, `CountAboard` on both paths, `SnapshotInterpolator.DropBefore` on getting out;
+  `StrategistController.TryEmbarkAtCursor`, `PickVehicle` (size on screen × 1.25, at least 18 px)
+  in front of `PickUnit` for a single click, `UnloadSelected` on `U` and the card, the full notice;
+  `StrategistHud.SelectionSummary` and the card's vehicle mode with **Unload (U)** and a per-mode
+  footer hint, the technical's "seats 4" tooltip, the key list's eighth line; `SelectionOverlay`'s
+  seat pips, embark and unload marker colours and the refused cross; `rts_unload` on `U` (85);
+  `README.md`, `NETCODE.md` §6.1, `DEMOS.md`.
+- **Not checked, and why:** as V2 — no Godot here, so neither V2's nor this "done when" was run, nor
+  the scenario baseline (§11). With V3 a person can now press embark and unload, so the listen-host
+  check of V2 and this one can be done together, and the baseline before either.
+- **Changed from the plan above:** the newest-tick guard resets when a packet is more than five
+  seconds older than the newest — a client that leaves one server and joins another would otherwise
+  apply nothing until the new clock passed the old one, and a late datagram is never that late.
+  `ApplyPresentation` takes an aircraft off its layer when it is not grounded (§5.1's sentence), so a
+  phase change is something for a client to react to; nothing sets a phase until V6. The card's
+  vehicle mode is shown only when no barracks or structure is selected, which a box select never
+  does. A full vehicle's notice replaces the selection line for 1.5 s. `T` and the dropship's card
+  button are V6's.
 
 ### V4 — Bots, agents, debugger (1 day)
 

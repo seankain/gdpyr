@@ -80,6 +80,19 @@ public class DemoCodecTests
 	}
 
 	[Fact]
+	public void TheVersionIsTwo_SinceTheUnitRecordCarriesPassengers()
+	{
+		// docs/VEHICLES.md §6.2: a change to a copied codec is a version bump, and a
+		// version-1 demo is refused rather than read through the new rule.
+		Assert.Equal(2, DemoFormat.Version);
+
+		DemoHeader old = Header();
+		old.Version = 1;
+		Assert.False(old.IsPlayable(out string reason));
+		Assert.Contains("version", reason);
+	}
+
+	[Fact]
 	public void Header_RefusesATruncatedOne()
 	{
 		byte[] bytes = Header().Encode();

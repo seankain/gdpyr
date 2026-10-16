@@ -78,6 +78,22 @@ public partial class UnitManager : Node
 	/// <summary>Scratch for <see cref="ApplyRecordedSnapshot"/>; a field so playback allocates nothing per tick.</summary>
 	private readonly HashSet<ushort> _recordedIds = new();
 
+	/// <summary>
+	/// A client's newest applied unit-snapshot tick (docs/VEHICLES.md §6.1). Every
+	/// packet feeds the interpolators, but what a unit is doing — alive, aboard, flying
+	/// — is taken only from a packet at or after this one: an unreliable datagram
+	/// arriving late would otherwise show a passenger who boarded a moment ago, or flip
+	/// a landed dropship's collision, for one interval.
+	/// </summary>
+	private uint _newestUnitSnapshotTick;
+
+	/// <summary>
+	/// How much older than the newest a unit snapshot has to be to be a different
+	/// server's clock — the client left one and joined another — rather than a late
+	/// datagram, which is never more than a few intervals behind. Five seconds.
+	/// </summary>
+	private const uint UnitClockResetTicks = SimConfig.TickRate * 5;
+
 	/// <summary>The units one order named, and what each was worth, for <see cref="Squads"/>. Pre-sized.</summary>
 	private readonly ushort[] _orderedUnits = new ushort[SimConfig.MaxUnits];
 	private readonly float[] _orderedStrengths = new float[SimConfig.MaxUnits];
@@ -315,6 +331,14 @@ public partial class UnitManager : Node
 			if (!_interpolators.TryGetValue(unit.UnitId, out SnapshotInterpolator interpolator))
 			{
 				continue;
+			}
+
+			// Into or out of a vehicle at the render clock, not at decode: the transform
+			// drawn is that far behind. Out, it is drawn where it got out from the first
+			// frame, not slid there from the vehicle.
+			if (unit.TryTakeRidingChange(renderTick, out uint changeTick, out bool gotOut) && gotOut)
+			{
+				interpolator.DropBefore(changeTick);
 			}
 
 			if (interpolator.TrySample(renderTick, out Vector3 position, out float yaw, out _))
@@ -1932,6 +1956,11 @@ public partial class UnitManager : Node
 				State = unit.State,
 				Team = unit.Team,
 				HealthPercent = unit.HealthPercent,
+
+				// Never both dead and aboard (docs/VEHICLES.md §5.1).
+				RidingIn = unit.IsAlive ? unit.RidingIn : (ushort)0,
+				Phase = unit.Phase,
+				CannotLand = unit.CannotLand,
 			};
 		}
 
@@ -2064,6 +2093,7 @@ public partial class UnitManager : Node
 			// the tick they are about (docs/DEMOS.md §4.2).
 			demo?.UnitSnapshot(tick, _pendingSnapshots[s]);
 
+			bool newest = TakeNewestUnitSnapshot(tick);
 			for (int i = 0; i < count; i++)
 			{
 				ref UnitSnapshot snapshot = ref _snapshotScratch[i];
@@ -2074,11 +2104,20 @@ public partial class UnitManager : Node
 					continue;
 				}
 
-				unit.ApplyRemoteState(snapshot.State, snapshot.HealthPercent);
+				if (newest)
+				{
+					unit.ApplyRemoteState(snapshot, tick);
+				}
+
 				if (_interpolators.TryGetValue(snapshot.UnitId, out SnapshotInterpolator interpolator))
 				{
-					interpolator.Push(tick, snapshot.Position, snapshot.Yaw, 0f);
+					PushRecord(interpolator, unit, snapshot, tick);
 				}
+			}
+
+			if (newest)
+			{
+				CountAboard(count);
 			}
 		}
 
@@ -2122,8 +2161,8 @@ public partial class UnitManager : Node
 				_interpolators[snapshot.UnitId] = new SnapshotInterpolator();
 			}
 
-			unit.ApplyRemoteState(snapshot.State, snapshot.HealthPercent);
-			_interpolators[snapshot.UnitId].Push(tick, snapshot.Position, snapshot.Yaw, 0f);
+			unit.ApplyRemoteState(snapshot, tick);
+			PushRecord(_interpolators[snapshot.UnitId], unit, snapshot, tick);
 		}
 
 		for (int i = _ordered.Count - 1; i >= 0; i--)
@@ -2135,7 +2174,59 @@ public partial class UnitManager : Node
 			}
 		}
 
+		// In order and complete, so every record is the newest and the count is exact.
+		CountAboard(count);
 		return true;
+	}
+
+	/// <summary>
+	/// Whether a unit snapshot about <paramref name="tick"/> is the newest this client
+	/// has had, and if so takes it as the newest. A packet from much further back than
+	/// any datagram is late is a new server's clock, and starts the count again.
+	/// </summary>
+	private bool TakeNewestUnitSnapshot(uint tick)
+	{
+		if (tick < _newestUnitSnapshotTick && _newestUnitSnapshotTick - tick <= UnitClockResetTicks)
+		{
+			return false;
+		}
+
+		_newestUnitSnapshotTick = tick;
+		return true;
+	}
+
+	/// <summary>
+	/// One record into a unit's interpolator. A passenger's has no heading — its yaw
+	/// field named its vehicle — so it keeps the one it is drawn with.
+	/// </summary>
+	private static void PushRecord(SnapshotInterpolator interpolator, Unit unit, in UnitSnapshot record, uint tick)
+	{
+		interpolator.Push(tick, record.Position, record.IsAboard ? unit.Yaw : record.Yaw, 0f);
+	}
+
+	/// <summary>
+	/// Every vehicle's passengers, counted from the records in the snapshot just
+	/// applied that name it (docs/VEHICLES.md §6.1). Client-side; the authority reads
+	/// its holds.
+	/// </summary>
+	private void CountAboard(int count)
+	{
+		for (int i = 0; i < _ordered.Count; i++)
+		{
+			if (_ordered[i].HasSeats)
+			{
+				_ordered[i].SetRemoteAboard(0);
+			}
+		}
+
+		for (int i = 0; i < count; i++)
+		{
+			ushort vehicle = _snapshotScratch[i].RidingIn;
+			if (vehicle != 0 && Find(vehicle) is { HasSeats: true } carrier)
+			{
+				carrier.SetRemoteAboard(carrier.AboardCount + 1);
+			}
+		}
 	}
 
 	/// <summary>
@@ -2184,6 +2275,14 @@ public partial class UnitManager : Node
 		_unitsRoot.AddChild(unit);
 		_units[id] = unit;
 		_ordered.Add(unit);
+
+		// A client's copy is nothing until a record says what it is: the spawn message
+		// says nothing of whether it is riding in a vehicle (docs/VEHICLES.md §6.2).
+		if (!simulated)
+		{
+			unit.HideUntilFirstRecord();
+		}
+
 		return unit;
 	}
 

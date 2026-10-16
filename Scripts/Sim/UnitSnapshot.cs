@@ -14,6 +14,11 @@ namespace Gdpyr.Sim;
 ///
 /// Health is a percentage rather than hit points: a tank and a rifleman do not
 /// share a scale, and a health bar over a unit is the only thing that reads it.
+///
+/// A unit riding in a vehicle (docs/VEHICLES.md §6.1) costs nothing extra: one bit
+/// of the flag byte says it is aboard, and the yaw field — a hidden passenger's
+/// heading means nothing — carries the vehicle's id instead. Its position is the
+/// vehicle's.
 /// </summary>
 public struct UnitSnapshot
 {
@@ -37,34 +42,90 @@ public struct UnitSnapshot
 	/// <summary>Health as 0–255 over the unit's own maximum. 0 means dead.</summary>
 	public byte HealthPercent;
 
+	/// <summary>The vehicle it is riding in, by unit id; 0 on foot. Never set on a dead unit's record.</summary>
+	public ushort RidingIn;
+
+	/// <summary>An aircraft's flight phase; <see cref="FlightPhase.Grounded"/> for everything that does not fly.</summary>
+	public FlightPhase Phase;
+
+	/// <summary>An aircraft holding at cruise because it has found nowhere to land.</summary>
+	public bool CannotLand;
+
 	public readonly bool IsAlive => State != UnitStateId.Dead && HealthPercent > 0;
+
+	public readonly bool IsAboard => RidingIn != 0;
 }
 
 /// <summary>
-/// The unit snapshot's one packed byte: what it is doing, and whose it is.
+/// Where an aircraft is in taking off and landing (docs/VEHICLES.md §4.2): two bits
+/// of the unit snapshot's flag byte, so the order is a protocol constant. Always
+/// <see cref="Grounded"/> for a unit that does not fly.
+/// </summary>
+public enum FlightPhase : byte
+{
+	Grounded = 0,
+	TakingOff = 1,
+	Cruising = 2,
+	Landing = 3,
+}
+
+/// <summary>
+/// The unit snapshot's one packed byte: what it is doing, whose it is, whether it is
+/// riding in a vehicle, and an aircraft's flight (docs/VEHICLES.md §6.1).
+///
+/// <code>
+/// bits 0–1  state        bit 2  team        bit 3  aboard
+/// bits 4–5  flight phase bit 6  cannot land bit 7  spare
+/// </code>
 ///
 /// Separate from <see cref="WeaponFlags"/> because it packs different things, and
-/// one byte rather than two fields for the same reason — this goes out per unit
+/// one byte rather than five fields for the same reason — this goes out per unit
 /// per snapshot, fifty times over, twenty times a second.
 /// </summary>
 public static class UnitFlags
 {
 	private const int StateMask = 0b11;
 	private const int TeamBit = 1 << 2;
+	private const int AboardBit = 1 << 3;
+	private const int PhaseShift = 4;
+	private const int PhaseMask = 0b11 << PhaseShift;
+	private const int CannotLandBit = 1 << 6;
 
-	public static byte Pack(UnitStateId state, Team team)
+	public static byte Pack(UnitStateId state, Team team) =>
+		Pack(state, team, aboard: false, FlightPhase.Grounded, cannotLand: false);
+
+	public static byte Pack(UnitStateId state, Team team, bool aboard, FlightPhase phase, bool cannotLand)
 	{
 		int packed = (int)state & StateMask;
 		if (team == Team.Strategist)
 		{
 			packed |= TeamBit;
 		}
+
+		if (aboard)
+		{
+			packed |= AboardBit;
+		}
+
+		packed |= ((int)phase << PhaseShift) & PhaseMask;
+		if (cannotLand)
+		{
+			packed |= CannotLandBit;
+		}
+
 		return (byte)packed;
 	}
 
 	public static UnitStateId State(byte flags) => (UnitStateId)(flags & StateMask);
 
 	public static Team TeamOf(byte flags) => (flags & TeamBit) != 0 ? Team.Strategist : Team.GroundForce;
+
+	/// <summary>Whether the record is a passenger's, whose yaw field names its vehicle.</summary>
+	public static bool IsAboard(byte flags) => (flags & AboardBit) != 0;
+
+	public static FlightPhase PhaseOf(byte flags) => (FlightPhase)((flags & PhaseMask) >> PhaseShift);
+
+	public static bool CannotLand(byte flags) => (flags & CannotLandBit) != 0;
 
 	/// <summary>Health as the wire carries it: 0–255 over the unit's own maximum.</summary>
 	public static byte PackHealth(float health, float maxHealth)

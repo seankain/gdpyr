@@ -121,6 +121,20 @@ public sealed class SnapshotInterpolator
 		return true;
 	}
 
+	/// <summary>
+	/// Forgets every snapshot older than <paramref name="tick"/>, however many that
+	/// leaves: for an entity that was somewhere else until then and must not be drawn
+	/// sliding from there — a unit getting out of a vehicle appears where it got out
+	/// (docs/VEHICLES.md §6.1).
+	/// </summary>
+	public void DropBefore(uint tick)
+	{
+		while (Count > 0 && _ticks[0] < tick)
+		{
+			Shift();
+		}
+	}
+
 	/// <summary>Drops snapshots the render clock has moved past, keeping one either side of it.</summary>
 	public void Prune(float renderTick)
 	{

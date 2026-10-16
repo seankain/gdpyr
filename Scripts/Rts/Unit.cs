@@ -167,6 +167,24 @@ public partial class Unit : CharacterBody3D
 	/// <summary>Server-side, on an unloading vehicle: the tick a rider with no clear place to get out is tried again on.</summary>
 	public uint UnloadRetryTick { get; set; }
 
+	/// <summary>
+	/// An aircraft's flight phase (docs/VEHICLES.md §4.2), replicated in the flag byte;
+	/// <see cref="FlightPhase.Grounded"/> for everything that does not fly. Off the
+	/// ground it is solid to nobody.
+	/// </summary>
+	public FlightPhase Phase { get; set; }
+
+	/// <summary>An aircraft holding at cruise because it found nowhere to land. Replicated, for the card.</summary>
+	public bool CannotLand { get; set; }
+
+	/// <summary>
+	/// How many are aboard, for a vehicle with seats: its hold on the authority, and on
+	/// a client the records in the newest unit snapshot that name it
+	/// (docs/VEHICLES.md §6.1) — units are never fogged or truncated, so the count is
+	/// exact.
+	/// </summary>
+	public int AboardCount => IsSimulated ? Cargo?.Count ?? 0 : _remoteAboard;
+
 	public float Yaw { get; private set; }
 
 	/// <summary>Where a shot leaves from, and where a line-of-sight ray starts.</summary>
@@ -187,6 +205,21 @@ public partial class Unit : CharacterBody3D
 	private Vector3 _destination;
 	private bool _hasDestination;
 	private bool _repath;
+
+	/// <summary>A client's copy, until the first snapshot record about it: drawn as nothing, solid to nothing.</summary>
+	private bool _awaitingFirstRecord;
+
+	/// <summary>
+	/// A client's copy: the vehicle the newest record says it is in, held until the
+	/// render clock reaches the tick that record is about. State is decoded about a
+	/// hundred milliseconds before the drawn transform gets there, and a rider shown at
+	/// decode would stand in the truck bed and then slide out through the hull.
+	/// </summary>
+	private ushort _pendingRidingIn;
+	private uint _ridingChangeTick;
+	private bool _ridingChangePending;
+
+	private int _remoteAboard;
 	private float _gravity;
 
 	public override void _Ready()
@@ -340,17 +373,95 @@ public partial class Unit : CharacterBody3D
 		Basis = Basis.FromEuler(new Vector3(0f, yaw, 0f));
 	}
 
-	/// <summary>Takes the server's word for what a unit is doing and how hurt it is.</summary>
-	public void ApplyRemoteState(UnitStateId state, byte healthPercent)
+	/// <summary>
+	/// Takes the server's word for what a unit is doing, how hurt it is, what it is
+	/// riding in and how it is flying, from a record about <paramref name="tick"/>.
+	/// The first record about a unit is applied whole, presentation and all, whatever
+	/// it says — so a passenger never flashes visible to a peer that joined while it was
+	/// aboard. After that, getting in or out waits for the render clock
+	/// (<see cref="TryTakeRidingChange"/>); dying and taking off or landing do not.
+	/// </summary>
+	public void ApplyRemoteState(in UnitSnapshot record, uint tick)
 	{
 		bool wasAlive = IsAlive;
-		State = state;
-		Health = healthPercent / (float)byte.MaxValue * (Definition?.MaxHealth ?? 100f);
+		FlightPhase wasPhase = Phase;
+		State = record.State;
+		Health = record.HealthPercent / (float)byte.MaxValue * (Definition?.MaxHealth ?? 100f);
+		Phase = record.Phase;
+		CannotLand = record.CannotLand;
 
-		if (wasAlive != IsAlive)
+		// The invariant, on this side too: a dead unit is never aboard.
+		ushort ridingIn = IsAlive ? record.RidingIn : (ushort)0;
+
+		if (_awaitingFirstRecord)
 		{
+			_awaitingFirstRecord = false;
+			_ridingChangePending = false;
+			RidingIn = ridingIn;
+			ApplyPresentation();
+			return;
+		}
+
+		if (ridingIn != (_ridingChangePending ? _pendingRidingIn : RidingIn))
+		{
+			_pendingRidingIn = ridingIn;
+			_ridingChangeTick = tick;
+			_ridingChangePending = ridingIn != RidingIn;
+		}
+
+		if (wasAlive != IsAlive || wasPhase != Phase)
+		{
+			if (!IsAlive)
+			{
+				// Dead is dead now, not at the render clock: there is no body to show.
+				RidingIn = 0;
+				_ridingChangePending = false;
+			}
+
 			ApplyPresentation();
 		}
+	}
+
+	/// <summary>
+	/// A client's copy, once per frame: gets in or out once <paramref name="renderTick"/>
+	/// has reached the tick the record that said so was about. True when it did;
+	/// <paramref name="gotOut"/> says it was getting out, when the caller drops the
+	/// interpolator's samples from before <paramref name="changeTick"/> — the ones at
+	/// the vehicle — so it appears where it got out instead of sliding there.
+	/// </summary>
+	public bool TryTakeRidingChange(float renderTick, out uint changeTick, out bool gotOut)
+	{
+		changeTick = _ridingChangeTick;
+		gotOut = false;
+		if (!_ridingChangePending || renderTick < _ridingChangeTick)
+		{
+			return false;
+		}
+
+		gotOut = RidingIn != 0 && _pendingRidingIn == 0;
+		RidingIn = _pendingRidingIn;
+		_ridingChangePending = false;
+		ApplyPresentation();
+		return true;
+	}
+
+	/// <summary>
+	/// A client's copy, made by a spawn message before any snapshot has said where it is
+	/// or whether it is riding in something: nothing to see or bump into until the first
+	/// record does (docs/VEHICLES.md §6.2). Called after it enters the tree, whose
+	/// <c>_Ready</c> puts it on its layer.
+	/// </summary>
+	public void HideUntilFirstRecord()
+	{
+		_awaitingFirstRecord = true;
+		Visible = false;
+		CollisionLayer = 0u;
+	}
+
+	/// <summary>A client's copy of a vehicle: how many records in the newest snapshot name it.</summary>
+	public void SetRemoteAboard(int count)
+	{
+		_remoteAboard = count;
 	}
 
 	/// <summary>
@@ -359,13 +470,14 @@ public partial class Unit : CharacterBody3D
 	/// other (docs/VEHICLES.md §5.1). A dead unit is hidden and off its collision layer
 	/// for the frame or two before it is freed, so nothing walks into an invisible
 	/// corpse; a rider is hidden and off it for as long as it rides, and on the server
-	/// collides with nothing either, so the hidden body never pushes its vehicle.
+	/// collides with nothing either, so the hidden body never pushes its vehicle. An
+	/// aircraft off the ground is drawn and on nobody's layer.
 	/// </summary>
 	public void ApplyPresentation()
 	{
 		bool shown = IsAlive && !IsRiding;
 		Visible = shown;
-		CollisionLayer = shown ? CollisionLayers.Units : 0u;
+		CollisionLayer = shown && Phase == FlightPhase.Grounded ? CollisionLayers.Units : 0u;
 
 		if (IsSimulated)
 		{

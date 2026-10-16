@@ -1,4 +1,5 @@
 using System;
+using System.Buffers.Binary;
 using Gdpyr.Sim;
 using Godot;
 using Xunit;
@@ -156,6 +157,117 @@ public class UnitSnapshotCodecTests
 
 		Assert.Equal(state, UnitFlags.State(packed));
 		Assert.Equal(team, UnitFlags.TeamOf(packed));
+	}
+
+	// ---- riding and flying (docs/VEHICLES.md §6.1) -------------------------
+
+	[Fact]
+	public void APassengerRoundTrips_WithItsVehicleInTheYawField()
+	{
+		UnitSnapshot rider = Sample(12);
+		rider.RidingIn = 40_001;
+		rider.Yaw = 2.5f;
+
+		byte[] payload = UnitSnapshotCodec.Encode(77u, new[] { rider, Sample(13) });
+		var into = new UnitSnapshot[2];
+		Assert.True(UnitSnapshotCodec.TryDecode(payload, into, out _, out _));
+
+		Assert.Equal((ushort)40_001, into[0].RidingIn);
+		Assert.True(into[0].IsAboard);
+		Assert.Equal(0f, into[0].Yaw);
+		Assert.Equal(rider.Position.X, into[0].Position.X, 2);
+		Assert.Equal(UnitStateId.Engaging, into[0].State);
+		Assert.Equal(Team.Strategist, into[0].Team);
+
+		// Its neighbour, on foot, is untouched.
+		Assert.Equal((ushort)0, into[1].RidingIn);
+		Assert.Equal(1.75f, into[1].Yaw, 3);
+	}
+
+	[Fact]
+	public void AnAboardRecordNamingVehicleZero_DecodesOnFoot()
+	{
+		byte[] payload = UnitSnapshotCodec.Encode(1u, new[] { Sample(5) });
+		int flags = UnitSnapshotCodec.HeaderBytes + 11;
+		int yaw = UnitSnapshotCodec.HeaderBytes + 9;
+		payload[flags] |= 1 << 3;
+		payload[yaw] = 0;
+		payload[yaw + 1] = 0;
+
+		var into = new UnitSnapshot[1];
+		Assert.True(UnitSnapshotCodec.TryDecode(payload, into, out _, out _));
+
+		Assert.False(into[0].IsAboard);
+		Assert.Equal((ushort)0, into[0].RidingIn);
+	}
+
+	[Theory]
+	[InlineData(FlightPhase.Grounded, false)]
+	[InlineData(FlightPhase.TakingOff, false)]
+	[InlineData(FlightPhase.Cruising, true)]
+	[InlineData(FlightPhase.Landing, false)]
+	public void TheFlightPhaseAndCannotLand_RoundTrip(FlightPhase phase, bool cannotLand)
+	{
+		UnitSnapshot aircraft = Sample(3);
+		aircraft.Phase = phase;
+		aircraft.CannotLand = cannotLand;
+
+		byte[] payload = UnitSnapshotCodec.Encode(1u, new[] { aircraft });
+		var into = new UnitSnapshot[1];
+		Assert.True(UnitSnapshotCodec.TryDecode(payload, into, out _, out _));
+
+		Assert.Equal(phase, into[0].Phase);
+		Assert.Equal(cannotLand, into[0].CannotLand);
+		Assert.Equal(1.75f, into[0].Yaw, 3);
+	}
+
+	[Fact]
+	public void AGroundRecord_IsTheBytesItAlwaysWas()
+	{
+		// Bits 3–7 clear: a record with nothing riding or flying encodes as before the
+		// vehicles, so the two-argument pack and the five-argument one agree.
+		UnitSnapshot unit = Sample(9);
+		byte[] payload = UnitSnapshotCodec.Encode(1u, new[] { unit });
+
+		Assert.Equal(UnitFlags.Pack(unit.State, unit.Team), payload[UnitSnapshotCodec.HeaderBytes + 11]);
+		Assert.Equal(0, payload[UnitSnapshotCodec.HeaderBytes + 11] & 0b1111_1000);
+		Assert.Equal(Quantize.YawToU16(unit.Yaw),
+			BinaryPrimitives.ReadUInt16LittleEndian(payload.AsSpan(UnitSnapshotCodec.HeaderBytes + 9)));
+	}
+
+	[Theory]
+	[InlineData(UnitStateId.Dead, Team.GroundForce, true, FlightPhase.Landing, true)]
+	[InlineData(UnitStateId.Engaging, Team.Strategist, false, FlightPhase.Cruising, false)]
+	[InlineData(UnitStateId.Idle, Team.Strategist, true, FlightPhase.Grounded, false)]
+	[InlineData(UnitStateId.Moving, Team.GroundForce, false, FlightPhase.TakingOff, true)]
+	public void StateTeamAndTheNewBits_ShareAByte(UnitStateId state, Team team, bool aboard, FlightPhase phase,
+		bool cannotLand)
+	{
+		byte packed = UnitFlags.Pack(state, team, aboard, phase, cannotLand);
+
+		Assert.Equal(state, UnitFlags.State(packed));
+		Assert.Equal(team, UnitFlags.TeamOf(packed));
+		Assert.Equal(aboard, UnitFlags.IsAboard(packed));
+		Assert.Equal(phase, UnitFlags.PhaseOf(packed));
+		Assert.Equal(cannotLand, UnitFlags.CannotLand(packed));
+		Assert.Equal(0, packed & 0b1000_0000);
+	}
+
+	[Fact]
+	public void AFullFieldOfPassengers_IsStillThirteenBytesEach_AndOneDatagram()
+	{
+		var units = new UnitSnapshot[UnitSnapshotCodec.MaxUnits];
+		for (int i = 0; i < units.Length; i++)
+		{
+			units[i] = Sample((ushort)(i + 1));
+			units[i].RidingIn = (ushort)(i % 2 == 0 ? 0 : 1);
+		}
+
+		byte[] payload = UnitSnapshotCodec.Encode(1u, units);
+
+		Assert.Equal(UnitSnapshotCodec.MaxPayloadBytes, payload.Length);
+		Assert.Equal(837, payload.Length);
+		Assert.True(payload.Length < 1200);
 	}
 
 	[Fact]
