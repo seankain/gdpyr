@@ -578,6 +578,13 @@ harness, which already runs a seeded episode headlessly ([`DEMOS.md`](DEMOS.md) 
 Swap `TransportFactory` to a Steam `MultiplayerPeer`, add lobby create/join. Re-evaluate the options
 in §2 at that time — that corner of the ecosystem moves.
 
+### M10 — Vehicles that carry units (8–9 days) *planned*
+
+The technical gets seats: units right-clicked onto it board until it is full, ride, and get out
+when its card's **Unload** is pressed. A vertical take-off and landing **dropship** does the same
+from the air. The design, decisions and milestones (V1–V7) are [`VEHICLES.md`](VEHICLES.md); it
+lifts the "Dropships and troop carriers" cut in §5.
+
 **Total: ~29–37 engineering days to end of M8.**
 
 > **Renumbering, M6 onwards.** M6 and M7 were "Playtest instrumentation" and "Steam"; they are now
@@ -591,7 +598,7 @@ in §2 at that time — that corner of the ecosystem moves.
 | Cut | Rationale |
 |---|---|
 | ~~**Builder units** in the first pass~~ | Resource nodes captured by proximity test the same economy loop with far less code. **Builders were added after M5** (§M5, [`NETCODE.md`](NETCODE.md) §10.5), and the cut still holds where it mattered: they build structures, they do not harvest, and capture-by-presence is still the economy. |
-| **Dropships and troop carriers** | Transport/logistics is a second system (load/unload, pathing, drop physics). Defer until the base loop is proven fun. |
+| **Dropships and troop carriers** | Transport/logistics is a second system (load/unload, pathing, drop physics). Defer until the base loop is proven fun. **Planned as M10** ([`VEHICLES.md`](VEHICLES.md)); the cut stands until it ships. |
 | Matchmaking, and any server list that is not a broadcast | Direct IP over Tailscale, and — since the main menu — LAN discovery on top of it: each server answers a broadcast query on UDP 7780–7783 with its name, port and roster ([`LAN.md`](LAN.md) §4). That is ~200 lines, one datagram each way, no registry and no service to run, and it covers the case the cut was really about: a room of people who should not have to be told an IP. It reaches the broadcast domain and stops there. Anything further away is still typed in, and matchmaking is still M9's problem. |
 | Animation, audio, VFX beyond placeholders | Greybox. |
 | Anti-cheat beyond server authority | Server authority is free and sufficient here. |
