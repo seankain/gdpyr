@@ -1,8 +1,9 @@
 # gdpyr — Vehicles that carry units: the technical, and a dropship
 
 **Status: in progress.** V1 (the engine-free cargo rules), V2 (the technical carries units, on the
-server), V3 (the wire and the strategist's controls) and V4 (bots, agents, debugger) are built; their
-engine-side checks are outstanding, and V5–V7 are not built. It replaces
+server), V3 (the wire and the strategist's controls), V4 (bots, agents, debugger) and V5 (the harness
+and the technical's scenarios) are built; their engine-side checks are outstanding, and V6–V7 are not
+built. It replaces
 the "Dropships and troop carriers" scope cut in [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md)
 §5 with a design and a milestone list (M10 there).
 
@@ -854,10 +855,46 @@ quiet policy's loaded technical is not recruited by its fallback commander.
   strategist's overlay has the pips, and a spectator has the header. The reference action space's
   centroid still counts riders, which stand where their vehicle does.
 
-### V5 — Harness and the technical's scenarios (1 day)
+### V5 — Harness and the technical's scenarios (1 day) — built; the engine-side checks are outstanding
 
 §11's spawn labels, `aboard`, strategist scripts, parser facts, and the three technical scenarios.
 The existing suite re-run against V2's baseline.
+
+- **Result:** `dotnet test` 1,673 passed, 0 failed (1,650 before; 23 new, all in `ScenarioTests`: an
+  `aboard` spawn resolves to its vehicle and its loader; six unresolvable vehicle fields, a forward
+  reference, an `aboard` with no strategist seat or with two and no `seat`, each a sentence; a
+  strategist script is commands by label, entered once on each step's first tick and again on every
+  pass of a repeating one; eight unsendable commands and a ground script with `commands`, each a
+  sentence; `stop` needs no target); the three new scenarios parse and their event metrics resolve
+  (`EveryCheckedInScenarioParsesAndNamesOnlyEventMetricsThatExist`). `dotnet build Gdpyr.csproj`
+  0 warnings, 0 errors;
+  `tools/Gdpyr.Playtest` and `tools/Gdpyr.AgentClient` build. Disabling the label and vehicle-field
+  checks was checked to fail twelve facts. Built: `ScenarioSpawn.Id`, `Aboard`, `Seat` and
+  `Scenario.LoaderOf`; `ScriptStep.Commands`, `ScriptCommand`, `ScenarioScript.TryEnter`; the
+  parse-time checks (`CheckScriptFits`, `CheckVehicleFields`, `CheckLabels`);
+  `UnitManager.ServerSeatPlaced` (harness-only: the rider is given an embark order by the loader and
+  boarded on the spot, the vehicle's `CargoIssuer` set to the loader) and the `spawn` op's `aboard`
+  and `seat`, refused as `not_boarded`; `GdpyrConnection.SpawnAboardAsync`; `Runner`'s labels, aboard
+  spawns and strategist steps through `ActCommands`; `technical_boards_squad.json`,
+  `technical_carries_squad.json`, `technical_wreck_ejects.json`; `AGENT_API.md` §9.1.
+- **Not checked, and why:** no Godot here, so the three scenarios have not been run, and neither the
+  baseline (§11) nor this milestone's re-run of the suite against it has been taken. Both are one
+  `./scripts/playtest.sh Tests/Scenarios/*.json`, at V2's start commit and at this one.
+- **Changed from the plan above:** an `aboard` spawn names its loader with `"seat"`, not `"peer"`: a
+  spawn names exactly one of `peer`, `unit` and `structure`, and a unit spawn with a `peer` would
+  break that rule. A stepped seat *does* fall back to its bot until it has acted once
+  (`AgentSeat.HasAction`); so in the warm-up a strategist seat sends one
+  empty command list, which takes the seat and orders nothing, and from then on it never falls
+  back. The scenarios use `"strategists": 1` so the seat attaches to a bot the roster already has.
+  `technical_boards_squad` also asserts `unit_disembarked.count == 0` and `unit_lost.count == 0`:
+  four in is only the claim if the other two neither got in and out nor died.
+  `technical_carries_squad` drives from `x = -50` to `x = 10` and reads `unit_disembarked[x>0]`, so
+  four exits there are four riders carried at least fifty metres. `technical_wreck_ejects` stands
+  the grenadier 55 m from the technical along `x = 8`, a line clear of cover on the greybox map,
+  over seeds 2 and 11, with a `look` pitch of 0.032 rad, computed by stepping the 40 mm round's drag:
+  it meets the technical's body about 1.4 m up at 55 m. A rider the server refuses to seat stays where it was
+  placed; the harness stops on the refusal, so nothing measures it. `dropship_lands_to_unload` is
+  V6's, which adds the kind.
 
 ### V6 — The dropship (2–3 days)
 

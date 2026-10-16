@@ -1,0 +1,33 @@
+{
+  "name": "six riflemen sent to a technical: the nearest four get in, the other two stay where they are",
+  "seeds": [2],
+  "duration_ticks": 900,
+  "warmup_ticks": 60,
+  "roster": { "ground": 0, "strategists": 1 },
+
+  "seats": [
+    { "id": "chair", "team": "strategist", "policy": "strategist", "step_mul": 6,
+      "script": { "repeat": false, "steps": [
+        { "ticks": 900, "commands": [
+          { "cmd": "embark", "units": ["r1", "r2", "r3", "r4", "r5", "r6"], "vehicle": "truck" }
+        ] }
+      ] } }
+  ],
+
+  "spawns": [
+    { "unit": "technical", "id": "truck", "team": "strategist", "at": [-45, 1, 55], "order": "none" },
+    { "unit": "infantry", "id": "r1", "team": "strategist", "at": [-41, 1, 53], "order": "none" },
+    { "unit": "infantry", "id": "r2", "team": "strategist", "at": [-41, 1, 55], "order": "none" },
+    { "unit": "infantry", "id": "r3", "team": "strategist", "at": [-41, 1, 57], "order": "none" },
+    { "unit": "infantry", "id": "r4", "team": "strategist", "at": [-39, 1, 53], "order": "none" },
+    { "unit": "infantry", "id": "r5", "team": "strategist", "at": [-39, 1, 55], "order": "none" },
+    { "unit": "infantry", "id": "r6", "team": "strategist", "at": [-39, 1, 57], "order": "none" }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.unit_embarked.count", "op": "==", "value": 4 },
+    { "metric": "events.unit_disembarked.count", "op": "==", "value": 0 },
+    { "metric": "events.unit_lost.count", "op": "==", "value": 0 }
+  ]
+}

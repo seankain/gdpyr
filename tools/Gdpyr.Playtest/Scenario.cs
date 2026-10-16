@@ -12,7 +12,11 @@ public sealed class ScenarioException : Exception
 	}
 }
 
-/// <summary>One step of a scripted seat: what to do, and for how many ticks.</summary>
+/// <summary>
+/// One step of a scripted seat: what to do, and for how many ticks. A ground seat's
+/// step is input — a move, a look, buttons — held for its ticks; a strategist seat's is
+/// <see cref="Commands"/>, sent once, on the step's first tick (docs/VEHICLES.md §11).
+/// </summary>
 public struct ScriptStep
 {
 	public int Ticks;
@@ -26,6 +30,40 @@ public struct ScriptStep
 
 	/// <summary>Button names, as §7.2 spells them.</summary>
 	public string[] Buttons;
+
+	/// <summary>True when the step said anything about a move, a look or buttons: a ground seat's input.</summary>
+	public bool HasInput;
+
+	/// <summary>A strategist seat's commands, naming units by spawn label. Null for a ground seat's step.</summary>
+	public ScriptCommand[] Commands;
+}
+
+/// <summary>
+/// One command a scripted strategist seat sends (docs/VEHICLES.md §11): an
+/// <c>embark</c>, an <c>unload</c> or an <c>order</c>, naming units by the labels
+/// their spawns gave them — a scenario cannot know the ids the server will hand out.
+/// </summary>
+public sealed class ScriptCommand
+{
+	/// <summary>The names the step type knows.</summary>
+	public static readonly string[] Names = { "embark", "unload", "order" };
+
+	/// <summary>The order kinds an <c>order</c> may name, as the control plane spells them.</summary>
+	public static readonly string[] OrderKinds = { "move", "attack", "patrol", "defend", "stop" };
+
+	public string Cmd = "order";
+
+	/// <summary>For an order: one of <see cref="OrderKinds"/>.</summary>
+	public string Kind = "move";
+
+	/// <summary>Spawn labels: the units to embark or to order, or the vehicles to unload.</summary>
+	public string[] Units = Array.Empty<string>();
+
+	/// <summary>For an embark: the spawn label of the vehicle to get into.</summary>
+	public string Vehicle;
+
+	/// <summary>For an order: where, as <c>[x, z]</c>.</summary>
+	public float[] Target = Array.Empty<float>();
 }
 
 /// <summary>
@@ -59,6 +97,35 @@ public sealed class ScenarioScript
 
 	/// <summary>Ticks one pass through the script takes.</summary>
 	public int TotalTicks { get; }
+
+	/// <summary>
+	/// The step that starts on <paramref name="elapsed"/>, if one does: what a strategist
+	/// seat's commands are sent on, once each — on every pass for a script that repeats,
+	/// and never again after the last step for one that does not.
+	/// </summary>
+	public bool TryEnter(int elapsed, out ScriptStep step)
+	{
+		step = default;
+		if (Steps.Count == 0 || TotalTicks <= 0 || elapsed < 0 || (!Repeat && elapsed >= TotalTicks))
+		{
+			return false;
+		}
+
+		elapsed %= TotalTicks;
+		int at = 0;
+		for (int i = 0; i < Steps.Count && at <= elapsed; i++)
+		{
+			if (at == elapsed)
+			{
+				step = Steps[i];
+				return true;
+			}
+
+			at += Math.Max(Steps[i].Ticks, 1);
+		}
+
+		return false;
+	}
 
 	/// <summary>The step in force on <paramref name="elapsed"/> ticks since the episode started.</summary>
 	public bool TryStep(int elapsed, out ScriptStep step)
@@ -142,6 +209,26 @@ public sealed class ScenarioSpawn
 	public float[] At = { 0f, 0f, 0f };
 
 	public float[] Look = { 0f, 0f };
+
+	/// <summary>
+	/// A unit spawn's label (docs/VEHICLES.md §11): what a later spawn's <see cref="Aboard"/>
+	/// and a strategist script's commands name it by. Null for none.
+	/// </summary>
+	public string Id;
+
+	/// <summary>
+	/// The label of an earlier unit spawn — a vehicle — this unit starts aboard. Placed
+	/// where the vehicle is, and seated by the server directly; null to stand at
+	/// <see cref="At"/>.
+	/// </summary>
+	public string Aboard;
+
+	/// <summary>
+	/// For a spawn <see cref="Aboard"/>: the strategist seat that loaded it, by its
+	/// scenario id, which the vehicle's cargo then answers to. Null for the scenario's
+	/// only strategist seat.
+	/// </summary>
+	public string Seat;
 }
 
 /// <summary>
@@ -280,6 +367,7 @@ public sealed class Scenario
 
 			ReadSeats(scenario, root);
 			ReadSpawns(scenario, root);
+			CheckLabels(scenario);
 			ReadAssertions(scenario, root);
 
 			if (scenario.Assertions.Count == 0)
@@ -346,6 +434,7 @@ public sealed class Scenario
 			}
 
 			seat.Script = ReadScript(scenario, element);
+			CheckScriptFits(scenario, seat);
 			scenario.Seats.Add(seat);
 			index++;
 		}
@@ -418,7 +507,13 @@ public sealed class Scenario
 				throw new ScenarioException($"'{scenario.Name}': every script step is an object");
 			}
 
-			var parsed = new ScriptStep { Ticks = Math.Max(Int(step, "ticks", 1), 1) };
+			var parsed = new ScriptStep
+			{
+				Ticks = Math.Max(Int(step, "ticks", 1), 1),
+				HasInput = step.TryGetProperty("move", out _) || step.TryGetProperty("look", out _)
+					|| step.TryGetProperty("buttons", out _),
+				Commands = ReadCommands(scenario, step),
+			};
 
 			if (step.TryGetProperty("move", out JsonElement move) && move.ValueKind == JsonValueKind.Array
 				&& move.GetArrayLength() >= 2)
@@ -454,6 +549,174 @@ public sealed class Scenario
 		return new ScenarioScript(read, repeat);
 	}
 
+	/// <summary>A strategist step's <c>commands</c>, each checked for what its kind needs; null when the step has none.</summary>
+	private static ScriptCommand[] ReadCommands(Scenario scenario, JsonElement step)
+	{
+		if (!step.TryGetProperty("commands", out JsonElement commands))
+		{
+			return null;
+		}
+
+		if (commands.ValueKind != JsonValueKind.Array)
+		{
+			throw new ScenarioException($"'{scenario.Name}': a step's 'commands' is an array");
+		}
+
+		var read = new List<ScriptCommand>();
+		foreach (JsonElement element in commands.EnumerateArray())
+		{
+			if (element.ValueKind != JsonValueKind.Object)
+			{
+				throw new ScenarioException($"'{scenario.Name}': every command in a step is an object");
+			}
+
+			var command = new ScriptCommand
+			{
+				Cmd = Text(element, "cmd", null),
+				Kind = Text(element, "kind", "move"),
+				Units = Labels(scenario, element, "units"),
+				Vehicle = Text(element, "vehicle", null),
+				Target = Numbers(element, "target", Array.Empty<float>()),
+			};
+
+			if (Array.IndexOf(ScriptCommand.Names, command.Cmd) < 0)
+			{
+				throw new ScenarioException(
+					$"'{scenario.Name}': a step's command is one of {string.Join(", ", ScriptCommand.Names)},"
+					+ $" not '{command.Cmd ?? "nothing"}'");
+			}
+
+			if (command.Units.Length == 0)
+			{
+				throw new ScenarioException(
+					$"'{scenario.Name}': a '{command.Cmd}' command names its units by spawn label, in 'units'");
+			}
+
+			if (command.Cmd == "embark" && command.Vehicle == null)
+			{
+				throw new ScenarioException(
+					$"'{scenario.Name}': an 'embark' command names the vehicle to get into, by spawn label, in 'vehicle'");
+			}
+
+			if (command.Cmd == "order")
+			{
+				if (Array.IndexOf(ScriptCommand.OrderKinds, command.Kind) < 0)
+				{
+					throw new ScenarioException(
+						$"'{scenario.Name}': an order's 'kind' is one of {string.Join(", ", ScriptCommand.OrderKinds)}");
+				}
+
+				if (command.Kind != "stop" && command.Target.Length < 2)
+				{
+					throw new ScenarioException(
+						$"'{scenario.Name}': a '{command.Kind}' order needs a 'target' of [x, z]");
+				}
+			}
+
+			read.Add(command);
+		}
+
+		return read.ToArray();
+	}
+
+	/// <summary>
+	/// A script drives its seat the only way the seat can be driven: a ground seat by
+	/// input, a strategist seat by commands. The other kind of step would do nothing,
+	/// silently, which is a scenario that tests less than it says.
+	/// </summary>
+	private static void CheckScriptFits(Scenario scenario, ScenarioSeat seat)
+	{
+		if (seat.Script == null)
+		{
+			return;
+		}
+
+		bool strategist = seat.Policy == "strategist";
+		foreach (ScriptStep step in seat.Script.Steps)
+		{
+			if (strategist && step.HasInput)
+			{
+				throw new ScenarioException(
+					$"'{scenario.Name}': seat '{seat.Id}' is a strategist; its script's steps carry 'commands',"
+					+ " not 'move', 'look' or 'buttons'");
+			}
+
+			if (!strategist && step.Commands != null)
+			{
+				throw new ScenarioException(
+					$"'{scenario.Name}': seat '{seat.Id}' is a ground seat; only a strategist seat's script carries 'commands'");
+			}
+		}
+	}
+
+	/// <summary>
+	/// Every label a strategist script names is a unit spawn's (docs/VEHICLES.md §11) —
+	/// checked here, not when the command would have been sent, so a typo is exit 2
+	/// before a server is started rather than a command that finds nobody half a round in.
+	/// </summary>
+	private static void CheckLabels(Scenario scenario)
+	{
+		var labels = new HashSet<string>(StringComparer.Ordinal);
+		foreach (ScenarioSpawn spawn in scenario.Spawns)
+		{
+			if (spawn.Id != null)
+			{
+				labels.Add(spawn.Id);
+			}
+		}
+
+		foreach (ScenarioSeat seat in scenario.Seats)
+		{
+			for (int i = 0; seat.Script != null && i < seat.Script.Steps.Count; i++)
+			{
+				ScriptCommand[] commands = seat.Script.Steps[i].Commands;
+				for (int c = 0; commands != null && c < commands.Length; c++)
+				{
+					foreach (string unit in commands[c].Units)
+					{
+						RequireLabel(scenario, labels, unit, commands[c].Cmd);
+					}
+
+					if (commands[c].Vehicle != null)
+					{
+						RequireLabel(scenario, labels, commands[c].Vehicle, commands[c].Cmd);
+					}
+				}
+			}
+		}
+	}
+
+	private static void RequireLabel(Scenario scenario, HashSet<string> labels, string label, string command)
+	{
+		if (!labels.Contains(label))
+		{
+			throw new ScenarioException(
+				$"'{scenario.Name}': a '{command}' command names '{label}', and no unit spawn has that 'id'");
+		}
+	}
+
+	/// <summary>An array of strings: spawn labels. Anything that is not a string is a mistake worth a sentence.</summary>
+	private static string[] Labels(Scenario scenario, JsonElement element, string name)
+	{
+		if (!element.TryGetProperty(name, out JsonElement value) || value.ValueKind != JsonValueKind.Array)
+		{
+			return Array.Empty<string>();
+		}
+
+		var read = new List<string>();
+		foreach (JsonElement label in value.EnumerateArray())
+		{
+			if (label.ValueKind != JsonValueKind.String)
+			{
+				throw new ScenarioException($"'{scenario.Name}': a command's '{name}' are spawn labels, which are strings");
+			}
+
+			read.Add(label.GetString());
+		}
+
+		return read.ToArray();
+	}
+
 	private static void ReadSpawns(Scenario scenario, JsonElement root)
 	{
 		if (!root.TryGetProperty("spawns", out JsonElement spawns) || spawns.ValueKind != JsonValueKind.Array)
@@ -478,6 +741,9 @@ public sealed class Scenario
 				Order = Text(element, "order", "none"),
 				At = Numbers(element, "at", new[] { 0f, 0f, 0f }),
 				Look = Numbers(element, "look", new[] { 0f, 0f }),
+				Id = Text(element, "id", null),
+				Aboard = Text(element, "aboard", null),
+				Seat = Text(element, "seat", null),
 			};
 
 			int named = (spawn.Peer != null ? 1 : 0) + (spawn.Unit != null ? 1 : 0) + (spawn.Structure != null ? 1 : 0);
@@ -488,8 +754,104 @@ public sealed class Scenario
 					+ " or a 'structure'");
 			}
 
+			CheckVehicleFields(scenario, spawn);
 			scenario.Spawns.Add(spawn);
 		}
+	}
+
+	/// <summary>
+	/// A spawn's label and what it starts aboard (docs/VEHICLES.md §11). A label is a unit
+	/// spawn's and unique. <c>aboard</c> names an earlier unit spawn — earlier, because the
+	/// vehicle has to be on the field to be got into — that is not itself aboard
+	/// anything, and needs a strategist seat for the cargo to answer to: one a vehicle's
+	/// loader has gone is unloaded on its first tick (§5.3), so a scenario with nobody to
+	/// load it would test the orphan rule and nothing else.
+	/// </summary>
+	private static void CheckVehicleFields(Scenario scenario, ScenarioSpawn spawn)
+	{
+		if ((spawn.Id != null || spawn.Aboard != null || spawn.Seat != null) && spawn.Unit == null)
+		{
+			throw new ScenarioException(
+				$"'{scenario.Name}': only a unit spawn takes an 'id', an 'aboard' or a 'seat'");
+		}
+
+		if (spawn.Id != null && FindSpawn(scenario, spawn.Id) != null)
+		{
+			throw new ScenarioException($"'{scenario.Name}': two spawns have the id '{spawn.Id}'");
+		}
+
+		if (spawn.Seat != null && spawn.Aboard == null)
+		{
+			throw new ScenarioException(
+				$"'{scenario.Name}': a spawn's 'seat' is the strategist seat that loaded it, and it is aboard nothing");
+		}
+
+		if (spawn.Aboard == null)
+		{
+			return;
+		}
+
+		ScenarioSpawn vehicle = FindSpawn(scenario, spawn.Aboard);
+		if (vehicle == null || spawn.Aboard == spawn.Id)
+		{
+			throw new ScenarioException(
+				$"'{scenario.Name}': a spawn starts aboard '{spawn.Aboard}', which is not the 'id' of an earlier unit spawn");
+		}
+
+		if (vehicle.Aboard != null)
+		{
+			throw new ScenarioException(
+				$"'{scenario.Name}': '{spawn.Aboard}' is itself aboard '{vehicle.Aboard}'; nothing rides in a passenger");
+		}
+
+		if (LoaderOf(scenario, spawn) == null)
+		{
+			throw new ScenarioException(spawn.Seat != null
+				? $"'{scenario.Name}': a spawn is loaded by seat '{spawn.Seat}', and no strategist seat has that id"
+				: $"'{scenario.Name}': a spawn starts aboard '{spawn.Aboard}', and there is not exactly one strategist"
+					+ " seat for its cargo to answer to; attach one, or name it in the spawn's 'seat'");
+		}
+	}
+
+	/// <summary>The earlier unit spawn with this label, or null.</summary>
+	private static ScenarioSpawn FindSpawn(Scenario scenario, string id)
+	{
+		foreach (ScenarioSpawn spawn in scenario.Spawns)
+		{
+			if (spawn.Id == id)
+			{
+				return spawn;
+			}
+		}
+
+		return null;
+	}
+
+	/// <summary>
+	/// The strategist seat a spawn aboard a vehicle was loaded by: the one its <c>seat</c>
+	/// names, or the scenario's only strategist seat; null when that is nobody.
+	/// </summary>
+	public static ScenarioSeat LoaderOf(Scenario scenario, ScenarioSpawn spawn)
+	{
+		ScenarioSeat only = null;
+		int strategists = 0;
+		foreach (ScenarioSeat seat in scenario.Seats)
+		{
+			if (seat.Policy != "strategist")
+			{
+				continue;
+			}
+
+			if (spawn.Seat != null && seat.Id == spawn.Seat)
+			{
+				return seat;
+			}
+
+			only = seat;
+			strategists++;
+		}
+
+		return spawn.Seat == null && strategists == 1 ? only : null;
 	}
 
 	private static void ReadAssertions(Scenario scenario, JsonElement root)

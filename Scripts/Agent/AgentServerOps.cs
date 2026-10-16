@@ -1004,11 +1004,27 @@ public sealed partial class AgentServer
 			string ordered = Text(root, "order", "none");
 			OrderKind order = ordered == "none" ? OrderKind.None : OrderFromName(ordered);
 
-			ushort unitId = units.ServerPlaceUnit(tier, where, team, order);
+			// A unit that starts aboard a vehicle (docs/VEHICLES.md §11) is placed where the
+			// vehicle is and seated by the server, loaded by the seat the scenario names.
+			int aboard = Int(root, "aboard", 0);
+			Unit vehicle = aboard > 0 && aboard <= ushort.MaxValue ? units.Find((ushort)aboard) : null;
+			if (aboard != 0 && vehicle == null)
+			{
+				session.SendError(correlation, "not_boarded", $"no unit {aboard} to start aboard");
+				return;
+			}
+
+			ushort unitId = units.ServerPlaceUnit(tier, vehicle?.GlobalPosition ?? where, team, order);
 			if (unitId == 0)
 			{
 				session.SendError(correlation, "unit_pool_full",
 					$"no room on the field for another unit ({SimConfig.MaxUnits})");
+				return;
+			}
+
+			if (vehicle != null && units.ServerSeatPlaced(unitId, vehicle.UnitId, Int(root, "seat", 0)) is { } refused)
+			{
+				session.SendError(correlation, "not_boarded", refused);
 				return;
 			}
 
@@ -1018,6 +1034,10 @@ public sealed partial class AgentServer
 				writer.WriteNumber("unit", unitId);
 				writer.WriteNumber("tier", tier);
 				writer.WriteString("team", team == Team.Strategist ? "strategist" : "ground");
+				if (vehicle != null)
+				{
+					writer.WriteNumber("aboard", vehicle.UnitId);
+				}
 			});
 			return;
 		}

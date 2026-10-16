@@ -156,6 +156,64 @@ public partial class UnitManager
 		ApplyUnload(Multiplayer.GetRemoteSenderId(), vehicleIds);
 	}
 
+	/// <summary>
+	/// Puts a unit a scenario placed straight into a vehicle, without the walk
+	/// (docs/VEHICLES.md §11): the harness's half of a spawn <c>aboard</c>, as narrow as
+	/// <see cref="ServerPlaceUnit"/> and for the same caller. The vehicle's cargo and the
+	/// rider's order answer to <paramref name="loaderPeerId"/>, the scenario's strategist
+	/// seat, so the orphan rule (<see cref="ServerCargo"/>) does not unload it on its
+	/// first tick. Null on success, or what stopped it.
+	/// </summary>
+	public string ServerSeatPlaced(ushort riderId, ushort vehicleId, int loaderPeerId)
+	{
+		if (NetworkManager.Instance is { IsClient: true })
+		{
+			return "this process is not the authority";
+		}
+
+		Unit rider = Find(riderId);
+		Unit vehicle = Find(vehicleId);
+		if (rider is not { IsOnField: true })
+		{
+			return $"unit {riderId} is not on the field";
+		}
+
+		if (vehicle is not { IsOnField: true, HasSeats: true })
+		{
+			return $"unit {vehicleId} is not a vehicle on the field that carries units";
+		}
+
+		if (vehicle.Team != rider.Team)
+		{
+			return $"unit {vehicleId} is not on unit {riderId}'s side";
+		}
+
+		if (!UnitCatalog.CanRide(rider.DefinitionId))
+		{
+			return $"a {UnitCatalog.NameOf(rider.DefinitionId)} does not ride in anything";
+		}
+
+		if (vehicle.Cargo.IsFull)
+		{
+			return $"{UnitCatalog.NameOf(vehicle.DefinitionId)} {vehicleId} is full ({vehicle.Cargo.Seats} seats)";
+		}
+
+		uint tick = NetworkManager.Instance?.Tick ?? 0;
+		rider.Order = new UnitOrder
+		{
+			Kind = OrderKind.Embark,
+			Target = vehicle.GlobalPosition,
+			Anchor = rider.GlobalPosition,
+			TargetOwnerId = OwnerId.ForUnit(vehicle.UnitId),
+			Returning = false,
+		};
+		rider.OrderIssuer = loaderPeerId;
+		rider.OrderTick = tick;
+		rider.GlobalPosition = vehicle.GlobalPosition;
+		vehicle.CargoIssuer = loaderPeerId;
+		return Board(rider, vehicle, tick) ? null : $"{UnitCatalog.NameOf(vehicle.DefinitionId)} {vehicleId} refused it";
+	}
+
 	/// <summary>Server-side: an embark on behalf of a peer with no client, through the same checks a person's gets.</summary>
 	public bool ServerEmbark(int peerId, ReadOnlySpan<int> unitIds, int vehicleId) =>
 		NetworkManager.Instance is not { IsClient: true } && ApplyEmbark(peerId, unitIds, vehicleId);

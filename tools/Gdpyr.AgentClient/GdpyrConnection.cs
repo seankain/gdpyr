@@ -677,6 +677,29 @@ public sealed class GdpyrConnection : IDisposable
 	}
 
 	/// <summary>
+	/// Puts a unit on the field already aboard a vehicle, for a scenario
+	/// (docs/VEHICLES.md §11): where <paramref name="vehicle"/> is, seated by the
+	/// server, with <paramref name="loaderSeat"/> — a strategist seat this session holds —
+	/// as the one its cargo answers to. Returns its unit id; the server refuses a vehicle
+	/// that is not one, is full, or is the other side's.
+	/// </summary>
+	public async Task<int> SpawnAboardAsync(string unit, string team, int vehicle, int loaderSeat,
+		CancellationToken cancel = default)
+	{
+		JsonElement response = await RequestAsync(writer =>
+		{
+			writer.WriteString("op", "spawn");
+			writer.WriteString("unit", unit ?? "infantry");
+			writer.WriteString("team", team ?? "strategist");
+			writer.WriteString("order", "none");
+			writer.WriteNumber("aboard", vehicle);
+			writer.WriteNumber("seat", loaderSeat);
+		}, cancel).ConfigureAwait(false);
+
+		return response.GetProperty("unit").GetInt32();
+	}
+
+	/// <summary>
 	/// Puts a finished structure on the map, free (docs/AGENT_API.md §9.1): a
 	/// pillbox, a sandbag wall or a sniper tower, by name or by catalog index.
 	/// Returns its slot; the server refuses one that does not fit where it was put.

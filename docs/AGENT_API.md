@@ -757,6 +757,42 @@ A spawn names exactly one of a `peer` (a seat to place), a `unit` (`infantry`, `
 structure is put up finished and free, and the server refuses one that does not fit where it was put
 rather than guessing — a pillbox inside a wall is a typo in the scenario, not a test.
 
+**A unit spawn can carry a label and start aboard.** `"id": "truck"` names a unit spawn for the rest
+of the file; `"aboard": "truck"` puts a unit in the seats of an earlier unit spawn instead of on the
+ground (its `at` is ignored), and the server seats it directly through the `spawn` op's `aboard` and
+`seat` fields — harness-only, like the rest of `spawn`. A vehicle loaded by nobody would be unloaded
+on its first tick (an orphaned vehicle lets its riders out, docs/VEHICLES.md §5.3), so the boarding
+is issued by a strategist seat: the one named by the spawn's `"seat"`, or the scenario's only
+strategist seat. It is a separate field because a spawn already names exactly one of `peer`, `unit`
+and `structure`. All of it is checked when the file is read, and each refusal is a sentence naming
+the spawn: an `id`, `aboard` or `seat` on anything but a unit spawn, two spawns with one id, an
+`aboard` naming no earlier unit spawn (a forward reference is refused, not resolved), a unit aboard a
+passenger, a `seat` with no `aboard`, and an `aboard` with no strategist seat to answer to, or with
+two and no `seat` to choose between them. What only the server knows it refuses with
+`not_boarded`, and the harness stops (exit 2): a kind that cannot ride, a rider on another team than
+its vehicle (an `aboard` spawn's `team` defaults to `strategist`, as every unit spawn's does), and one
+rider more than the vehicle seats.
+
+**A strategist seat's script is commands, not input.** Its steps carry `commands` instead of
+`move`, `look` and `buttons`, naming units by spawn label:
+
+```json
+{"id":"chair","team":"strategist","policy":"strategist","step_mul":6,
+ "script":{"repeat":false,"steps":[
+   {"ticks":720,"commands":[{"cmd":"order","kind":"move","units":["truck"],"target":[10,60]}]},
+   {"ticks":780,"commands":[{"cmd":"unload","units":["truck"]}]}]}}
+```
+
+`cmd` is `embark` (with a `vehicle` label), `unload`, or `order` (with a `kind` of `move`, `attack`,
+`patrol`, `defend` or `stop`, and a `target` `[x, z]` unless it is `stop`). A step's commands are
+sent once, through `act` (§7.4), on the step's first tick — each pass of a repeating script enters
+its steps again — and apply on the server's next tick; a step with no commands holds. In the warm-up
+the seat sends one empty command list, which takes it from its bot — a seat that has never acted
+is still the bot's (§2.1) — without ordering anything, so `counters.pilot_fallbacks` stays zero. A ground seat's script with `commands`, a
+strategist seat's with input, an unknown command, kind or label, and a command missing its units,
+vehicle or target are refused when the file is read. `technical_boards_squad.json`,
+`technical_carries_squad.json` and `technical_wreck_ejects.json` are the three that use both.
+
 That is `Tests/Scenarios/rifle_lethality.json` as checked in. Two differences from the sketch above
 it are worth naming, because both are the published schema winning an argument with a document:
 **`observation.self.health` is a fraction, not 100** — the JSON lane carries the same normalized
