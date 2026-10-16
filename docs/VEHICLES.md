@@ -95,8 +95,13 @@ pattern.
   roof above a parked truck does not board it and later get out at street level.
 - **`Cargo.StandOff(vehicle, unit, vehicleRadius, unitRadius)`** — where a boarder walks to: the
   nearest point to it on a ring `vehicleRadius + unitRadius + 0.5 m` round the vehicle, inside
-  reach. Never the vehicle's centre: an airborne dropship is solid to nothing, and boarders standing
-  under its centre are the bodies its landing checks wait for (§8.2).
+  reach — at ground height for a vehicle off the ground, so a walker can arrive while a dropship is
+  still coming down (`InReach`'s band, measured against the vehicle, still keeps it from boarding
+  until it lands). Never the vehicle's centre: an airborne dropship is solid to nothing, and
+  boarders standing under its centre are the bodies its landing checks wait for (§8.2).
+- **`Cargo.InField(point)`** — |x|, |z| ≤ 115 m: the one bound for exit slots, landing spots and
+  aircraft destinations. The ground outside the walls is a navmesh island of its own (the hidden
+  300 × 300 m slab is in the `navmesh` group), so no navmesh test keeps anything off it.
 - **`Cargo.ExitSlot(vehicle, yaw, vehicleRadius, passengerRadius, ordinal)`** — the `ordinal`-th
   candidate point: a row behind the vehicle first, then its sides, then its front, then a second
   ring further out, each `vehicleRadius + passengerRadius + 0.6 m` from the centre and 1.2 m apart
@@ -169,10 +174,10 @@ undo each other — a passenger killed with its vehicle shown again, or a corpse
 
 `OrderKind` (`Scripts/Sim/UnitOrder.cs`) gains two wire values, appended:
 
-| Value | On | `Target` | `TargetOwnerId` |
-|---|---|---|---|
-| `Embark = 7` | a passenger walking to its vehicle, and while it rides | `Cargo.StandOff` beside the vehicle, refreshed every tick | `OwnerId.ForUnit(vehicle)` |
-| `Unload = 8` | a vehicle | where it came to rest (recorded only) | — |
+| Value | On | `Target` | `Anchor` | `TargetOwnerId` |
+|---|---|---|---|---|
+| `Embark = 7` | a passenger walking to its vehicle, and while it rides | walking: `Cargo.StandOff` beside the vehicle, refreshed every tick; riding: the vehicle's position, written by the pin (§5.3) | where it stood when ordered, as `ApplyOrder` sets it — the unit HTN's `Encode` reads it | `OwnerId.ForUnit(vehicle)` |
+| `Unload = 8` | a vehicle | where it came to rest (recorded only) | the same | — |
 
 Neither goes through the generic order message: `UnitOrder.IsIssuable` stays the range
 `Move..Stop`, which already excludes 7 and 8, as it excludes `Build`. `UnitBrain.Destination`
@@ -203,7 +208,7 @@ died, a moment ago is a race, not a forged packet. Today `ApplyOrder` counts a d
   the rest `UnitOrder.Hold(where they stand)`; all of them get issuer and tick, `NextScanTick = 0`,
   `ResetPlan`, `Suppression.Clear`, `Squads.Leave`. **The vehicle** is set to hold where it is (for
   a dropship, land there; §8.2), with the sender as issuer and as `CargoIssuer`; a standing `Unload`
-  is cancelled. From here the vehicle is claimed (§9.1).
+  is cancelled. From here no computer strategist orders it (§9.1).
 - **`ClientUnload(int[] vehicleIds)`** → `ApplyUnload`. Same sender and ownership checks; an empty
   vehicle is a no-op (the button is disabled, but a passenger may have died). Sets the vehicle's
   order to `Unload`, issuer and tick, `ResetPlan`; boarders still walking to it stand down to
@@ -243,24 +248,30 @@ before `ServerReapCorpses` and `BroadcastUnitSnapshot`. Both server entry points
   the order, the dropship once `Grounded` — lets everybody out (§5.4). When its hold is empty it
   holds where it is.
 - **Orphans:** a vehicle with passengers or boarders whose `CargoIssuer` is no longer seated as a
-  strategist (a person or a policy) unloads where it stands, and its boarders stand down — on the
-  server, whatever AI is running or none, so a person who loads a squad and leaves cannot strand
-  units that never fight and, being alive, never let the strategist lose.
-- **Pin, last:** every rider's `GlobalPosition` becomes its vehicle's. Position only — nothing
-  reads a rider's velocity, and a copied one would survive into its first step after it gets out.
+  strategist — on the strategist team and either a person or a bot seat with a policy attached
+  (`AgentServer.IsAttached`) — unloads where it stands, and its boarders stand down. On the server,
+  whatever AI is running or none, so a person who loads a squad and leaves cannot strand units that
+  never fight and, being alive, never let the strategist lose.
+- **Pin, last:** every rider's `GlobalPosition`, and its `Order.Target`, become its vehicle's
+  position. Position only — nothing reads a rider's velocity, and a copied one would survive into
+  its first step after it gets out.
   Fog, snapshots, the agent views and the spectator then read a rider at the right place with no
   code of their own.
 
 ### 5.4 Getting out
 
 For each rider in hold order, take `Cargo.ExitSlot` candidates in turn and accept the first that
-passes three checks, as shared helpers beside `ValidateSite` (`UnitManager.Structures.cs`):
+passes five checks, as shared helpers beside `ValidateSite` (`UnitManager.Structures.cs`):
 
+- **in the field** — `Cargo.InField`;
+- **reachable** — new: a World-layer ray from the vehicle's centre 1 m up to the slot at the same
+  height. Without it a technical parked against a perimeter wall puts its second ring through the
+  1 m wall onto the strip outside, which is clear, on ground and on navmesh; the same goes for a
+  sandbag or barracks wall;
 - **ground** — `ValidateSite`'s World-layer ray, reused as it is;
 - **navmesh** — `NavigationServer3D.MapGetClosestPoint` within a tolerance of the passenger's own
   (its radius + 0.3 m flat, 0.5 m vertical), not `ValidateSite`'s, which is sized for a structure
-  (half-extent + 1.5 m) and would accept a slot on the strip outside the walls; skipped, as
-  `ValidateSite` skips it, while `NavigationReady` is false;
+  (half-extent + 1.5 m); skipped, as `ValidateSite` skips it, while `NavigationReady` is false;
 - **clearance** — new: an `IntersectShape` with the passenger's capsule lifted 0.15 m against
   World, Units and Players, excluding the vehicle. `Obstructs` tests a box against World only. The
   navmesh check alone is not enough either: the map's invisible `Cube`, `Cube2` and `Cube3`
@@ -338,10 +349,10 @@ given:
 | `GroundSensor.Scan` (`GroundSensor.cs:129`) | skips riders: no bot sees or targets them |
 | `BotDirector.PruneGroundContacts` (`BotDirector.cs:274`) | forgets a rider as it forgets a dead unit, or the shared contact memory keeps it for 8 s |
 | `BotPilot.TryTargetState`, `TryCoverThreat` (`BotPilot.cs:540`, `:888`) | a rider is a lost target and no threat |
-| `BotStrategist` (§9.1) | `Decide`, `FillZones`, `Fortify`, `QueueSupply`, legacy `Command` skip riders |
+| `BotStrategist` (§9.1) | `Decide`, `FillZones` and legacy `Command` leave riders out; `Fortify` and `QueueSupply` count them but never order them |
 | `StrategistController.IsSelectable`, `PruneSelection` (`:1008`, `:1191`) | riders are not selectable and drop out of a selection |
 | `SpectatorView` pick (`SpectatorView.cs:472`), `AiEntities.TryPosition` | riders are not pickable; following one follows its vehicle |
-| `AiDebugPublisher` unit labels | no label for a rider; the vehicle's says "aboard 3/4" |
+| `AiDebugPublisher` unit labels (`AddUnitLabels`) | no label for a rider. A label has no field for an aboard count (`AiLabel`), so a vehicle's aboard and seats are inspect values (§10), not label text |
 | `Scripts/Ui/Debug.cs:177` | the units line reads `live/64 (n riding)` |
 
 Two views deliberately keep riders, **both or neither**, because policies join them by registry
@@ -426,10 +437,13 @@ per unit per snapshot for what is zero on almost every record.
 `U` (physical keycode 85) and `T` (84) are free; every digit is taken and `G` must stay unique
 (`GrenadeTests.TheGrenadeKeyIsBound`).
 
-- **`StrategistController.CommandAtCursor`** (`:643`) calls `TryEmbarkAtCursor()` first — before
-  the `TryGroundPoint` early return, since it needs only the cursor and the vehicle's screen
-  position (a dropship against the sky has no ground point under it). It fires only when:
-  the pending order is Move (an armed `X`/`C`/`B` means a ground order); the selection holds at
+- **`StrategistController.CommandAtCursor`** (`:643`) keeps an armed placement (`5`/`6`/`7`) first:
+  with a structure armed, the right-click needs a ground point and places it, as today. Otherwise
+  it calls `TryEmbarkAtCursor()` before the `TryGroundPoint` early return, since embarking needs
+  only the cursor and the vehicle's screen position (a dropship against the sky has no ground point
+  under it). It fires only when: the pending order is Move (an armed `X`/`C`/`B` means a ground
+  order — and `ArmPlacement` resets the pending order to Move, which is why placement is tested
+  separately); the selection holds at
   least one unit that can ride other than the vehicle; and the nearest own vehicle with seats is
   inside a pick radius scaled by its on-screen size and nearer the cursor than any enemy contact
   and — with builders selected — any structure `TryAssistAtCursor` would pick. `PickUnit`'s fixed
@@ -508,14 +522,17 @@ New `UnitDefinition` exports: `Seats` (0 carries nobody) in "Body"; a "Flight" c
   `Hold` and `Unload`, where it is. Patrol keeps it flying between its ends. An embark request
   sets it to hold, so a dropship in the air — patrolling or passing — comes down where it is to be
   boarded; boarders walk to the stand-off ring (§4.1), not under it.
-- **Landing spot:** on entering `Landing`, `TryLandingSpot(target)` runs §5.4's checks with a
-  hull-sized shape from the ground to clear altitude, over a short nearest-first ring of candidates
-  (6 m, then 12 m out). Boarders whose `Embark` names this dropship are not obstacles to it. None
-  clear: it holds cruise with `CannotLand` set, and the card says "no room to land". At 2 m it
-  re-checks for other bodies (Units, Players) beneath and waits there until clear.
-- **Order targets are clamped** for aircraft to inside the walls (|x|, |z| ≤ 115 m) and must be
-  finite; `ApplyOrder` checks neither today, and the hidden 300 × 300 m slab means there is ground,
-  and probably navmesh, outside the walls.
+- **Landing spot:** on entering `Landing`, `TryLandingSpot(target)` runs §5.4's checks (bar
+  reachability) with a hull-sized shape from the ground to clear altitude, over a short
+  nearest-first ring of candidates (6 m, then 12 m out), each inside `Cargo.InField`. Boarders whose
+  `Embark` names this dropship are not obstacles to it. None clear: it holds cruise with
+  `CannotLand` set, and the card says "no room to land". At 2 m it re-checks for other bodies
+  (Units, Players) beneath and waits there until clear.
+- **Destinations are bounded where the aircraft steers**, not where orders arrive: `SteerFlying`
+  clamps its destination into `Cargo.InField` and replaces a non-finite one with its own position.
+  Orders reach an aircraft by more paths than `ApplyOrder` — `ServerBuild` writes a fresh unit's
+  Move from the barracks' rally point, which `ApplyRally` stores unchecked, and `ServerPlaceUnit`
+  writes its own — and none of them checks either.
 - **Spawning:** `Barracks.SpawnSlot` is 2 m from the barracks wall, inside a 2 m hull. An aircraft
   spawns pushed out along the door's normal by its radius plus 1 m, and takes off for the rally
   point.
@@ -557,16 +574,27 @@ and boarders, recruit a loaded or loading technical as its scout (`Commander.Rec
 technicals first) and patrol it away with the person's squad aboard, and put a dropship in the
 garrison. So:
 
-- `Decide`, `FillZones`, `ApplyIntents` (as a guard), `Fortify` and `QueueSupply` skip riders.
-- **A vehicle with passengers or boarders, and its boarders, are claimed for as long as the peer
-  that loaded them (`CargoIssuer`, the boarders' issuer) is seated as a person or a policy
-  strategist** — from the click, not from the first boarding, and not only for 30 s. Emptied, the
-  vehicle is an ordinary unit again under D1. When that peer leaves, §5.3's orphan rule unloads it.
-- Dropships are skipped by `Decide` altogether: no role, never in the garrison, never bought (not
-  in `Tiers`; `BotStrategist.Build` treats tier index as definition id, so adding it there would
-  make the builder buyable).
+- **`Decide` and `FillZones` leave out riders, boarders, vehicles with passengers or boarders, and
+  aircraft**; `ApplyIntents` skips them as a guard. They are left out unconditionally, from the
+  click on, not through `IsClaimed`: `IsClaimed` returns false at once for a unit whose issuer is
+  the bot's own peer (`BotStrategist.cs:283`), and a policy's seat is a bot peer whose commander
+  covers for it whenever the policy goes quiet — a claim test would hand a policy's loaded
+  technical to its own fallback commander, which recruits technicals first. Nothing is lost: by
+  V-D9 no computer strategist loads anything, and §5.3's orphan rule unloads what a departed loader
+  left. Emptied, a vehicle is an ordinary unit again under D1.
+- Aircraft are left out for their own reasons: no role, never in the garrison, and in `FillZones`
+  a landed, unarmed dropship at the rally point would add 250 points of "friendly strength" to the
+  barracks zone that `Commander.Fallback` retreats squads to. Never bought (not in `Tiers`;
+  `BotStrategist.Build` treats tier index as definition id, so adding it there would make the
+  builder buyable).
+- **`Fortify` and `QueueSupply` count riders but never order them.** Both count builders and
+  trucks against `LiveUnitCount`, which includes riders; skipping a riding builder in the count
+  would make the bot buy a second one. Riders are skipped only when choosing a unit to order
+  (`_idleBuilders`, and the `ServerAssist`/`ServerConstruct` targets) — a riding builder's order is
+  `Embark`, not `Build`, so it would otherwise count as idle.
 - The technical keeps `Scout`. A loading or loaded one is never offered to `Recruit` because it is
-  claimed. `CommanderHtnTests`' recon facts and `htn_recon_finds_contact` must pass unchanged.
+  never in the commander's input. `CommanderHtnTests`' recon facts and `htn_recon_finds_contact`
+  must pass unchanged.
 - Legacy `Command` (`:565`) re-orders any unit whose order kind differs from what it wants, with no
   claim at all. It skips riders, boarders, vehicles with passengers or boarders, and aircraft. For
   a round with no vehicles carrying anybody that is no change, which is what D5 requires.
@@ -578,10 +606,20 @@ garrison. So:
   preconditions (`IfNot`, `UnitDomain.cs:958–959`, `:972–973`) and as executing conditions
   (`WhileNot`, `:962`, `:976`), since every operator has an executing condition for its premise.
   `Embark` and `Unload` join both, so an autonomous unit walking to board, or a vehicle unloading,
-  is not pulled off it. An order kind no selector matches yields no plan and falls back to
-  `UnitBrain.Destination`, which §5.2 teaches. The domain's signature changes with it; the
-  `HtnDebugTests` signature facts compare builds with each other, so they hold, and a spectator
-  from an older build is refused as it would be for any domain change.
+  is not pulled off it.
+- **A last selector, `carry`, obeys `Embark` and `Unload`**: `IfAny(Order, Embark, Unload)`, then
+  `UnitGoal.Obey`, executing while the order stands. Every stored order kind has a top-level
+  selector today; one that matched none would fall back to `UnitBrain.Destination` correctly, but
+  FluidHTN replans whenever it has no task, so every boarder and every unloading vehicle would run
+  a failing `FindPlan` each tick. `Obey` is `FollowOrder`, which takes "stop to fight" from
+  `HoldsWhileEngaging`, so behaviour is the same. No new fact or goal: `HtnSchema` takes the order
+  fact's values from `OrderKind`. `UnitHtnTests` gains Embark and Unload rows (a person's boarder
+  never retreats or resupplies; an autonomous unloading vehicle never retreats) and the
+  zero-allocation run gains both kinds.
+- The domain's signature changes; the `HtnDebugTests` signature facts compare builds with each
+  other, so they hold, and a spectator from an older build is refused as it would be for any
+  domain change. In a round with no vehicle carrying anybody, no new condition is ever false, so
+  no decision changes.
 - Aircraft get no unit context from `PlanOf`: cover, defend posts and pad posts mean nothing to
   them. They follow their order through `UnitBrain`.
 - No new `UnitFact`, `UnitGoal` or `CommandGoal` in this plan, so `HtnSchema`,
@@ -616,10 +654,13 @@ All additive (V-D10), as the supply truck and H6's events were.
   four fields; `StrategistActionSpace.Select` leaves riders out of every group, so `all`, `idle`
   and `armor` never order a passenger. Heads and widths are untouched, so checkpoints load. A loaded
   vehicle's death is several `unit_lost` events at once; `StrategistReward` will feel it.
-- **AI debugger:** `AiValueKey` appends `RidingIn`, `Aboard`, `Seats`, `Altitude`; `AiMarkerKey`
-  appends `Vehicle` (where a boarding unit is walking); `AiDebugText`'s unit header prints
-  "riding in technical 12" or "aboard 3/4"; `AiDebugWorld` labels the new marker. Byte enums are
-  appended, so `AiDebugCodec.Version` stays 1.
+- **AI debugger:** `AiValueKey` appends `RidingIn`, `Aboard`, `Seats`, `Altitude` as inspect
+  values; `AiMarkerKey` appends `Vehicle` (where a boarding unit is walking); `AiDebugText`'s unit
+  header prints "riding in technical 12" or "aboard 3/4" from them; `AiDebugWorld` labels the new
+  marker, and may draw "aboard n/m" over a vehicle from the snapshot's count (§6.1). Byte enums are
+  appended and no frame field is added, so `AiDebugCodec.Version` stays 1.
+- **`tools/gdpyr_env`** needs no code change: it passes command dicts through and reads
+  `list_units` and events by name.
 
 ---
 
@@ -633,7 +674,11 @@ only.
   This is a new kind of parse-time check: `Scenario.ReadSpawns` validates only the one-of rule
   today, and a seat named by `peer` is resolved at run time in `Runner.SpawnAsync`. A forward or
   unknown label is a `ScenarioException` with a sentence. The server boards the unit directly
-  (harness-only, like `ServerPlaceUnit`).
+  (harness-only, like `ServerPlaceUnit`), with the scenario's strategist seat — named by the
+  spawn's `peer`, or the only one — as the vehicle's `CargoIssuer` and the riders' issuer. A
+  harness-placed unit has no issuer, and §5.3's orphan rule would unload a vehicle loaded by
+  nobody on its first tick; so a scenario with an `aboard` spawn and no strategist seat is refused
+  at parse time. A stepped seat never falls back to its bot, so it stays seated.
 - **Strategist scripts:** a step type of timed commands — `embark`, `unload`, `order` — naming units
   by spawn label; `Runner` keeps spawned ids by label and sends the steps through
   `GdpyrConnection.ActCommands`.
@@ -646,7 +691,7 @@ metric:
 |---|---|---|
 | `technical_boards_squad` | a technical and six riflemen beside it; scripted embark of all six | `unit_embarked.count == 4` |
 | `technical_carries_squad` | a technical with four aboard; scripted move 60 m, then unload | `unit_disembarked[x>…].count == 4`; `unit_lost.count == 0` |
-| `technical_wreck_ejects` | a technical with four aboard, on open ground, and a scripted grenadier on `scripts/locker_then_fire.json` — `locker_launcher_vs_tank`'s pattern, since a scenario cannot arm a bot | `unit_lost[tier=1].count >= 1` over seeds; `unit_disembarked.count == 4` in the seeds that killed it |
+| `technical_wreck_ejects` | a technical with four aboard on open ground, ~55 m from a scripted grenadier on `scripts/locker_then_fire.json` (`locker_launcher_vs_tank`'s pattern, since a scenario cannot arm a bot) — outside the technical's 50 m engage range, inside its 70 m sensor, so it cannot kill the grenadier first; the spawn's `look` pitch retuned for the range; a stepped strategist seat for the `aboard` spawn | in every seed: `unit_lost[tier=1].count == 1`, `unit_disembarked.count == 4`, `observation.grenadier.self.alive.min == 1` (a 40 mm round does 130 of the technical's 220) |
 | `dropship_lands_to_unload` | a dropship with eight aboard; scripted move, then unload | `dropship_landed.count >= 1`; `unit_disembarked.count == 8` |
 
 **The baseline.** The last measured suite is 18 of 19 at `fcf2a5d`, with
@@ -696,8 +741,10 @@ the same change.
 ### V4 — Bots, agents, debugger (1 day)
 
 §9 and §10. `AgentEventTests`, `StrategistActionSpaceTests` (a rider is in no group),
-`AgentObservationTests` (order bytes 7–8 and tier 7 leave the one-hots zero), and the existing
-`CommanderHtnTests`/`UnitHtnTests` unchanged.
+`AgentObservationTests` (order bytes 7–8 and tier 7 leave the one-hots zero), `UnitHtnTests`'
+Embark/Unload rows and zero-allocation run, and the existing `CommanderHtnTests` unchanged. On a
+listen host with a computer co-strategist: a riding builder does not make it buy another, and a
+quiet policy's loaded technical is not recruited by its fallback commander.
 
 ### V5 — Harness and the technical's scenarios (1 day)
 
@@ -716,7 +763,9 @@ and the dropship have seats; only the dropship has flight keys),
 ### V7 — Docs (alongside each)
 
 A `NETCODE.md` §10.10 in §10.7's shape (the rule, the table, on the wire, who uses it, not in it);
-§6.1's record description, §6.3's checks and rejection rule, and §7's table; `DEMOS.md`'s version
+§6.1's record description, §6.3's checks and rejection rule, §7's table, §10.6 (its "everything
+else the strategist fields is soft" and the armour table gain the dropship at 0.5) and §10.9 (the
+dropship joins both lists of vehicles that carry no grenades); `DEMOS.md`'s version
 note; `AGENT_API.md` §6.2, §7.4, §7.5 (`list_units`' fields and example), §8, §9.1; `HTN_BOTS.md` on
 the claim for loading vehicles; `TRAINING.md` on multi-unit loss; this document's status, and
 `IMPLEMENTATION_PLAN.md` §5's scope-cut row struck as the builders' was.
@@ -732,11 +781,11 @@ the claim for loading vehicles; `TRAINING.md` on multi-unit loss; this document'
 | A consumer still asks `IsAlive` and leaks a hidden passenger into play | bots shoot at a parked truck's empty bed; a node is held by nobody visible; selection grabs invisible units | One predicate; §5.6 done in one milestone; a review grep for `IsAlive` over `Scripts/` before V2 closes |
 | Passengers stranded aboard | live units that never fight; a round that cannot end | Unload retries; the server-side orphan rule; riders show in the debug HUD's units line |
 | Boarders that never arrive | a truck that waits for ever; seats reserved by units across the map | The vehicle waits only while somebody is walking to it, and boarders give up after 20 s |
-| Unloading into geometry | units stuck in a wall or outside the map | Slots checked against the navmesh with a passenger's tolerance *and* physics; slots taken this tick remembered |
+| Unloading into geometry | units stuck in a wall, or put through one onto the strip outside the map (which has navmesh of its own) | Slots inside `Cargo.InField`, in sight of the vehicle, and checked against the navmesh with a passenger's tolerance *and* physics; slots taken this tick remembered |
 | Dropship lands on a body, or cannot land | units or players squeezed out; a dropship hovering for ever | Pre-landing and 2 m checks; boarders stand off; "no room to land" from the wire's own bit |
 | Ground bots helpless against the dropship | `htn_*` ground scenarios degrade when a strategist fields one | Half bullet damage, not none; goal projection; drop compensation in §14 if playtests ask |
 | Mixed client and server builds after new RPCs | every unit RPC misrouted, silently | Ship together (§6.2); a join-time protocol version is a separate, small change worth making |
-| Recon regresses because the technical is now also a transport | `htn_recon_finds_contact` fails | The commander never loads a technical; a loading or loaded one is claimed; the recon tests gate V4 |
+| Recon regresses because the technical is now also a transport | `htn_recon_finds_contact` fails | The commander never loads a technical; a loading or loaded one is never in its input; the recon tests gate V4 |
 | Reward or metric spikes from multi-unit deaths | `StrategistReward` and `unit_lost` counts jump when a loaded vehicle dies | It is what happened; `TRAINING.md` says so (V7) |
 
 ---
