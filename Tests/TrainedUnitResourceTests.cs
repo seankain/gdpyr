@@ -78,6 +78,21 @@ public class TrainedUnitResourceTests
 		}
 	}
 
+	[Fact]
+	public void TheTechnical_SeatsFour_AndNothingElseCarriesAnybody()
+	{
+		// docs/VEHICLES.md V-D1, V-D2: a vehicle with seats, inside the bound every hold is made at.
+		Dictionary<string, string> technical = Resource("Units/technical.tres");
+		Assert.Equal(4, Int(technical, "Seats"));
+		Assert.InRange(Int(technical, "Seats"), 1, Gdpyr.Sim.SimConfig.MaxPassengers);
+		Assert.Equal("true", technical["IsVehicle"]);
+
+		foreach (string unit in new[] { "infantry", "tank", "builder", "supply_truck", "sniper", "heavy_gunner" })
+		{
+			Assert.False(Resource($"Units/{unit}.tres").ContainsKey("Seats"), unit);
+		}
+	}
+
 	// ---- reading the files -------------------------------------------------------------
 
 	private static readonly Regex PathLine = new("\"(res://[^\"]+)\"", RegexOptions.Compiled);

@@ -98,6 +98,17 @@ public partial class UnitDefinition : Resource
 	[Export]
 	public float EyeHeightMeters = 1.5f;
 
+	/// <summary>
+	/// How many units on foot can ride in it (docs/VEHICLES.md V-D1, V-D2): the
+	/// technical's four. Zero carries nobody, which is what a file that says nothing
+	/// gets. More than <see cref="SimConfig.MaxPassengers"/> is that many.
+	/// </summary>
+	[Export]
+	public int Seats;
+
+	/// <summary>True for a vehicle other units can get into.</summary>
+	public bool CarriesUnits => Seats > 0;
+
 	[ExportCategory("Senses and weapons")]
 
 	/// <summary>

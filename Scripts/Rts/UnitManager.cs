@@ -279,6 +279,11 @@ public partial class UnitManager : Node
 		// before combat, so that a pillbox's round flies on the tick it was fired.
 		ServerStructures(tick);
 
+		// After the structures, whose finish can still move a vehicle out of a
+		// footprint, and before the snapshot: riders are put where their vehicles ended
+		// up (docs/VEHICLES.md §5.3).
+		ServerCargo(tick);
+
 		Defenses.ServerTick(tick, CombatManager.Instance, GetTree()?.Root?.World3D?.DirectSpaceState);
 
 		ServerReapCorpses(tick);
@@ -445,6 +450,13 @@ public partial class UnitManager : Node
 			return;
 		}
 
+		// Before the plan, the scan and the target: a rider does none of it, and a unit
+		// getting in this tick spends no ray and fires nothing from inside.
+		if (SimulateCargo(unit, tick))
+		{
+			return;
+		}
+
 		UnitContext plan = PlanOf(unit);
 
 		if (tick >= unit.NextScanTick)
@@ -551,7 +563,7 @@ public partial class UnitManager : Node
 		for (int i = 0; i < _ordered.Count && _supplyCount < _supplies.Length; i++)
 		{
 			Unit unit = _ordered[i];
-			if (unit.IsAlive && unit.Definition is { IsSupply: true } definition)
+			if (unit.IsOnField && unit.Definition is { IsSupply: true } definition)
 			{
 				_supplies[_supplyCount++] = new SupplySource(unit.GlobalPosition, definition.SupplyRadiusMeters,
 					unit.UnitId, unit.Team);
@@ -899,7 +911,7 @@ public partial class UnitManager : Node
 		for (int i = 0; i < _ordered.Count && _neighbourCount < _neighbours.Length; i++)
 		{
 			Unit unit = _ordered[i];
-			if (unit.IsAlive && unit.Team == Team.Strategist)
+			if (unit.IsOnField && unit.Team == Team.Strategist)
 			{
 				_neighbours[_neighbourCount++] = new Neighbour(unit.UnitId, unit.GlobalPosition, HealthFraction(unit),
 					unit.State == UnitStateId.Engaging);
@@ -918,7 +930,7 @@ public partial class UnitManager : Node
 			for (int m = 0; m < members; m++)
 			{
 				Unit unit = Find(_squadMembers[m]);
-				if (unit != null && unit.IsAlive)
+				if (unit != null && unit.IsOnField)
 				{
 					_census.Add(s, unit.UnitId, unit.GlobalPosition, unit.State == UnitStateId.Engaging,
 						unit.TargetOwnerId);
@@ -1366,7 +1378,7 @@ public partial class UnitManager : Node
 		for (int i = 0; i < _ordered.Count; i++)
 		{
 			Unit unit = _ordered[i];
-			if (unit.IsAlive && unit.Plan != null)
+			if (unit.IsOnField && unit.Plan != null)
 			{
 				goals[(int)unit.Plan.Intent.Goal]++;
 				waiting += UnitContext.Paces(unit.Plan.Intent.Goal) && unit.Plan.Waiting ? 1 : 0;
@@ -1437,8 +1449,9 @@ public partial class UnitManager : Node
 			Unit unit = _ordered[i];
 
 			// Its own muzzle sits inside its own capsule, and friendly fire between
-			// units would make a firing line a suicide pact.
-			if (!unit.IsAlive || unit.Team == attackerTeam || OwnerId.ForUnit(unit.UnitId) == attackerOwnerId)
+			// units would make a firing line a suicide pact. A rider is inside its
+			// vehicle, and nothing reaches it there (docs/VEHICLES.md V-D6).
+			if (!unit.IsOnField || unit.Team == attackerTeam || OwnerId.ForUnit(unit.UnitId) == attackerOwnerId)
 			{
 				continue;
 			}
@@ -1495,6 +1508,17 @@ public partial class UnitManager : Node
 		unit.DespawnTick = tick + CorpseTicks;
 		ResetPlan(unit);
 		Squads.Leave(unit.UnitId);
+
+		// A dead unit is never aboard (docs/VEHICLES.md §5.1). Nothing reaches a rider
+		// to kill it, and a wreck takes its riders out before it hurts them; this is
+		// the guard for whatever does anyway.
+		if (unit.IsRiding)
+		{
+			Find(unit.RidingIn)?.Cargo?.Remove(unit.UnitId);
+			unit.RidingIn = 0;
+			unit.ApplyPresentation();
+		}
+
 		AgentEventBus.Emit(AgentEventKind.UnitLost, tick, unit.UnitId, unit.DefinitionId, attackerOwnerId,
 			unit.GlobalPosition.X, unit.GlobalPosition.Z);
 		return true;
@@ -1645,6 +1669,14 @@ public partial class UnitManager : Node
 	/// Validates and applies an order. Every one of these checks is answering a
 	/// byte a client chose (docs/NETCODE.md §1, §6.3): is the sender a strategist,
 	/// does the order type exist, does the sender's side own each unit.
+	///
+	/// What a client cannot honestly send counts in <see cref="RejectedOrders"/>: a
+	/// malformed id, a unit of the other side. What can change within a round trip — a
+	/// unit that died, got into a vehicle or was freed a moment ago — is skipped without
+	/// counting, because an honest client's selection lags the server by that much
+	/// (docs/VEHICLES.md §5.2). Riders are skipped, so ordering a vehicle never touches
+	/// its passengers; and a vehicle with units still walking to it keeps the order for
+	/// when they are aboard, unless it is a stop.
 	/// </summary>
 	private void ApplyOrder(int senderPeerId, ReadOnlySpan<int> unitIds, byte kind, Vector3 target,
 		int targetOwnerId)
@@ -1676,13 +1708,18 @@ public partial class UnitManager : Node
 			}
 
 			Unit unit = Find((ushort)raw);
-			if (unit == null || !unit.IsAlive || unit.Team != senderTeam)
+			if (unit == null || !unit.IsOnField)
+			{
+				continue;
+			}
+
+			if (unit.Team != senderTeam)
 			{
 				RejectedOrders++;
 				continue;
 			}
 
-			unit.Order = ordered == OrderKind.Stop
+			UnitOrder order = ordered == OrderKind.Stop
 				? UnitOrder.Hold(unit.GlobalPosition)
 				: new UnitOrder
 				{
@@ -1696,6 +1733,18 @@ public partial class UnitManager : Node
 				};
 			unit.OrderIssuer = senderPeerId;
 			unit.OrderTick = tick;
+
+			// "Click the truck, click where to go" while its passengers are still on
+			// their way: it goes when they are aboard (ServerCargo), in a squad of its own.
+			if (ordered != OrderKind.Stop && unit.HasSeats && CountBoarders(unit) > 0)
+			{
+				unit.Departure = order;
+				unit.HasDeparture = true;
+				continue;
+			}
+
+			unit.Order = order;
+			unit.HasDeparture = false;
 
 			// Re-evaluate on the next tick rather than at the end of the current scan
 			// interval: an order the units do not react to for a sixth of a second
@@ -2149,12 +2198,62 @@ public partial class UnitManager : Node
 		_interpolators.Remove(unitId);
 		ResetPlan(unit);
 		Squads.Leave(unitId);
+		if (unit.IsSimulated)
+		{
+			ReleaseCargo(unit);
+		}
+
 		unit.QueueFree();
+	}
+
+	/// <summary>
+	/// Server-side, for a unit being freed: a rider leaves its vehicle's hold, and a
+	/// vehicle frees nobody with itself (docs/VEHICLES.md §5.5). A corpse is reaped two
+	/// seconds after its riders were taken out of the wreck and a round's field is
+	/// emptied after every hold is, so a vehicle with anybody aboard here is a bug: it
+	/// is logged and its riders are left on their feet where it was — never put
+	/// anywhere, never announced.
+	/// </summary>
+	private void ReleaseCargo(Unit unit)
+	{
+		if (unit.IsRiding)
+		{
+			Find(unit.RidingIn)?.Cargo?.Remove(unit.UnitId);
+			unit.RidingIn = 0;
+		}
+
+		if (unit.Cargo is not { IsEmpty: false } hold)
+		{
+			return;
+		}
+
+		GD.PushError($"[rts] {UnitCatalog.NameOf(unit.DefinitionId)} {unit.UnitId} freed with {hold.Count} aboard");
+		for (int i = 0; i < hold.Count; i++)
+		{
+			if (Find(hold[i]) is { } rider)
+			{
+				rider.RidingIn = 0;
+				rider.ApplyPresentation();
+			}
+		}
+
+		hold.Clear();
 	}
 
 	/// <summary>Clears the field. Called between rounds, on the server.</summary>
 	public void ClearUnits()
 	{
+		// Every hold and every wreck first, so no despawn below frees anybody aboard
+		// and no wreck is resolved against a field that is gone.
+		CombatManager.Instance?.ClearWrecks();
+		for (int i = 0; i < _ordered.Count; i++)
+		{
+			Unit unit = _ordered[i];
+			unit.Cargo?.Clear();
+			unit.RidingIn = 0;
+			unit.HasDeparture = false;
+		}
+
 		for (int i = _ordered.Count - 1; i >= 0; i--)
 		{
 			ushort id = _ordered[i].UnitId;

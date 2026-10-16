@@ -14,6 +14,7 @@ MoveSpeed = 8.0
 HeightMeters = 2.2
 RadiusMeters = 1.0
 EyeHeightMeters = 1.8
+Seats = 4
 SensorRadiusMeters = 70.0
 EngageRangeMeters = 50.0
 LeashRadiusMeters = 30.0

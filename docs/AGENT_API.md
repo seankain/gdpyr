@@ -555,7 +555,9 @@ for one of the two (`tier` 5 or 6) is refused: neither comes out of a barracks.
 ```
 Unit ids that the seat does not own are rejected by `ApplyOrder` exactly as a client's would be,
 and the rejection is counted in `UnitManager.RejectedOrders` — so a policy emitting garbage shows
-up on the debug HUD rather than silently doing nothing.
+up on the debug HUD rather than silently doing nothing. An id of a unit that has died, got into a
+vehicle or been freed since the observation is skipped without counting
+([`NETCODE.md`](NETCODE.md) §6.3).
 
 **Shipped**, with the two parity wrappers the sketch named — `ServerCancelBuild(peerId, index)` and
 `ServerSetRally(peerId, index, point)` — plus three things worth writing down:

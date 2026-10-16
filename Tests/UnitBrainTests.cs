@@ -73,6 +73,8 @@ public class UnitBrainTests
 	[InlineData(OrderKind.Defend, true)]
 	[InlineData(OrderKind.Move, false)]
 	[InlineData(OrderKind.Patrol, false)]
+	[InlineData(OrderKind.Embark, false)]
+	[InlineData(OrderKind.Unload, false)]
 	public void OnlySomeOrdersStopToFight(OrderKind order, bool holds)
 	{
 		// A move order that stops for every contact is how a flank the strategist has
@@ -184,6 +186,56 @@ public class UnitBrainTests
 		var enemy = new Vector3(0f, 0f, 26f);
 
 		Assert.Equal(anchor, UnitBrain.Destination(order, self, hasTarget: true, enemy, Infantry, out _));
+	}
+
+	[Fact]
+	public void ABoarderWalksToWhereItWasToldToStand_AndKeepsWalkingWithATarget()
+	{
+		// docs/VEHICLES.md §5.2: beside the vehicle, shooting on the way as on a move.
+		var order = new UnitOrder
+		{
+			Kind = OrderKind.Embark,
+			Target = new Vector3(12f, 0f, -3f),
+			Anchor = Vector3.Zero,
+			TargetOwnerId = OwnerId.ForUnit(9),
+		};
+
+		Vector3 destination = UnitBrain.Destination(order, new Vector3(30f, 0f, 0f), hasTarget: true,
+			new Vector3(40f, 0f, 10f), Infantry, out bool hasDestination);
+
+		Assert.True(hasDestination);
+		Assert.Equal(order.Target, destination);
+	}
+
+	[Fact]
+	public void AnUnloadingVehicleHasNoDestination()
+	{
+		// None at all, rather than its own position: a destination within the re-path
+		// threshold would keep it driving at an old path corner (docs/VEHICLES.md §5.2).
+		var self = new Vector3(5f, 0f, 5f);
+		var order = new UnitOrder { Kind = OrderKind.Unload, Target = self, Anchor = self };
+
+		Vector3 destination = UnitBrain.Destination(order, self, hasTarget: true, new Vector3(9f, 0f, 9f), Infantry,
+			out bool hasDestination);
+
+		Assert.False(hasDestination);
+		Assert.Equal(self, destination);
+	}
+
+	[Fact]
+	public void EmbarkAndUnload_CannotArriveThroughTheGenericOrderMessage()
+	{
+		Assert.False(UnitOrder.IsIssuable((byte)OrderKind.Embark));
+		Assert.False(UnitOrder.IsIssuable((byte)OrderKind.Unload));
+		Assert.True(UnitOrder.IsIssuable((byte)OrderKind.Stop));
+	}
+
+	[Fact]
+	public void TheNewOrderKinds_AreAppended()
+	{
+		// On the wire, in the unit HTN's order fact and in a policy's observation bytes.
+		Assert.Equal(7, (byte)OrderKind.Embark);
+		Assert.Equal(8, (byte)OrderKind.Unload);
 	}
 
 	// ---- acquisition -------------------------------------------------------

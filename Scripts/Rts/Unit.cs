@@ -117,6 +117,56 @@ public partial class Unit : CharacterBody3D
 
 	public bool IsAlive => Health > 0f;
 
+	/// <summary>
+	/// The vehicle it is riding in, by <see cref="UnitId"/>; 0 on foot
+	/// (docs/VEHICLES.md §5.1). A rider stays a unit — alive, hidden, solid to nothing,
+	/// not simulated, and pinned to its vehicle's position every tick. Never set on a
+	/// dead unit.
+	/// </summary>
+	public ushort RidingIn { get; set; }
+
+	public bool IsRiding => RidingIn != 0;
+
+	/// <summary>
+	/// Alive and on foot: the question every system outside the unit loop is asking
+	/// when it asks whether a unit is there to be seen, hit, counted on a node or
+	/// selected. A rider is alive — it is still the strategist's army — and is none
+	/// of those.
+	/// </summary>
+	public bool IsOnField => IsAlive && !IsRiding;
+
+	/// <summary>
+	/// Who is aboard, for a unit with seats (<see cref="UnitDefinition.Seats"/>); null
+	/// for one without. Made once, in <c>_Ready</c>.
+	/// </summary>
+	public CargoHold Cargo { get; private set; }
+
+	/// <summary>True for a unit other units can get into.</summary>
+	public bool HasSeats => Cargo is { Seats: > 0 };
+
+	/// <summary>
+	/// Server-side, on a unit with seats: the peer whose embark request last reserved
+	/// or filled one of them (docs/VEHICLES.md §5.3). A vehicle with somebody aboard or
+	/// on the way whose loader is no longer seated as a strategist lets them out.
+	/// </summary>
+	public int CargoIssuer { get; set; }
+
+	/// <summary>
+	/// Server-side, on a unit with seats: an order given to it while units were still
+	/// walking to it, carried out once none is (docs/VEHICLES.md §5.2). Meaningful only
+	/// while <see cref="HasDeparture"/>.
+	/// </summary>
+	public UnitOrder Departure;
+
+	/// <inheritdoc cref="Departure"/>
+	public bool HasDeparture { get; set; }
+
+	/// <summary>Server-side, on a unit with seats: units walking to it, as the last cargo pass counted them.</summary>
+	public int BoardersWalking { get; set; }
+
+	/// <summary>Server-side, on an unloading vehicle: the tick a rider with no clear place to get out is tried again on.</summary>
+	public uint UnloadRetryTick { get; set; }
+
 	public float Yaw { get; private set; }
 
 	/// <summary>Where a shot leaves from, and where a line-of-sight ray starts.</summary>
@@ -136,6 +186,7 @@ public partial class Unit : CharacterBody3D
 	private CollisionShape3D _collision;
 	private Vector3 _destination;
 	private bool _hasDestination;
+	private bool _repath;
 	private float _gravity;
 
 	public override void _Ready()
@@ -152,6 +203,9 @@ public partial class Unit : CharacterBody3D
 
 		CollisionLayer = CollisionLayers.Units;
 		CollisionMask = CollisionLayers.UnitMask;
+
+		int seats = UnitCatalog.SeatsOf(DefinitionId);
+		Cargo = seats > 0 ? new CargoHold(seats) : null;
 
 		BuildBody();
 
@@ -243,8 +297,18 @@ public partial class Unit : CharacterBody3D
 		}
 
 		State = UnitStateId.Dead;
-		SetDeadPresentation(true);
+		ApplyPresentation();
 		return true;
+	}
+
+	/// <summary>
+	/// Asks for a fresh path on the next destination, however near the last one it is.
+	/// For a unit put somewhere other than where it walked to — out of a vehicle — whose
+	/// old path starts where it got in (docs/VEHICLES.md §5.4).
+	/// </summary>
+	public void ForceRepath()
+	{
+		_repath = true;
 	}
 
 	/// <summary>
@@ -285,18 +349,28 @@ public partial class Unit : CharacterBody3D
 
 		if (wasAlive != IsAlive)
 		{
-			SetDeadPresentation(!IsAlive);
+			ApplyPresentation();
 		}
 	}
 
 	/// <summary>
-	/// A dead unit is hidden and off its collision layer for the frame or two before
-	/// it is freed, so nothing walks into an invisible corpse.
+	/// Whether it is drawn and solid, from whether it is alive and on foot — the one
+	/// place both are decided, so that dying and getting in or out cannot undo each
+	/// other (docs/VEHICLES.md §5.1). A dead unit is hidden and off its collision layer
+	/// for the frame or two before it is freed, so nothing walks into an invisible
+	/// corpse; a rider is hidden and off it for as long as it rides, and on the server
+	/// collides with nothing either, so the hidden body never pushes its vehicle.
 	/// </summary>
-	public void SetDeadPresentation(bool dead)
+	public void ApplyPresentation()
 	{
-		Visible = !dead;
-		CollisionLayer = dead ? 0u : CollisionLayers.Units;
+		bool shown = IsAlive && !IsRiding;
+		Visible = shown;
+		CollisionLayer = shown ? CollisionLayers.Units : 0u;
+
+		if (IsSimulated)
+		{
+			CollisionMask = IsRiding ? 0u : CollisionLayers.UnitMask;
+		}
 	}
 
 	// ---- construction ------------------------------------------------------
@@ -392,8 +466,9 @@ public partial class Unit : CharacterBody3D
 
 		// Re-pathing every tick would recompute the same path sixty times a second
 		// for a unit walking a straight line.
-		if (_destination.DistanceSquaredTo(destination) > RepathThresholdMeters * RepathThresholdMeters)
+		if (_repath || _destination.DistanceSquaredTo(destination) > RepathThresholdMeters * RepathThresholdMeters)
 		{
+			_repath = false;
 			_destination = destination;
 			if (_agent != null && UnitManager.Instance is { NavigationReady: true })
 			{

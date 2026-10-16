@@ -152,6 +152,12 @@ public static class UnitBrain
 				// structure is (Construction.InReach), not from this point.
 				return order.Target;
 
+			case OrderKind.Embark:
+				// Beside the vehicle, refreshed every tick by whoever knows where the vehicle
+				// is (docs/VEHICLES.md §5.3). An unloading vehicle has no destination at all:
+				// it falls through to standing still.
+				return order.Target;
+
 			case OrderKind.Defend:
 				// Chases only as far as the leash, then goes home. Without this a probe
 				// at the edge of the sensor drags the whole garrison off the point.

@@ -562,8 +562,9 @@ public sealed class BotPilot
 			return true;
 		}
 
+		// A target that got into a vehicle is a target lost (docs/VEHICLES.md V-D6).
 		Unit unit = units.Find(OwnerId.UnitOf(_targetOwnerId));
-		if (unit == null || !unit.IsAlive)
+		if (unit == null || !unit.IsOnField)
 		{
 			return false;
 		}
@@ -898,7 +899,7 @@ public sealed class BotPilot
 		}
 
 		Unit unit = OwnerId.IsUnit(_targetOwnerId) ? units.Find(OwnerId.UnitOf(_targetOwnerId)) : null;
-		if (unit == null || !unit.IsAlive || unit.Team == team || (unit.Definition?.IsBulletProof ?? false))
+		if (unit == null || !unit.IsOnField || unit.Team == team || (unit.Definition?.IsBulletProof ?? false))
 		{
 			unit = null;
 			for (int i = 0; i < _contactCount && unit == null; i++)
@@ -911,7 +912,7 @@ public sealed class BotPilot
 			}
 		}
 
-		if (unit == null || !unit.IsAlive)
+		if (unit == null || !unit.IsOnField)
 		{
 			return false;
 		}
@@ -1310,7 +1311,7 @@ public sealed class BotPilot
 	private Vector3 GrenadeAim(PlayerCombat combat, Vector3 eye, bool targetInCover)
 	{
 		if (!OwnerId.IsUnit(_targetOwnerId)
-			|| UnitManager.Instance?.Find(OwnerId.UnitOf(_targetOwnerId)) is not { IsAlive: true } unit
+			|| UnitManager.Instance?.Find(OwnerId.UnitOf(_targetOwnerId)) is not { IsOnField: true } unit
 			|| unit.Definition?.IsVehicle == true)
 		{
 			return Vector3.Zero;

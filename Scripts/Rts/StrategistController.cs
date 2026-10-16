@@ -909,7 +909,7 @@ public partial class StrategistController : Node3D
 		for (int i = 0; i < _selected.Count; i++)
 		{
 			Unit unit = _selected[i];
-			if (unit != null && IsInstanceValid(unit) && unit.IsAlive && UnitCatalog.CanConstruct(unit.DefinitionId))
+			if (unit != null && IsInstanceValid(unit) && unit.IsOnField && UnitCatalog.CanConstruct(unit.DefinitionId))
 			{
 				count++;
 			}
@@ -924,7 +924,7 @@ public partial class StrategistController : Node3D
 		for (int i = 0; i < _selected.Count && at < ids.Length; i++)
 		{
 			Unit unit = _selected[i];
-			if (unit != null && IsInstanceValid(unit) && unit.IsAlive && UnitCatalog.CanConstruct(unit.DefinitionId))
+			if (unit != null && IsInstanceValid(unit) && unit.IsOnField && UnitCatalog.CanConstruct(unit.DefinitionId))
 			{
 				ids[at++] = unit.UnitId;
 			}
@@ -1005,8 +1005,9 @@ public partial class StrategistController : Node3D
 
 	// ---- picking -----------------------------------------------------------
 
+	/// <summary>A unit of the side's on the field. A rider is not: it is selected by selecting its vehicle (docs/VEHICLES.md §7).</summary>
 	private static bool IsSelectable(Unit unit, Team team) =>
-		unit != null && IsInstanceValid(unit) && unit.IsAlive && unit.Team == team;
+		unit != null && IsInstanceValid(unit) && unit.IsOnField && unit.Team == team;
 
 	/// <summary>
 	/// The index of <paramref name="team"/>'s barracks under the cursor, or -1. A ray
@@ -1194,7 +1195,7 @@ public partial class StrategistController : Node3D
 		for (int i = _selected.Count - 1; i >= 0; i--)
 		{
 			Unit unit = _selected[i];
-			if (unit == null || !IsInstanceValid(unit) || !unit.IsAlive)
+			if (unit == null || !IsInstanceValid(unit) || !unit.IsOnField)
 			{
 				_selected.RemoveAt(i);
 				changed = true;

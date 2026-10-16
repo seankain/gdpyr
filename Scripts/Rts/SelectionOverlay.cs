@@ -186,7 +186,7 @@ public partial class SelectionOverlay : Control
 		for (int i = 0; i < _selected.Count; i++)
 		{
 			Unit unit = _selected[i];
-			if (unit == null || !IsInstanceValid(unit) || !unit.IsAlive)
+			if (unit == null || !IsInstanceValid(unit) || !unit.IsOnField)
 			{
 				continue;
 			}

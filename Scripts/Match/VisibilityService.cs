@@ -274,7 +274,10 @@ public sealed class VisibilityService
 		for (int i = 0; units != null && i < units.SlotCount; i++)
 		{
 			Unit unit = units.UnitAt(i);
-			if (unit == null || !unit.IsAlive || unit.Team != Team.Strategist)
+
+			// A rider sees nothing from inside (docs/VEHICLES.md V-D6) — and would crowd
+			// the candidates at its vehicle's point, starving a sensor elsewhere that can.
+			if (unit == null || !unit.IsOnField || unit.Team != Team.Strategist)
 			{
 				continue;
 			}

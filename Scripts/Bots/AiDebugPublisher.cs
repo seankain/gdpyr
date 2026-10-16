@@ -128,7 +128,8 @@ public sealed class AiDebugPublisher
 		for (int i = 0; i < units.SlotCount && frame.Labels.Count < AiDebugCodec.MaxLabels; i++)
 		{
 			Unit unit = units.UnitAt(i);
-			if (unit is not { IsAlive: true, Plan: { } plan })
+			// No label for a rider: it plans nothing while it rides (docs/VEHICLES.md §5.6).
+			if (unit is not { IsOnField: true, Plan: { } plan })
 			{
 				continue;
 			}

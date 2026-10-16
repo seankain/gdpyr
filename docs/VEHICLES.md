@@ -1,8 +1,9 @@
 # gdpyr — Vehicles that carry units: the technical, and a dropship
 
-**Status: in progress.** V1 (the engine-free cargo rules) is built; V2–V7 are not. It replaces the
-"Dropships and troop carriers" scope cut in [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) §5
-with a design and a milestone list (M10 there).
+**Status: in progress.** V1 (the engine-free cargo rules) and V2 (the technical carries units, on
+the server) are built; V2's engine-side checks are outstanding, and V3–V7 are not built. It replaces
+the "Dropships and troop carriers" scope cut in [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md)
+§5 with a design and a milestone list (M10 there).
 
 Companion documents: [`NETCODE.md`](NETCODE.md) §6 (unit replication, commands), §10.5 (builders,
 the request pattern this copies), §10.7 (the supply truck, the precedent for "a unit kind is one
@@ -270,7 +271,10 @@ passes five checks, as shared helpers beside `ValidateSite` (`UnitManager.Struct
   height. Without it a technical parked against a perimeter wall puts its second ring through the
   1 m wall onto the strip outside, which is clear, on ground and on navmesh; the same goes for a
   sandbag or barracks wall;
-- **ground** — `ValidateSite`'s World-layer ray, reused as it is;
+- **ground** — a World-layer ray down from the reachability line's height (1 m over the slot)
+  rather than `ValidateSite`'s from 6 m above, so a slot under a roof finds the floor and not the
+  roof; and the ground within `CapturePad.VerticalToleranceMeters` of the vehicle's feet, the band a
+  unit gets in from, so nobody gets out at the foot of a drop;
 - **navmesh** — `NavigationServer3D.MapGetClosestPoint` within a tolerance of the passenger's own
   (its radius + 0.3 m flat, 0.5 m vertical), not `ValidateSite`'s, which is sized for a structure
   (half-extent + 1.5 m); skipped, as `ValidateSite` skips it, while `NavigationReady` is false;
@@ -722,7 +726,7 @@ the same change.
   NaN distance as furthest and never drops a candidate for want of room in its boarders span;
   `WreckKillsAll` treats an unknown (NaN) height as high. Nothing in the game calls any of it yet.
 
-### V2 — The technical carries units, on the server (2 days)
+### V2 — The technical carries units, on the server (2 days) — built; the engine-side checks are outstanding
 
 - Record the scenario baseline (§11).
 - `UnitDefinition.Seats`; `Units/technical.tres` `Seats = 4`; `UnitCatalog.SeatsOf`/`CanRide`.
@@ -736,6 +740,39 @@ the same change.
 - **Done when:** on a listen host, units board, ride, unload and survive a wreck; a passenger
   cannot be hit, does not count on a node and does not light the fog; "click the truck, click
   where to go" drives it away full.
+- **Result:** `dotnet test` 1,609 passed, 0 failed (1,602 before; 7 new: 6 in `UnitBrainTests` —
+  Embark goes to its target, Unload has no destination, neither is issuable or stops to fight, both
+  are appended — and 1 in `TrainedUnitResourceTests`, the technical's four seats and nobody else's);
+  `dotnet build Gdpyr.csproj` 0 warnings, 0 errors. Built: `UnitDefinition.Seats`,
+  `technical.tres` `Seats = 4`, `UnitCatalog.SeatsOf`/`CanRide`; `OrderKind.Embark = 7`/`Unload = 8`;
+  `Unit.RidingIn`/`IsRiding`/`IsOnField`, `Cargo`, `CargoIssuer`, `Departure`, `ApplyPresentation`
+  (replacing `SetDeadPresentation`), `ForceRepath`; `Scripts/Rts/UnitManager.Cargo.cs` — both
+  request quartets, `SimulateCargo`/`ResolveEmbarkOrder`/`Board`, `ServerCargo` (orphans,
+  departures, unload with a 10-tick retry, the pin), the exit-slot checks and `EjectFromWreck`;
+  `ApplyOrder`'s rejection rule and departures; `CombatManager`'s wreck list and `ResolveWrecks`;
+  `Despawn`/`ClearUnits`' hold rules; §5.6's sweep in full, and the review grep for `IsAlive` over
+  `Scripts/`, whose remaining unit uses are the army counts (`LiveUnitCount`, `Build`'s census,
+  `Fortify`'s and `QueueSupply`'s counts), the damage entry points, the cover claims (boarding
+  clears the spot), and the two agent views that keep riders.
+- **Not checked, and why:** there is no Godot in the environment this was built in, so the scenario
+  baseline (§11) was not recorded and the "done when" above was not run. Nor can it be run on V2
+  alone: nothing a person or a policy can press reaches `RequestEmbark` or `RequestUnload` until
+  V3's right-click and `U`, or V4's agent commands. The baseline is therefore V3's or V4's first step.
+- **Changed from the plan above, in the code and here:** the exit slot's ground ray (§5.4, above).
+  §9.1's exclusion of boarders and of vehicles with passengers or boarders from `Decide`,
+  `FillZones`, `ApplyIntents` and legacy `Command` (`BotStrategist.IsInTransport`) is brought
+  forward from V4: without it a computer co-strategist recruits a person's loaded technical once the
+  30 s claim lapses. An embark keeps an order the vehicle was already keeping; the vehicle leaves
+  its squad on an embark or an unload, and a departure puts it in a squad of its own, as the order
+  would have. A vehicle whose loader has gone unloads on nobody's word (issuer 0), so no claim
+  holds its riders. A rider thrown from a wreck holds on its own last issuer's word. An unload of a
+  vehicle with nobody aboard does nothing, boarders walking to it included. The debug HUD's
+  "(n riding)" appears only when n > 0.
+- **Left for V4, with their kinds:** the `unit_embarked`, `unit_disembarked` and `dropship_landed`
+  events — `Board`, `GetOut` and the dropship's landing are where they go; and §9.2's `carry`
+  selector, without which an HTN unit walking to board, or a vehicle unloading, runs a failing
+  `FindPlan` each tick and moves by `UnitBrain.Destination`, which is the right behaviour at a
+  planning cost.
 
 ### V3 — The wire and the strategist's controls (1½ days)
 

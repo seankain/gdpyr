@@ -137,6 +137,19 @@ public static class UnitCatalog
 	/// <summary>Whether units of this kind resupply the units round them (<see cref="UnitDefinition.SupplyRadiusMeters"/>).</summary>
 	public static bool IsSupply(byte id) => Definition(id)?.IsSupply ?? false;
 
+	/// <summary>
+	/// How many units ride in one of this kind (<see cref="UnitDefinition.Seats"/>,
+	/// docs/VEHICLES.md V-D2), clamped to <see cref="SimConfig.MaxPassengers"/>; 0 for
+	/// anything that carries nobody.
+	/// </summary>
+	public static int SeatsOf(byte id) => Mathf.Clamp(Definition(id)?.Seats ?? 0, 0, SimConfig.MaxPassengers);
+
+	/// <summary>
+	/// Whether units of this kind can get into a vehicle (V-D1): anything on foot.
+	/// No vehicle carries a vehicle.
+	/// </summary>
+	public static bool CanRide(byte id) => Definition(id) is { IsVehicle: false };
+
 	/// <summary>Whether a barracks trains units of this kind, rather than only a structure (docs/NETCODE.md §10.8).</summary>
 	public static bool IsTrainedInBarracks(byte id) => Definition(id)?.TrainedInBarracks ?? false;
 

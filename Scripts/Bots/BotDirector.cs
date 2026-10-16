@@ -269,7 +269,9 @@ public sealed class BotDirector
 	/// Ages the ground memory, and forgets what is dead: a unit killed or a structure
 	/// knocked down is no contact to plan against. That is no privilege — the unit
 	/// snapshot is not fogged for the ground force, so every ground client draws a
-	/// unit's death, and every structure's (docs/NETCODE.md §6.2, §10.5).
+	/// unit's death, and every structure's (docs/NETCODE.md §6.2, §10.5). A unit that got
+	/// into a vehicle is forgotten the same way: every ground client sees it vanish
+	/// into the truck (docs/VEHICLES.md V-D12).
 	/// </summary>
 	private void PruneGroundContacts(uint tick)
 	{
@@ -287,7 +289,7 @@ public sealed class BotDirector
 			int ownerId = memory.At(i).OwnerId;
 			bool gone = OwnerId.IsStructure(ownerId)
 				? units.StructureOf(ownerId) is not { IsDestroyed: false }
-				: units.Find(OwnerId.UnitOf(ownerId)) is not { IsAlive: true };
+				: units.Find(OwnerId.UnitOf(ownerId)) is not { IsOnField: true };
 
 			if (gone)
 			{

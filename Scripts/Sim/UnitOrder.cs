@@ -4,7 +4,9 @@ namespace Gdpyr.Sim;
 
 /// <summary>
 /// The four orders a strategist can give, plus the two that are not orders
-/// (docs/IMPLEMENTATION_PLAN.md §M3), plus the one only a builder is given.
+/// (docs/IMPLEMENTATION_PLAN.md §M3), plus the one only a builder is given, plus
+/// the two a vehicle that carries units and its passengers are given
+/// (docs/VEHICLES.md §5.2).
 ///
 /// The numbers are on the wire, so they are written down rather than inherited
 /// from declaration order. <see cref="Stop"/> is a command and never a stored
@@ -39,6 +41,25 @@ public enum OrderKind : byte
 	/// <see cref="UnitOrder.TargetOwnerId"/> its <see cref="OwnerId.ForStructure"/>.
 	/// </summary>
 	Build = 6,
+
+	/// <summary>
+	/// Get into a vehicle, and ride in it (docs/VEHICLES.md §5.2). Never through the
+	/// generic order message, for <see cref="Build"/>'s reason: it names a vehicle, so
+	/// it arrives by its own request. <see cref="UnitOrder.Target"/> is where to stand
+	/// beside the vehicle while walking to it, and the vehicle's position once aboard;
+	/// <see cref="UnitOrder.Anchor"/> where the unit stood when it was ordered;
+	/// <see cref="UnitOrder.TargetOwnerId"/> the vehicle's <see cref="OwnerId.ForUnit"/>.
+	/// Shoots on the walk, as a move does.
+	/// </summary>
+	Embark = 7,
+
+	/// <summary>
+	/// A vehicle letting everybody aboard out where it is (docs/VEHICLES.md §5.2,
+	/// V-D5): it stands still, and they get out round it. Its own request, too.
+	/// <see cref="UnitOrder.Target"/> and <see cref="UnitOrder.Anchor"/> are where it
+	/// was told, which nothing steers by.
+	/// </summary>
+	Unload = 8,
 }
 
 /// <summary>
@@ -82,7 +103,8 @@ public struct UnitOrder
 	/// is something the server has to answer for (docs/NETCODE.md §1).
 	/// <see cref="OrderKind.Build"/> is not issuable here: it has its own request,
 	/// which checks what the generic one cannot — that the unit is a builder and the
-	/// structure is the sender's.
+	/// structure is the sender's. Nor are <see cref="OrderKind.Embark"/> and
+	/// <see cref="OrderKind.Unload"/>, which name a vehicle and have requests of their own.
 	/// </summary>
 	public static bool IsIssuable(byte kind) =>
 		kind is >= (byte)OrderKind.Move and <= (byte)OrderKind.Stop;
