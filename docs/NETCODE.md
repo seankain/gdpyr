@@ -1215,11 +1215,11 @@ it load-bearing, and a protocol version in the join handshake is a small change 
 **Who uses it.** A person right-clicks a friendly vehicle with units selected, presses `U` or the
 card's **Unload**, and queues a dropship on `T`. A policy sends `embark` and `unload`. The playtest
 harness starts units aboard and scripts a strategist seat's commands ([`AGENT_API.md`](AGENT_API.md)
-§9.1), and four scenarios check it: `technical_boards_squad`, `technical_carries_squad`,
-`technical_wreck_ejects` and `dropship_lands_to_unload`. **No computer strategist loads anything**
-(V-D9): riders, boarders, a vehicle with anybody aboard or on the way, and every aircraft are left out
-of its command outright ([`HTN_BOTS.md`](HTN_BOTS.md) D1), so a person's loaded truck is never
-recruited as a scout. Under `--bot-ai htn` a unit walking to get in, or a vehicle unloading, is never
+§9.1), and four scenarios check it, all passing in Godot: `technical_boards_squad`,
+`technical_carries_squad`, `technical_wreck_ejects` and `dropship_lands_to_unload`. **No computer
+strategist loads anything** (V-D9): riders, boarders, a vehicle with anybody aboard or on the way, and
+every aircraft are left out of its command outright ([`HTN_BOTS.md`](HTN_BOTS.md) D1), so a person's
+loaded truck is never recruited as a scout. Under `--bot-ai htn` a unit walking to get in, or a vehicle unloading, is never
 pulled off it to retreat or resupply. Ground bots do not see riders, and walk to the ground under an
 airborne dropship to shoot at it.
 
