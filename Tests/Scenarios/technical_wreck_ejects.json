@@ -1,19 +1,19 @@
 {
   "name": "a technical destroyed with four aboard throws them all out alive, and the grenadier outranges its gun",
   "seeds": [2, 11],
-  "duration_ticks": 960,
+  "duration_ticks": 1560,
   "warmup_ticks": 60,
   "roster": { "ground": 1, "strategists": 1 },
 
   "seats": [
-    { "id": "grenadier", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/locker_then_fire.json" },
+    { "id": "grenadier", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/locker_then_six_rounds.json" },
     { "id": "chair", "team": "strategist", "policy": "strategist", "step_mul": 6,
-      "script": { "repeat": false, "steps": [ { "ticks": 960, "commands": [] } ] } }
+      "script": { "repeat": false, "steps": [ { "ticks": 1560, "commands": [] } ] } }
   ],
 
   "spawns": [
     { "peer": "grenadier", "at": [8, 1, 9.5], "look": [0, 0.032] },
-    { "unit": "technical", "id": "truck", "team": "strategist", "at": [8, 1, -45.5], "order": "none" },
+    { "unit": "technical", "id": "truck", "team": "strategist", "at": [8, 1, -42.5], "order": "none" },
     { "unit": "infantry", "aboard": "truck" },
     { "unit": "infantry", "aboard": "truck" },
     { "unit": "infantry", "aboard": "truck" },
@@ -24,6 +24,7 @@
     { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
     { "metric": "events.unit_lost[tier=1].count", "op": "==", "value": 1 },
     { "metric": "events.unit_disembarked.count", "op": "==", "value": 4 },
+    { "metric": "events.unit_lost.count", "op": "==", "value": 1 },
     { "metric": "observation.grenadier.self.alive.min", "op": "==", "value": 1 }
   ]
 }

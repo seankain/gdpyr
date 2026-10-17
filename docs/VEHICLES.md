@@ -1,10 +1,14 @@
 # gdpyr — Vehicles that carry units: the technical, and a dropship
 
-**Status: built; the engine-side checks are outstanding.** V1 (the engine-free cargo rules), V2 (the
-technical carries units, on the server), V3 (the wire and the strategist's controls), V4 (bots,
-agents, debugger), V5 (the harness and the technical's scenarios), V6 (the dropship) and V7 (the
-docs) are built. None of it has been run in Godot: the scenario baseline, the four vehicle scenarios
-and the listen-host and dedicated-server checks of V2–V6 are still to be taken (§12). It replaced
+**Status: built; the four vehicle scenarios pass in Godot; the listen-host and dedicated-server
+checks are outstanding.** V1 (the engine-free cargo rules), V2 (the technical carries units, on the
+server), V3 (the wire and the strategist's controls), V4 (bots, agents, debugger), V5 (the harness
+and the technical's scenarios), V6 (the dropship) and V7 (the docs) are built. The four vehicle
+scenarios were first run headless in Godot 4.6 on 2026-10-17: three passed as written, and
+`technical_wreck_ejects` failed on its own set-up, not on the game, and passes as corrected; the
+whole suite, 23 scenarios, passes, and the 19 that predate the vehicles report what they did before
+them, within the engine's run-to-run spread (§12, *Engine-side checks*). The listen-host and dedicated-server checks of V2–V6 need a person at the
+controls and are still to be taken. It replaced
 the "Dropships and troop carriers" scope cut in [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md)
 §5 with a design and a milestone list (M10 there); the cut is struck.
 
@@ -675,8 +679,8 @@ All additive (V-D10), as the supply truck and H6's events were.
 
 ## 11. Harness and scenarios
 
-The harness cannot express this yet: a spawn cannot refer to another spawn, `Runner.Act`
-(`tools/Gdpyr.Playtest/Runner.cs:246`) ignores strategist seats, and `ScriptStep` is ground input
+Before V5 the harness could not express this: a spawn could not refer to another spawn, `Runner.Act`
+(`tools/Gdpyr.Playtest/Runner.cs:246`) ignored strategist seats, and `ScriptStep` was ground input
 only.
 
 - **Spawns** gain an optional `"id"` label and `"aboard": "<label>"` naming an earlier unit spawn.
@@ -700,7 +704,7 @@ metric:
 |---|---|---|
 | `technical_boards_squad` | a technical and six riflemen beside it; scripted embark of all six | `unit_embarked.count == 4` |
 | `technical_carries_squad` | a technical with four aboard; scripted move 60 m, then unload | `unit_disembarked[x>…].count == 4`; `unit_lost.count == 0` |
-| `technical_wreck_ejects` | a technical with four aboard on open ground, ~55 m from a scripted grenadier on `scripts/locker_then_fire.json` (`locker_launcher_vs_tank`'s pattern, since a scenario cannot arm a bot) — outside the technical's 50 m engage range, inside its 70 m sensor, so it cannot kill the grenadier first; the spawn's `look` pitch retuned for the range; a stepped strategist seat for the `aboard` spawn | in every seed: `unit_lost[tier=1].count == 1`, `unit_disembarked.count == 4`, `observation.grenadier.self.alive.min == 1` (a 40 mm round does 130 of the technical's 220) |
+| `technical_wreck_ejects` | a technical with four aboard on open ground at `(8, -42.5)`, 52 m from a scripted grenadier on `scripts/locker_then_six_rounds.json` (`locker_launcher_vs_tank`'s pattern, since a scenario cannot arm a bot) — outside the technical's 50 m engage range, inside its 70 m sensor, so it cannot kill the grenadier first, and 108.5 m from the barracks, outside its 107.1 m resupply reach, so it does not heal between rounds; a stepped strategist seat for the `aboard` spawn | in every seed: `unit_lost[tier=1].count == 1`, `unit_disembarked.count == 4`, `unit_lost.count == 1`, `observation.grenadier.self.alive.min == 1` (a direct 40 mm hit does its impact's 40 of the technical's 220 — the unit struck is left out of its own blast — so the sixth round wrecks it, and the script fires no seventh) |
 | `dropship_lands_to_unload` | a dropship with eight aboard; scripted move, then unload | `dropship_landed.count >= 1`; `unit_disembarked.count == 8` |
 
 **The baseline.** The last measured suite is 18 of 19 at `fcf2a5d`, with
@@ -708,6 +712,8 @@ metric:
 `cee3f28` since changed the unit domain's Attack selector — the cause that section gives for that
 failure — and recorded no suite result. So V2 starts by running `./scripts/playtest.sh` over
 `Tests/Scenarios/*.json` at its own start commit, and that run is the baseline V5 compares against.
+It was taken on 2026-10-17, after V7: 19 of 19 at `574d402`, V2's start commit, and 23 of 23 with
+the vehicles (§12, *Engine-side checks*).
 
 ---
 
@@ -729,7 +735,7 @@ the same change.
   NaN distance as furthest and never drops a candidate for want of room in its boarders span;
   `WreckKillsAll` treats an unknown (NaN) height as high. Nothing in the game calls any of it yet.
 
-### V2 — The technical carries units, on the server (2 days) — built; the engine-side checks are outstanding
+### V2 — The technical carries units, on the server (2 days) — built; the listen-host check is outstanding
 
 - Record the scenario baseline (§11).
 - `UnitDefinition.Seats`; `Units/technical.tres` `Seats = 4`; `UnitCatalog.SeatsOf`/`CanRide`.
@@ -777,7 +783,7 @@ the same change.
   `FindPlan` each tick and moves by `UnitBrain.Destination`, which is the right behaviour at a
   planning cost.
 
-### V3 — The wire and the strategist's controls (1½ days) — built; the engine-side checks are outstanding
+### V3 — The wire and the strategist's controls (1½ days) — built; the dedicated-server check is outstanding
 
 - `UnitFlags` bits and the yaw-slot rule, `UnitSnapshot`'s fields, `UnitSnapshotCodec`, client
   apply on both paths with the newest-tick guard, hidden-until-first-record puppets, getting in and
@@ -819,7 +825,7 @@ the same change.
   does. A full vehicle's notice replaces the selection line for 1.5 s. `T` and the dropship's card
   button are V6's.
 
-### V4 — Bots, agents, debugger (1 day) — built; the engine-side checks are outstanding
+### V4 — Bots, agents, debugger (1 day) — built; the listen-host check is outstanding
 
 §9 and §10. `AgentEventTests`, `StrategistActionSpaceTests` (a rider is in no group),
 `AgentObservationTests` (order bytes 7–8 and tier 7 leave the one-hots zero), `UnitHtnTests`'
@@ -856,7 +862,7 @@ quiet policy's loaded technical is not recruited by its fallback commander.
   strategist's overlay has the pips, and a spectator has the header. The reference action space's
   centroid still counts riders, which stand where their vehicle does.
 
-### V5 — Harness and the technical's scenarios (1 day) — built; the engine-side checks are outstanding
+### V5 — Harness and the technical's scenarios (1 day) — built; its scenarios and the suite re-run pass in Godot
 
 §11's spawn labels, `aboard`, strategist scripts, parser facts, and the three technical scenarios.
 The existing suite re-run against V2's baseline.
@@ -890,14 +896,15 @@ The existing suite re-run against V2's baseline.
   `technical_boards_squad` also asserts `unit_disembarked.count == 0` and `unit_lost.count == 0`:
   four in is only the claim if the other two neither got in and out nor died.
   `technical_carries_squad` drives from `x = -50` to `x = 10` and reads `unit_disembarked[x>0]`, so
-  four exits there are four riders carried at least fifty metres. `technical_wreck_ejects` stands
+  four exits there are four riders carried at least fifty metres. `technical_wreck_ejects` stood
   the grenadier 55 m from the technical along `x = 8`, a line clear of cover on the greybox map,
   over seeds 2 and 11, with a `look` pitch of 0.032 rad, computed by stepping the 40 mm round's drag:
-  it meets the technical's body about 1.4 m up at 55 m. A rider the server refuses to seat stays where it was
+  it meets the technical's body about 1.4 m up at 55 m. That set-up failed when it was first run in
+  Godot and was corrected (*Engine-side checks*, below). A rider the server refuses to seat stays where it was
   placed; the harness stops on the refusal, so nothing measures it. `dropship_lands_to_unload` is
   V6's, which adds the kind.
 
-### V6 — The dropship (2–3 days) — built; the engine-side checks are outstanding
+### V6 — The dropship (2–3 days) — built; its scenario passes in Godot, the listen-host check is outstanding
 
 `Scripts/Sim/Flight.cs` and `FlightTests`; `Units/dropship.tres`, id 7, the flight exports;
 `SteerFlying`, no acquisition when unarmed, flat arrival, landing spots, clamped targets, spawning;
@@ -999,9 +1006,71 @@ the claim for loading vehicles; `TRAINING.md` on multi-unit loss; this document'
 - **Not checked, and why:** as V2–V6 — no Godot here. The docs describe the code as written; what
   the engine does with it is the outstanding checks' to say.
 
+### Engine-side checks — the scenarios (2026-10-17)
+
+Run headless in Godot 4.6 (`v4.6.stable.mono.official.89cea1439`) with the .NET 8.0.131 SDK,
+through `./scripts/playtest.sh`, on `8461773` with the correction below. `dotnet test` 1,704 passed,
+0 failed; `dotnet build` of `Gdpyr.csproj`, `tools/Gdpyr.Playtest` and `tools/Gdpyr.AgentClient`
+0 warnings, 0 errors.
+
+| Scenario | Result | What the trace shows |
+|---|---|---|
+| `technical_boards_squad` | passes as written | four `unit_embarked`, nobody out, nobody lost |
+| `technical_carries_squad` | passes as written | four `unit_disembarked` at `x > 0` after the 60 m drive, nobody lost |
+| `technical_wreck_ejects` | failed as written; passes as corrected, seeds 2 and 11 | six direct hits of 40 on the truck; on the sixth, four riders out at exit slots behind and beside the wreck, each dealt 50 (half of 100) in the grenadier's name |
+| `dropship_lands_to_unload` | passes as written | took off, flew 60 m and landed 0.4 m from its point 719 ticks after the order (`dropship_landed`, aboard 8); all eight out two ticks after the unload, on the 3.0 m ring round the hull |
+
+**Why `technical_wreck_ejects` failed.** In both seeds the technical took four hits and lived. The
+scenario rested on two premises that the game does not bear out:
+
+- A direct 40 mm hit does its impact, 40, not impact and blast: the unit struck is left out of its
+  own blast (`CombatManager.Explode`, M2's rule, stated in `NETCODE.md` §10.6). The truck's 220 takes
+  six rounds, not two.
+- At `(8, -45.5)` the truck stood 106.9 m from the barracks, 0.2 m inside its 107.1 m resupply reach
+  (a barracks gun's 7.1 m offset and 100 m range), so three seconds after each hit it healed at
+  11/s: 180, 154, 128 and 102 left after hits one to four, a round every 256 ticks. The script's
+  932 ticks fired four.
+
+Corrected, and no game code changed: the truck is moved 3 m towards the grenadier, to
+`(8, -42.5)` — 108.5 m from the barracks, 52 m from the grenadier, still past the technical's 50 m
+engage range, and the same 0.032 rad pitch hits it every time; a new script,
+`scripts/locker_then_six_rounds.json`, fires six rounds and stops, because a seventh lands among
+riders standing at half health by the wreck and kills three (seen in a longer run); the scenario
+runs 1,560 ticks; and `unit_lost.count == 1` is asserted, the "alive" in its name.
+
+**What these runs exercise in the engine:** the nearest four admitted and the rest held; boarders
+walking to the stand-off point and getting in; the pin (riders got out where the truck had driven
+to); rounds and blasts not reaching a rider — six launcher blasts went off against a truck with four
+riders pinned at its position and hurt none of them; exit slots passing the reachability, ground,
+navigation-mesh and clearance checks on the greybox map, round the technical and round the
+dropship's 2 m hull; `ResolveWrecks` after the projectile step, on the ground; and the dropship's
+take-off, cruise, landing-spot search, landing and `dropship_landed`. Of V6's three unverified
+engine behaviours, two are now exercised on that path: the landing-spot check accepted open floor
+(its second ray, started 0.6 m into the floor, found nothing under it), and the body switched
+between grounded and floating motion at take-off and touchdown. The resized cylinder was queried,
+but nothing stood under the dropship, so a stale height would not have shown.
+
+**The suite against the baseline (§11).** `./scripts/playtest.sh Tests/Scenarios/*.json` at
+`574d402`, V2's start commit (V1 adds code that nothing calls): 19 of 19 pass. With the vehicles and
+the correction above: 23 of 23, the same 19 and the four vehicle scenarios. Of the 19, 18 report the
+same value for every assertion at both commits. The nineteenth, `htn_squad_retreats`, reads
+`squad_task[goal=4].count` 3..5 over its four seeds at the baseline and 3..6 with the vehicles; two
+runs of the same commit differ as much — 5, 5, 3, 3 per seed, then 3, 5, 2, 5, at the baseline — so
+that is the engine's run-to-run spread (`AGENT_API.md` §3), not this change. `htn_recon_finds_contact`,
+which §9.1 says must pass unchanged, does, with the same values. `htn_strategist_defends_node`, the
+one failure in the last recorded suite (`fcf2a5d`), passes at both commits.
+
+**Not exercised by any scenario, and still outstanding:** the listen-host and dedicated-server
+checks of V2–V6, which need a person at the controls — the right-click, `U`, `T`, the card and the
+overlay; a remote client's view (hidden riders, getting in and out at the render clock, the aboard
+count); "click the truck, click where to go" (the departure); the orphan rule; a boarder's timeout;
+a dropship coming down to be boarded, holding at 2 m over a body, or holding at cruise with no room;
+a refused roof; and a computer co-strategist beside a loaded vehicle. Riders not counting on a node
+and not lighting the fog are checked in the code only.
+
 **About 8–9 days in all**; V1–V5 (the technical) stand on their own and ship first. All seven are
-built; what remains is running them (§11's baseline, the four vehicle scenarios, and the listen-host
-and dedicated-server checks V2–V6 name).
+built, the four vehicle scenarios pass in Godot and the suite holds against its baseline; what
+remains is the listen-host and dedicated-server checks V2–V6 name.
 
 ---
 
