@@ -109,6 +109,35 @@ public partial class UnitDefinition : Resource
 	/// <summary>True for a vehicle other units can get into.</summary>
 	public bool CarriesUnits => Seats > 0;
 
+	[ExportCategory("Flight")]
+
+	/// <summary>
+	/// The height above the ground it cruises at (docs/VEHICLES.md §4.2, §8.1): the
+	/// dropship's fourteen metres. Zero is a unit that does not fly, which is what a
+	/// file that says nothing gets. It takes off when it has somewhere to go and lands
+	/// when it has nowhere, and moves across the ground only in the air.
+	/// </summary>
+	[Export]
+	public float CruiseAltitudeMeters;
+
+	/// <summary>How fast it climbs [m/s].</summary>
+	[Export]
+	public float ClimbMetersPerSecond;
+
+	/// <summary>How fast it comes down [m/s].</summary>
+	[Export]
+	public float DescentMetersPerSecond;
+
+	/// <summary>
+	/// Below this height it moves only up and down, so it never slides into a barracks
+	/// roof (6.5 m) or a sniper tower's cabin (8.4 m) on its way up or down.
+	/// </summary>
+	[Export]
+	public float ClearAltitudeMeters;
+
+	/// <summary>True for a unit that flies.</summary>
+	public bool IsAircraft => CruiseAltitudeMeters > 0f;
+
 	[ExportCategory("Senses and weapons")]
 
 	/// <summary>
@@ -200,6 +229,13 @@ public partial class UnitDefinition : Resource
 		Mathf.Min(EngageRangeMeters, SensorRadiusMeters),
 		ArrivalRadiusMeters,
 		LeashRadiusMeters);
+
+	/// <summary>The phase machine's view of how it flies (<see cref="Flight"/>); a cruise altitude of zero for a unit that does not.</summary>
+	public FlightTraits ToFlightTraits() => new(
+		CruiseAltitudeMeters,
+		ClimbMetersPerSecond,
+		DescentMetersPerSecond,
+		ClearAltitudeMeters);
 
 	public float AccuracyConeRadians => Spread.ConeFromDegrees(AccuracyConeDegrees);
 

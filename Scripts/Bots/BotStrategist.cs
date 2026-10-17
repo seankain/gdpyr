@@ -229,7 +229,7 @@ public sealed class BotStrategist
 		for (int i = 0; i < units.SlotCount && count < _commandUnits.Length; i++)
 		{
 			Unit unit = units.UnitAt(i);
-			if (unit == null || IsInTransport(unit) || unit.Team != Team.Strategist
+			if (unit == null || IsOutOfCommand(unit) || unit.Team != Team.Strategist
 				|| UnitCatalog.CanConstruct(unit.DefinitionId))
 			{
 				continue;
@@ -286,6 +286,16 @@ public sealed class BotStrategist
 	private static bool IsInTransport(Unit unit) =>
 		!unit.IsOnField || unit.Order.Kind == OrderKind.Embark
 		|| (unit.HasSeats && (!unit.Cargo.IsEmpty || unit.BoardersWalking > 0));
+
+	/// <summary>
+	/// Whether a unit is outside the computer strategist's command altogether: part of a
+	/// transport (<see cref="IsInTransport"/>), or an aircraft (docs/VEHICLES.md §9.1). An
+	/// aircraft has no role, is never in the garrison, and a landed, unarmed dropship at
+	/// the rally point would add its price to the barracks zone's friendly strength,
+	/// which is where the commander sends squads to fall back. No computer strategist
+	/// buys one; a person's or a policy's is theirs alone.
+	/// </summary>
+	private static bool IsOutOfCommand(Unit unit) => IsInTransport(unit) || unit.IsAircraft;
 
 	/// <summary>
 	/// Whether somebody else has the say over a unit (docs/HTN_BOTS.md §8, D1): a
@@ -379,7 +389,7 @@ public sealed class BotStrategist
 		for (int i = 0; i < units.SlotCount; i++)
 		{
 			Unit unit = units.UnitAt(i);
-			if (unit != null && !IsInTransport(unit) && unit.Team == Team.Strategist)
+			if (unit != null && !IsOutOfCommand(unit) && unit.Team == Team.Strategist)
 			{
 				_zones.AddFriendly(unit.GlobalPosition, ForceRatio.Strength(UnitCatalog.CostOf(unit.DefinitionId),
 					unit.Health / (unit.Definition?.MaxHealth ?? 100f)));
@@ -435,7 +445,7 @@ public sealed class BotStrategist
 			for (int m = 0; m < members; m++)
 			{
 				Unit unit = units.Find(_squadMembers[m]);
-				if (unit == null || IsInTransport(unit))
+				if (unit == null || IsOutOfCommand(unit))
 				{
 					continue;
 				}
@@ -589,11 +599,11 @@ public sealed class BotStrategist
 
 		for (int i = 0; i < units.SlotCount; i++)
 		{
-			// No claim at all here, so the units getting into or out of a vehicle, and
-			// the vehicle, are left out outright (docs/VEHICLES.md §9.1). For a round with
-			// no vehicle carrying anybody that is no change (D5).
+			// No claim at all here, so the units getting into or out of a vehicle, the
+			// vehicle and any aircraft are left out outright (docs/VEHICLES.md §9.1). For a
+			// round with no vehicle carrying anybody and no aircraft that is no change (D5).
 			Unit unit = units.UnitAt(i);
-			if (unit == null || IsInTransport(unit) || unit.Team != Team.Strategist)
+			if (unit == null || IsOutOfCommand(unit) || unit.Team != Team.Strategist)
 			{
 				continue;
 			}

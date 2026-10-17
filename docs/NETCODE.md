@@ -869,8 +869,8 @@ one navigation mesh still serves every unit (§M5 of the plan).
 arms do nothing to them — not the rifle, not the DMR, not the pistol, and not the heavy gun's
 12.7 mm either — and only an explosive does: the launcher's grenade, by its impact or its blast.
 (A hand grenade is an explosive too, but an anti-personnel one: a quarter of its blast, §10.9.)
-Everything else the strategist fields is soft and takes a bullet whole, and a wall of sandbags
-still takes 0.3 of one.
+Everything else the strategist fields is soft and takes a bullet whole, but for two: a wall of
+sandbags still takes 0.3 of one, and the dropship's airframe half ([`VEHICLES.md`](VEHICLES.md) §8.1).
 
 It is one number on each definition: `BulletDamageScale`, which structures already had
 (`Structures/*.tres`) and units now have too (`Units/*.tres`, default 1). The tank, the pillbox and
@@ -888,6 +888,7 @@ the armour and still draws its impact, so what a player sees is sparks and no ma
 | pillbox | 700 | 0 | 40 / up to 90 |
 | sniper tower | 450 | 0 | 40 / up to 90 |
 | sandbag wall | 400 | 0.3 | 40 / up to 90 |
+| dropship | 400 | 0.5 | 40 / up to 90 |
 
 A grenade's direct victim takes the impact (40) and is left out of its own blast
 (`CombatManager.Explode`), so a grenade that lands at a tank's tracks does more than one that
@@ -1067,8 +1068,8 @@ structure block, as for the builder and the truck.
 ### 10.9 Hand grenades
 
 Every ground-force player and every strategist unit on foot carries **three hand grenades**
-(`GrenadeSim.Carried`; a unit's is `UnitDefinition.Grenades`, which the technical, the tank and the
-supply truck set to 0). They are **anti-personnel**: a wide blast that kills a person near it, and a
+(`GrenadeSim.Carried`; a unit's is `UnitDefinition.Grenades`, which the technical, the tank, the
+supply truck and the dropship set to 0). They are **anti-personnel**: a wide blast that kills a person near it, and a
 quarter of that to a vehicle or a structure.
 
 | | hand grenade | launcher grenade (§10.6) |
@@ -1105,9 +1106,9 @@ the thrower and their teammates included, and it spares units on the thrower's o
 **Against vehicles and structures** it is the round's own share, applied after the armour rule of
 §10.6 (`Armour.DamageTaken(amount, explosive, bulletScale, roundScale)`): a grenade is an explosive,
 so it does hurt a tank, a pillbox and a tower, but its `VehicleDamageScale` and `StructureDamageScale`
-are 0.25. A vehicle is a unit whose definition says `IsVehicle` — the technical, the tank and the
-supply truck — which is a separate flag from armour on purpose: two of the three are vehicles a
-bullet hurts. Every other round's shares are 1, so nothing else changed.
+are 0.25. A vehicle is a unit whose definition says `IsVehicle` — the technical, the tank, the
+supply truck and the dropship — which is a separate flag from armour on purpose: three of the four
+are vehicles a bullet hurts. Every other round's shares are 1, so nothing else changed.
 
 **Units throw** (`UnitManager.ServerThrow`) at the player they are fighting when they are 6–28 m off
 and either behind something or slower than 2.5 m/s — standing or crouched, not walking — and at most

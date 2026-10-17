@@ -301,7 +301,9 @@ public sealed class BotPilot
 		}
 
 		// A bot with something to shoot at walks towards it; the brain stops it and
-		// strafes once it is inside its preferred range.
+		// strafes once it is inside its preferred range. An aircraft in the air is aimed
+		// at where it is and walked towards where it is over the ground.
+		Vector3 targetGround = hasTarget ? MovementGoal(targetPosition) : targetPosition;
 		Vector3 goal;
 		bool hasGoal;
 		bool keepMoving = false;
@@ -309,12 +311,12 @@ public sealed class BotPilot
 		bool inCover = false;
 		if (_plan != null)
 		{
-			hasGoal = Planned(character, explosive, tick, hasTarget, targetPosition, out goal, out keepMoving, out use,
+			hasGoal = Planned(character, explosive, tick, hasTarget, targetGround, out goal, out keepMoving, out use,
 				out inCover);
 		}
 		else if (hasTarget)
 		{
-			goal = targetPosition;
+			goal = targetGround;
 			hasGoal = true;
 		}
 		else
@@ -573,6 +575,23 @@ public sealed class BotPilot
 		head = unit.EyePosition;
 		velocity = unit.Velocity;
 		return true;
+	}
+
+	/// <summary>
+	/// Where to walk to get at a target at <paramref name="targetPosition"/>: the target
+	/// itself, unless it is an aircraft off the ground (docs/VEHICLES.md §8.3), when it is
+	/// the ground under it — a goal in the sky is one the bot would path at for ever.
+	/// </summary>
+	private Vector3 MovementGoal(Vector3 targetPosition)
+	{
+		if (!OwnerId.IsUnit(_targetOwnerId)
+			|| UnitManager.Instance?.Find(OwnerId.UnitOf(_targetOwnerId)) is not { IsAircraft: true } aircraft
+			|| aircraft.Phase == FlightPhase.Grounded || !float.IsFinite(aircraft.HeightAboveGround))
+		{
+			return targetPosition;
+		}
+
+		return new Vector3(targetPosition.X, aircraft.GlobalPosition.Y - aircraft.HeightAboveGround, targetPosition.Z);
 	}
 
 	/// <summary>

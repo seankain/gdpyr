@@ -24,7 +24,7 @@ dedicated-server authoritative.
 - [`docs/DEMOS.md`](docs/DEMOS.md) — recording a round and watching it back: the console, the
   journal, and what playback does with it
 - [`docs/VEHICLES.md`](docs/VEHICLES.md) — vehicles that carry units: the technical with seats,
-  boarding and unloading (built), and a vertical take-off and landing dropship (not built yet)
+  boarding and unloading, and a vertical take-off and landing dropship
 - [`docs/LAN.md`](docs/LAN.md) — hosting a room of machines from a checkout, with a dev build
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — AWS EC2 dedicated-server runbook
 
@@ -177,8 +177,9 @@ map:
 | `1` `2` `3` `4` `8`, Backspace | queue an infantryman, a technical, a tank, a builder or a supply truck; cancel the last one |
 | `5` `6` `7` | with builders selected: put a pillbox, a sandbag wall or a sniper tower where the next right-click lands |
 | `9` `0` | queue a sniper at a sniper tower, a heavy gunner at a pillbox (the selected one, else the one with the shortest queue) |
-| right-click a technical, with units selected | they walk to it and get in, nearest first, up to its four seats; the technical becomes the selection and waits for them |
-| `U` | every selected technical with anybody aboard lets them out round it, where it is |
+| `T` | queue a dropship at the barracks |
+| right-click a technical or a dropship, with units selected | they walk to it and get in, nearest first, up to its seats (four, or eight); the vehicle becomes the selection and waits for them — a dropship in the air comes down to be boarded |
+| `U` | every selected vehicle with anybody aboard lets them out round it, where it is; a dropship lands first |
 
 Right-clicking an enemy player orders an attack on that player rather than on the ground under
 them. Units are server-simulated and never predicted; the order marker appears immediately and the
@@ -215,6 +216,13 @@ once they are. Pips over the truck show who is aboard. Passengers do not shoot, 
 heal, and nothing can hit them; select the truck and press `U` (or the card's **Unload**) and they
 get out round it. A truck destroyed with them aboard throws them out, each losing half its health.
 
+**The dropship carries eight** (250 points, `T`). It takes off when it has somewhere to go, flies a
+straight line at 14 m over everything, and lands whenever it has nowhere to go — on arriving, on
+`Z`, and to be boarded or unloaded; a ring on the ground shows where it is over, red when it has found
+no room to land. It is unarmed, so attack-move and defend are only somewhere to fly, sees 40 m from
+up there over every wall, and bullets do half to it. Destroyed within 4 m of the ground it throws its
+riders out as the truck does; higher than that, nobody aboard lives.
+
 **Units heal** ([`docs/HTN_BOTS.md`](docs/HTN_BOTS.md) §8, D2) inside a barracks' red ring and inside
 the green ring round a **supply truck** (120 points, `8`), once nothing has hit them for three
 seconds — a rifleman at half health is whole again ten seconds later. The truck is soft, carries a
@@ -226,8 +234,8 @@ They go off three seconds after the throw, lying where they landed; anything tha
 bullet stops one, and one that hits somebody drops at their feet. They are anti-personnel: a blast
 that kills within 2 m and reaches 7 m, and a quarter of that to a vehicle or a structure. The blast
 hurts you and your teammates too. Strategist units on foot carry three as well and throw them at a
-player who is behind a wall or standing still 6–28 m away; the technical, the tank and the supply
-truck carry none.
+player who is behind a wall or standing still 6–28 m away; the technical, the tank, the supply
+truck and the dropship carry none.
 
 On the ground, right mouse raises the sights. What that gets you is the weapon's:
 
@@ -245,7 +253,8 @@ recorded input frame the rest of the simulation runs on, and nothing about them 
 
 **Armour, and the weapon locker.** The tank, the pillbox and the sniper tower are armour: rifle, DMR,
 pistol and heavy-gun rounds stop against them and do nothing, and only the launcher's grenade — by its
-impact or its blast — hurts them properly; a hand grenade does a quarter of its blast. The answer when one turns up is the **weapon locker** at the spawn:
+impact or its blast — hurts them properly; a hand grenade does a quarter of its blast. The dropship
+is not armour, but its airframe takes half of what a bullet does. The answer when one turns up is the **weapon locker** at the spawn:
 stand at it and tap `E` to swap the large weapon in your hands for the next one, with a full
 magazine — rifle, launcher, DMR, and round again. The swap is for that life; what you spawn with is
 still the loadout menu's (`1`/`2`/`3` while dead). A hit on armour that did nothing shows no hit

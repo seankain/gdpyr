@@ -52,25 +52,27 @@ public partial class StrategistHud : CanvasLayer
 		+ "with builders selected: 5/6/7 then RMB places pillbox/sandbags/tower (turn the view to turn it) · RMB on a site finishes or mends it\n"
 		+ "units out of a fight for 3 s heal inside the barracks ring and a supply truck's ring: move them there\n"
 		+ "with units selected, RMB a technical and they get in, up to 4 · select it and RMB to drive · U lets them out\n"
+		+ "T queue a dropship: 8 seats, flies, lands where it has nowhere to go · RMB it with units selected to board\n"
 		+ "F1 ground force · F2 strategist";
 
 	/// <summary>Pixels the key list is tall, a line each; the card sits on top of it.</summary>
-	private const float KeysHeight = 192f;
+	private const float KeysHeight = 216f;
 
 	/// <summary>
-	/// Every unit a card can offer, in the order the number keys are: the three tiers,
-	/// the builder and the supply truck, which a barracks trains, then the sniper and
-	/// the heavy gunner, which a sniper tower and a pillbox do (docs/NETCODE.md §10.8).
-	/// A card shows the buttons for what the thing it is up for trains, and hides the rest.
+	/// Every unit a card can offer, in the order the keys are: the three tiers, the
+	/// builder and the supply truck, which a barracks trains, then the sniper and the
+	/// heavy gunner, which a sniper tower and a pillbox do (docs/NETCODE.md §10.8), and
+	/// the dropship, which a barracks trains on <c>T</c> (docs/VEHICLES.md §7). A card
+	/// shows the buttons for what the thing it is up for trains, and hides the rest.
 	/// </summary>
 	private static readonly byte[] CardUnits =
 	{
 		UnitCatalog.Infantry, UnitCatalog.Technical, UnitCatalog.Tank, UnitCatalog.Builder, UnitCatalog.SupplyTruck,
-		UnitCatalog.Sniper, UnitCatalog.HeavyGunner,
+		UnitCatalog.Sniper, UnitCatalog.HeavyGunner, UnitCatalog.Dropship,
 	};
 
 	/// <summary>The key that queues each of <see cref="CardUnits"/>, printed on its button.</summary>
-	private static readonly string[] CardKeys = { "1", "2", "3", "4", "8", "9", "0" };
+	private static readonly string[] CardKeys = { "1", "2", "3", "4", "8", "9", "0", "T" };
 
 	private static readonly Color CardBorderColor = new(0.35f, 0.45f, 0.55f, 0.9f);
 
@@ -259,6 +261,7 @@ public partial class StrategistHud : CanvasLayer
 						? $"; keeps firing for {definition.SuppressSeconds:0.#} s where a target went to ground"
 						: string.Empty)
 					+ (UnitCatalog.SeatsOf(id) > 0 ? $"; seats {UnitCatalog.SeatsOf(id)}" : string.Empty)
+					+ (definition.IsAircraft ? "; flies, unarmed, lands to load and unload" : string.Empty)
 				: string.Empty;
 			button.Disabled = full || !UnitCatalog.IsBuildable(id) || match.StrategistPoints < cost;
 		}

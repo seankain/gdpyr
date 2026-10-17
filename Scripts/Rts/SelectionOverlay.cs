@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Gdpyr.Core;
 using Gdpyr.Match;
 using Gdpyr.Sim;
 using Godot;
@@ -227,6 +228,7 @@ public partial class SelectionOverlay : Control
 		DrawContacts();
 		DrawStructures();
 		DrawSeats();
+		DrawAircraftShadows();
 		DrawGhost();
 
 		if (_orderAge < OrderMarkerSeconds && TryScreen(_orderPoint, out Vector2 marker))
@@ -278,7 +280,47 @@ public partial class SelectionOverlay : Control
 		}
 	}
 
-	private void DrawGroundRing(Vector3 middle, float radius)
+	/// <summary>How far down from an aircraft the ground under it is looked for, for its ring.</summary>
+	private const float AircraftGroundProbeMeters = 130f;
+
+	private PhysicsRayQueryParameters3D _groundRay;
+
+	/// <summary>
+	/// A ring on the ground under each of the strategist's aircraft that is off it
+	/// (docs/VEHICLES.md §7), the hull's width: fourteen metres up, a dropship is hard to
+	/// place against the map without one, and the ring is where it will come down. One
+	/// world-layer ray each, on this peer, a frame.
+	/// </summary>
+	private void DrawAircraftShadows()
+	{
+		UnitManager units = UnitManager.Instance;
+		PhysicsDirectSpaceState3D space = _camera?.GetWorld3D()?.DirectSpaceState;
+		Team side = CombatManager.Instance?.Local?.Team ?? Team.Strategist;
+		for (int i = 0; units != null && space != null && i < units.SlotCount; i++)
+		{
+			Unit aircraft = units.UnitAt(i);
+			if (aircraft == null || !IsInstanceValid(aircraft) || !aircraft.IsAircraft || !aircraft.IsOnField
+				|| aircraft.Phase == FlightPhase.Grounded || aircraft.Team != side)
+			{
+				continue;
+			}
+
+			Vector3 at = aircraft.GlobalPosition;
+			_groundRay ??= new PhysicsRayQueryParameters3D { CollisionMask = CollisionLayers.World };
+			_groundRay.From = at;
+			_groundRay.To = at - (Vector3.Up * AircraftGroundProbeMeters);
+			Godot.Collections.Dictionary hit = space.IntersectRay(_groundRay);
+			if (hit.Count > 0)
+			{
+				DrawGroundRing(hit["position"].AsVector3(), aircraft.Definition?.RadiusMeters ?? 2f,
+					aircraft.CannotLand ? RefusedColor : SeatColor);
+			}
+		}
+	}
+
+	private void DrawGroundRing(Vector3 middle, float radius) => DrawGroundRing(middle, radius, SelectionColor);
+
+	private void DrawGroundRing(Vector3 middle, float radius, Color color)
 	{
 		Vector3 centre = middle + (Vector3.Up * 0.1f);
 		bool previousOnScreen = TryScreen(centre + (Vector3.Right * radius), out Vector2 previous);
@@ -291,7 +333,7 @@ public partial class SelectionOverlay : Control
 
 			if (onScreen && previousOnScreen)
 			{
-				DrawLine(previous, screen, SelectionColor, 2f);
+				DrawLine(previous, screen, color, 2f);
 			}
 
 			previous = screen;

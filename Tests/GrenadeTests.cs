@@ -555,7 +555,7 @@ public class GrenadeTests
 	[Fact]
 	public void UnitsOnFootCarryThree_VehiclesNone()
 	{
-		foreach (string vehicle in new[] { "technical", "tank", "supply_truck" })
+		foreach (string vehicle in new[] { "technical", "tank", "supply_truck", "dropship" })
 		{
 			Dictionary<string, string> file = TrainedUnitResourceTests.Resource($"Units/{vehicle}.tres");
 			Assert.Equal("true", file["IsVehicle"]);

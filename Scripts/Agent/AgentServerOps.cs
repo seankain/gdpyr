@@ -1082,6 +1082,7 @@ public sealed partial class AgentServer
 		"supply_truck" or "4" => UnitCatalog.SupplyTruck,
 		"sniper" or "5" => UnitCatalog.Sniper,
 		"heavy_gunner" or "6" => UnitCatalog.HeavyGunner,
+		"dropship" or "7" => UnitCatalog.Dropship,
 		_ => UnitCatalog.Infantry,
 	};
 

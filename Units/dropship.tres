@@ -1,0 +1,30 @@
+[gd_resource type="Resource" script_class="UnitDefinition" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Rts/UnitDefinition.cs" id="1_unitdef"]
+
+[resource]
+script = ExtResource("1_unitdef")
+Name = &"dropship"
+Cost = 250
+BuildSeconds = 14.0
+MaxHealth = 400.0
+BulletDamageScale = 0.5
+IsVehicle = true
+RegenPerSecond = 16.0
+MoveSpeed = 12.0
+HeightMeters = 4.0
+RadiusMeters = 2.0
+EyeHeightMeters = 2.0
+Seats = 8
+CruiseAltitudeMeters = 14.0
+ClimbMetersPerSecond = 4.0
+DescentMetersPerSecond = 3.0
+ClearAltitudeMeters = 10.0
+SensorRadiusMeters = 40.0
+EngageRangeMeters = 0.0
+LeashRadiusMeters = 20.0
+ArrivalRadiusMeters = 3.0
+WeaponId = 1
+AccuracyConeDegrees = 4.0
+Grenades = 0
+Color = Color(0.35, 0.5, 0.75, 1)
