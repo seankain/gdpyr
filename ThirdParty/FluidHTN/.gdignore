@@ -1,0 +1,3 @@
+# Not Godot content: vendored plain C# libraries (docs/HTN_BOTS.md §3.8). The
+# game assembly still compiles them through the SDK's default glob; this only
+# keeps the editor from writing .uid files into a folder a bump replaces whole.
