@@ -357,8 +357,8 @@ Same status as the ground seat's: every number is a hypothesis, in one file, and
 nothing in it is a fact about gdpyr.
 
 **A loaded vehicle's death is several units lost at once** ([`VEHICLES.md`](VEHICLES.md) V-D7): a
-technical destroyed with four aboard is up to five `unit_lost` on one tick, and the `unit lost` term
-feels all of them. That is what happened, and it is the lesson; a reward that wants it softer is the
+technical destroyed with four aboard is up to five `unit_lost` on one tick, a dropship with eight up
+to nine — all nine when it was more than 4 m up — and the `unit lost` term feels all of them. That is what happened, and it is the lesson; a reward that wants it softer is the
 reward's change to make, not the game's.
 
 ### Differences that leak into the loop

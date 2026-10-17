@@ -219,6 +219,30 @@ public class AiDebugTextTests
 	}
 
 	[Fact]
+	public void AnAircraftOffTheGround_SaysHowHighItIs_AndOnTheGround_Nothing()
+	{
+		// docs/VEHICLES.md §10: Altitude is in centimetres.
+		var flying = new AiInspect { Ref = AiEntityRef.Unit(20) };
+		flying.Add(AiValueKey.Order, (int)OrderKind.Move);
+		flying.Add(AiValueKey.Health, 100);
+		flying.Add(AiValueKey.Seats, 8);
+		flying.Add(AiValueKey.Aboard, 8);
+		flying.Add(AiValueKey.Altitude, 1400);
+
+		var landed = new AiInspect { Ref = AiEntityRef.Unit(20) };
+		landed.Add(AiValueKey.Order, (int)OrderKind.None);
+		landed.Add(AiValueKey.Health, 100);
+		landed.Add(AiValueKey.Seats, 8);
+		landed.Add(AiValueKey.Aboard, 0);
+		landed.Add(AiValueKey.Altitude, 3);
+
+		string up = AiDebugText.Header(flying, new AiDebugFrame(), HtnTextStyle.Plain);
+		Assert.Contains("aboard 8/8", up);
+		Assert.Contains("14.0 m up", up);
+		Assert.DoesNotContain("m up", AiDebugText.Header(landed, new AiDebugFrame(), HtnTextStyle.Plain));
+	}
+
+	[Fact]
 	public void TheVehicleKeys_AreAppended()
 	{
 		// Byte enums on the debug wire: appended, so AiDebugCodec.Version stays 1.

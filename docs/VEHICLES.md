@@ -1,11 +1,12 @@
 # gdpyr — Vehicles that carry units: the technical, and a dropship
 
-**Status: in progress.** V1 (the engine-free cargo rules), V2 (the technical carries units, on the
-server), V3 (the wire and the strategist's controls), V4 (bots, agents, debugger), V5 (the harness
-and the technical's scenarios) and V6 (the dropship) are built; their engine-side checks are
-outstanding, and V7's remaining docs are not written. It replaces
+**Status: built; the engine-side checks are outstanding.** V1 (the engine-free cargo rules), V2 (the
+technical carries units, on the server), V3 (the wire and the strategist's controls), V4 (bots,
+agents, debugger), V5 (the harness and the technical's scenarios), V6 (the dropship) and V7 (the
+docs) are built. None of it has been run in Godot: the scenario baseline, the four vehicle scenarios
+and the listen-host and dedicated-server checks of V2–V6 are still to be taken (§12). It replaced
 the "Dropships and troop carriers" scope cut in [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md)
-§5 with a design and a milestone list (M10 there).
+§5 with a design and a milestone list (M10 there); the cut is struck.
 
 Companion documents: [`NETCODE.md`](NETCODE.md) §6 (unit replication, commands), §10.5 (builders,
 the request pattern this copies), §10.7 (the supply truck, the precedent for "a unit kind is one
@@ -970,7 +971,7 @@ and the dropship have seats; only the dropship has flight keys),
   - V7 keeps `NETCODE.md` §10.10, §6.1's and §6.3's text, §7's table, `DEMOS.md`, `HTN_BOTS.md` and
     `TRAINING.md`.
 
-### V7 — Docs (alongside each)
+### V7 — Docs (alongside each) — done
 
 A `NETCODE.md` §10.10 in §10.7's shape (the rule, the table, on the wire, who uses it, not in it);
 §6.1's record description, §6.3's checks and rejection rule, §7's table, §10.6 (its "everything
@@ -980,7 +981,27 @@ note; `AGENT_API.md` §6.2, §7.4, §7.5 (`list_units`' fields and example), §8
 the claim for loading vehicles; `TRAINING.md` on multi-unit loss; this document's status, and
 `IMPLEMENTATION_PLAN.md` §5's scope-cut row struck as the builders' was.
 
-**About 8–9 days in all**; V1–V5 (the technical) stand on their own and ship first.
+- **Result:** each item was checked against the code as it stands. Written in this milestone:
+  `NETCODE.md` §10.10 (the rule for both vehicles, the table, on the wire — including that one build
+  for everybody is now load-bearing — who uses it, and what is not in it), §10's title, and §6.1's
+  record description naming the flag byte; `AGENT_API.md` §7.4 (the dropship's eight, and that it
+  lands for an embark or an unload) and §9.1 (the fourth scenario); `HTN_BOTS.md`'s D1 row (an
+  aircraft is never the commander's and plans nothing); `TRAINING.md` (a dropship's wreck is up to
+  nine `unit_lost`); `IMPLEMENTATION_PLAN.md` §5's row struck and M10's heading; `AI_DEBUG.md` §4.1;
+  this status. Already written by the milestone that made them true, and found accurate: §6.1's
+  passenger paragraph, §6.3's rejection rule and §7's two requests (V2–V3), §10.6 and §10.9 (V6),
+  `DEMOS.md`'s version note (V3), `AGENT_API.md` §6.2, §7.5 and §8 (V4, V6), `HTN_BOTS.md`'s `Carry`
+  row and retreat conditions (V4), and `README.md` (V3, V6).
+- **Code, a few lines of it:** `AiValueKey.Altitude`, first published in V6, was shown nowhere. The
+  unit header now says "14.0 m up" for an aircraft off the ground, and nothing on it
+  (`AiDebugText`), with one new fact in `AiDebugTextTests`. `dotnet test` 1,704 passed, 0 failed
+  (1,703 before); `dotnet build Gdpyr.csproj` 0 warnings, 0 errors.
+- **Not checked, and why:** as V2–V6 — no Godot here. The docs describe the code as written; what
+  the engine does with it is the outstanding checks' to say.
+
+**About 8–9 days in all**; V1–V5 (the technical) stand on their own and ship first. All seven are
+built; what remains is running them (§11's baseline, the four vehicle scenarios, and the listen-host
+and dedicated-server checks V2–V6 name).
 
 ---
 
