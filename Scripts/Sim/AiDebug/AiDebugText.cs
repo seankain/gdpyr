@@ -111,6 +111,15 @@ public static class AiDebugText
 					inspect.TryValue(AiValueKey.Aboard, out int aboard);
 					text.Append($" · aboard {aboard}/{seats}");
 				}
+
+				// An aircraft's height, which its position alone does not say over uneven ground;
+				// nothing on the ground, where it reads a few millimetres up.
+				if (inspect.TryValue(AiValueKey.Altitude, out int centimetres)
+					&& centimetres > Flight.TouchdownMeters * 100f)
+				{
+					// Whole metres and tenths in integers, so no locale writes "14,0".
+					text.Append($" · {centimetres / 100}.{centimetres % 100 / 10} m up");
+				}
 				if (inspect.TryValue(AiValueKey.Commander, out int commander)
 					&& inspect.TryValue(AiValueKey.CommanderSquad, out int slot))
 				{

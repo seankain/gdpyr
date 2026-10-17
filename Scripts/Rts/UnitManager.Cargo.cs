@@ -279,7 +279,8 @@ public partial class UnitManager
 			unit.Order = new UnitOrder
 			{
 				Kind = OrderKind.Embark,
-				Target = Cargo.StandOff(vehicle.GlobalPosition, unit.GlobalPosition, RadiusOf(vehicle), RadiusOf(unit)),
+				Target = Cargo.StandOff(vehicle.GlobalPosition, unit.GlobalPosition, RadiusOf(vehicle), RadiusOf(unit),
+					vehicle.HeightAboveGround),
 				Anchor = unit.GlobalPosition,
 				TargetOwnerId = OwnerId.ForUnit(vehicle.UnitId),
 				Returning = false,
@@ -294,9 +295,10 @@ public partial class UnitManager
 			Reordered(unit, senderPeerId, tick);
 		}
 
-		// The vehicle waits for them where it is. An order given to it while they are on
-		// their way is kept for when they are aboard (ApplyOrder), and a standing unload
-		// is over. It keeps its gun and any order already waiting.
+		// The vehicle waits for them where it is — a dropship in the air comes down there.
+		// An order given to it while they are on their way is kept for when they are
+		// aboard (ApplyOrder), and a standing unload is over. It keeps its gun and any
+		// order already waiting.
 		vehicle.Order = UnitOrder.Hold(vehicle.GlobalPosition);
 		vehicle.OrderIssuer = senderPeerId;
 		vehicle.OrderTick = tick;
@@ -493,14 +495,18 @@ public partial class UnitManager
 			return false;
 		}
 
+		// A dropship takes nobody until it is down; its boarders wait beside where it is
+		// coming down, on the ground under it.
 		float vehicleRadius = RadiusOf(vehicle);
 		float unitRadius = RadiusOf(unit);
-		if (Cargo.InReach(vehicle.GlobalPosition, vehicleRadius, unit.GlobalPosition, unitRadius))
+		if (Flight.CanBoard(vehicle.Flight)
+			&& Cargo.InReach(vehicle.GlobalPosition, vehicleRadius, unit.GlobalPosition, unitRadius))
 		{
 			return Board(unit, vehicle, tick);
 		}
 
-		unit.Order.Target = Cargo.StandOff(vehicle.GlobalPosition, unit.GlobalPosition, vehicleRadius, unitRadius);
+		unit.Order.Target = Cargo.StandOff(vehicle.GlobalPosition, unit.GlobalPosition, vehicleRadius, unitRadius,
+			vehicle.HeightAboveGround);
 		return false;
 	}
 
@@ -603,7 +609,8 @@ public partial class UnitManager
 				Depart(vehicle, tick);
 			}
 
-			if (vehicle.Order.Kind == OrderKind.Unload && tick > vehicle.OrderTick)
+			// At rest: a technical the tick after it was told, a dropship once it is down.
+			if (vehicle.Order.Kind == OrderKind.Unload && tick > vehicle.OrderTick && Flight.CanUnload(vehicle.Flight))
 			{
 				StepUnload(vehicle, tick);
 			}
@@ -645,7 +652,7 @@ public partial class UnitManager
 		vehicle.NextScanTick = 0;
 		ResetPlan(vehicle);
 
-		if (order.Kind == OrderKind.None)
+		if (order.Kind == OrderKind.None || vehicle.IsAircraft)
 		{
 			return;
 		}

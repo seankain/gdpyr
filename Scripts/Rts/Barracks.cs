@@ -41,6 +41,9 @@ public partial class Barracks : Node3D
 	/// <summary>Where finished units are sent. Set by the strategist; defaults ahead of the door.</summary>
 	public Vector3 RallyPoint { get; set; }
 
+	/// <summary>Flat, out of the door: the way everything it turns out walks away from the building.</summary>
+	public Vector3 Forward => _forward;
+
 	/// <summary>
 	/// How far out, measured flat from the middle of the building, its own defences
 	/// can reach: the furthest any child <see cref="DefenseMount"/> engages, plus how

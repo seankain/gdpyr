@@ -662,8 +662,9 @@ public partial class UnitManager
 			Unit unit = _ordered[i];
 			float radius = unit.Definition?.RadiusMeters ?? 0.4f;
 
-			// A rider goes where its vehicle does, and the vehicle is walked out itself.
-			if (!unit.IsOnField || !footprint.Contains(unit.GlobalPosition, radius))
+			// A rider goes where its vehicle does, and the vehicle is walked out itself. An
+			// aircraft in the air is passing over, not standing in the way.
+			if (!unit.IsOnField || unit.Phase != FlightPhase.Grounded || !footprint.Contains(unit.GlobalPosition, radius))
 			{
 				continue;
 			}

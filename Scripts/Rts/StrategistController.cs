@@ -238,6 +238,7 @@ public partial class StrategistController : Node3D
 		else if (@event.IsActionPressed("rts_build_tank")) { QueueUnit(UnitCatalog.Tank); }
 		else if (@event.IsActionPressed("rts_build_builder")) { QueueUnit(UnitCatalog.Builder); }
 		else if (@event.IsActionPressed("rts_build_supply")) { QueueUnit(UnitCatalog.SupplyTruck); }
+		else if (@event.IsActionPressed("rts_build_dropship")) { QueueUnit(UnitCatalog.Dropship); }
 		else if (@event.IsActionPressed("rts_build_sniper")) { Train(UnitCatalog.Sniper); }
 		else if (@event.IsActionPressed("rts_build_gunner")) { Train(UnitCatalog.HeavyGunner); }
 		else if (@event.IsActionPressed("rts_place_pillbox")) { ArmPlacement(StructureKinds.Pillbox); }

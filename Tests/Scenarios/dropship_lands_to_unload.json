@@ -1,0 +1,40 @@
+{
+  "name": "a dropship with eight aboard flies sixty metres, comes down and lets them all out where it landed",
+  "seeds": [2],
+  "duration_ticks": 1860,
+  "warmup_ticks": 60,
+  "roster": { "ground": 0, "strategists": 1 },
+
+  "seats": [
+    { "id": "chair", "team": "strategist", "policy": "strategist", "step_mul": 6,
+      "script": { "repeat": false, "steps": [
+        { "ticks": 960, "commands": [
+          { "cmd": "order", "kind": "move", "units": ["ship"], "target": [10, 60] }
+        ] },
+        { "ticks": 840, "commands": [
+          { "cmd": "unload", "units": ["ship"] }
+        ] }
+      ] } }
+  ],
+
+  "spawns": [
+    { "unit": "dropship", "id": "ship", "team": "strategist", "at": [-50, 1, 60], "order": "none" },
+    { "unit": "infantry", "aboard": "ship" },
+    { "unit": "infantry", "aboard": "ship" },
+    { "unit": "infantry", "aboard": "ship" },
+    { "unit": "infantry", "aboard": "ship" },
+    { "unit": "infantry", "aboard": "ship" },
+    { "unit": "infantry", "aboard": "ship" },
+    { "unit": "infantry", "aboard": "ship" },
+    { "unit": "infantry", "aboard": "ship" }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.dropship_landed.count", "op": ">=", "value": 1 },
+    { "metric": "events.dropship_landed[aboard=8,x>0].count", "op": ">=", "value": 1 },
+    { "metric": "events.unit_disembarked.count", "op": "==", "value": 8 },
+    { "metric": "events.unit_disembarked[x>0].count", "op": "==", "value": 8 },
+    { "metric": "events.unit_lost.count", "op": "==", "value": 0 }
+  ]
+}

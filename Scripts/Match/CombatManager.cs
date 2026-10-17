@@ -1033,8 +1033,9 @@ public partial class CombatManager : Node
 				VehicleId = unit.UnitId,
 				AttackerOwnerId = attackerOwnerId,
 				Weapon = weapon,
-				// A ground vehicle's. An aircraft's is measured (docs/VEHICLES.md §8, V6).
-				HeightAboveGround = 0f,
+				// Measured for an aircraft, as the last tick's ray found it; nought for
+				// anything that does not fly (docs/VEHICLES.md V-D7).
+				HeightAboveGround = unit.HeightAboveGround,
 			};
 		}
 

@@ -405,7 +405,9 @@ barracks building one reads a head tier of 1, the same as a tank. A **supply tru
 of 1, queued with `{"cmd":"build","tier":4}`. What it does — units heal within its 12 m and inside a
 barracks' ring, three seconds after they were last hit — shows in the vector only as the health
 fraction of the units it heals. The **sniper** and the **heavy gunner** ([`NETCODE.md`](NETCODE.md)
-§10.8) are the same case: catalog ids 5 and 6, no tier bit. A structure's training queue is not in
+§10.8) are the same case: catalog ids 5 and 6, no tier bit; so is the **dropship**
+([`VEHICLES.md`](VEHICLES.md) §8): catalog id 7, no tier bit, queued with `{"cmd":"build","tier":7}`,
+and its height is `list_units`' `y`. A structure's training queue is not in
 the barracks block; the round block's queued-unit count includes it. What a policy's builders put up is
 not in the vector at all: a strategist policy can build (§7.4) but cannot see what it built. That is
 the first thing to add when somebody trains one that wants to — a structure block, and a schema
@@ -576,9 +578,11 @@ and `U` get:
 ```
 
 An embark sends the units that can ride — anything on foot — walking to the vehicle, nearest first,
-until its seats are full (the technical has four); the rest stop where they are, and the vehicle
-holds until its boarders are aboard, keeping an `order` given to it meanwhile for then. An unload's
-`units` are vehicles; each with anybody aboard stops and lets them out round it. They are commands
+until its seats are full (the technical has four, the dropship eight); the rest stop where they are,
+and the vehicle holds until its boarders are aboard, keeping an `order` given to it meanwhile for
+then. An unload's `units` are vehicles; each with anybody aboard stops and lets them out round it. A
+dropship in the air comes down where it is for either, and takes nobody in or lets nobody out until
+it has landed (`dropship_landed`, §8). They are commands
 rather than order kinds on purpose: `OrderFromName` turns a kind it does not know into a move, so
 `"kind":"embark"` sent to an older server would march the units to the origin, whereas a `cmd` it
 does not know is skipped.
@@ -670,7 +674,7 @@ from position deltas and gets it slightly wrong.
 | `contact_spotted` | peer, observer, first, x, z — the strategist side's fog picked up a ground-force player it did not have in sight at the refresh before. Either bot AI (H6) |
 | `node_contested` | node, owner, contested, ticks — a node's contest (both sides inside its radius) started (`contested` 1) or ended (0, with `ticks` it lasted). Either bot AI (H6) |
 | `unit_embarked` / `unit_disembarked` | unit, vehicle, tier (the passenger's), x, z — a unit got into a vehicle (at the vehicle) or out of one (where it got out): an unload, or thrown out alive from a wreck ([`VEHICLES.md`](VEHICLES.md) §10) |
-| `dropship_landed` | unit, aboard, x, z — a dropship touched down, with how many were aboard. Not emitted until the dropship is built (V6) |
+| `dropship_landed` | unit, aboard, x, z — a dropship touched down, with how many were aboard ([`VEHICLES.md`](VEHICLES.md) §8.2) |
 
 **A vehicle destroyed with passengers aboard** is several `unit_lost` records on one tick, all
 naming the killer: on the ground each passenger is thrown out (a `unit_disembarked`) and dealt half
@@ -753,7 +757,7 @@ of assertions. It is checked into the repo beside the tests.
 ```
 
 A spawn names exactly one of a `peer` (a seat to place), a `unit` (`infantry`, `technical`,
-`tank`, `builder`, `supply_truck`, `sniper` or `heavy_gunner`) or a `structure` (`pillbox`, `sandbag_wall`, `sniper_tower`, with a `yaw`). A
+`tank`, `builder`, `supply_truck`, `sniper`, `heavy_gunner` or `dropship`) or a `structure` (`pillbox`, `sandbag_wall`, `sniper_tower`, with a `yaw`). A
 structure is put up finished and free, and the server refuses one that does not fit where it was put
 rather than guessing — a pillbox inside a wall is a typo in the scenario, not a test.
 
@@ -791,7 +795,8 @@ the seat sends one empty command list, which takes it from its bot — a seat th
 is still the bot's (§2.1) — without ordering anything, so `counters.pilot_fallbacks` stays zero. A ground seat's script with `commands`, a
 strategist seat's with input, an unknown command, kind or label, and a command missing its units,
 vehicle or target are refused when the file is read. `technical_boards_squad.json`,
-`technical_carries_squad.json` and `technical_wreck_ejects.json` are the three that use both.
+`technical_carries_squad.json`, `technical_wreck_ejects.json` and `dropship_lands_to_unload.json` are
+the four that use both.
 
 That is `Tests/Scenarios/rifle_lethality.json` as checked in. Two differences from the sketch above
 it are worth naming, because both are the published schema winning an argument with a document:

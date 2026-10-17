@@ -40,7 +40,7 @@ public class TrainedUnitResourceTests
 		Assert.Equal("false", Resource("Units/sniper.tres")["TrainedInBarracks"]);
 		Assert.Equal("false", Resource("Units/heavy_gunner.tres")["TrainedInBarracks"]);
 
-		foreach (string unit in new[] { "infantry", "technical", "tank", "builder", "supply_truck" })
+		foreach (string unit in new[] { "infantry", "technical", "tank", "builder", "supply_truck", "dropship" })
 		{
 			Assert.False(Resource($"Units/{unit}.tres").ContainsKey("TrainedInBarracks"));
 		}
@@ -72,25 +72,97 @@ public class TrainedUnitResourceTests
 	[Fact]
 	public void NoOtherUnitSuppresses()
 	{
-		foreach (string unit in new[] { "infantry", "technical", "tank", "builder", "supply_truck", "sniper" })
+		foreach (string unit in new[] { "infantry", "technical", "tank", "builder", "supply_truck", "sniper", "dropship" })
 		{
 			Assert.False(Resource($"Units/{unit}.tres").ContainsKey("SuppressSeconds"));
 		}
 	}
 
 	[Fact]
-	public void TheTechnical_SeatsFour_AndNothingElseCarriesAnybody()
+	public void TheTechnicalSeatsFour_TheDropshipEight_AndNothingElseCarriesAnybody()
 	{
-		// docs/VEHICLES.md V-D1, V-D2: a vehicle with seats, inside the bound every hold is made at.
-		Dictionary<string, string> technical = Resource("Units/technical.tres");
-		Assert.Equal(4, Int(technical, "Seats"));
-		Assert.InRange(Int(technical, "Seats"), 1, Gdpyr.Sim.SimConfig.MaxPassengers);
-		Assert.Equal("true", technical["IsVehicle"]);
+		// docs/VEHICLES.md V-D1, V-D2: vehicles with seats, inside the bound every hold is made at.
+		foreach ((string unit, int seats) in new[] { ("technical", 4), ("dropship", 8) })
+		{
+			Dictionary<string, string> vehicle = Resource($"Units/{unit}.tres");
+			Assert.Equal(seats, Int(vehicle, "Seats"));
+			Assert.InRange(Int(vehicle, "Seats"), 1, Gdpyr.Sim.SimConfig.MaxPassengers);
+			Assert.Equal("true", vehicle["IsVehicle"]);
+		}
 
 		foreach (string unit in new[] { "infantry", "tank", "builder", "supply_truck", "sniper", "heavy_gunner" })
 		{
 			Assert.False(Resource($"Units/{unit}.tres").ContainsKey("Seats"), unit);
 		}
+	}
+
+	[Fact]
+	public void Id7_IsTheDropship_AndEveryEarlierIdIsWhereItWas()
+	{
+		// docs/VEHICLES.md §8.1: appended, so demos, scenarios and trained policies keep their ids.
+		string[] expected =
+		{
+			"res://Units/infantry.tres", "res://Units/technical.tres", "res://Units/tank.tres",
+			"res://Units/builder.tres", "res://Units/supply_truck.tres", "res://Units/sniper.tres",
+			"res://Units/heavy_gunner.tres", "res://Units/dropship.tres",
+		};
+
+		for (int id = 0; id < expected.Length; id++)
+		{
+			Assert.Equal(expected[id], UnitPath(id));
+		}
+
+		Assert.Matches(@"public const byte Dropship = 7;", File.ReadAllText(Repo("Scripts/Core/UnitCatalog.cs")));
+		Assert.True(expected.Length <= Gdpyr.Sim.SimConfig.MaxUnitDefinitions);
+	}
+
+	private static readonly string[] FlightKeys =
+	{
+		"CruiseAltitudeMeters", "ClimbMetersPerSecond", "DescentMetersPerSecond", "ClearAltitudeMeters",
+	};
+
+	[Fact]
+	public void OnlyTheDropship_HasFlightKeys()
+	{
+		Dictionary<string, string> dropship = Resource("Units/dropship.tres");
+		foreach (string key in FlightKeys)
+		{
+			Assert.True(Float(dropship, key) > 0f, key);
+		}
+
+		foreach (string unit in new[] { "infantry", "technical", "tank", "builder", "supply_truck", "sniper", "heavy_gunner" })
+		{
+			Dictionary<string, string> file = Resource($"Units/{unit}.tres");
+			foreach (string key in FlightKeys)
+			{
+				Assert.False(file.ContainsKey(key), $"{unit}.{key}");
+			}
+		}
+	}
+
+	[Fact]
+	public void TheDropship_IsAnUnarmedTransport_WithTheNumbersThePlanWrites()
+	{
+		// docs/VEHICLES.md V-D8, §8.1: every number a playtest knob, these the defaults.
+		Dictionary<string, string> dropship = Resource("Units/dropship.tres");
+		Assert.Equal(250, Int(dropship, "Cost"));
+		Assert.Equal(14f, Float(dropship, "BuildSeconds"));
+		Assert.Equal(400f, Float(dropship, "MaxHealth"));
+		Assert.Equal(0.5f, Float(dropship, "BulletDamageScale"));
+		Assert.Equal(12f, Float(dropship, "MoveSpeed"));
+		Assert.Equal(14f, Float(dropship, "CruiseAltitudeMeters"));
+		Assert.Equal(40f, Float(dropship, "SensorRadiusMeters"));
+
+		// Unarmed: it shoots nothing, so it never picks a target (UnitManager.SimulateUnit).
+		Assert.Equal(0f, Float(dropship, "EngageRangeMeters"));
+
+		// Below clear altitude it only climbs or comes down, and clear is above every roof
+		// on the map: the barracks' 6.5 m and the sniper tower's 8.4 m cabin.
+		float clear = Float(dropship, "ClearAltitudeMeters");
+		Assert.InRange(clear, 8.4f, Float(dropship, "CruiseAltitudeMeters"));
+
+		// Its hitbox stays a capsule: height at least twice the radius.
+		Assert.True(Float(dropship, "HeightMeters") >= 2f * Float(dropship, "RadiusMeters"));
 	}
 
 	// ---- reading the files -------------------------------------------------------------

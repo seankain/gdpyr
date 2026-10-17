@@ -384,7 +384,7 @@ public partial class UnitManager : Node
 				continue;
 			}
 
-			Unit unit = SpawnUnit(definitionId, barracks.SpawnSlot(barracks.Queue.Produced), barracks.Team);
+			Unit unit = SpawnUnit(definitionId, SpawnPoint(barracks, definitionId), barracks.Team);
 			if (unit == null)
 			{
 				// The field is full. Refund rather than swallow it: the strategist paid
@@ -485,7 +485,14 @@ public partial class UnitManager : Node
 
 		if (tick >= unit.NextScanTick)
 		{
-			AcquireTarget(unit);
+			// A unit that shoots nothing never picks a target — the dropship — so an attack
+			// order is a flight to its point, a defend order to its anchor, and one that
+			// names a player is a flight to where the click was (docs/VEHICLES.md §8.1).
+			if (unit.Traits.EngageRangeMeters > 0f)
+			{
+				AcquireTarget(unit);
+			}
+
 			if (plan != null)
 			{
 				Encode(unit, plan, tick);
@@ -548,7 +555,18 @@ public partial class UnitManager : Node
 			site.Workers++;
 		}
 
-		float destinationDistance = hasDestination && !working ? unit.GlobalPosition.DistanceTo(destination) : 0f;
+		// An aircraft's destination is bounded to the field where it steers, and it has
+		// arrived when it is over it, measured flat. Ground units keep the distance they
+		// always had: legacy's decisions must not move (docs/HTN_BOTS.md D5).
+		bool aircraft = unit.IsAircraft;
+		if (aircraft)
+		{
+			destination = AircraftDestination(unit, destination);
+		}
+
+		float destinationDistance = !hasDestination || working ? 0f
+			: aircraft ? AircraftDistance(unit, destination)
+			: unit.GlobalPosition.DistanceTo(destination);
 
 		var situation = new UnitSituation(unit.IsAlive, unit.Order.Kind, hasTarget, targetDistance,
 			destinationDistance);
@@ -559,7 +577,22 @@ public partial class UnitManager : Node
 
 		// A unit that stops to fight stops; one on a move order shoots on the walk.
 		bool holding = working || (unit.State == UnitStateId.Engaging && holdsWhileEngaging);
-		unit.Steer(destination, hasDestination && !holding, SimConfig.TickDelta);
+		if (aircraft)
+		{
+			// A patrol that turned round this tick flies to its other end rather than
+			// landing at this one.
+			if (arrived && unit.Order.Kind == OrderKind.Patrol)
+			{
+				destination = AircraftDestination(unit, UnitBrain.Destination(unit.Order, unit.GlobalPosition, hasTarget,
+					targetPoint, unit.Traits, out hasDestination));
+			}
+
+			SteerAircraft(unit, destination, hasDestination, tick);
+		}
+		else
+		{
+			unit.Steer(destination, hasDestination && !holding, SimConfig.TickDelta);
+		}
 		unit.FaceTowards(hasTarget ? targetPoint : working ? site.Pose.Base : destination, SimConfig.TickDelta);
 
 		ServerFire(unit, tick, hasTarget, targetPoint, targetVelocity);
@@ -906,7 +939,9 @@ public partial class UnitManager : Node
 	/// <summary>A unit's planning context, made the first time it is simulated; null under legacy.</summary>
 	private UnitContext PlanOf(Unit unit)
 	{
-		if (_planning == null || unit.Team != Team.Strategist)
+		// An aircraft follows its order through UnitBrain: cover, defend posts and pad
+		// posts mean nothing to it (docs/VEHICLES.md §9.2).
+		if (_planning == null || unit.Team != Team.Strategist || unit.IsAircraft)
 		{
 			return null;
 		}
@@ -935,7 +970,10 @@ public partial class UnitManager : Node
 		for (int i = 0; i < _ordered.Count && _neighbourCount < _neighbours.Length; i++)
 		{
 			Unit unit = _ordered[i];
-			if (unit.IsOnField && unit.Team == Team.Strategist)
+
+			// Riders and aircraft are nobody's neighbours: a dropship's position fourteen
+			// metres up, and its view over every wall, would skew the odds round it.
+			if (unit.IsOnField && !unit.IsAircraft && unit.Team == Team.Strategist)
 			{
 				_neighbours[_neighbourCount++] = new Neighbour(unit.UnitId, unit.GlobalPosition, HealthFraction(unit),
 					unit.State == UnitStateId.Engaging);
@@ -954,7 +992,7 @@ public partial class UnitManager : Node
 			for (int m = 0; m < members; m++)
 			{
 				Unit unit = Find(_squadMembers[m]);
-				if (unit != null && unit.IsOnField)
+				if (unit != null && unit.IsOnField && !unit.IsAircraft)
 				{
 					_census.Add(s, unit.UnitId, unit.GlobalPosition, unit.State == UnitStateId.Engaging,
 						unit.TargetOwnerId);
@@ -1776,6 +1814,14 @@ public partial class UnitManager : Node
 			unit.NextScanTick = 0;
 			ResetPlan(unit);
 			Suppression.Clear(ref unit.LastSeen);
+
+			// An aircraft is in no squad: a dropship in a mixed order adds no strength to it
+			// (docs/VEHICLES.md §5.6).
+			if (unit.IsAircraft)
+			{
+				Squads.Leave(unit.UnitId);
+				continue;
+			}
 
 			// A client chooses the list, so the same unit may be in it any number of
 			// times. Recorded once, every unit the order reached fits the scratch: there

@@ -269,8 +269,9 @@ best debugging aid you will have: dump it on a disputed kill.
 ### 6.1 Units
 
 **M3 took the custom packed replicator, not `MultiplayerSpawner` + `MultiplayerSynchronizer`.**
-One unreliable message at 20 Hz carrying an array of `{id, def, quantized pos, yaw, state+team,
-health%}` — 13 bytes each, 837 bytes for a full field of 64 — plus a reliable spawn and despawn per
+One unreliable message at 20 Hz carrying an array of `{id, def, quantized pos, yaw, flags,
+health%}` — the flag byte is state and team, and since the vehicles whether a unit is aboard and how
+an aircraft is flying (below) — 13 bytes each, 837 bytes for a full field of 64 — plus a reliable spawn and despawn per
 unit per life. `Scripts/Sim/UnitSnapshotCodec.cs`, decoded into a `SnapshotInterpolator` per unit,
 the same one remote characters use. Units never simulate on clients.
 
@@ -579,7 +580,7 @@ exists to be.
 
 ---
 
-## 10. Economy, emplacements, the scoreboard, barracks defences, structures, armour, resupply, training and grenades
+## 10. Economy, emplacements, the scoreboard, barracks defences, structures, armour, resupply, training, grenades and vehicles
 
 M5 added three things that are neither a per-tick sample nor a projectile, and all three are on the
 wire as **state**: sent when it changes, reliable, and absent the rest of the time.
@@ -869,8 +870,8 @@ one navigation mesh still serves every unit (§M5 of the plan).
 arms do nothing to them — not the rifle, not the DMR, not the pistol, and not the heavy gun's
 12.7 mm either — and only an explosive does: the launcher's grenade, by its impact or its blast.
 (A hand grenade is an explosive too, but an anti-personnel one: a quarter of its blast, §10.9.)
-Everything else the strategist fields is soft and takes a bullet whole, and a wall of sandbags
-still takes 0.3 of one.
+Everything else the strategist fields is soft and takes a bullet whole, but for two: a wall of
+sandbags still takes 0.3 of one, and the dropship's airframe half ([`VEHICLES.md`](VEHICLES.md) §8.1).
 
 It is one number on each definition: `BulletDamageScale`, which structures already had
 (`Structures/*.tres`) and units now have too (`Units/*.tres`, default 1). The tank, the pillbox and
@@ -888,6 +889,7 @@ the armour and still draws its impact, so what a player sees is sparks and no ma
 | pillbox | 700 | 0 | 40 / up to 90 |
 | sniper tower | 450 | 0 | 40 / up to 90 |
 | sandbag wall | 400 | 0.3 | 40 / up to 90 |
+| dropship | 400 | 0.5 | 40 / up to 90 |
 
 A grenade's direct victim takes the impact (40) and is left out of its own blast
 (`CombatManager.Explode`), so a grenade that lands at a tank's tracks does more than one that
@@ -1067,8 +1069,8 @@ structure block, as for the builder and the truck.
 ### 10.9 Hand grenades
 
 Every ground-force player and every strategist unit on foot carries **three hand grenades**
-(`GrenadeSim.Carried`; a unit's is `UnitDefinition.Grenades`, which the technical, the tank and the
-supply truck set to 0). They are **anti-personnel**: a wide blast that kills a person near it, and a
+(`GrenadeSim.Carried`; a unit's is `UnitDefinition.Grenades`, which the technical, the tank, the
+supply truck and the dropship set to 0). They are **anti-personnel**: a wide blast that kills a person near it, and a
 quarter of that to a vehicle or a structure.
 
 | | hand grenade | launcher grenade (§10.6) |
@@ -1105,9 +1107,9 @@ the thrower and their teammates included, and it spares units on the thrower's o
 **Against vehicles and structures** it is the round's own share, applied after the armour rule of
 §10.6 (`Armour.DamageTaken(amount, explosive, bulletScale, roundScale)`): a grenade is an explosive,
 so it does hurt a tank, a pillbox and a tower, but its `VehicleDamageScale` and `StructureDamageScale`
-are 0.25. A vehicle is a unit whose definition says `IsVehicle` — the technical, the tank and the
-supply truck — which is a separate flag from armour on purpose: two of the three are vehicles a
-bullet hurts. Every other round's shares are 1, so nothing else changed.
+are 0.25. A vehicle is a unit whose definition says `IsVehicle` — the technical, the tank, the
+supply truck and the dropship — which is a separate flag from armour on purpose: three of the four
+are vehicles a bullet hurts. Every other round's shares are 1, so nothing else changed.
 
 **Units throw** (`UnitManager.ServerThrow`) at the player they are fighting when they are 6–28 m off
 and either behind something or slower than 2.5 m/s — standing or crouched, not walking — and at most
@@ -1148,6 +1150,83 @@ raw `grenade` button works on the socket); a unit does not get out of the way of
 neither does a bot; and the computer strategist does not plan with grenades — its units throw them
 on their own. Not run in Godot here: everything above that is engine-free is in
 `Tests/GrenadeTests.cs` and `Tests/BotBrainTests.cs`.
+
+### 10.10 Vehicles that carry units: the technical's seats, and the dropship
+
+Added as M10 ([`VEHICLES.md`](VEHICLES.md)), which lifts the "Dropships and troop carriers" cut
+([`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) §5): the technical gets seats that units are
+ordered into and let out of, and a vertical take-off and landing dropship does the same from the air.
+Until then the only way to move a squad was to walk it, at 4.5 m/s.
+
+**The rule** (`Scripts/Sim/Cargo.cs` and `Scripts/Sim/Flight.cs`, engine-free,
+`Tests/CargoTests.cs` and `Tests/FlightTests.cs`; the engine half is `Scripts/Rts/UnitManager.Cargo.cs`
+and `UnitManager.Flight.cs`). Any unit on foot rides, one seat each, and no vehicle carries a vehicle.
+Told to **embark**, the units that can ride walk to the vehicle and get in as each comes within reach
+— both radii and a metre, measured flat, inside the 4 m band a capture pad uses — nearest first until
+the seats are full; the rest stop where they are, and a boarder that has not arrived in 20 s gives up.
+The vehicle holds where it is and waits: an order given to it while they are on their way is kept for
+when they are aboard. **A rider stays a unit** — same id, same health — alive, hidden, solid to
+nothing, not simulated and pinned to its vehicle's position every tick; everything outside the unit
+loop that asks whether a unit is there to be hit, seen, counted on a node or selected asks
+`Unit.IsOnField`. Only the counts of the side's army keep counting riders — the defeat condition's,
+and the computer strategist's census of builders and trucks — because they are still its army. Told to **unload**, the vehicle stops — the dropship lands — and each rider
+gets out at the first exit slot round it that is in the field, in sight of the vehicle, on the
+ground, on the navigation mesh and clear of bodies; one with nowhere clear stays aboard and is tried
+again. A vehicle whose loader is no longer a seated strategist unloads on its own. A vehicle
+**destroyed** with riders throws them out round the wreck, each dealt half its maximum health in the
+killer's name, if it was within 4 m of the ground; higher than that, everybody aboard dies. Wrecks
+are resolved after the projectile step, so the blast that destroyed the vehicle never touches them
+and the order the units are listed in decides nothing.
+
+**The dropship flies** a straight line over everything at 14 m and lands whenever it has nowhere to
+go: on arriving, on a stop or a hold, and to be boarded or unloaded. Below 10 m it moves only up and
+down, clear of every roof on the map. It comes down only on a spot it found clear first — the
+ground, not a roof or a block, on the navigation mesh, with nothing in a hull-wide cylinder up to
+10 m — trying the point, then rings at 6 m and 12 m; with none it holds at cruise and says so, and at
+2 m it waits for anybody under it to move. Off the ground it is on no collision layer and meets only
+the world. It carries no gun, so it never picks a target: an attack order is somewhere to fly.
+
+| | technical | dropship |
+|---|---|---|
+| catalog id, key | 1, `2` | 7, `T` |
+| seats | 4 | 8 |
+| cost, seconds | 150, 9 | 250, 14 |
+| health, share of a bullet | 220, 1 | 400, 0.5 (§10.6) |
+| speed | 8 m/s | 12 m/s in the air, none on the ground |
+| sees, shoots | 70 m, 50 m | 40 m (from 16 m up), nothing |
+| body | radius 1.0, height 2.2 | radius 2.0, height 4.0 |
+| a rifleman gets in from | 2.4 m | 3.4 m, once it has landed |
+| exit slots for a rifleman | 26 | 36 |
+| flight | — | cruise 14 m, climb 4 m/s, descent 3 m/s, clear 10 m |
+
+**On the wire: no new server message.** The unit record stays 13 bytes (§6.1): bit 3 of its flag
+byte says aboard, bits 4–5 are the flight phase, bit 6 says no room to land, and a passenger's yaw
+field names its vehicle. A client counts each vehicle's passengers from the records that name it.
+The two requests are `ClientEmbark` and `ClientUnload` (§6.3, §7), checked as an order is. The
+dropship is one catalog line, appended, so every older id means what it did; `DemoFormat.Version`
+went to 2 for the flag byte ([`DEMOS.md`](DEMOS.md) §6). The agent API is additive
+([`AGENT_API.md`](AGENT_API.md) §6.2, §7.4, §7.5, §8): two commands, four `list_units` fields and
+three events, with the observation schema and the action heads unchanged. **One build for
+everybody**: there is no join-time protocol check, and new `[Rpc]` methods on `UnitManager` can
+renumber its RPCs, so a server and a client from either side of this change misroute every unit RPC
+silently rather than failing a decode. That was already the practice; this is the change that makes
+it load-bearing, and a protocol version in the join handshake is a small change worth making first.
+
+**Who uses it.** A person right-clicks a friendly vehicle with units selected, presses `U` or the
+card's **Unload**, and queues a dropship on `T`. A policy sends `embark` and `unload`. The playtest
+harness starts units aboard and scripts a strategist seat's commands ([`AGENT_API.md`](AGENT_API.md)
+§9.1), and four scenarios check it: `technical_boards_squad`, `technical_carries_squad`,
+`technical_wreck_ejects` and `dropship_lands_to_unload`. **No computer strategist loads anything**
+(V-D9): riders, boarders, a vehicle with anybody aboard or on the way, and every aircraft are left out
+of its command outright ([`HTN_BOTS.md`](HTN_BOTS.md) D1), so a person's loaded truck is never
+recruited as a scout. Under `--bot-ai htn` a unit walking to get in, or a vehicle unloading, is never
+pulled off it to retreat or resupply. Ground bots do not see riders, and walk to the ground under an
+airborne dropship to shoot at it.
+
+**Not in it** ([`VEHICLES.md`](VEHICLES.md) §14): the computer strategist using vehicles at all;
+unloading at a point; firing from the technical's bed; seat sizes and vehicles carrying vehicles; a
+helipad; a transport block in the agent observation; ground bots leading a launcher round against an
+aircraft, and a door gun.
 
 ---
 

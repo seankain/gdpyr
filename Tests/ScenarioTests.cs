@@ -179,6 +179,30 @@ public class ScenarioTests
 		Assert.Equal("chair", Scenario.LoaderOf(scenario, rider).Id);
 	}
 
+	[Fact]
+	public void TheDropshipScenario_SeatsEight_AllLoadedByItsOneStrategistSeat()
+	{
+		// docs/VEHICLES.md §11: the dropship's scenario, eight aboard one airframe.
+		string path = System.IO.Path.Combine(ScenarioDirectory(), "dropship_lands_to_unload.json");
+		Scenario scenario = Scenario.Load(path);
+
+		ScenarioSpawn ship = scenario.Spawns[0];
+		Assert.Equal("dropship", ship.Unit);
+		Assert.Equal("ship", ship.Id);
+
+		int aboard = 0;
+		foreach (ScenarioSpawn spawn in scenario.Spawns)
+		{
+			if (spawn.Aboard == "ship")
+			{
+				aboard++;
+				Assert.Equal("chair", Scenario.LoaderOf(scenario, spawn).Id);
+			}
+		}
+
+		Assert.Equal(8, aboard);
+	}
+
 	[Theory]
 	[InlineData("""{ "unit": "infantry", "aboard": "lorry" }""", "not the 'id' of an earlier unit spawn")]
 	[InlineData("""{ "unit": "infantry", "id": "r1", "aboard": "r1" }""", "not the 'id' of an earlier unit spawn")]

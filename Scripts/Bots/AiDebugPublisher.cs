@@ -368,6 +368,11 @@ public sealed class AiDebugPublisher
 			inspect.Add(AiValueKey.Aboard, unit.AboardCount);
 		}
 
+		if (unit.IsAircraft && float.IsFinite(unit.HeightAboveGround))
+		{
+			inspect.Add(AiValueKey.Altitude, Mathf.RoundToInt(unit.HeightAboveGround * 100f));
+		}
+
 		if (unit is { IsOnField: true, Order.Kind: OrderKind.Embark } && OwnerId.IsUnit(unit.Order.TargetOwnerId)
 			&& UnitManager.Instance.Find(OwnerId.UnitOf(unit.Order.TargetOwnerId)) is { } vehicle)
 		{

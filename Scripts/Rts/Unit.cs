@@ -168,14 +168,64 @@ public partial class Unit : CharacterBody3D
 	public uint UnloadRetryTick { get; set; }
 
 	/// <summary>
-	/// An aircraft's flight phase (docs/VEHICLES.md §4.2), replicated in the flag byte;
+	/// An aircraft's flight (docs/VEHICLES.md §4.2): its phase, whether it has found
+	/// nowhere to land, and whether somebody is under it as it comes down. Stepped on the
+	/// authority by <see cref="Sim.Flight"/>; a client's copy has the phase and
+	/// <see cref="CannotLand"/> from the snapshot.
+	/// </summary>
+	public FlightState Flight;
+
+	/// <summary>
+	/// An aircraft's flight phase, replicated in the flag byte;
 	/// <see cref="FlightPhase.Grounded"/> for everything that does not fly. Off the
 	/// ground it is solid to nobody.
 	/// </summary>
-	public FlightPhase Phase { get; set; }
+	public FlightPhase Phase
+	{
+		get => Flight.Phase;
+		set => Flight.Phase = value;
+	}
 
 	/// <summary>An aircraft holding at cruise because it found nowhere to land. Replicated, for the card.</summary>
-	public bool CannotLand { get; set; }
+	public bool CannotLand
+	{
+		get => Flight.CannotLand;
+		set => Flight.CannotLand = value;
+	}
+
+	/// <summary>How it flies (<see cref="UnitDefinition.CruiseAltitudeMeters"/>); a cruise altitude of zero for a unit that does not.</summary>
+	public FlightTraits FlightTraits { get; private set; }
+
+	/// <summary>True for a unit that flies: the dropship (docs/VEHICLES.md §8).</summary>
+	public bool IsAircraft => FlightTraits.IsAircraft;
+
+	/// <summary>
+	/// Server-side, for an aircraft: how far its feet are above the ground under it, as
+	/// the last tick's ray found it; 0 on the ground, and for everything that does not
+	/// fly. What a wreck's riders are judged by (<see cref="Cargo.WreckKillsAll"/>).
+	/// Never replicated.
+	/// </summary>
+	public float HeightAboveGround { get; set; }
+
+	/// <summary>
+	/// Server-side, for an aircraft coming down: the ground it is landing on, found clear
+	/// before it started down (docs/VEHICLES.md §8.2). Meaningful only while
+	/// <see cref="HasLandingSpot"/>.
+	/// </summary>
+	public Vector3 LandingSpot { get; set; }
+
+	/// <inheritdoc cref="LandingSpot"/>
+	public bool HasLandingSpot { get; set; }
+
+	/// <summary>
+	/// Server-side: where its order meant it to land when it found <see cref="LandingSpot"/>
+	/// there or near there. While the order still means that place, the aircraft has
+	/// arrived, wherever round it the spot turned out to be.
+	/// </summary>
+	public Vector3 LandingFor { get; set; }
+
+	/// <summary>Server-side, for an aircraft that found nowhere to land: the tick it looks again on.</summary>
+	public uint LandingRetryTick { get; set; }
 
 	/// <summary>
 	/// How many are aboard, for a vehicle with seats: its hold on the authority, and on
@@ -201,6 +251,10 @@ public partial class Unit : CharacterBody3D
 
 	private NavigationAgent3D _agent;
 	private MeshInstance3D _mesh;
+
+	/// <summary>An aircraft's rotors, on a peer that draws anything, and whether they are turning: off the ground, and shown.</summary>
+	private Node3D[] _rotors;
+	private bool _rotorsSpinning;
 	private CollisionShape3D _collision;
 	private Vector3 _destination;
 	private bool _hasDestination;
@@ -228,6 +282,7 @@ public partial class Unit : CharacterBody3D
 
 		Definition ??= UnitCatalog.Definition(DefinitionId);
 		Traits = UnitCatalog.TraitsFor(DefinitionId);
+		FlightTraits = UnitCatalog.FlightTraitsFor(DefinitionId);
 		Health = Definition?.MaxHealth ?? 100f;
 
 		byte weaponId = Definition?.WeaponDefinitionId ?? WeaponCatalog.Rifle;
@@ -241,8 +296,10 @@ public partial class Unit : CharacterBody3D
 		Cargo = seats > 0 ? new CargoHold(seats) : null;
 
 		BuildBody();
+		SetProcess(_rotors != null);
 
-		if (IsSimulated)
+		// An aircraft flies a straight line over everything; it has no path to ask for.
+		if (IsSimulated && !IsAircraft)
 		{
 			BuildAgent();
 		}
@@ -289,6 +346,48 @@ public partial class Unit : CharacterBody3D
 		velocity.Z = desired.Z;
 
 		velocity.Y = IsOnFloor() ? 0f : velocity.Y - (_gravity * dt);
+
+		Velocity = velocity;
+		MoveAndSlide();
+	}
+
+	/// <summary>
+	/// An aircraft's step (docs/VEHICLES.md §8.2), in place of <see cref="Steer"/>: a
+	/// straight line across the ground towards <paramref name="destination"/> at its
+	/// speed when <paramref name="horizontal"/> allows it, and
+	/// <paramref name="verticalVelocity"/> up or down, both from <see cref="Sim.Flight"/>.
+	/// Floating while it is off the ground, so the floor is not a floor to it; on the
+	/// ground it stands still and settles, as a unit that is not walking does. Velocity
+	/// is always written whole, Y included: a ground bot leads its shots with it.
+	/// </summary>
+	public void SteerFlying(Vector3 destination, bool horizontal, float verticalVelocity, float dt)
+	{
+		if (!IsSimulated)
+		{
+			return;
+		}
+
+		Vector3 velocity = Vector3.Zero;
+		if (Phase == FlightPhase.Grounded && verticalVelocity <= 0f)
+		{
+			MotionMode = MotionModeEnum.Grounded;
+			velocity.Y = IsOnFloor() ? 0f : Velocity.Y - (_gravity * dt);
+		}
+		else
+		{
+			MotionMode = MotionModeEnum.Floating;
+			velocity.Y = verticalVelocity;
+
+			Vector3 across = destination - GlobalPosition;
+			across.Y = 0f;
+			float distance = across.Length();
+			if (horizontal && distance > 0.01f)
+			{
+				// No further than the destination in one tick, so it stops over it.
+				float speed = Mathf.Min(Definition?.MoveSpeed ?? 0f, distance / Mathf.Max(dt, 1e-4f));
+				velocity += across / distance * speed;
+			}
+		}
 
 		Velocity = velocity;
 		MoveAndSlide();
@@ -471,17 +570,41 @@ public partial class Unit : CharacterBody3D
 	/// for the frame or two before it is freed, so nothing walks into an invisible
 	/// corpse; a rider is hidden and off it for as long as it rides, and on the server
 	/// collides with nothing either, so the hidden body never pushes its vehicle. An
-	/// aircraft off the ground is drawn and on nobody's layer.
+	/// aircraft off the ground is drawn, on nobody's layer, and on the server meets only
+	/// the world (docs/VEHICLES.md §8.3): nothing rides its roof into the air, and it
+	/// flies over units and players rather than into them.
 	/// </summary>
 	public void ApplyPresentation()
 	{
 		bool shown = IsAlive && !IsRiding;
+		bool grounded = Phase == FlightPhase.Grounded;
 		Visible = shown;
-		CollisionLayer = shown && Phase == FlightPhase.Grounded ? CollisionLayers.Units : 0u;
+		CollisionLayer = shown && grounded ? CollisionLayers.Units : 0u;
 
 		if (IsSimulated)
 		{
-			CollisionMask = IsRiding ? 0u : CollisionLayers.UnitMask;
+			CollisionMask = IsRiding ? 0u : grounded ? CollisionLayers.UnitMask : CollisionLayers.World;
+		}
+
+		_rotorsSpinning = shown && !grounded;
+	}
+
+	/// <summary>How fast an aircraft's rotors turn in the air [rad/s]. Cosmetic.</summary>
+	private const float RotorRadiansPerSecond = 30f;
+
+	/// <summary>Only an aircraft on a peer that draws it is processed at all: its rotors turn while it is off the ground.</summary>
+	public override void _Process(double delta)
+	{
+		if (!_rotorsSpinning || _rotors == null)
+		{
+			return;
+		}
+
+		float turn = RotorRadiansPerSecond * (float)delta;
+		for (int i = 0; i < _rotors.Length; i++)
+		{
+			// Alternate ways round, as a tandem pair does.
+			_rotors[i].RotateY(i % 2 == 0 ? turn : -turn);
 		}
 	}
 
@@ -501,6 +624,17 @@ public partial class Unit : CharacterBody3D
 		};
 		AddChild(_collision);
 
+		if (IsAircraft)
+		{
+			// The collider stays the capsule the hitbox is; only what is drawn differs.
+			if (!Bootstrap.IsDedicatedServer)
+			{
+				BuildAirframe(height, radius);
+			}
+
+			return;
+		}
+
 		_mesh = new MeshInstance3D
 		{
 			Name = "Mesh",
@@ -519,6 +653,64 @@ public partial class Unit : CharacterBody3D
 			BuildSupplyRing(Definition.SupplyRadiusMeters);
 		}
 	}
+
+	/// <summary>
+	/// An aircraft as drawn (docs/VEHICLES.md §8.4): a hull on four legs and a tandem pair
+	/// of rotors, inside the capsule it collides with and is hit as. All of it hangs off
+	/// one child, so anything that ever tilts it tilts the drawing and never the body's
+	/// basis, which is its facing on the wire.
+	/// </summary>
+	private void BuildAirframe(float height, float radius)
+	{
+		Color color = Definition?.Color ?? new Color(0.35f, 0.5f, 0.75f);
+		var hullMaterial = new StandardMaterial3D { AlbedoColor = color };
+		var darkMaterial = new StandardMaterial3D { AlbedoColor = color.Darkened(0.6f) };
+
+		var airframe = new Node3D { Name = "Airframe" };
+		AddChild(airframe);
+
+		float legHeight = height * 0.22f;
+		float hullHeight = height * 0.45f;
+		float hullWidth = radius * 1.2f;
+		float hullLength = radius * 2.3f;
+
+		airframe.AddChild(Part("Hull", new BoxMesh { Size = new Vector3(hullWidth, hullHeight, hullLength) },
+			new Vector3(0f, legHeight + (hullHeight * 0.5f), 0f), hullMaterial));
+
+		for (int i = 0; i < 4; i++)
+		{
+			float x = (i % 2 == 0 ? -1f : 1f) * hullWidth * 0.4f;
+			float z = (i < 2 ? -1f : 1f) * hullLength * 0.35f;
+			airframe.AddChild(Part($"Leg{i}", new BoxMesh { Size = new Vector3(0.15f, legHeight, 0.15f) },
+				new Vector3(x, legHeight * 0.5f, z), darkMaterial));
+		}
+
+		// Fore and aft, the aft one higher so the discs pass over each other.
+		float blade = radius * 1.7f;
+		float top = legHeight + hullHeight;
+		_rotors = new Node3D[2];
+		for (int i = 0; i < _rotors.Length; i++)
+		{
+			float z = (i == 0 ? -1f : 1f) * hullLength * 0.38f;
+			float y = top + ((height - top) * (i == 0 ? 0.55f : 0.85f));
+			var rotor = new Node3D { Name = $"Rotor{i}", Position = new Vector3(0f, y, z) };
+			rotor.AddChild(Part("BladeA", new BoxMesh { Size = new Vector3(blade, 0.05f, 0.22f) }, Vector3.Zero,
+				darkMaterial));
+			rotor.AddChild(Part("BladeB", new BoxMesh { Size = new Vector3(0.22f, 0.05f, blade) }, Vector3.Zero,
+				darkMaterial));
+			airframe.AddChild(rotor);
+			_rotors[i] = rotor;
+		}
+	}
+
+	private static MeshInstance3D Part(string name, Mesh mesh, Vector3 position, Material material) => new()
+	{
+		Name = name,
+		Mesh = mesh,
+		Position = position,
+		CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+		MaterialOverride = material,
+	};
 
 	/// <summary>
 	/// A line on the ground at a supply truck's reach, as a barracks draws its ring:

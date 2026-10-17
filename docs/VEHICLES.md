@@ -1,11 +1,12 @@
 # gdpyr — Vehicles that carry units: the technical, and a dropship
 
-**Status: in progress.** V1 (the engine-free cargo rules), V2 (the technical carries units, on the
-server), V3 (the wire and the strategist's controls), V4 (bots, agents, debugger) and V5 (the harness
-and the technical's scenarios) are built; their engine-side checks are outstanding, and V6–V7 are not
-built. It replaces
+**Status: built; the engine-side checks are outstanding.** V1 (the engine-free cargo rules), V2 (the
+technical carries units, on the server), V3 (the wire and the strategist's controls), V4 (bots,
+agents, debugger), V5 (the harness and the technical's scenarios), V6 (the dropship) and V7 (the
+docs) are built. None of it has been run in Godot: the scenario baseline, the four vehicle scenarios
+and the listen-host and dedicated-server checks of V2–V6 are still to be taken (§12). It replaced
 the "Dropships and troop carriers" scope cut in [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md)
-§5 with a design and a milestone list (M10 there).
+§5 with a design and a milestone list (M10 there); the cut is struck.
 
 Companion documents: [`NETCODE.md`](NETCODE.md) §6 (unit replication, commands), §10.5 (builders,
 the request pattern this copies), §10.7 (the supply truck, the precedent for "a unit kind is one
@@ -896,7 +897,7 @@ The existing suite re-run against V2's baseline.
   placed; the harness stops on the refusal, so nothing measures it. `dropship_lands_to_unload` is
   V6's, which adds the kind.
 
-### V6 — The dropship (2–3 days)
+### V6 — The dropship (2–3 days) — built; the engine-side checks are outstanding
 
 `Scripts/Sim/Flight.cs` and `FlightTests`; `Units/dropship.tres`, id 7, the flight exports;
 `SteerFlying`, no acquisition when unarmed, flat arrival, landing spots, clamped targets, spawning;
@@ -905,7 +906,72 @@ collision by phase; the ground bots' goal projection; presentation; `T` and the 
 and the dropship have seats; only the dropship has flight keys),
 `GrenadeTests.UnitsOnFootCarryThree_VehiclesNone` (the dropship joins its vehicle list).
 
-### V7 — Docs (alongside each)
+- **Result:** `dotnet test` 1,703 passed, 0 failed (1,673 before; 30 new: 25 in `FlightTests` — take-off
+  reaches cruise in `ceil(14 / 4 / dt)` = 210 ticks, nothing moves across below clear altitude going
+  up or at all coming down or on the ground, landing returns to the ground, a destination while
+  landing takes off again and dropping one while taking off comes down again, no room to land holds
+  cruise, a body underneath holds it at 2 m until it goes, boarding and unloading are refused in all
+  three phases off the ground, cruise holds its altitude after a cut-short move, an unknown height
+  neither climbs nor descends, altitude stays inside the wire's ±327.67 m, broken traits clamp,
+  a ground unit is left alone, and the landing candidates' rings, order and wrap — 3 in
+  `TrainedUnitResourceTests` (id 7 is the dropship and ids 0–6 are where they were, only the dropship
+  has flight keys, the dropship's numbers), 1 in `VehicleControlsTests` (the card offers the dropship
+  on `T`) and 1 in `ScenarioTests` (the dropship scenario seats eight, all loaded by its one seat));
+  existing facts extended: the seats fact covers the dropship's eight, the barracks and suppression
+  lists and `GrenadeTests`' vehicle list name it, and `T` is now asserted bound to
+  `rts_build_dropship` and nothing else. `dotnet build Gdpyr.csproj`, `tools/Gdpyr.Playtest` and
+  `tools/Gdpyr.AgentClient` 0 warnings, 0 errors. Breaking the clear-altitude rule, boarding off the
+  ground, re-taking off from a landing, the hold at 2 m, or the cruise clamp was checked to fail one or
+  two facts each. Built: `FlightTraits`, `FlightState`, `Flight.Step`/`CanBoard`/`CanUnload`/
+  `NeedsGroundCheck`/`LandingCandidate`; `UnitDefinition`'s "Flight" exports and `ToFlightTraits`,
+  `Units/dropship.tres`, `UnitCatalog.Dropship = 7`, `IsAircraft`, `FlightTraitsFor`; on `Unit`,
+  `Flight` (behind the existing `Phase` and `CannotLand`), `HeightAboveGround`, the landing spot,
+  `SteerFlying`, no navigation agent for an aircraft, the collision mask by phase in
+  `ApplyPresentation`, and the airframe — hull, four legs, a tandem pair of rotors that turn off the
+  ground; `Scripts/Rts/UnitManager.Flight.cs` — the height ray, landing spots, the 2 m check, bounded
+  destinations, `dropship_landed`, and the barracks spawn pushed out of the door; in
+  `SimulateUnit` no acquisition at zero engage range and flat arrival for aircraft; boarding and
+  unloading wait for the ground, and boarders stand off at the ground under it; aircraft are out of
+  plans, the neighbour list, the census, every squad, structure completion and the computer
+  strategist (`BotStrategist.IsOutOfCommand`); a wreck's height is the aircraft's; a ground bot walks
+  to the ground under an airborne target; `AiValueKey.Altitude` is produced, in centimetres; `T`
+  (`rts_build_dropship`, physical keycode 84), the card's eighth button, its tooltip and the key
+  list's ninth line; the overlay's ring under an airborne dropship; the scenario `spawn`'s
+  `dropship`/`7`; `dropship_lands_to_unload.json`; `README.md`, `AGENT_API.md` §6.2, §8 and §9.1,
+  `NETCODE.md` §10.6's sentence and table and §10.9's two lists (V7 items, brought forward because
+  V6 made them true), `IMPLEMENTATION_PLAN.md` M10.
+- **Not checked, and why:** no Godot here, so `dropship_lands_to_unload` has not been run, nor any
+  listen-host check, nor the scenario baseline. Three engine behaviours are relied on and unverified:
+  that a ray starting inside a convex box does not hit that box (the "not elevated" check below), that
+  switching a `CharacterBody3D` between `Grounded` and `Floating` motion each phase change behaves,
+  and that a `CylinderShape3D` whose height changes between queries is queried at its new height.
+- **Changed from the plan above, in the code and here:**
+  - `Unit.Steer` does not branch: an aircraft's tick calls `UnitManager.SteerAircraft`, which measures,
+    finds the landing spot, steps the phase machine and calls `Unit.SteerFlying` to move the body.
+    `Flight.Step` returns the horizontal permission through an `out`; `FlightState` also carries
+    `GroundBlocked`, set by the engine half on the last 2 m, and the phase it leaves is the one this
+    tick's velocity puts it in. `FlightTraits` clamps cruise to 100 m, so the wire's range holds
+    whatever a file says.
+  - Landing candidates are engine-free (`Flight.LandingCandidate`): the point, then 8 at 6 m and 8
+    at 12 m, each ring nearest the aircraft first. The ground is the first surface under the
+    candidate from above — what a hull coming straight down meets — and a second ray from 0.6 m
+    into that surface must find nothing below it: the barracks is in the `navmesh` group, so its
+    roof is baked as walkable, and §5.4's navigation check alone would let a dropship land on it,
+    or on a cover block or `Cube2`. The navigation tolerance is the hull's radius plus 0.3 m. With no
+    room, it looks again a second later, not every scan.
+  - An aircraft that settled for a spot up to 12 m from its destination has arrived
+    (`Unit.LandingFor`): without it, the order's 3 m arrival radius would lift it straight back to a
+    destination it had already found it could not land on. A new destination clears it.
+  - A patrol that turns round this tick flies to its other end rather than landing for a tick at
+    this one.
+  - Numbers the plan left open: regeneration 16/s (4%), eye 2 m (16 m at cruise), arrival 3 m,
+    weapon the pistol (it never fires: no target is ever acquired), colour slate blue.
+  - No tilt is drawn. The airframe hangs off one child, so one would go there and never on the body.
+  - The overlay's ring is red while the dropship has found no room to land, as the card says.
+  - V7 keeps `NETCODE.md` §10.10, §6.1's and §6.3's text, §7's table, `DEMOS.md`, `HTN_BOTS.md` and
+    `TRAINING.md`.
+
+### V7 — Docs (alongside each) — done
 
 A `NETCODE.md` §10.10 in §10.7's shape (the rule, the table, on the wire, who uses it, not in it);
 §6.1's record description, §6.3's checks and rejection rule, §7's table, §10.6 (its "everything
@@ -915,7 +981,27 @@ note; `AGENT_API.md` §6.2, §7.4, §7.5 (`list_units`' fields and example), §8
 the claim for loading vehicles; `TRAINING.md` on multi-unit loss; this document's status, and
 `IMPLEMENTATION_PLAN.md` §5's scope-cut row struck as the builders' was.
 
-**About 8–9 days in all**; V1–V5 (the technical) stand on their own and ship first.
+- **Result:** each item was checked against the code as it stands. Written in this milestone:
+  `NETCODE.md` §10.10 (the rule for both vehicles, the table, on the wire — including that one build
+  for everybody is now load-bearing — who uses it, and what is not in it), §10's title, and §6.1's
+  record description naming the flag byte; `AGENT_API.md` §7.4 (the dropship's eight, and that it
+  lands for an embark or an unload) and §9.1 (the fourth scenario); `HTN_BOTS.md`'s D1 row (an
+  aircraft is never the commander's and plans nothing); `TRAINING.md` (a dropship's wreck is up to
+  nine `unit_lost`); `IMPLEMENTATION_PLAN.md` §5's row struck and M10's heading; `AI_DEBUG.md` §4.1;
+  this status. Already written by the milestone that made them true, and found accurate: §6.1's
+  passenger paragraph, §6.3's rejection rule and §7's two requests (V2–V3), §10.6 and §10.9 (V6),
+  `DEMOS.md`'s version note (V3), `AGENT_API.md` §6.2, §7.5 and §8 (V4, V6), `HTN_BOTS.md`'s `Carry`
+  row and retreat conditions (V4), and `README.md` (V3, V6).
+- **Code, a few lines of it:** `AiValueKey.Altitude`, first published in V6, was shown nowhere. The
+  unit header now says "14.0 m up" for an aircraft off the ground, and nothing on it
+  (`AiDebugText`), with one new fact in `AiDebugTextTests`. `dotnet test` 1,704 passed, 0 failed
+  (1,703 before); `dotnet build Gdpyr.csproj` 0 warnings, 0 errors.
+- **Not checked, and why:** as V2–V6 — no Godot here. The docs describe the code as written; what
+  the engine does with it is the outstanding checks' to say.
+
+**About 8–9 days in all**; V1–V5 (the technical) stand on their own and ship first. All seven are
+built; what remains is running them (§11's baseline, the four vehicle scenarios, and the listen-host
+and dedicated-server checks V2–V6 name).
 
 ---
 

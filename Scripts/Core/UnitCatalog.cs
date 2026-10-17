@@ -30,6 +30,7 @@ public static class UnitCatalog
 		"res://Units/supply_truck.tres", // 4 — supply truck, not a tier
 		"res://Units/sniper.tres",       // 5 — sniper, trained by a sniper tower
 		"res://Units/heavy_gunner.tres", // 6 — heavy gunner, trained by a pillbox
+		"res://Units/dropship.tres",     // 7 — dropship, not a tier
 	};
 
 	public const byte Infantry = 0;
@@ -75,6 +76,15 @@ public static class UnitCatalog
 	/// </summary>
 	public const byte HeavyGunner = 6;
 
+	/// <summary>
+	/// The vertical take-off and landing transport (docs/VEHICLES.md §8): eight seats, an
+	/// airframe bullets do half to, and no gun — it never picks a target, so an attack or
+	/// a defend order is somewhere to fly. It lands whenever it has nowhere to go, to be
+	/// boarded or to let its riders out. Trained at the barracks; not a tier, for the
+	/// builder's reason, and so no computer strategist ever buys one (V-D9).
+	/// </summary>
+	public const byte Dropship = 7;
+
 	/// <summary>The three fighting tiers in order, which is the order the strategist's build keys are in.</summary>
 	public static readonly byte[] Tiers = { Infantry, Technical, Tank };
 
@@ -82,6 +92,9 @@ public static class UnitCatalog
 
 	/// <summary>The brain's view of each unit, parallel to <see cref="Definitions"/>.</summary>
 	public static UnitTraits[] Traits { get; private set; } = System.Array.Empty<UnitTraits>();
+
+	/// <summary>How each unit flies, parallel to <see cref="Definitions"/>; a cruise altitude of zero for the ones that do not.</summary>
+	public static FlightTraits[] FlightTraits { get; private set; } = System.Array.Empty<FlightTraits>();
 
 	public static bool IsLoaded { get; private set; }
 
@@ -101,6 +114,7 @@ public static class UnitCatalog
 
 		var definitions = new UnitDefinition[Paths.Length];
 		var traits = new UnitTraits[Paths.Length];
+		var flight = new FlightTraits[Paths.Length];
 
 		for (int i = 0; i < Paths.Length; i++)
 		{
@@ -116,16 +130,20 @@ public static class UnitCatalog
 
 			definitions[i] = definition;
 			traits[i] = definition.ToTraits();
+			flight[i] = definition.ToFlightTraits();
 		}
 
 		Definitions = definitions;
 		Traits = traits;
+		FlightTraits = flight;
 		IsLoaded = true;
 	}
 
 	public static UnitDefinition Definition(byte id) => id < Definitions.Length ? Definitions[id] : null;
 
 	public static UnitTraits TraitsFor(byte id) => id < Traits.Length ? Traits[id] : default;
+
+	public static FlightTraits FlightTraitsFor(byte id) => id < FlightTraits.Length ? FlightTraits[id] : default;
 
 	public static string NameOf(byte id) => Definition(id)?.Name.ToString() ?? $"#{id}";
 
@@ -149,6 +167,12 @@ public static class UnitCatalog
 	/// No vehicle carries a vehicle.
 	/// </summary>
 	public static bool CanRide(byte id) => Definition(id) is { IsVehicle: false };
+
+	/// <summary>
+	/// Whether units of this kind fly (<see cref="UnitDefinition.CruiseAltitudeMeters"/>,
+	/// docs/VEHICLES.md §8): the dropship.
+	/// </summary>
+	public static bool IsAircraft(byte id) => Definition(id)?.IsAircraft ?? false;
 
 	/// <summary>Whether a barracks trains units of this kind, rather than only a structure (docs/NETCODE.md §10.8).</summary>
 	public static bool IsTrainedInBarracks(byte id) => Definition(id)?.TrainedInBarracks ?? false;
