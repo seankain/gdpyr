@@ -23,6 +23,27 @@ namespace Gdpyr.Ui;
 /// </summary>
 public partial class StrategistHud : CanvasLayer
 {
+	/// <summary>
+	/// What the strategist has selected, as the HUD needs it (docs/VEHICLES.md §7):
+	/// how many units, and of them the vehicles that carry units — how many, how many
+	/// are aboard them and how many seats they have, and whether one is an aircraft
+	/// with nowhere to land. <see cref="Notice"/> is a line that replaces the usual one
+	/// for a moment: a vehicle that was full.
+	/// </summary>
+	public struct SelectionSummary
+	{
+		public int Count;
+		public int Vehicles;
+		public int Aboard;
+		public int Seats;
+		public bool CannotLand;
+
+		/// <summary>The one vehicle's kind when <see cref="Vehicles"/> is 1, as a person reads it.</summary>
+		public string VehicleName;
+
+		public string Notice;
+	}
+
 	private const string Keys =
 		"WASD/edge pan · Space/Ctrl raise/lower · hold RMB and drag to look (Q/E also turn) · wheel zoom\n"
 		+ "LMB select · click the barracks to train units · RMB order · X attack-move · C patrol · B defend · Z stop · F select all\n"
@@ -30,7 +51,11 @@ public partial class StrategistHud : CanvasLayer
 		+ "9 queue a sniper at a sniper tower · 0 queue a heavy gunner at a pillbox · click a finished tower or pillbox for its queue and rally point\n"
 		+ "with builders selected: 5/6/7 then RMB places pillbox/sandbags/tower (turn the view to turn it) · RMB on a site finishes or mends it\n"
 		+ "units out of a fight for 3 s heal inside the barracks ring and a supply truck's ring: move them there\n"
+		+ "with units selected, RMB a technical and they get in, up to 4 · select it and RMB to drive · U lets them out\n"
 		+ "F1 ground force · F2 strategist";
+
+	/// <summary>Pixels the key list is tall, a line each; the card sits on top of it.</summary>
+	private const float KeysHeight = 192f;
 
 	/// <summary>
 	/// Every unit a card can offer, in the order the number keys are: the three tiers,
@@ -61,6 +86,8 @@ public partial class StrategistHud : CanvasLayer
 	private ProgressBar _cardProgress;
 	private readonly Button[] _cardButtons = new Button[CardUnits.Length];
 	private Button _cardCancel;
+	private Button _cardUnload;
+	private Label _cardHint;
 
 	public SelectionOverlay Overlay { get; private set; }
 
@@ -69,6 +96,9 @@ public partial class StrategistHud : CanvasLayer
 
 	/// <summary>The card's cancel button was pressed.</summary>
 	public event Action CancelPressed;
+
+	/// <summary>The card's unload button was pressed, with vehicles selected.</summary>
+	public event Action UnloadPressed;
 
 	public override void _Ready()
 	{
@@ -91,7 +121,7 @@ public partial class StrategistHud : CanvasLayer
 		_selection = NewLabel(root, new Vector2(24f, 80f), new Vector2(520f, 32f));
 		_economy = NewLabel(root, new Vector2(24f, 112f), new Vector2(640f, 32f));
 		_builders = NewLabel(root, new Vector2(24f, 144f), new Vector2(760f, 32f));
-		_keys = NewLabel(root, new Vector2(24f, -180f), new Vector2(1100f, 168f), anchorTop: 1f);
+		_keys = NewLabel(root, new Vector2(24f, -(KeysHeight + 12f)), new Vector2(1100f, KeysHeight), anchorTop: 1f);
 		_keys.Text = Keys;
 
 		BuildCard(root);
@@ -103,10 +133,11 @@ public partial class StrategistHud : CanvasLayer
 	/// <paramref name="barracksSelected"/> whether the strategist clicked on it,
 	/// which is what puts its card up. <paramref name="structure"/> is the sniper
 	/// tower or pillbox clicked on for its queue, or null; while there is one, the
-	/// card is its.
+	/// card is its. With neither, and vehicles that carry units in the selection, the
+	/// card is theirs: who is aboard, and the unload button.
 	/// </summary>
-	public void Refresh(MatchState match, UnitManager units, uint tick, int selectedCount, OrderKind pendingOrder,
-		EconomyService economy, int barracks, bool barracksSelected, Structure structure)
+	public void Refresh(MatchState match, UnitManager units, uint tick, in SelectionSummary selection,
+		OrderKind pendingOrder, EconomyService economy, int barracks, bool barracksSelected, Structure structure)
 	{
 		int live = units?.LiveUnitCount ?? 0;
 
@@ -124,7 +155,9 @@ public partial class StrategistHud : CanvasLayer
 			? $"selected {NameOf(structure)}   right-click the ground to set its rally point"
 			: barracksSelected
 				? "selected barracks   right-click the ground to set its rally point"
-				: $"selected {selectedCount}   next order: {Describe(pendingOrder)}";
+				: !string.IsNullOrEmpty(selection.Notice)
+					? $"selected {selection.Count}   {selection.Notice}"
+					: $"selected {selection.Count}   next order: {Describe(pendingOrder)}";
 		_economy.Text = Economy(economy);
 
 		if (structure != null)
@@ -132,9 +165,47 @@ public partial class StrategistHud : CanvasLayer
 			RefreshCard(match, shown: true, NameOf(structure), structure.TrainingQueued, structure.TrainsUnit,
 				structure.TrainingProgress(tick), only: structure.TrainsUnit);
 		}
-		else
+		else if (barracksSelected || selection.Vehicles == 0)
 		{
 			RefreshCard(match, barracksSelected, "barracks", status.Queued, status.Head, status.Progress, only: -1);
+		}
+		else
+		{
+			RefreshVehicleCard(selection);
+		}
+	}
+
+	/// <summary>
+	/// The card's third mode (docs/VEHICLES.md §7): the selected vehicles that carry
+	/// units, how many are aboard of how many seats, and the button that lets them out —
+	/// greyed out with nobody aboard. Nothing to train, so no unit buttons, no bar and
+	/// no cancel.
+	/// </summary>
+	private void RefreshVehicleCard(in SelectionSummary selection)
+	{
+		_card.Visible = true;
+		ShowTrainingControls(false);
+
+		string what = selection.Vehicles == 1
+			? (selection.VehicleName ?? "vehicle").Replace('_', ' ')
+			: $"{selection.Vehicles} vehicles";
+		_cardStatus.Text = selection.CannotLand
+			? $"{what} · no room to land"
+			: $"{what} · {selection.Aboard}/{selection.Seats} aboard";
+
+		_cardUnload.Disabled = selection.Aboard == 0;
+		_cardHint.Text = "right-click with units selected to board · right-click the ground to drive";
+	}
+
+	/// <summary>The parts of the card that are about training, shown for a barracks or a structure and hidden for vehicles.</summary>
+	private void ShowTrainingControls(bool training)
+	{
+		_cardProgress.Visible = training;
+		_cardCancel.Visible = training;
+		_cardUnload.Visible = !training;
+		for (int i = 0; i < _cardButtons.Length && !training; i++)
+		{
+			_cardButtons[i].Visible = false;
 		}
 	}
 
@@ -154,6 +225,8 @@ public partial class StrategistHud : CanvasLayer
 			return;
 		}
 
+		ShowTrainingControls(true);
+		_cardHint.Text = "right-click the ground to set the rally point";
 		_cardStatus.Text = queued > 0
 			? $"{title}: training {UnitCatalog.NameOf(head).Replace('_', ' ')} {Mathf.RoundToInt(progress * 100f)}%"
 				+ $"   queued {queued}"
@@ -185,6 +258,7 @@ public partial class StrategistHud : CanvasLayer
 					+ (definition.SuppressSeconds > 0f
 						? $"; keeps firing for {definition.SuppressSeconds:0.#} s where a target went to ground"
 						: string.Empty)
+					+ (UnitCatalog.SeatsOf(id) > 0 ? $"; seats {UnitCatalog.SeatsOf(id)}" : string.Empty)
 				: string.Empty;
 			button.Disabled = full || !UnitCatalog.IsBuildable(id) || match.StrategistPoints < cost;
 		}
@@ -319,15 +393,22 @@ public partial class StrategistHud : CanvasLayer
 		_cardCancel.TooltipText = "takes the last unit off the queue and refunds it";
 		_cardCancel.Pressed += () => CancelPressed?.Invoke();
 
-		var hint = new Label
+		_cardUnload = NewCardButton(footer, new Vector2(0f, 32f));
+		_cardUnload.Text = "Unload (U)";
+		_cardUnload.TooltipText = "everybody aboard gets out round the vehicle, where it stands";
+		_cardUnload.Visible = false;
+		_cardUnload.Pressed += () => UnloadPressed?.Invoke();
+
+		// Set per mode: what a right-click means depends on what the card is up for.
+		_cardHint = new Label
 		{
 			Text = "right-click the ground to set the rally point",
 			VerticalAlignment = VerticalAlignment.Center,
 			MouseFilter = Control.MouseFilterEnum.Ignore,
 		};
-		hint.AddThemeColorOverride("font_color", new Color(0.75f, 0.75f, 0.78f));
-		hint.AddThemeFontSizeOverride("font_size", 12);
-		footer.AddChild(hint);
+		_cardHint.AddThemeColorOverride("font_color", new Color(0.75f, 0.75f, 0.78f));
+		_cardHint.AddThemeFontSizeOverride("font_size", 12);
+		footer.AddChild(_cardHint);
 
 		// Pinned by its bottom-right corner and grown up and to the left, so it is
 		// whatever size its buttons need without this having to know it.
@@ -336,8 +417,8 @@ public partial class StrategistHud : CanvasLayer
 		panel.GrowVertical = Control.GrowDirection.Begin;
 		panel.OffsetLeft = -16f;
 		panel.OffsetRight = -16f;
-		panel.OffsetTop = -188f;
-		panel.OffsetBottom = -188f;
+		panel.OffsetTop = -(KeysHeight + 20f);
+		panel.OffsetBottom = -(KeysHeight + 20f);
 
 		_card = panel;
 	}

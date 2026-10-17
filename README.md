@@ -23,8 +23,8 @@ dedicated-server authoritative.
   graph and lines in the world
 - [`docs/DEMOS.md`](docs/DEMOS.md) — recording a round and watching it back: the console, the
   journal, and what playback does with it
-- [`docs/VEHICLES.md`](docs/VEHICLES.md) — the plan for vehicles that carry units: the technical
-  with seats, boarding and unloading, and a vertical take-off and landing dropship (not built yet)
+- [`docs/VEHICLES.md`](docs/VEHICLES.md) — vehicles that carry units: the technical with seats,
+  boarding and unloading (built), and a vertical take-off and landing dropship (not built yet)
 - [`docs/LAN.md`](docs/LAN.md) — hosting a room of machines from a checkout, with a dev build
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — AWS EC2 dedicated-server runbook
 
@@ -177,6 +177,8 @@ map:
 | `1` `2` `3` `4` `8`, Backspace | queue an infantryman, a technical, a tank, a builder or a supply truck; cancel the last one |
 | `5` `6` `7` | with builders selected: put a pillbox, a sandbag wall or a sniper tower where the next right-click lands |
 | `9` `0` | queue a sniper at a sniper tower, a heavy gunner at a pillbox (the selected one, else the one with the shortest queue) |
+| right-click a technical, with units selected | they walk to it and get in, nearest first, up to its four seats; the technical becomes the selection and waits for them |
+| `U` | every selected technical with anybody aboard lets them out round it, where it is |
 
 Right-clicking an enemy player orders an attack on that player rather than on the ground under
 them. Units are server-simulated and never predicted; the order marker appears immediately and the
@@ -205,6 +207,13 @@ look up. Neither comes out of a barracks. A knocked-down structure refunds what 
 standing body fires over and a crouched one hides behind, and 8 blocks nothing sees through. A
 finished sandbag wall is cover in the same way. A map marks its cover by putting `CSGBox3D` nodes
 in the `cover` group.
+
+**The technical carries four** ([`docs/VEHICLES.md`](docs/VEHICLES.md)). Select units on foot and
+right-click a technical: the nearest four walk to it and get in, the rest stop where they are, and the
+truck holds until they are aboard — a right-click on the ground in the meantime is where it drives
+once they are. Pips over the truck show who is aboard. Passengers do not shoot, see, hold a node or
+heal, and nothing can hit them; select the truck and press `U` (or the card's **Unload**) and they
+get out round it. A truck destroyed with them aboard throws them out, each losing half its health.
 
 **Units heal** ([`docs/HTN_BOTS.md`](docs/HTN_BOTS.md) §8, D2) inside a barracks' red ring and inside
 the green ring round a **supply truck** (120 points, `8`), once nothing has hit them for three

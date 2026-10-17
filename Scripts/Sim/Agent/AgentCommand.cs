@@ -26,6 +26,17 @@ public enum AgentCommandKind : byte
 	/// <c>ServerConstruct</c> a human strategist's request does.
 	/// </summary>
 	Construct = 5,
+
+	/// <summary>
+	/// Put units into a vehicle (docs/VEHICLES.md §10): the units it names walk to
+	/// <see cref="AgentCommand.Vehicle"/> and get in, nearest first, until it is full.
+	/// A command rather than an order kind, so a server that does not know it skips it
+	/// instead of marching the units to the origin. Lands in <c>ServerEmbark</c>.
+	/// </summary>
+	Embark = 6,
+
+	/// <summary>Let everybody out of the vehicles it names, where each is. Lands in <c>ServerUnload</c>.</summary>
+	Unload = 7,
 }
 
 /// <summary>
@@ -80,6 +91,9 @@ public struct AgentCommand
 
 	/// <summary>Which way the structure faces [rad]. Only meaningful for <see cref="AgentCommandKind.Construct"/>.</summary>
 	public float Yaw;
+
+	/// <summary>The vehicle to get into, by unit id. Only meaningful for <see cref="AgentCommandKind.Embark"/>.</summary>
+	public int Vehicle;
 
 	/// <summary>Index into the seat's unit-id buffer, for an order.</summary>
 	public int UnitsOffset;
@@ -157,9 +171,10 @@ public sealed class AgentCommandList
 	}
 
 	/// <summary>
-	/// Adds a command that names units — an order, or a construct naming its
-	/// builders — copying the ids into the shared buffer as <see cref="AddOrder"/>
-	/// does. The command keeps whatever kind it was given.
+	/// Adds a command that names units — an order, a construct naming its builders, an
+	/// embark naming its passengers or an unload naming its vehicles — copying the ids
+	/// into the shared buffer as <see cref="AddOrder"/> does. The command keeps whatever
+	/// kind it was given.
 	/// </summary>
 	public bool AddWithUnits(AgentCommand command, ReadOnlySpan<int> unitIds)
 	{

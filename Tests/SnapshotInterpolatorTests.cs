@@ -36,6 +36,37 @@ public class SnapshotInterpolatorTests
 	}
 
 	[Fact]
+	public void DropBefore_ForgetsWhereItWas_SoItAppearsWhereItIs()
+	{
+		// A passenger at the truck until tick 106, then out at a slot 3 m away
+		// (docs/VEHICLES.md §6.1): drawn at the slot, not sliding to it.
+		var interpolator = new SnapshotInterpolator();
+		interpolator.Push(100, Vector3.Zero, 0f, 0f);
+		interpolator.Push(103, Vector3.Zero, 0f, 0f);
+		interpolator.Push(106, new Vector3(3f, 0f, 0f), 0f, 0f);
+		interpolator.Push(109, new Vector3(3f, 0f, 1f), 0f, 0f);
+
+		interpolator.DropBefore(106);
+
+		Assert.Equal(2, interpolator.Count);
+		Assert.Equal(106u, interpolator.OldestTick);
+		Assert.True(interpolator.TrySample(105f, out Vector3 position, out _, out _));
+		Assert.Equal(3f, position.X, precision: 4);
+		Assert.Equal(0f, position.Z, precision: 4);
+	}
+
+	[Fact]
+	public void DropBefore_ATickPastEverythingEmptiesIt()
+	{
+		var interpolator = WithLine(100, 3);
+
+		interpolator.DropBefore(1000);
+
+		Assert.Equal(0, interpolator.Count);
+		Assert.False(interpolator.TrySample(1000f, out _, out _, out _));
+	}
+
+	[Fact]
 	public void Sample_TakesTheShortWayRoundOnYaw()
 	{
 		// Interpolating 350° -> 10° the long way spins a remote player through a

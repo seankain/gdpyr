@@ -81,6 +81,19 @@ public partial class CombatManager : Node
 	/// <summary>Client-side: tracers fired locally and not yet matched to the server's account of them.</summary>
 	private readonly List<(uint Id, uint Tick)> _predicted = new();
 
+	/// <summary>A vehicle destroyed with somebody aboard, and by what (docs/VEHICLES.md §5.5).</summary>
+	private struct Wreck
+	{
+		public ushort VehicleId;
+		public int AttackerOwnerId;
+		public byte Weapon;
+		public float HeightAboveGround;
+	}
+
+	/// <summary>The vehicles destroyed this tick with anybody aboard, for <see cref="ResolveWrecks"/>. Pre-sized.</summary>
+	private readonly Wreck[] _wrecks = new Wreck[SimConfig.MaxUnits];
+	private int _wreckCount;
+
 	private ProjectileSim _projectiles;
 	private GameModeDefinition _gameMode;
 	private ProjectileView _view;
@@ -350,6 +363,13 @@ public partial class CombatManager : Node
 
 		RecordHitboxes(tick);
 		StepProjectiles(tick, authoritative: true);
+
+		// After every kill of the tick — a melee kill in the roster loop earlier
+		// included — and outside every damage loop, so what a destroyed vehicle does to
+		// its riders does not depend on where they are in the registry
+		// (docs/VEHICLES.md §5.5). Before the economy and the fog, which then see them
+		// where they landed.
+		ResolveWrecks(tick);
 		ServerRespawns(tick);
 
 		// Before the round is judged, not after: the strategist's defeat condition
@@ -881,8 +901,9 @@ public partial class CombatManager : Node
 
 			// A blast spares its own side, unlike the self-damage above: a launcher
 			// that clears a room is the point, and one that also clears the room's
-			// owner's infantry is a different weapon.
-			if (unit == null || unit == directUnit || !unit.IsAlive || unit.Team == attackerTeam)
+			// owner's infantry is a different weapon. A rider is inside its vehicle; what
+			// happens to it is the wreck's (ResolveWrecks).
+			if (unit == null || unit == directUnit || !unit.IsOnField || unit.Team == attackerTeam)
 			{
 				continue;
 			}
@@ -1003,6 +1024,20 @@ public partial class CombatManager : Node
 			attacker.Kills++;
 		}
 
+		// Only written down here: its riders are taken out after the projectile step,
+		// once every kill of the tick is in (ResolveWrecks).
+		if (killed && unit.Cargo is { IsEmpty: false } && _wreckCount < _wrecks.Length)
+		{
+			_wrecks[_wreckCount++] = new Wreck
+			{
+				VehicleId = unit.UnitId,
+				AttackerOwnerId = attackerOwnerId,
+				Weapon = weapon,
+				// A ground vehicle's. An aircraft's is measured (docs/VEHICLES.md §8, V6).
+				HeightAboveGround = 0f,
+			};
+		}
+
 		// A unit is named on the stream the way a projectile names it: one signed id
 		// across both spaces, units in the negative half (see OwnerId). A ground
 		// policy shoots units far more often than it shoots people, so a stream that
@@ -1020,6 +1055,60 @@ public partial class CombatManager : Node
 		}
 
 		return killed ? HitFlags.Killed : HitFlags.None;
+	}
+
+	/// <summary>
+	/// Takes the riders out of every vehicle destroyed this tick with anybody aboard
+	/// (docs/VEHICLES.md §5.5, V-D7). A wreck on the ground throws them out round it,
+	/// each dealt half its maximum health as explosive damage; one higher than
+	/// <see cref="Cargo.WreckSurvivableHeightMeters"/> kills them all, as does a wreck
+	/// with no clear place for one. The damage goes through <see cref="DamageUnit"/> in
+	/// the killer's name — so <c>Damage</c>, <c>Kill</c> and <c>unit_lost</c> are the
+	/// ordinary ones — with the killer when they are still a player on the roster;
+	/// one who has left, or a unit or a structure, gets no kill and no marker. No hit
+	/// message is broadcast: no round hit them.
+	///
+	/// Riders are invisible to the segment queries and the splash loop, so the blast
+	/// that destroyed the vehicle cannot also touch them.
+	/// </summary>
+	private void ResolveWrecks(uint tick)
+	{
+		UnitManager units = UnitManager.Instance;
+		for (int w = 0; units != null && w < _wreckCount; w++)
+		{
+			Wreck wreck = _wrecks[w];
+			Unit vehicle = units.Find(wreck.VehicleId);
+			if (vehicle?.Cargo == null)
+			{
+				continue;
+			}
+
+			PlayerCombat attacker = OwnerId.IsPeer(wreck.AttackerOwnerId)
+				? Find(OwnerId.PeerOf(wreck.AttackerOwnerId))
+				: null;
+			bool survivable = !Cargo.WreckKillsAll(wreck.HeightAboveGround);
+
+			while (!vehicle.Cargo.IsEmpty)
+			{
+				Unit rider = units.EjectFromWreck(vehicle, vehicle.Cargo[0], survivable, tick, out bool placed);
+				if (rider == null)
+				{
+					continue;
+				}
+
+				float damage = placed ? Cargo.WreckDamage(rider.Definition?.MaxHealth ?? 100f) : rider.Health;
+				DamageUnit(rider, damage, explosive: true, vehicleScale: 1f, attacker, wreck.AttackerOwnerId,
+					wreck.Weapon, tick);
+			}
+		}
+
+		_wreckCount = 0;
+	}
+
+	/// <summary>Forgets every wreck not yet resolved: the field they were on is being cleared.</summary>
+	public void ClearWrecks()
+	{
+		_wreckCount = 0;
 	}
 
 	/// <summary>How far the shooter was from a unit it killed. Zero when a unit or the world did it.</summary>

@@ -128,7 +128,8 @@ public sealed class AiDebugPublisher
 		for (int i = 0; i < units.SlotCount && frame.Labels.Count < AiDebugCodec.MaxLabels; i++)
 		{
 			Unit unit = units.UnitAt(i);
-			if (unit is not { IsAlive: true, Plan: { } plan })
+			// No label for a rider: it plans nothing while it rides (docs/VEHICLES.md §5.6).
+			if (unit is not { IsOnField: true, Plan: { } plan })
 			{
 				continue;
 			}
@@ -352,6 +353,25 @@ public sealed class AiDebugPublisher
 			{
 				inspect.Add(AiMarkerKey.Anchor, unit.Order.Anchor);
 			}
+		}
+
+		// Vehicles (docs/VEHICLES.md §10): what it is riding in, or who is aboard it, and
+		// for a unit walking to get in, where the vehicle is.
+		if (unit.IsRiding)
+		{
+			inspect.Add(AiValueKey.RidingIn, unit.RidingIn);
+		}
+
+		if (unit.HasSeats)
+		{
+			inspect.Add(AiValueKey.Seats, unit.Cargo.Seats);
+			inspect.Add(AiValueKey.Aboard, unit.AboardCount);
+		}
+
+		if (unit is { IsOnField: true, Order.Kind: OrderKind.Embark } && OwnerId.IsUnit(unit.Order.TargetOwnerId)
+			&& UnitManager.Instance.Find(OwnerId.UnitOf(unit.Order.TargetOwnerId)) is { } vehicle)
+		{
+			inspect.Add(AiMarkerKey.Vehicle, vehicle.GlobalPosition);
 		}
 
 		_bots.CollectStrategists(_strategists);

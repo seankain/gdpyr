@@ -152,6 +152,179 @@ public class ScenarioTests
 		Assert.Contains("exactly one", error.Message);
 	}
 
+	// ---- vehicles (docs/VEHICLES.md §11) ------------------------------------
+
+	/// <summary>A strategist seat, a technical labelled <c>truck</c>, and <paramref name="spawns"/> after it.</summary>
+	private static string WithTruck(string spawns, string seats = """{ "id": "chair", "team": "strategist", "policy": "strategist" }""") => $$"""
+		{
+		  "name": "a truck",
+		  "seats": [ {{seats}} ],
+		  "spawns": [
+		    { "unit": "technical", "id": "truck", "at": [0, 1, 0] }{{(spawns.Length > 0 ? "," : "")}}
+		    {{spawns}}
+		  ],
+		  "assert": [ { "metric": "events.unit_disembarked.count", "op": "==", "value": 1 } ]
+		}
+		""";
+
+	[Fact]
+	public void AUnitSpawnCanStartAboardAnEarlierOne_LoadedByTheOnlyStrategistSeat()
+	{
+		Scenario scenario = Scenario.Parse(WithTruck("""{ "unit": "infantry", "id": "r1", "aboard": "truck" }"""));
+
+		ScenarioSpawn rider = scenario.Spawns[1];
+		Assert.Equal("truck", scenario.Spawns[0].Id);
+		Assert.Equal("r1", rider.Id);
+		Assert.Equal("truck", rider.Aboard);
+		Assert.Equal("chair", Scenario.LoaderOf(scenario, rider).Id);
+	}
+
+	[Theory]
+	[InlineData("""{ "unit": "infantry", "aboard": "lorry" }""", "not the 'id' of an earlier unit spawn")]
+	[InlineData("""{ "unit": "infantry", "id": "r1", "aboard": "r1" }""", "not the 'id' of an earlier unit spawn")]
+	[InlineData("""{ "unit": "infantry", "id": "truck" }""", "two spawns have the id 'truck'")]
+	[InlineData("""{ "peer": "chair", "id": "me" }""", "only a unit spawn takes")]
+	[InlineData("""{ "unit": "infantry", "seat": "chair" }""", "aboard nothing")]
+	[InlineData("""{ "unit": "infantry", "id": "r1", "aboard": "truck" }, { "unit": "infantry", "aboard": "r1" }""",
+		"nothing rides in a passenger")]
+	public void AVehicleFieldThatCannotBeResolved_IsASentence(string spawns, string expected)
+	{
+		ScenarioException error = Assert.Throws<ScenarioException>(() => Scenario.Parse(WithTruck(spawns)));
+		Assert.Contains(expected, error.Message);
+	}
+
+	[Fact]
+	public void AForwardReference_IsRefused_BecauseTheVehicleMustBeOnTheFieldFirst()
+	{
+		ScenarioException error = Assert.Throws<ScenarioException>(() => Scenario.Parse("""
+			{
+			  "name": "backwards",
+			  "seats": [ { "id": "chair", "team": "strategist", "policy": "strategist" } ],
+			  "spawns": [
+			    { "unit": "infantry", "aboard": "truck" },
+			    { "unit": "technical", "id": "truck", "at": [0, 1, 0] }
+			  ],
+			  "assert": [ { "metric": "events.unit_disembarked.count", "op": "==", "value": 1 } ]
+			}
+			"""));
+		Assert.Contains("earlier unit spawn", error.Message);
+	}
+
+	[Theory]
+	[InlineData("""{ "id": "a0", "team": "ground", "policy": "ground" }""", "not exactly one strategist seat")]
+	[InlineData("""{ "id": "a", "team": "strategist", "policy": "strategist" }, { "id": "b", "team": "strategist", "policy": "strategist" }""",
+		"not exactly one strategist seat")]
+	public void ASpawnAboard_NeedsOneStrategistSeatForItsCargoToAnswerTo(string seats, string expected)
+	{
+		ScenarioException error = Assert.Throws<ScenarioException>(() =>
+			Scenario.Parse(WithTruck("""{ "unit": "infantry", "aboard": "truck" }""", seats)));
+		Assert.Contains(expected, error.Message);
+	}
+
+	[Fact]
+	public void WithTwoStrategistSeats_ASpawnAboardNamesItsLoader()
+	{
+		Scenario scenario = Scenario.Parse(WithTruck("""{ "unit": "infantry", "aboard": "truck", "seat": "b" }""",
+			"""{ "id": "a", "team": "strategist", "policy": "strategist" }, { "id": "b", "team": "strategist", "policy": "strategist" }"""));
+
+		Assert.Equal("b", Scenario.LoaderOf(scenario, scenario.Spawns[1]).Id);
+
+		ScenarioException error = Assert.Throws<ScenarioException>(() =>
+			Scenario.Parse(WithTruck("""{ "unit": "infantry", "aboard": "truck", "seat": "c" }""",
+				"""{ "id": "a", "team": "strategist", "policy": "strategist" }""")));
+		Assert.Contains("no strategist seat has that id", error.Message);
+	}
+
+	/// <summary>A strategist seat scripted with <paramref name="steps"/>, the truck and two riflemen.</summary>
+	private static string Scripted(string steps, string policy = "strategist") => $$"""
+		{
+		  "name": "scripted",
+		  "seats": [ { "id": "chair", "team": "strategist", "policy": "{{policy}}", "script": { "repeat": false, "steps": [ {{steps}} ] } } ],
+		  "spawns": [
+		    { "unit": "technical", "id": "truck", "at": [0, 1, 0] },
+		    { "unit": "infantry", "id": "r1", "at": [3, 1, 0] },
+		    { "unit": "infantry", "id": "r2", "at": [4, 1, 0] }
+		  ],
+		  "assert": [ { "metric": "events.unit_embarked.count", "op": "==", "value": 2 } ]
+		}
+		""";
+
+	[Fact]
+	public void AStrategistScript_IsCommandsByLabel_SentOnceOnEachStepsFirstTick()
+	{
+		Scenario scenario = Scenario.Parse(Scripted("""
+			{ "ticks": 30, "commands": [ { "cmd": "embark", "units": ["r1", "r2"], "vehicle": "truck" } ] },
+			{ "ticks": 240, "commands": [ { "cmd": "order", "kind": "move", "units": ["truck"], "target": [60, 0] } ] },
+			{ "ticks": 60, "commands": [ { "cmd": "unload", "units": ["truck"] } ] }
+			"""));
+
+		ScenarioScript script = scenario.Seats[0].Script;
+		Assert.True(script.TryEnter(0, out ScriptStep first));
+		ScriptCommand embark = Assert.Single(first.Commands);
+		Assert.Equal("embark", embark.Cmd);
+		Assert.Equal(new[] { "r1", "r2" }, embark.Units);
+		Assert.Equal("truck", embark.Vehicle);
+
+		Assert.False(script.TryEnter(1, out _));
+		Assert.False(script.TryEnter(29, out _));
+		Assert.True(script.TryEnter(30, out ScriptStep second));
+		Assert.Equal(new[] { 60f, 0f }, Assert.Single(second.Commands).Target);
+		Assert.True(script.TryEnter(270, out ScriptStep third));
+		Assert.Equal("unload", Assert.Single(third.Commands).Cmd);
+
+		// It does not repeat: nothing is entered after the last step.
+		Assert.False(script.TryEnter(330, out _));
+		Assert.False(script.TryEnter(360, out _));
+	}
+
+	[Fact]
+	public void ARepeatingScript_EntersItsStepsAgainOnEveryPass()
+	{
+		var script = new ScenarioScript(new[] { new ScriptStep { Ticks = 10 }, new ScriptStep { Ticks = 5 } }, repeat: true);
+
+		Assert.True(script.TryEnter(0, out _));
+		Assert.True(script.TryEnter(10, out _));
+		Assert.True(script.TryEnter(15, out _));
+		Assert.True(script.TryEnter(25, out _));
+		Assert.False(script.TryEnter(16, out _));
+	}
+
+	[Theory]
+	[InlineData("""{ "ticks": 1, "commands": [ { "cmd": "embark", "units": ["r9"], "vehicle": "truck" } ] }""",
+		"names 'r9', and no unit spawn has that 'id'")]
+	[InlineData("""{ "ticks": 1, "commands": [ { "cmd": "embark", "units": ["r1"], "vehicle": "lorry" } ] }""",
+		"names 'lorry'")]
+	[InlineData("""{ "ticks": 1, "commands": [ { "cmd": "embark", "units": ["r1"] } ] }""", "names the vehicle")]
+	[InlineData("""{ "ticks": 1, "commands": [ { "cmd": "order", "kind": "move", "units": ["r1"] } ] }""",
+		"needs a 'target'")]
+	[InlineData("""{ "ticks": 1, "commands": [ { "cmd": "order", "kind": "charge", "units": ["r1"], "target": [0, 0] } ] }""",
+		"an order's 'kind' is one of")]
+	[InlineData("""{ "ticks": 1, "commands": [ { "cmd": "board", "units": ["r1"] } ] }""", "not 'board'")]
+	[InlineData("""{ "ticks": 1, "commands": [ { "cmd": "unload", "units": [] } ] }""", "names its units by spawn label")]
+	[InlineData("""{ "ticks": 1, "move": [1, 0] }""", "its script's steps carry 'commands'")]
+	public void AStrategistScriptThatCannotBeSent_IsASentence(string steps, string expected)
+	{
+		ScenarioException error = Assert.Throws<ScenarioException>(() => Scenario.Parse(Scripted(steps)));
+		Assert.Contains(expected, error.Message);
+	}
+
+	[Fact]
+	public void AGroundSeatsScript_CarriesNoCommands()
+	{
+		ScenarioException error = Assert.Throws<ScenarioException>(() => Scenario.Parse(Scripted(
+			"""{ "ticks": 1, "commands": [ { "cmd": "unload", "units": ["truck"] } ] }""", policy: "ground")));
+		Assert.Contains("only a strategist seat's script carries 'commands'", error.Message);
+	}
+
+	[Fact]
+	public void AStopNeedsNoTarget()
+	{
+		Scenario scenario = Scenario.Parse(Scripted(
+			"""{ "ticks": 1, "commands": [ { "cmd": "order", "kind": "stop", "units": ["truck"] } ] }"""));
+
+		Assert.Equal("stop", Assert.Single(scenario.Seats[0].Script.Steps[0].Commands).Kind);
+	}
+
 	[Fact]
 	public void ASweepIsASeedsArrayAndASingleRunIsASeed()
 	{

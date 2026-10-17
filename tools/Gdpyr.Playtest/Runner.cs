@@ -69,6 +69,13 @@ public sealed class Runner
 	private readonly GdpyrConnection _connection;
 	private readonly string _traceDirectory;
 
+	/// <summary>
+	/// This episode's unit spawns by their labels: the ids the server gave them, which a
+	/// strategist script's commands and a later spawn's <c>aboard</c> name them by
+	/// (docs/VEHICLES.md §11).
+	/// </summary>
+	private readonly Dictionary<string, int> _labels = new(StringComparer.Ordinal);
+
 	public Runner(GdpyrConnection connection, string traceDirectory)
 	{
 		_connection = connection;
@@ -179,13 +186,15 @@ public sealed class Runner
 		// play alone while the rest play against a full roster.
 		if (scenario.WarmupTicks > 0)
 		{
-			await StepAsync(scenario, 0, scenario.WarmupTicks, metrics, trace, cancel).ConfigureAwait(false);
+			await StepAsync(scenario, 0, scenario.WarmupTicks, metrics, trace, commanding: false, cancel)
+				.ConfigureAwait(false);
 		}
 
 		await SpawnAsync(scenario, trace, cancel).ConfigureAwait(false);
 
 		metrics.StartTick = _connection.Tick;
-		await StepAsync(scenario, 0, scenario.DurationTicks, metrics, trace, cancel).ConfigureAwait(false);
+		await StepAsync(scenario, 0, scenario.DurationTicks, metrics, trace, commanding: true, cancel)
+			.ConfigureAwait(false);
 		metrics.EndTick = _connection.Tick;
 
 		// One more read: the last step's observations and events are still in flight
@@ -214,16 +223,20 @@ public sealed class Runner
 	/// One tick at a time rather than a batch: the point of the harness is that a
 	/// scenario can say what happened on which tick, and a step of 600 would make
 	/// every metric's tick the last one.
+	///
+	/// <paramref name="commanding"/> is false for the warmup, before anything is
+	/// spawned: a scripted strategist seat then only takes its seat, and its commands,
+	/// which name spawns, wait for the episode.
 	/// </summary>
 	private async Task StepAsync(Scenario scenario, int from, int ticks, EpisodeMetrics metrics,
-		StreamWriter trace, CancellationToken cancel)
+		StreamWriter trace, bool commanding, CancellationToken cancel)
 	{
 		for (int i = 0; i < ticks; i++)
 		{
 			int elapsed = from + i;
 			foreach (ScenarioSeat seat in scenario.Seats)
 			{
-				Act(seat, elapsed, trace);
+				Act(seat, elapsed, commanding, trace);
 			}
 
 			bool truncated = await _connection.StepAsync(1, cancel).ConfigureAwait(false);
@@ -243,18 +256,21 @@ public sealed class Runner
 		}
 	}
 
-	private void Act(ScenarioSeat seat, int elapsed, StreamWriter trace)
+	private void Act(ScenarioSeat seat, int elapsed, bool commanding, StreamWriter trace)
 	{
-		if (seat.PeerId == 0 || seat.Script == null || !seat.Script.TryStep(elapsed, out ScriptStep step))
+		if (seat.PeerId == 0 || seat.Script == null)
 		{
 			return;
 		}
 
 		if (seat.Policy == "strategist")
 		{
-			// A scripted strategist has nothing to say yet: scripts are an FPS
-			// affordance, and a scenario that wants a commanding strategist attaches a
-			// policy rather than a script.
+			Command(seat, elapsed, commanding, trace);
+			return;
+		}
+
+		if (!seat.Script.TryStep(elapsed, out ScriptStep step))
+		{
 			return;
 		}
 
@@ -281,6 +297,95 @@ public sealed class Runner
 			writer.WriteNumber("buttons", (ushort)action.Buttons);
 		});
 	}
+
+	/// <summary>
+	/// A scripted strategist seat's tick (docs/VEHICLES.md §11): on the first tick of each
+	/// of its steps, that step's commands, with the labels turned into the ids this
+	/// episode's spawns were given. In the warmup it sends one empty list, on its first
+	/// tick: an attached stepped seat that has acted once is the policy's from then on
+	/// (docs/AGENT_API.md §2.1), so its bot never plays — and never orders the units the
+	/// script is about to.
+	/// </summary>
+	private void Command(ScenarioSeat seat, int elapsed, bool commanding, StreamWriter trace)
+	{
+		if (!commanding)
+		{
+			if (elapsed == 0)
+			{
+				_connection.ActCommands(seat.PeerId, Array.Empty<GdpyrCommand>());
+			}
+
+			return;
+		}
+
+		if (!seat.Script.TryEnter(elapsed, out ScriptStep step))
+		{
+			return;
+		}
+
+		var commands = new List<GdpyrCommand>();
+		foreach (ScriptCommand command in step.Commands ?? Array.Empty<ScriptCommand>())
+		{
+			commands.Add(command.Cmd switch
+			{
+				"embark" => GdpyrCommand.Embark(Ids(command.Units), Id(command.Vehicle)),
+				"unload" => GdpyrCommand.Unload(Ids(command.Units)),
+				_ => GdpyrCommand.Order(command.Kind, Ids(command.Units),
+					command.Target.Length > 0 ? command.Target[0] : 0f,
+					command.Target.Length > 1 ? command.Target[1] : 0f),
+			});
+		}
+
+		_connection.ActCommands(seat.PeerId, commands);
+
+		Trace(trace, _connection.Tick, "commands", writer =>
+		{
+			writer.WriteNumber("seat", seat.PeerId);
+			writer.WriteStartArray("commands");
+			foreach (GdpyrCommand command in commands)
+			{
+				writer.WriteStartObject();
+				writer.WriteString("cmd", command.Cmd);
+				if (command.Kind != null)
+				{
+					writer.WriteString("kind", command.Kind);
+				}
+
+				writer.WriteStartArray("units");
+				foreach (int unit in command.Units ?? Array.Empty<int>())
+				{
+					writer.WriteNumberValue(unit);
+				}
+
+				writer.WriteEndArray();
+				if (command.Vehicle != 0)
+				{
+					writer.WriteNumber("vehicle", command.Vehicle);
+				}
+
+				writer.WriteEndObject();
+			}
+
+			writer.WriteEndArray();
+		});
+	}
+
+	private int[] Ids(string[] labels)
+	{
+		var ids = new int[labels.Length];
+		for (int i = 0; i < labels.Length; i++)
+		{
+			ids[i] = Id(labels[i]);
+		}
+
+		return ids;
+	}
+
+	/// <summary>The id the server gave the spawn with this label. The parser checked the label exists; a spawn that failed has thrown already.</summary>
+	private int Id(string label) =>
+		label != null && _labels.TryGetValue(label, out int id)
+			? id
+			: throw new ScenarioException($"no unit spawn labelled '{label}' is on the field this episode");
 
 	/// <summary>Drains what the step produced into the metrics and the trace.</summary>
 	private async Task CollectAsync(Scenario scenario, EpisodeMetrics metrics, StreamWriter trace,
@@ -371,6 +476,7 @@ public sealed class Runner
 
 	private async Task SpawnAsync(Scenario scenario, StreamWriter trace, CancellationToken cancel)
 	{
+		_labels.Clear();
 		foreach (ScenarioSpawn spawn in scenario.Spawns)
 		{
 			if (spawn.Structure != null)
@@ -391,15 +497,40 @@ public sealed class Runner
 
 			if (spawn.Unit != null)
 			{
-				int unit = await _connection.SpawnUnitAsync(spawn.Unit, spawn.Team, spawn.At, spawn.Order,
-					cancel).ConfigureAwait(false);
+				// Aboard an earlier spawn: placed in it by the server, loaded by the strategist
+				// seat the parser found for it (docs/VEHICLES.md §11).
+				int vehicle = spawn.Aboard != null ? Id(spawn.Aboard) : 0;
+				int loader = spawn.Aboard != null ? Scenario.LoaderOf(scenario, spawn)?.PeerId ?? 0 : 0;
+				int unit = spawn.Aboard != null
+					? await _connection.SpawnAboardAsync(spawn.Unit, spawn.Team, vehicle, loader, cancel)
+						.ConfigureAwait(false)
+					: await _connection.SpawnUnitAsync(spawn.Unit, spawn.Team, spawn.At, spawn.Order, cancel)
+						.ConfigureAwait(false);
+
+				if (spawn.Id != null)
+				{
+					_labels[spawn.Id] = unit;
+				}
 
 				Trace(trace, _connection.Tick, "spawn", writer =>
 				{
 					writer.WriteString("unit", spawn.Unit);
 					writer.WriteString("team", spawn.Team);
 					writer.WriteNumber("id", unit);
-					WriteVector(writer, "at", spawn.At);
+					if (spawn.Id != null)
+					{
+						writer.WriteString("label", spawn.Id);
+					}
+
+					if (vehicle != 0)
+					{
+						writer.WriteNumber("aboard", vehicle);
+						writer.WriteNumber("loader", loader);
+					}
+					else
+					{
+						WriteVector(writer, "at", spawn.At);
+					}
 				});
 				continue;
 			}

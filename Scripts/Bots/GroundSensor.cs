@@ -126,7 +126,9 @@ public static class GroundSensor
 		for (int i = 0; units != null && i < units.SlotCount; i++)
 		{
 			Unit unit = units.UnitAt(i);
-			if (unit == null || !unit.IsAlive)
+
+			// A rider is inside its vehicle: nothing to see, nothing to shoot (docs/VEHICLES.md V-D6).
+			if (unit == null || !unit.IsOnField)
 			{
 				continue;
 			}

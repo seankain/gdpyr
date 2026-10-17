@@ -78,6 +78,22 @@ public partial class UnitManager : Node
 	/// <summary>Scratch for <see cref="ApplyRecordedSnapshot"/>; a field so playback allocates nothing per tick.</summary>
 	private readonly HashSet<ushort> _recordedIds = new();
 
+	/// <summary>
+	/// A client's newest applied unit-snapshot tick (docs/VEHICLES.md §6.1). Every
+	/// packet feeds the interpolators, but what a unit is doing — alive, aboard, flying
+	/// — is taken only from a packet at or after this one: an unreliable datagram
+	/// arriving late would otherwise show a passenger who boarded a moment ago, or flip
+	/// a landed dropship's collision, for one interval.
+	/// </summary>
+	private uint _newestUnitSnapshotTick;
+
+	/// <summary>
+	/// How much older than the newest a unit snapshot has to be to be a different
+	/// server's clock — the client left one and joined another — rather than a late
+	/// datagram, which is never more than a few intervals behind. Five seconds.
+	/// </summary>
+	private const uint UnitClockResetTicks = SimConfig.TickRate * 5;
+
 	/// <summary>The units one order named, and what each was worth, for <see cref="Squads"/>. Pre-sized.</summary>
 	private readonly ushort[] _orderedUnits = new ushort[SimConfig.MaxUnits];
 	private readonly float[] _orderedStrengths = new float[SimConfig.MaxUnits];
@@ -279,6 +295,11 @@ public partial class UnitManager : Node
 		// before combat, so that a pillbox's round flies on the tick it was fired.
 		ServerStructures(tick);
 
+		// After the structures, whose finish can still move a vehicle out of a
+		// footprint, and before the snapshot: riders are put where their vehicles ended
+		// up (docs/VEHICLES.md §5.3).
+		ServerCargo(tick);
+
 		Defenses.ServerTick(tick, CombatManager.Instance, GetTree()?.Root?.World3D?.DirectSpaceState);
 
 		ServerReapCorpses(tick);
@@ -310,6 +331,14 @@ public partial class UnitManager : Node
 			if (!_interpolators.TryGetValue(unit.UnitId, out SnapshotInterpolator interpolator))
 			{
 				continue;
+			}
+
+			// Into or out of a vehicle at the render clock, not at decode: the transform
+			// drawn is that far behind. Out, it is drawn where it got out from the first
+			// frame, not slid there from the vehicle.
+			if (unit.TryTakeRidingChange(renderTick, out uint changeTick, out bool gotOut) && gotOut)
+			{
+				interpolator.DropBefore(changeTick);
 			}
 
 			if (interpolator.TrySample(renderTick, out Vector3 position, out float yaw, out _))
@@ -445,6 +474,13 @@ public partial class UnitManager : Node
 			return;
 		}
 
+		// Before the plan, the scan and the target: a rider does none of it, and a unit
+		// getting in this tick spends no ray and fires nothing from inside.
+		if (SimulateCargo(unit, tick))
+		{
+			return;
+		}
+
 		UnitContext plan = PlanOf(unit);
 
 		if (tick >= unit.NextScanTick)
@@ -551,7 +587,7 @@ public partial class UnitManager : Node
 		for (int i = 0; i < _ordered.Count && _supplyCount < _supplies.Length; i++)
 		{
 			Unit unit = _ordered[i];
-			if (unit.IsAlive && unit.Definition is { IsSupply: true } definition)
+			if (unit.IsOnField && unit.Definition is { IsSupply: true } definition)
 			{
 				_supplies[_supplyCount++] = new SupplySource(unit.GlobalPosition, definition.SupplyRadiusMeters,
 					unit.UnitId, unit.Team);
@@ -899,7 +935,7 @@ public partial class UnitManager : Node
 		for (int i = 0; i < _ordered.Count && _neighbourCount < _neighbours.Length; i++)
 		{
 			Unit unit = _ordered[i];
-			if (unit.IsAlive && unit.Team == Team.Strategist)
+			if (unit.IsOnField && unit.Team == Team.Strategist)
 			{
 				_neighbours[_neighbourCount++] = new Neighbour(unit.UnitId, unit.GlobalPosition, HealthFraction(unit),
 					unit.State == UnitStateId.Engaging);
@@ -918,7 +954,7 @@ public partial class UnitManager : Node
 			for (int m = 0; m < members; m++)
 			{
 				Unit unit = Find(_squadMembers[m]);
-				if (unit != null && unit.IsAlive)
+				if (unit != null && unit.IsOnField)
 				{
 					_census.Add(s, unit.UnitId, unit.GlobalPosition, unit.State == UnitStateId.Engaging,
 						unit.TargetOwnerId);
@@ -1366,7 +1402,7 @@ public partial class UnitManager : Node
 		for (int i = 0; i < _ordered.Count; i++)
 		{
 			Unit unit = _ordered[i];
-			if (unit.IsAlive && unit.Plan != null)
+			if (unit.IsOnField && unit.Plan != null)
 			{
 				goals[(int)unit.Plan.Intent.Goal]++;
 				waiting += UnitContext.Paces(unit.Plan.Intent.Goal) && unit.Plan.Waiting ? 1 : 0;
@@ -1437,8 +1473,9 @@ public partial class UnitManager : Node
 			Unit unit = _ordered[i];
 
 			// Its own muzzle sits inside its own capsule, and friendly fire between
-			// units would make a firing line a suicide pact.
-			if (!unit.IsAlive || unit.Team == attackerTeam || OwnerId.ForUnit(unit.UnitId) == attackerOwnerId)
+			// units would make a firing line a suicide pact. A rider is inside its
+			// vehicle, and nothing reaches it there (docs/VEHICLES.md V-D6).
+			if (!unit.IsOnField || unit.Team == attackerTeam || OwnerId.ForUnit(unit.UnitId) == attackerOwnerId)
 			{
 				continue;
 			}
@@ -1495,6 +1532,17 @@ public partial class UnitManager : Node
 		unit.DespawnTick = tick + CorpseTicks;
 		ResetPlan(unit);
 		Squads.Leave(unit.UnitId);
+
+		// A dead unit is never aboard (docs/VEHICLES.md §5.1). Nothing reaches a rider
+		// to kill it, and a wreck takes its riders out before it hurts them; this is
+		// the guard for whatever does anyway.
+		if (unit.IsRiding)
+		{
+			Find(unit.RidingIn)?.Cargo?.Remove(unit.UnitId);
+			unit.RidingIn = 0;
+			unit.ApplyPresentation();
+		}
+
 		AgentEventBus.Emit(AgentEventKind.UnitLost, tick, unit.UnitId, unit.DefinitionId, attackerOwnerId,
 			unit.GlobalPosition.X, unit.GlobalPosition.Z);
 		return true;
@@ -1645,6 +1693,14 @@ public partial class UnitManager : Node
 	/// Validates and applies an order. Every one of these checks is answering a
 	/// byte a client chose (docs/NETCODE.md §1, §6.3): is the sender a strategist,
 	/// does the order type exist, does the sender's side own each unit.
+	///
+	/// What a client cannot honestly send counts in <see cref="RejectedOrders"/>: a
+	/// malformed id, a unit of the other side. What can change within a round trip — a
+	/// unit that died, got into a vehicle or was freed a moment ago — is skipped without
+	/// counting, because an honest client's selection lags the server by that much
+	/// (docs/VEHICLES.md §5.2). Riders are skipped, so ordering a vehicle never touches
+	/// its passengers; and a vehicle with units still walking to it keeps the order for
+	/// when they are aboard, unless it is a stop.
 	/// </summary>
 	private void ApplyOrder(int senderPeerId, ReadOnlySpan<int> unitIds, byte kind, Vector3 target,
 		int targetOwnerId)
@@ -1676,13 +1732,18 @@ public partial class UnitManager : Node
 			}
 
 			Unit unit = Find((ushort)raw);
-			if (unit == null || !unit.IsAlive || unit.Team != senderTeam)
+			if (unit == null || !unit.IsOnField)
+			{
+				continue;
+			}
+
+			if (unit.Team != senderTeam)
 			{
 				RejectedOrders++;
 				continue;
 			}
 
-			unit.Order = ordered == OrderKind.Stop
+			UnitOrder order = ordered == OrderKind.Stop
 				? UnitOrder.Hold(unit.GlobalPosition)
 				: new UnitOrder
 				{
@@ -1696,6 +1757,18 @@ public partial class UnitManager : Node
 				};
 			unit.OrderIssuer = senderPeerId;
 			unit.OrderTick = tick;
+
+			// "Click the truck, click where to go" while its passengers are still on
+			// their way: it goes when they are aboard (ServerCargo), in a squad of its own.
+			if (ordered != OrderKind.Stop && unit.HasSeats && CountBoarders(unit) > 0)
+			{
+				unit.Departure = order;
+				unit.HasDeparture = true;
+				continue;
+			}
+
+			unit.Order = order;
+			unit.HasDeparture = false;
 
 			// Re-evaluate on the next tick rather than at the end of the current scan
 			// interval: an order the units do not react to for a sixth of a second
@@ -1883,6 +1956,11 @@ public partial class UnitManager : Node
 				State = unit.State,
 				Team = unit.Team,
 				HealthPercent = unit.HealthPercent,
+
+				// Never both dead and aboard (docs/VEHICLES.md §5.1).
+				RidingIn = unit.IsAlive ? unit.RidingIn : (ushort)0,
+				Phase = unit.Phase,
+				CannotLand = unit.CannotLand,
 			};
 		}
 
@@ -2015,6 +2093,7 @@ public partial class UnitManager : Node
 			// the tick they are about (docs/DEMOS.md §4.2).
 			demo?.UnitSnapshot(tick, _pendingSnapshots[s]);
 
+			bool newest = TakeNewestUnitSnapshot(tick);
 			for (int i = 0; i < count; i++)
 			{
 				ref UnitSnapshot snapshot = ref _snapshotScratch[i];
@@ -2025,11 +2104,20 @@ public partial class UnitManager : Node
 					continue;
 				}
 
-				unit.ApplyRemoteState(snapshot.State, snapshot.HealthPercent);
+				if (newest)
+				{
+					unit.ApplyRemoteState(snapshot, tick);
+				}
+
 				if (_interpolators.TryGetValue(snapshot.UnitId, out SnapshotInterpolator interpolator))
 				{
-					interpolator.Push(tick, snapshot.Position, snapshot.Yaw, 0f);
+					PushRecord(interpolator, unit, snapshot, tick);
 				}
+			}
+
+			if (newest)
+			{
+				CountAboard(count);
 			}
 		}
 
@@ -2073,8 +2161,8 @@ public partial class UnitManager : Node
 				_interpolators[snapshot.UnitId] = new SnapshotInterpolator();
 			}
 
-			unit.ApplyRemoteState(snapshot.State, snapshot.HealthPercent);
-			_interpolators[snapshot.UnitId].Push(tick, snapshot.Position, snapshot.Yaw, 0f);
+			unit.ApplyRemoteState(snapshot, tick);
+			PushRecord(_interpolators[snapshot.UnitId], unit, snapshot, tick);
 		}
 
 		for (int i = _ordered.Count - 1; i >= 0; i--)
@@ -2086,7 +2174,59 @@ public partial class UnitManager : Node
 			}
 		}
 
+		// In order and complete, so every record is the newest and the count is exact.
+		CountAboard(count);
 		return true;
+	}
+
+	/// <summary>
+	/// Whether a unit snapshot about <paramref name="tick"/> is the newest this client
+	/// has had, and if so takes it as the newest. A packet from much further back than
+	/// any datagram is late is a new server's clock, and starts the count again.
+	/// </summary>
+	private bool TakeNewestUnitSnapshot(uint tick)
+	{
+		if (tick < _newestUnitSnapshotTick && _newestUnitSnapshotTick - tick <= UnitClockResetTicks)
+		{
+			return false;
+		}
+
+		_newestUnitSnapshotTick = tick;
+		return true;
+	}
+
+	/// <summary>
+	/// One record into a unit's interpolator. A passenger's has no heading — its yaw
+	/// field named its vehicle — so it keeps the one it is drawn with.
+	/// </summary>
+	private static void PushRecord(SnapshotInterpolator interpolator, Unit unit, in UnitSnapshot record, uint tick)
+	{
+		interpolator.Push(tick, record.Position, record.IsAboard ? unit.Yaw : record.Yaw, 0f);
+	}
+
+	/// <summary>
+	/// Every vehicle's passengers, counted from the records in the snapshot just
+	/// applied that name it (docs/VEHICLES.md §6.1). Client-side; the authority reads
+	/// its holds.
+	/// </summary>
+	private void CountAboard(int count)
+	{
+		for (int i = 0; i < _ordered.Count; i++)
+		{
+			if (_ordered[i].HasSeats)
+			{
+				_ordered[i].SetRemoteAboard(0);
+			}
+		}
+
+		for (int i = 0; i < count; i++)
+		{
+			ushort vehicle = _snapshotScratch[i].RidingIn;
+			if (vehicle != 0 && Find(vehicle) is { HasSeats: true } carrier)
+			{
+				carrier.SetRemoteAboard(carrier.AboardCount + 1);
+			}
+		}
 	}
 
 	/// <summary>
@@ -2135,6 +2275,14 @@ public partial class UnitManager : Node
 		_unitsRoot.AddChild(unit);
 		_units[id] = unit;
 		_ordered.Add(unit);
+
+		// A client's copy is nothing until a record says what it is: the spawn message
+		// says nothing of whether it is riding in a vehicle (docs/VEHICLES.md §6.2).
+		if (!simulated)
+		{
+			unit.HideUntilFirstRecord();
+		}
+
 		return unit;
 	}
 
@@ -2149,12 +2297,62 @@ public partial class UnitManager : Node
 		_interpolators.Remove(unitId);
 		ResetPlan(unit);
 		Squads.Leave(unitId);
+		if (unit.IsSimulated)
+		{
+			ReleaseCargo(unit);
+		}
+
 		unit.QueueFree();
+	}
+
+	/// <summary>
+	/// Server-side, for a unit being freed: a rider leaves its vehicle's hold, and a
+	/// vehicle frees nobody with itself (docs/VEHICLES.md §5.5). A corpse is reaped two
+	/// seconds after its riders were taken out of the wreck and a round's field is
+	/// emptied after every hold is, so a vehicle with anybody aboard here is a bug: it
+	/// is logged and its riders are left on their feet where it was — never put
+	/// anywhere, never announced.
+	/// </summary>
+	private void ReleaseCargo(Unit unit)
+	{
+		if (unit.IsRiding)
+		{
+			Find(unit.RidingIn)?.Cargo?.Remove(unit.UnitId);
+			unit.RidingIn = 0;
+		}
+
+		if (unit.Cargo is not { IsEmpty: false } hold)
+		{
+			return;
+		}
+
+		GD.PushError($"[rts] {UnitCatalog.NameOf(unit.DefinitionId)} {unit.UnitId} freed with {hold.Count} aboard");
+		for (int i = 0; i < hold.Count; i++)
+		{
+			if (Find(hold[i]) is { } rider)
+			{
+				rider.RidingIn = 0;
+				rider.ApplyPresentation();
+			}
+		}
+
+		hold.Clear();
 	}
 
 	/// <summary>Clears the field. Called between rounds, on the server.</summary>
 	public void ClearUnits()
 	{
+		// Every hold and every wreck first, so no despawn below frees anybody aboard
+		// and no wreck is resolved against a field that is gone.
+		CombatManager.Instance?.ClearWrecks();
+		for (int i = 0; i < _ordered.Count; i++)
+		{
+			Unit unit = _ordered[i];
+			unit.Cargo?.Clear();
+			unit.RidingIn = 0;
+			unit.HasDeparture = false;
+		}
+
 		for (int i = _ordered.Count - 1; i >= 0; i--)
 		{
 			ushort id = _ordered[i].UnitId;

@@ -133,14 +133,14 @@ public partial class UnitManager
 	/// <summary>The structure a round's owner id names, or null for anything else.</summary>
 	public Structure StructureOf(int ownerId) => StructureAt(OwnerId.StructureOf(ownerId));
 
-	/// <summary>Live builders on a side. For the computer strategist and the HUD.</summary>
+	/// <summary>Builders on a side on the field — riding in nothing. For the HUD's "builders N".</summary>
 	public int BuilderCount(Team team)
 	{
 		int builders = 0;
 		for (int i = 0; i < _ordered.Count; i++)
 		{
 			Unit unit = _ordered[i];
-			if (unit.IsAlive && unit.Team == team && UnitCatalog.CanConstruct(unit.DefinitionId))
+			if (unit.IsOnField && unit.Team == team && UnitCatalog.CanConstruct(unit.DefinitionId))
 			{
 				builders++;
 			}
@@ -482,7 +482,11 @@ public partial class UnitManager
 		return space.IntersectShape(query, 1).Count > 0;
 	}
 
-	/// <summary>The builders among some unit ids: alive, on the sender's side, and able to build.</summary>
+	/// <summary>
+	/// The builders among some unit ids: on the field, on the sender's side, and able to
+	/// build. Not a rider, which nobody can send anywhere until it is out, and for which
+	/// a site would be paid that nobody can walk to (docs/VEHICLES.md §5.6).
+	/// </summary>
 	private int GatherBuilders(ReadOnlySpan<int> unitIds, Team team)
 	{
 		int count = 0;
@@ -495,7 +499,7 @@ public partial class UnitManager
 			}
 
 			Unit unit = Find((ushort)raw);
-			if (unit == null || !unit.IsAlive || unit.Team != team || !UnitCatalog.CanConstruct(unit.DefinitionId))
+			if (unit == null || !unit.IsOnField || unit.Team != team || !UnitCatalog.CanConstruct(unit.DefinitionId))
 			{
 				continue;
 			}
@@ -657,7 +661,9 @@ public partial class UnitManager
 		{
 			Unit unit = _ordered[i];
 			float radius = unit.Definition?.RadiusMeters ?? 0.4f;
-			if (!unit.IsAlive || !footprint.Contains(unit.GlobalPosition, radius))
+
+			// A rider goes where its vehicle does, and the vehicle is walked out itself.
+			if (!unit.IsOnField || !footprint.Contains(unit.GlobalPosition, radius))
 			{
 				continue;
 			}

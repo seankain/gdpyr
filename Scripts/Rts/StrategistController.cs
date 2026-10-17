@@ -75,6 +75,20 @@ public partial class StrategistController : Node3D
 	/// <summary>How far the ground cursor ray is willing to travel.</summary>
 	private const float CursorRayLength = 4000f;
 
+	/// <summary>
+	/// A vehicle's pick radius over its size on screen: a little more than the body, so
+	/// a click on the edge of a truck is a click on the truck and not on the rifleman
+	/// beside it (docs/VEHICLES.md §7).
+	/// </summary>
+	private const float VehiclePickScale = 1.25f;
+
+	/// <summary>Milliseconds a notice — a vehicle that was full — replaces the selection line.</summary>
+	private const ulong NoticeMilliseconds = 1500;
+
+	/// <summary>What the selection line says instead of the next order, until <see cref="_noticeUntilMs"/>.</summary>
+	private string _notice;
+	private ulong _noticeUntilMs;
+
 	private readonly List<Unit> _selected = new();
 
 	/// <summary>Rebuilt every simulation tick and handed to the overlay to draw.</summary>
@@ -154,6 +168,7 @@ public partial class StrategistController : Node3D
 		_hud.Overlay.Attach(_camera);
 		_hud.BuildPressed += CardBuild;
 		_hud.CancelPressed += CancelUnit;
+		_hud.UnloadPressed += UnloadSelected;
 
 		// A strategist needs a pointer. The first-person rig takes the mouse back when
 		// this node goes away (fps_controller.EnterFirstPerson).
@@ -198,7 +213,7 @@ public partial class StrategistController : Node3D
 		if (CombatManager.Instance is { } combat)
 		{
 			RefreshContacts(combat, tick);
-			_hud.Refresh(combat.Match, UnitManager.Instance, tick, _selected.Count, _pendingOrder, combat.Economy,
+			_hud.Refresh(combat.Match, UnitManager.Instance, tick, Summarize(), _pendingOrder, combat.Economy,
 				BuildTarget, _selectedBarracks >= 0, SelectedStructure);
 			_hud.RefreshBuilders(UnitManager.Instance, combat.Local?.Team ?? Team.Strategist, _placing,
 				CountSelectedBuilders());
@@ -229,6 +244,7 @@ public partial class StrategistController : Node3D
 		else if (@event.IsActionPressed("rts_place_sandbags")) { ArmPlacement(StructureKinds.SandbagWall); }
 		else if (@event.IsActionPressed("rts_place_tower")) { ArmPlacement(StructureKinds.SniperTower); }
 		else if (@event.IsActionPressed("rts_cancel_build")) { CancelUnit(); }
+		else if (@event.IsActionPressed("rts_unload")) { UnloadSelected(); }
 		else
 		{
 			return;
@@ -580,7 +596,9 @@ public partial class StrategistController : Node3D
 		{
 			if (from.DistanceTo(to) < ClickThresholdPixels)
 			{
-				Unit single = PickUnit(to, team);
+				// A vehicle by its size on screen first, so selecting a truck again lands
+				// on the truck and not on a rifleman who just got out of it.
+				Unit single = PickVehicle(to, team, out _) ?? PickUnit(to, team);
 				if (single != null)
 				{
 					_selected.Add(single);
@@ -642,14 +660,26 @@ public partial class StrategistController : Node3D
 	/// </summary>
 	private void CommandAtCursor()
 	{
-		if (!TryGroundPoint(out Vector3 point))
+		// An armed structure first: the click needs a ground point and places it.
+		if (_placing != NotPlacing)
+		{
+			if (TryGroundPoint(out Vector3 site))
+			{
+				PlaceAtCursor(site);
+			}
+
+			return;
+		}
+
+		// Units onto a vehicle of their own, before the ground: getting in needs only the
+		// cursor and the vehicle on screen (docs/VEHICLES.md §7).
+		if (TryEmbarkAtCursor())
 		{
 			return;
 		}
 
-		if (_placing != NotPlacing)
+		if (!TryGroundPoint(out Vector3 point))
 		{
-			PlaceAtCursor(point);
 			return;
 		}
 
@@ -891,9 +921,8 @@ public partial class StrategistController : Node3D
 			return false;
 		}
 
-		Structure structure = PickStructure(Cursor,
-			CombatManager.Instance?.Local?.Team ?? Team.Strategist);
-		if (structure == null || (structure.IsBuilt && structure.Health >= structure.MaxHealth))
+		Structure structure = PickAssist(Cursor, out _);
+		if (structure == null)
 		{
 			return false;
 		}
@@ -903,13 +932,21 @@ public partial class StrategistController : Node3D
 		return true;
 	}
 
+	/// <summary>The structure of the side's under the cursor that builders would go and work on: a site, or one that is hurt.</summary>
+	private Structure PickAssist(Vector2 screen, out float distance)
+	{
+		Structure structure = PickStructure(screen, CombatManager.Instance?.Local?.Team ?? Team.Strategist,
+			out distance);
+		return structure == null || (structure.IsBuilt && structure.Health >= structure.MaxHealth) ? null : structure;
+	}
+
 	private int CountSelectedBuilders()
 	{
 		int count = 0;
 		for (int i = 0; i < _selected.Count; i++)
 		{
 			Unit unit = _selected[i];
-			if (unit != null && IsInstanceValid(unit) && unit.IsAlive && UnitCatalog.CanConstruct(unit.DefinitionId))
+			if (unit != null && IsInstanceValid(unit) && unit.IsOnField && UnitCatalog.CanConstruct(unit.DefinitionId))
 			{
 				count++;
 			}
@@ -924,7 +961,7 @@ public partial class StrategistController : Node3D
 		for (int i = 0; i < _selected.Count && at < ids.Length; i++)
 		{
 			Unit unit = _selected[i];
-			if (unit != null && IsInstanceValid(unit) && unit.IsAlive && UnitCatalog.CanConstruct(unit.DefinitionId))
+			if (unit != null && IsInstanceValid(unit) && unit.IsOnField && UnitCatalog.CanConstruct(unit.DefinitionId))
 			{
 				ids[at++] = unit.UnitId;
 			}
@@ -977,11 +1014,15 @@ public partial class StrategistController : Node3D
 	/// The structure of <paramref name="team"/>'s under the cursor, if any; with
 	/// <paramref name="trainersOnly"/>, only a finished one that trains something.
 	/// </summary>
-	private Structure PickStructure(Vector2 screen, Team team, bool trainersOnly = false)
+	private Structure PickStructure(Vector2 screen, Team team, bool trainersOnly = false) =>
+		PickStructure(screen, team, out _, trainersOnly);
+
+	/// <inheritdoc cref="PickStructure(Vector2, Team, bool)"/>
+	private Structure PickStructure(Vector2 screen, Team team, out float bestDistance, bool trainersOnly = false)
 	{
 		UnitManager units = UnitManager.Instance;
 		Structure best = null;
-		float bestDistance = PickRadiusPixels * 1.5f;
+		bestDistance = PickRadiusPixels * 1.5f;
 
 		for (int i = 0; units != null && i < SimConfig.MaxStructures; i++)
 		{
@@ -1003,10 +1044,193 @@ public partial class StrategistController : Node3D
 		return best;
 	}
 
+	// ---- vehicles that carry units (docs/VEHICLES.md §7) ------------------------
+
+	/// <summary>
+	/// A right-click on a vehicle of the side's with units selected: those that can ride
+	/// go and get in, and the vehicle becomes the selection, so the next right-click on
+	/// the ground drives it — it waits for them first (V-D3). Only with no order armed —
+	/// X, C or B mean a ground order — and only when the vehicle is nearer the cursor than
+	/// any enemy, and than any structure the selected builders would go to. A vehicle the
+	/// client can see is full is not asked: the click flashes a cross and says so (V-D4).
+	/// A selection of nothing but vehicles falls through to an order.
+	/// </summary>
+	private bool TryEmbarkAtCursor()
+	{
+		if (_pendingOrder != OrderKind.Move)
+		{
+			return false;
+		}
+
+		PruneSelection();
+		Team team = CombatManager.Instance?.Local?.Team ?? Team.Strategist;
+		Unit vehicle = PickVehicle(Cursor, team, out float distance);
+		if (vehicle == null || CountRiders(vehicle) == 0)
+		{
+			return false;
+		}
+
+		if ((PickEnemyPlayer(Cursor, out _, out float enemy) != null && enemy <= distance)
+			|| (CountSelectedBuilders() > 0 && PickAssist(Cursor, out float structure) != null && structure <= distance))
+		{
+			return false;
+		}
+
+		string name = UnitCatalog.NameOf(vehicle.DefinitionId).Replace('_', ' ');
+		if (vehicle.AboardCount >= vehicle.Cargo.Seats)
+		{
+			_hud.Overlay.FlashRefused(vehicle.GlobalPosition);
+			ShowNotice($"{name} {vehicle.UnitId} is full");
+			return true;
+		}
+
+		var ids = new int[CountRiders(vehicle)];
+		int at = 0;
+		for (int i = 0; i < _selected.Count && at < ids.Length; i++)
+		{
+			if (CanRide(_selected[i], vehicle))
+			{
+				ids[at++] = _selected[i].UnitId;
+			}
+		}
+
+		UnitManager.Instance?.RequestEmbark(ids, vehicle.UnitId);
+		_hud.Overlay.FlashOrder(vehicle.GlobalPosition, OrderKind.Embark);
+
+		// The vehicle is what the next click is about; without this the boarders would
+		// drop out of the selection one by one and the next right-click would move the
+		// rally point.
+		_selected.Clear();
+		_selected.Add(vehicle);
+		_hud.Overlay.SetSelection(_selected);
+		SelectBarracks(-1);
+		SelectStructure(-1);
+		_pendingOrder = OrderKind.Move;
+		return true;
+	}
+
+	/// <summary>U and the card's button: every selected vehicle with anybody aboard lets them out where it is (V-D5).</summary>
+	private void UnloadSelected()
+	{
+		PruneSelection();
+		int count = 0;
+		for (int i = 0; i < _selected.Count; i++)
+		{
+			count += _selected[i] is { HasSeats: true, AboardCount: > 0 } ? 1 : 0;
+		}
+
+		if (count == 0)
+		{
+			return;
+		}
+
+		var ids = new int[count];
+		int at = 0;
+		for (int i = 0; i < _selected.Count && at < ids.Length; i++)
+		{
+			if (_selected[i] is { HasSeats: true, AboardCount: > 0 } vehicle)
+			{
+				ids[at++] = vehicle.UnitId;
+				_hud.Overlay.FlashOrder(vehicle.GlobalPosition, OrderKind.Unload);
+			}
+		}
+
+		UnitManager.Instance?.RequestUnload(ids);
+	}
+
+	/// <summary>The selected units that can get into <paramref name="vehicle"/>: on foot, of a kind that rides, and not the vehicle.</summary>
+	private int CountRiders(Unit vehicle)
+	{
+		int count = 0;
+		for (int i = 0; i < _selected.Count; i++)
+		{
+			count += CanRide(_selected[i], vehicle) ? 1 : 0;
+		}
+
+		return count;
+	}
+
+	private static bool CanRide(Unit unit, Unit vehicle) =>
+		unit != null && unit != vehicle && IsInstanceValid(unit) && unit.IsOnField
+		&& UnitCatalog.CanRide(unit.DefinitionId);
+
+	/// <summary>
+	/// The nearest of the side's vehicles that carry units whose size on screen the
+	/// cursor is inside, and how far from its middle, in pixels. By its size rather than
+	/// <see cref="PickUnit"/>'s fixed round a metre up, which a rifleman beside a truck
+	/// would win and the top of a tall hull would miss.
+	/// </summary>
+	private Unit PickVehicle(Vector2 screen, Team team, out float bestDistance)
+	{
+		UnitManager units = UnitManager.Instance;
+		Unit best = null;
+		bestDistance = float.MaxValue;
+
+		for (int i = 0; units != null && _camera != null && i < units.SlotCount; i++)
+		{
+			Unit unit = units.UnitAt(i);
+			if (!IsSelectable(unit, team) || !unit.HasSeats)
+			{
+				continue;
+			}
+
+			float height = unit.Definition?.HeightMeters ?? 2f;
+			float extent = Mathf.Max(unit.Definition?.RadiusMeters ?? 1f, height * 0.5f);
+			Vector3 middle = unit.GlobalPosition + (Vector3.Up * (height * 0.5f));
+			if (!TryScreen(middle, out Vector2 at) || !TryScreen(middle + (_camera.GlobalBasis.X * extent), out Vector2 edge))
+			{
+				continue;
+			}
+
+			float radius = Mathf.Max(at.DistanceTo(edge) * VehiclePickScale, PickRadiusPixels * 0.5f);
+			float distance = at.DistanceTo(screen);
+			if (distance <= radius && distance < bestDistance)
+			{
+				bestDistance = distance;
+				best = unit;
+			}
+		}
+
+		return best;
+	}
+
+	/// <summary>The selection, as the HUD's line and card need it: the vehicles in it, and who is aboard them.</summary>
+	private StrategistHud.SelectionSummary Summarize()
+	{
+		var summary = new StrategistHud.SelectionSummary
+		{
+			Count = _selected.Count,
+			Notice = Time.GetTicksMsec() < _noticeUntilMs ? _notice : null,
+		};
+
+		for (int i = 0; i < _selected.Count; i++)
+		{
+			if (_selected[i] is not { HasSeats: true } vehicle)
+			{
+				continue;
+			}
+
+			summary.Vehicles++;
+			summary.Aboard += vehicle.AboardCount;
+			summary.Seats += vehicle.Cargo.Seats;
+			summary.CannotLand |= vehicle.CannotLand;
+			summary.VehicleName = UnitCatalog.NameOf(vehicle.DefinitionId);
+		}
+
+		return summary;
+	}
+
+	private void ShowNotice(string text)
+	{
+		_notice = text;
+		_noticeUntilMs = Time.GetTicksMsec() + NoticeMilliseconds;
+	}
+
 	// ---- picking -----------------------------------------------------------
 
+	/// <summary>A unit of the side's on the field. A rider is not: it is selected by selecting its vehicle (docs/VEHICLES.md §7).</summary>
 	private static bool IsSelectable(Unit unit, Team team) =>
-		unit != null && IsInstanceValid(unit) && unit.IsAlive && unit.Team == team;
+		unit != null && IsInstanceValid(unit) && unit.IsOnField && unit.Team == team;
 
 	/// <summary>
 	/// The index of <paramref name="team"/>'s barracks under the cursor, or -1. A ray
@@ -1073,13 +1297,17 @@ public partial class StrategistController : Node3D
 	/// from the roster, so a player whose ghost has faded cannot be right-clicked
 	/// where their body happens to be (docs/IMPLEMENTATION_PLAN.md §M4).
 	/// </summary>
-	private PlayerCombat PickEnemyPlayer(Vector2 screen, out Vector3 lastKnown)
+	private PlayerCombat PickEnemyPlayer(Vector2 screen, out Vector3 lastKnown) =>
+		PickEnemyPlayer(screen, out lastKnown, out _);
+
+	/// <inheritdoc cref="PickEnemyPlayer(Vector2, out Vector3)"/>
+	private PlayerCombat PickEnemyPlayer(Vector2 screen, out Vector3 lastKnown, out float bestDistance)
 	{
 		CombatManager combat = CombatManager.Instance;
 		Team team = combat?.Local?.Team ?? Team.Strategist;
 		uint tick = NetworkManager.Instance?.Tick ?? 0;
 		PlayerCombat best = null;
-		float bestDistance = PickRadiusPixels;
+		bestDistance = PickRadiusPixels;
 		lastKnown = Vector3.Zero;
 
 		for (int i = 0; combat != null && i < combat.PlayerCount; i++)
@@ -1194,7 +1422,7 @@ public partial class StrategistController : Node3D
 		for (int i = _selected.Count - 1; i >= 0; i--)
 		{
 			Unit unit = _selected[i];
-			if (unit == null || !IsInstanceValid(unit) || !unit.IsAlive)
+			if (unit == null || !IsInstanceValid(unit) || !unit.IsOnField)
 			{
 				_selected.RemoveAt(i);
 				changed = true;

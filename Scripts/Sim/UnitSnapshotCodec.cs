@@ -25,7 +25,8 @@ namespace Gdpyr.Sim;
 /// </list>
 ///
 /// Decoding is total, like every other codec here: a malformed datagram returns
-/// false, never throws.
+/// false, never throws. A record marked aboard that names vehicle 0 reads as a unit
+/// on foot.
 /// </summary>
 public static class UnitSnapshotCodec
 {
@@ -67,11 +68,14 @@ public static class UnitSnapshotCodec
 		for (int i = 0; i < count; i++)
 		{
 			ref readonly UnitSnapshot u = ref units[i];
+			bool aboard = u.RidingIn != 0;
 			BinaryPrimitives.WriteUInt16LittleEndian(into[offset..], u.UnitId);
 			into[offset + 2] = u.DefinitionId;
 			WriteVector(into[(offset + 3)..], u.Position);
-			BinaryPrimitives.WriteUInt16LittleEndian(into[(offset + 9)..], Quantize.YawToU16(u.Yaw));
-			into[offset + 11] = UnitFlags.Pack(u.State, u.Team);
+
+			// A passenger's heading means nothing; the field carries its vehicle instead.
+			BinaryPrimitives.WriteUInt16LittleEndian(into[(offset + 9)..], aboard ? u.RidingIn : Quantize.YawToU16(u.Yaw));
+			into[offset + 11] = UnitFlags.Pack(u.State, u.Team, aboard, u.Phase, u.CannotLand);
 			into[offset + 12] = u.HealthPercent;
 			offset += UnitSnapshot.SizeBytes;
 		}
@@ -99,15 +103,20 @@ public static class UnitSnapshotCodec
 		for (int i = 0; i < units; i++)
 		{
 			byte flags = payload[offset + 11];
+			ushort yawField = BinaryPrimitives.ReadUInt16LittleEndian(payload[(offset + 9)..]);
+			ushort ridingIn = UnitFlags.IsAboard(flags) ? yawField : (ushort)0;
 			into[i] = new UnitSnapshot
 			{
 				UnitId = BinaryPrimitives.ReadUInt16LittleEndian(payload[offset..]),
 				DefinitionId = payload[offset + 2],
 				Position = ReadVector(payload[(offset + 3)..]),
-				Yaw = Quantize.U16ToYaw(BinaryPrimitives.ReadUInt16LittleEndian(payload[(offset + 9)..])),
+				Yaw = ridingIn != 0 ? 0f : Quantize.U16ToYaw(yawField),
 				State = UnitFlags.State(flags),
 				Team = UnitFlags.TeamOf(flags),
 				HealthPercent = payload[offset + 12],
+				RidingIn = ridingIn,
+				Phase = UnitFlags.PhaseOf(flags),
+				CannotLand = UnitFlags.CannotLand(flags),
 			};
 			offset += UnitSnapshot.SizeBytes;
 		}

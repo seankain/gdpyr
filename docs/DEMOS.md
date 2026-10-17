@@ -293,4 +293,6 @@ Stated rather than discovered:
   already runs a seeded episode headlessly and already has a divergence probe pointed at exactly
   this question.
 - **The demo version is tied to the wire version.** §2.2 says why. A protocol change invalidates old
-  demos, and `DemoHeader.IsPlayable` is what makes that a refusal rather than a mystery.
+  demos, and `DemoHeader.IsPlayable` is what makes that a refusal rather than a mystery. Version 2 is
+  the first such change: the unit record's flag byte gained the aboard and flight bits, and an aboard
+  record's yaw field names its vehicle ([`VEHICLES.md`](VEHICLES.md) §6). Version-1 demos are refused.

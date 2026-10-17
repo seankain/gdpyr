@@ -50,7 +50,7 @@ public sealed class GdpyrObservation
 /// <summary>One command for a strategist seat (docs/AGENT_API.md §7.4).</summary>
 public sealed class GdpyrCommand
 {
-	/// <summary>One of order, build, cancel, rally, noop.</summary>
+	/// <summary>One of order, build, cancel, rally, construct, embark, unload, noop.</summary>
 	public string Cmd = "noop";
 
 	/// <summary>For an order: move, attack, patrol, defend, stop.</summary>
@@ -62,6 +62,9 @@ public sealed class GdpyrCommand
 	public int Barracks;
 	public int Tier;
 
+	/// <summary>For an embark: the vehicle the units are to get into, by id.</summary>
+	public int Vehicle;
+
 	public static GdpyrCommand Build(int barracks, int tier) =>
 		new() { Cmd = "build", Barracks = barracks, Tier = tier };
 
@@ -72,6 +75,12 @@ public sealed class GdpyrCommand
 
 	public static GdpyrCommand Order(string kind, int[] units, float x, float z, int targetOwner = 0) =>
 		new() { Cmd = "order", Kind = kind, Units = units, Target = new[] { x, z }, TargetOwner = targetOwner };
+
+	/// <summary><paramref name="units"/> walk to <paramref name="vehicle"/> and get in, nearest first, until it is full (docs/VEHICLES.md §10).</summary>
+	public static GdpyrCommand Embark(int[] units, int vehicle) => new() { Cmd = "embark", Units = units, Vehicle = vehicle };
+
+	/// <summary>Everybody aboard each of <paramref name="vehicles"/> gets out round it, where it is.</summary>
+	public static GdpyrCommand Unload(int[] vehicles) => new() { Cmd = "unload", Units = vehicles };
 }
 
 /// <summary>
@@ -100,8 +109,22 @@ public sealed class GdpyrUnit
 	/// <summary>Health as a fraction of this tier's maximum.</summary>
 	public float Health;
 
-	/// <summary><c>OrderKind</c> as stored: 0 none, 1 move, 2 attack, 3 patrol, 4 defend.</summary>
+	/// <summary><c>OrderKind</c> as stored: 0 none, 1 move, 2 attack, 3 patrol, 4 defend, 6 build, 7 embark, 8 unload.</summary>
 	public int Order;
+
+	/// <summary>The vehicle this unit is riding in, by id; 0 on foot (docs/VEHICLES.md §10). A rider is listed at its vehicle's position.</summary>
+	public int RidingIn;
+
+	/// <summary>How many units this one can carry; 0 for anything that carries nobody.</summary>
+	public int Seats;
+
+	/// <summary>How many are riding in it now.</summary>
+	public int Aboard;
+
+	/// <summary>Height above the map's origin: an aircraft's altitude, and a unit on a roof's.</summary>
+	public float Y;
+
+	public bool IsRiding => RidingIn != 0;
 }
 
 /// <summary>What a <c>step</c> said about one attached seat (docs/AGENT_API.md §5.2).</summary>
@@ -552,6 +575,11 @@ public sealed class GdpyrConnection : IDisposable
 			writer.WriteNumber("target_owner", command.TargetOwner);
 		}
 
+		if (command.Vehicle != 0)
+		{
+			writer.WriteNumber("vehicle", command.Vehicle);
+		}
+
 		writer.WriteNumber("barracks", command.Barracks);
 		writer.WriteNumber("tier", command.Tier);
 		writer.WriteEndObject();
@@ -592,6 +620,13 @@ public sealed class GdpyrConnection : IDisposable
 				Z = Real(element, "z"),
 				Health = Real(element, "health"),
 				Order = Whole(element, "order"),
+
+				// Absent from a server that predates the vehicles, and read as zero there:
+				// nobody riding, nothing with seats.
+				RidingIn = Whole(element, "riding_in"),
+				Seats = Whole(element, "seats"),
+				Aboard = Whole(element, "aboard"),
+				Y = Real(element, "y"),
 			});
 		}
 
@@ -636,6 +671,29 @@ public sealed class GdpyrConnection : IDisposable
 			writer.WriteString("team", team ?? "strategist");
 			writer.WriteString("order", order ?? "none");
 			WriteVector(writer, "at", at);
+		}, cancel).ConfigureAwait(false);
+
+		return response.GetProperty("unit").GetInt32();
+	}
+
+	/// <summary>
+	/// Puts a unit on the field already aboard a vehicle, for a scenario
+	/// (docs/VEHICLES.md §11): where <paramref name="vehicle"/> is, seated by the
+	/// server, with <paramref name="loaderSeat"/> — a strategist seat this session holds —
+	/// as the one its cargo answers to. Returns its unit id; the server refuses a vehicle
+	/// that is not one, is full, or is the other side's.
+	/// </summary>
+	public async Task<int> SpawnAboardAsync(string unit, string team, int vehicle, int loaderSeat,
+		CancellationToken cancel = default)
+	{
+		JsonElement response = await RequestAsync(writer =>
+		{
+			writer.WriteString("op", "spawn");
+			writer.WriteString("unit", unit ?? "infantry");
+			writer.WriteString("team", team ?? "strategist");
+			writer.WriteString("order", "none");
+			writer.WriteNumber("aboard", vehicle);
+			writer.WriteNumber("seat", loaderSeat);
 		}, cancel).ConfigureAwait(false);
 
 		return response.GetProperty("unit").GetInt32();

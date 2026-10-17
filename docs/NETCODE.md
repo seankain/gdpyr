@@ -291,6 +291,27 @@ Cost: ~180 lines of codec and roster plumbing, and a manual roster replay to joi
 Budget check at 50 units: 50 × 13 B × 20 Hz ≈ **13 KB/s** per client, against the ~25 KB/s §7
 budgets for everything.
 
+**Passengers cost nothing extra** ([`VEHICLES.md`](VEHICLES.md) §6). The flag byte packs the state in
+bits 0–1 and the team in bit 2; bit 3 says the unit is riding in a vehicle, bits 4–5 are an
+aircraft's flight phase (0 grounded, 1 taking off, 2 cruising, 3 landing) and bit 6 says an aircraft
+is holding for want of a landing spot; bit 7 is spare. A passenger's yaw field carries its vehicle's
+id instead of a heading, and its position is the vehicle's. A record marked aboard that names
+vehicle 0 decodes as a unit on foot, so decoding stays total. Still 13 bytes, still 837 for 64.
+Riders stay in the packet: leaving them out would make demo playback despawn them and freeze live
+puppets, visible, where they boarded.
+
+A client applies the new state with three rules. What a unit is doing — alive, aboard, flying — is
+taken only from a packet at or after the newest it has applied, though every packet still feeds the
+interpolators: an unreliable packet arriving late would otherwise show a passenger who boarded a
+moment ago, for one interval. (A packet more than five seconds older than the newest is a different
+server's clock, and resets it.) Getting in and out happens at the render clock, not at decode — the
+drawn transform is `InterpolationDelayTicks` behind — and a unit getting out has its samples from
+before then dropped, so it appears where it got out instead of sliding from the truck. And a puppet
+made by `ServerSpawnUnit`, which says nothing of riding, is hidden and solid to nothing until its
+first record, which is applied whole whatever it says: a passenger never flashes visible to a peer
+that joined while it was aboard. Each vehicle's passenger count on a client is the number of records
+in the newest snapshot that name it; units are never fogged or truncated, so it is exact.
+
 ### 6.2 Fog of war
 
 Fog of war is an **anti-cheat property, not a shader**. If the strategist client receives the
@@ -372,9 +393,24 @@ private void ClientIssueOrder(int[] unitIds, byte kind, Vector3 target, int targ
 ```
 
 Server checks, in order: the order type is one of Move/Attack/Patrol/Defend/Stop, the sender is a
-strategist, and each id names a live unit on the sender's side. Anything that fails is counted in
-`RejectedOrders` — visible in the debug HUD, and anything but 0 on a server with honest clients is
-a bug.
+strategist, and each id names a live unit on the sender's side. What a client cannot honestly send
+is counted in `RejectedOrders` — an unknown order type, a sender who is not a strategist, a
+malformed id, a unit of the other side — visible in the debug HUD, and anything but 0 on a server
+with honest clients is a bug. What can change within a round trip is skipped without counting: a
+unit that died, got into a vehicle or was freed a moment ago. An honest client's selection lags the
+server by that much, so such an id is a race, not a forged packet. (Before the vehicles,
+`ApplyOrder` counted a dead or unknown id, which made "0 for honest clients" untrue after any
+death.)
+
+Two more requests name a vehicle and follow the same rule ([`VEHICLES.md`](VEHICLES.md) §5.2):
+`ClientEmbark(int[] unitIds, int vehicleId)` — the units on foot that can ride walk to the vehicle
+and get in, nearest first, until it is full; the rest stop where they are; the vehicle holds and
+waits — and `ClientUnload(int[] vehicleIds)`, which lets everybody out round each vehicle where it
+stands. A vehicle that is not the sender's side's, a unit of the wrong side or of a kind that cannot
+ride (a vehicle), and a sender who is not a strategist count; a vehicle with no free seat, an empty
+one, and a dead, riding or freed id do not. An order given through `ClientIssueOrder` to a vehicle
+that units are still walking to is kept and carried out once they are aboard (a stop applies at
+once), and an order naming a rider skips it.
 
 `targetOwnerId` is an `OwnerId` (§4.2): positive names a peer, negative a unit, 0 nothing. The
 same folded id space that lets one `ProjectileSpawn` field name either kind of shooter lets one
@@ -402,6 +438,7 @@ route, so there is no second behaviour to write.
 | `ProjectileSpawn` | S→C | Reliable | per shot | 23 B |
 | `ProjectileHit` | S→C | Reliable | per hit | 15 B |
 | `ClientIssueOrder` | C→S | Reliable | per click | ~16 B + 4 B/unit |
+| `ClientEmbark` / `ClientUnload` | C→S | Reliable | per click | ~8 B + 4 B/unit / ~4 B + 4 B/vehicle |
 | `ServerBarracksState` | S→C | Reliable | 5 Hz per barracks | ~8 B |
 | `MatchState` (tickets, points) | S→C | Reliable | on change | ~22 B |
 | `ServerNodeState` | S→C | Reliable | 5 Hz per *changed* node | ~8 B |

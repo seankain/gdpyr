@@ -525,6 +525,39 @@ public class AgentObservationTests
 		}
 	}
 
+	[Theory]
+	[InlineData(OrderKind.Embark)]
+	[InlineData(OrderKind.Unload)]
+	public void TheVehicleOrders_FallOutsideTheOrderOneHot_AsBuildDoes(OrderKind order)
+	{
+		// docs/VEHICLES.md §10: obs-2 is unchanged; a policy that wants transport state
+		// reads list_units.
+		var units = new[] { new AgentUnitView { Alive = true, Order = (byte)order } };
+		float[] values = EncodeStrategist(units: units);
+		int at = AgentStrategistObservation.OffsetOf("units");
+
+		for (int i = 0; i < AgentStrategistObservation.OrderKinds; i++)
+		{
+			Assert.Equal(0f, values[at + 7 + i]);
+		}
+
+		Assert.Equal(0f, values[at + AgentStrategistObservation.UnitFloats]);
+	}
+
+	[Fact]
+	public void AKindPastTheTiers_LeavesTheTierOneHotZero()
+	{
+		// The dropship will be id 7, as the builder (3) to the heavy gunner (6) have no tier bit.
+		var units = new[] { new AgentUnitView { Alive = true, Tier = 7 } };
+		float[] values = EncodeStrategist(units: units);
+		int at = AgentStrategistObservation.OffsetOf("units");
+
+		Assert.Equal(1f, values[at + 0]);
+		Assert.Equal(0f, values[at + 1]);
+		Assert.Equal(0f, values[at + 2]);
+		Assert.Equal(0f, values[at + 3]);
+	}
+
 	[Fact]
 	public void MoreUnitsThanFitAreTruncatedRatherThanOverrunning()
 	{

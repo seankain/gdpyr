@@ -229,7 +229,8 @@ public sealed class BotStrategist
 		for (int i = 0; i < units.SlotCount && count < _commandUnits.Length; i++)
 		{
 			Unit unit = units.UnitAt(i);
-			if (unit == null || !unit.IsAlive || unit.Team != Team.Strategist || UnitCatalog.CanConstruct(unit.DefinitionId))
+			if (unit == null || IsInTransport(unit) || unit.Team != Team.Strategist
+				|| UnitCatalog.CanConstruct(unit.DefinitionId))
 			{
 				continue;
 			}
@@ -272,6 +273,19 @@ public sealed class BotStrategist
 			AssaultCount += s == Commander.GarrisonSlot ? 0 : _commander.SquadAt(s).Members;
 		}
 	}
+
+	/// <summary>
+	/// Whether a unit is part of somebody's transport (docs/VEHICLES.md §9.1): dead, a
+	/// rider, a unit walking to get in, or a vehicle with anybody aboard or on the way.
+	/// None of them is the computer strategist's to order, from the click on and not
+	/// through <see cref="IsClaimed"/> — a policy's seat is a bot peer whose fallback
+	/// commander would otherwise recruit its loaded technical, technicals first. Nothing
+	/// is lost: no computer strategist loads anything (V-D9), and a vehicle whose loader
+	/// has gone unloads by itself. Emptied, a vehicle is an ordinary unit again.
+	/// </summary>
+	private static bool IsInTransport(Unit unit) =>
+		!unit.IsOnField || unit.Order.Kind == OrderKind.Embark
+		|| (unit.HasSeats && (!unit.Cargo.IsEmpty || unit.BoardersWalking > 0));
 
 	/// <summary>
 	/// Whether somebody else has the say over a unit (docs/HTN_BOTS.md §8, D1): a
@@ -365,7 +379,7 @@ public sealed class BotStrategist
 		for (int i = 0; i < units.SlotCount; i++)
 		{
 			Unit unit = units.UnitAt(i);
-			if (unit != null && unit.IsAlive && unit.Team == Team.Strategist)
+			if (unit != null && !IsInTransport(unit) && unit.Team == Team.Strategist)
 			{
 				_zones.AddFriendly(unit.GlobalPosition, ForceRatio.Strength(UnitCatalog.CostOf(unit.DefinitionId),
 					unit.Health / (unit.Definition?.MaxHealth ?? 100f)));
@@ -421,7 +435,7 @@ public sealed class BotStrategist
 			for (int m = 0; m < members; m++)
 			{
 				Unit unit = units.Find(_squadMembers[m]);
-				if (unit == null || !unit.IsAlive)
+				if (unit == null || IsInTransport(unit))
 				{
 					continue;
 				}
@@ -575,8 +589,11 @@ public sealed class BotStrategist
 
 		for (int i = 0; i < units.SlotCount; i++)
 		{
+			// No claim at all here, so the units getting into or out of a vehicle, and
+			// the vehicle, are left out outright (docs/VEHICLES.md §9.1). For a round with
+			// no vehicle carrying anybody that is no change (D5).
 			Unit unit = units.UnitAt(i);
-			if (unit == null || !unit.IsAlive || unit.Team != Team.Strategist)
+			if (unit == null || IsInTransport(unit) || unit.Team != Team.Strategist)
 			{
 				continue;
 			}
@@ -675,8 +692,11 @@ public sealed class BotStrategist
 				continue;
 			}
 
+			// Counted riding or not — a riding builder is still one, and skipping it would
+			// buy a second — but only one on foot and not on its way into a vehicle is
+			// idle: a rider's order is Embark, not Build (docs/VEHICLES.md §9.1).
 			builders++;
-			if (unit.Order.Kind != OrderKind.Build)
+			if (unit.IsOnField && unit.Order.Kind is not (OrderKind.Build or OrderKind.Embark))
 			{
 				_idleBuilders[idle++] = unit.UnitId;
 			}

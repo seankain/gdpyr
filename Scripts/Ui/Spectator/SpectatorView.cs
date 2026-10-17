@@ -469,7 +469,8 @@ public partial class SpectatorView : Node3D
 		{
 			for (int i = 0; i < units.SlotCount; i++)
 			{
-				if (units.UnitAt(i) is { IsAlive: true } unit)
+				// A rider is not pickable; its vehicle is, and following one follows the other.
+				if (units.UnitAt(i) is { IsOnField: true } unit)
 				{
 					Consider(AiEntityRef.Unit(unit.UnitId), unit.GlobalPosition + (Vector3.Up * 0.9f));
 				}

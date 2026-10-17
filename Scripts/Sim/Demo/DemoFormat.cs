@@ -89,8 +89,13 @@ public static class DemoFormat
 	/// Bumped whenever a record's layout changes, or whenever one of the snapshot
 	/// codecs the payloads are copied from does. A reader refuses anything else
 	/// rather than guessing: half a decoded round is worse than a refusal.
+	///
+	/// 2: the unit record's flag byte gained the aboard, flight-phase and cannot-land
+	/// bits, and an aboard record's yaw field names its vehicle (docs/VEHICLES.md §6).
+	/// Every version-1 record has those bits clear and would decode the same; the bump
+	/// is this constant's own rule, that a change to a copied codec is one.
 	/// </summary>
-	public const byte Version = 1;
+	public const byte Version = 2;
 
 	/// <summary>
 	/// Ceiling on one recorded payload. Comfortably over the largest thing either

@@ -205,10 +205,52 @@ public class AgentEventTests
 		Assert.Equal("squad_task", AgentEventSchema.NameOf(AgentEventKind.SquadTask));
 		Assert.Equal("contact_spotted", AgentEventSchema.NameOf(AgentEventKind.ContactSpotted));
 		Assert.Equal("node_contested", AgentEventSchema.NameOf(AgentEventKind.NodeContested));
-		Assert.Equal(AgentEventKind.NodeContested, AgentEventSchema.Last);
+		Assert.Equal((AgentEventKind)14, AgentEventKind.NodeContested);
 		Assert.Equal("ticks", AgentEventSchema.FieldsOf(AgentEventKind.NodeContested)[3]);
 		Assert.Equal("goal", AgentEventSchema.FieldsOf(AgentEventKind.SquadTask)[2]);
 		Assert.Equal("observer", AgentEventSchema.FieldsOf(AgentEventKind.ContactSpotted)[1]);
+	}
+
+	[Fact]
+	public void TheVehicleEventsAreAppended_UnderTheirOwnNames()
+	{
+		// docs/VEHICLES.md §10: after node_contested, so every recorded trace keeps its numbers.
+		Assert.Equal(15, (int)AgentEventKind.UnitEmbarked);
+		Assert.Equal(16, (int)AgentEventKind.UnitDisembarked);
+		Assert.Equal(17, (int)AgentEventKind.DropshipLanded);
+		Assert.Equal(AgentEventKind.DropshipLanded, AgentEventSchema.Last);
+
+		Assert.Equal("unit_embarked", AgentEventSchema.NameOf(AgentEventKind.UnitEmbarked));
+		Assert.Equal("unit_disembarked", AgentEventSchema.NameOf(AgentEventKind.UnitDisembarked));
+		Assert.Equal("dropship_landed", AgentEventSchema.NameOf(AgentEventKind.DropshipLanded));
+		Assert.Equal("vehicle", AgentEventSchema.FieldsOf(AgentEventKind.UnitEmbarked)[1]);
+		Assert.Equal("tier", AgentEventSchema.FieldsOf(AgentEventKind.UnitDisembarked)[2]);
+		Assert.Equal("aboard", AgentEventSchema.FieldsOf(AgentEventKind.DropshipLanded)[1]);
+	}
+
+	[Fact]
+	public void TheSchemaNamesTheVehicleCommands_AppendedAfterTheOldOnes()
+	{
+		Assert.Equal(6, (int)AgentCommandKind.Embark);
+		Assert.Equal(7, (int)AgentCommandKind.Unload);
+		Assert.Equal(new[] { "order", "build", "cancel", "rally", "noop", "construct" }, AgentJson.CommandNames[..6]);
+		Assert.Contains("embark", AgentJson.CommandNames);
+		Assert.Contains("unload", AgentJson.CommandNames);
+	}
+
+	[Fact]
+	public void AnEmbarkCommandKeepsItsVehicleAndItsPassengers_AndAnUnloadItsVehicles()
+	{
+		var list = new AgentCommandList();
+		Assert.True(list.AddWithUnits(new AgentCommand { Kind = AgentCommandKind.Embark, Vehicle = 12 }, new[] { 3, 4, 5 }));
+		Assert.True(list.AddWithUnits(new AgentCommand { Kind = AgentCommandKind.Unload }, new[] { 12, 14 }));
+
+		AgentCommand[] stored = list.Commands.ToArray();
+		Assert.Equal(AgentCommandKind.Embark, stored[0].Kind);
+		Assert.Equal(12, stored[0].Vehicle);
+		Assert.Equal(new[] { 3, 4, 5 }, list.UnitsOf(stored[0]).ToArray());
+		Assert.Equal(AgentCommandKind.Unload, stored[1].Kind);
+		Assert.Equal(new[] { 12, 14 }, list.UnitsOf(stored[1]).ToArray());
 	}
 
 	[Fact]

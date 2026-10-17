@@ -430,6 +430,15 @@ public sealed partial class AgentServer : IDisposable
 						out _);
 					break;
 
+				// The checks a person's right-click and U get (docs/VEHICLES.md §10).
+				case AgentCommandKind.Embark:
+					units.ServerEmbark(seat.PeerId, list.UnitsOf(command), command.Vehicle);
+					break;
+
+				case AgentCommandKind.Unload:
+					units.ServerUnload(seat.PeerId, list.UnitsOf(command));
+					break;
+
 				case AgentCommandKind.Noop:
 				default:
 					break;

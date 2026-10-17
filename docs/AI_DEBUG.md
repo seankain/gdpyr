@@ -187,7 +187,9 @@ MTR 2.0`), the facts as a table, and the history newest first:
 ```
 
 `AiDebugText.Describe` puts a header on top — who it is, its role or order, health, goal and its
-family, how it moves, what it is shooting and its focus — and `SquadText.Table` lays out a
+family, how it moves, what it is shooting and its focus; for a unit in a vehicle "riding in unit 12",
+and for a vehicle that carries units "aboard 3/4" ([`VEHICLES.md`](VEHICLES.md) §10), with a
+`vehicle` marker where a unit walking to get in is headed — and `SquadText.Table` lays out a
 commander: one row per squad with role, size, task, target, goal, phase, strength against what it
 formed with, and flags.
 

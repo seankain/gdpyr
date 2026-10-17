@@ -411,6 +411,13 @@ not in the vector at all: a strategist policy can build (§7.4) but cannot see w
 the first thing to add when somebody trains one that wants to — a structure block, and a schema
 version.
 
+**Vehicles that carry units change nothing in the vector either** ([`VEHICLES.md`](VEHICLES.md)
+§10), and the schema stays `gdpyr-agent-obs-2`. A passenger is a row of its own, alive, at its
+vehicle's position (the server pins it there every tick); its order byte is `Embark` (7), and a
+vehicle letting its riders out has `Unload` (8) — both past the order one-hot's five, as `Stop` and
+`Build` are, so neither sets a bit. Who is riding in what, and how many seats a vehicle has, is in
+`list_units` (§7.5). A trailing transport block would be `obs-3`.
+
 **Fog parity is one call, not a re-implementation.** The live records come from
 `VisibilityService.IsVisible`, the ghosts from `VisibilityService.TryContact` — the same two
 answers a human strategist's snapshot and HUD are built from (`NETCODE.md` §6.2). The rule that
@@ -555,7 +562,26 @@ for one of the two (`tier` 5 or 6) is refused: neither comes out of a barracks.
 ```
 Unit ids that the seat does not own are rejected by `ApplyOrder` exactly as a client's would be,
 and the rejection is counted in `UnitManager.RejectedOrders` — so a policy emitting garbage shows
-up on the debug HUD rather than silently doing nothing.
+up on the debug HUD rather than silently doing nothing. An id of a unit that has died, got into a
+vehicle or been freed since the observation is skipped without counting
+([`NETCODE.md`](NETCODE.md) §6.3).
+
+`embark` and `unload` put units into a vehicle and let them out ([`VEHICLES.md`](VEHICLES.md) §10),
+through `UnitManager.ServerEmbark` and `ServerUnload` — the checks a human strategist's right-click
+and `U` get:
+
+```json
+{"cmd":"embark","units":[12,13,14,15,16],"vehicle":31}
+{"cmd":"unload","units":[31]}
+```
+
+An embark sends the units that can ride — anything on foot — walking to the vehicle, nearest first,
+until its seats are full (the technical has four); the rest stop where they are, and the vehicle
+holds until its boarders are aboard, keeping an `order` given to it meanwhile for then. An unload's
+`units` are vehicles; each with anybody aboard stops and lets them out round it. They are commands
+rather than order kinds on purpose: `OrderFromName` turns a kind it does not know into a move, so
+`"kind":"embark"` sent to an older server would march the units to the origin, whereas a `cmd` it
+does not know is skipped.
 
 **Shipped**, with the two parity wrappers the sketch named — `ServerCancelBuild(peerId, index)` and
 `ServerSetRally(peerId, index, point)` — plus three things worth writing down:
@@ -586,8 +612,12 @@ and this is it:
 ```json
 → {"op":"list_units","seat":7}
 ← {"op":"units","seat":7,"units":[
-    {"id":12,"tier":0,"alive":true,"x":-41.5,"z":8.25,"health":1.0,"order":1},
-    {"id":13,"tier":2,"alive":false,"x":12.0,"z":-3.5,"health":0.0,"order":0}]}
+    {"id":12,"tier":0,"alive":true,"x":-41.5,"z":8.25,"health":1.0,"order":7,
+     "riding_in":31,"seats":0,"aboard":0,"y":0.5},
+    {"id":13,"tier":2,"alive":false,"x":12.0,"z":-3.5,"health":0.0,"order":0,
+     "riding_in":0,"seats":0,"aboard":0,"y":0.5},
+    {"id":31,"tier":1,"alive":true,"x":-41.5,"z":8.25,"health":0.8,"order":1,
+     "riding_in":0,"seats":4,"aboard":1,"y":0.5}]}
 ```
 
 - **Entry *i* is slot *i* of the observation's unit block.** Both walk `UnitManager` in registry
@@ -601,7 +631,12 @@ and this is it:
   strategist's client already draws. A ground seat asking is refused (`wrong_policy`): it sees units
   through `GroundSensor` or not at all.
 - **Positions are metres**, not the normalized floats of the observation, because a command's target
-  is in metres.
+  is in metres. `y` is the height, which an aircraft makes worth carrying.
+- **Who rides in what** ([`VEHICLES.md`](VEHICLES.md) §10): `riding_in` is the vehicle a unit is in, 0
+  on foot, and a passenger is listed at its vehicle's position; `seats` is how many a vehicle carries
+  (0 for anything that carries nobody) and `aboard` how many it carries now. A passenger can be
+  ordered nowhere until it is out — an order naming it skips it — and the reference action space
+  leaves it out of every group.
 
 The alternative considered and rejected was a client-side roster built from `unit_built` and
 `unit_lost`. It drifts — the events fire at build and at death, the observation carries a corpse
@@ -634,6 +669,14 @@ from position deltas and gets it slightly wrong.
 | `squad_task` | strategist (its peer id), squad (the commander's slot), goal, x, z — a computer strategist's commander squad took a new goal. `--bot-ai htn` only (H6) |
 | `contact_spotted` | peer, observer, first, x, z — the strategist side's fog picked up a ground-force player it did not have in sight at the refresh before. Either bot AI (H6) |
 | `node_contested` | node, owner, contested, ticks — a node's contest (both sides inside its radius) started (`contested` 1) or ended (0, with `ticks` it lasted). Either bot AI (H6) |
+| `unit_embarked` / `unit_disembarked` | unit, vehicle, tier (the passenger's), x, z — a unit got into a vehicle (at the vehicle) or out of one (where it got out): an unload, or thrown out alive from a wreck ([`VEHICLES.md`](VEHICLES.md) §10) |
+| `dropship_landed` | unit, aboard, x, z — a dropship touched down, with how many were aboard. Not emitted until the dropship is built (V6) |
+
+**A vehicle destroyed with passengers aboard** is several `unit_lost` records on one tick, all
+naming the killer: on the ground each passenger is thrown out (a `unit_disembarked`) and dealt half
+its maximum health, and any it kills is lost; from higher than 4 m — an aircraft's wreck — all of
+them are lost, with no `unit_disembarked`. A reward that counts units lost feels one launcher round
+as five losses, which is what happened.
 
 `node_contested` was in this table from M6 and first emitted in H6. `gun_mounted` and `can_spent`
 were in it too and are still not emitted, so neither is a kind a scenario can name (§9.1).
@@ -713,6 +756,42 @@ A spawn names exactly one of a `peer` (a seat to place), a `unit` (`infantry`, `
 `tank`, `builder`, `supply_truck`, `sniper` or `heavy_gunner`) or a `structure` (`pillbox`, `sandbag_wall`, `sniper_tower`, with a `yaw`). A
 structure is put up finished and free, and the server refuses one that does not fit where it was put
 rather than guessing — a pillbox inside a wall is a typo in the scenario, not a test.
+
+**A unit spawn can carry a label and start aboard.** `"id": "truck"` names a unit spawn for the rest
+of the file; `"aboard": "truck"` puts a unit in the seats of an earlier unit spawn instead of on the
+ground (its `at` is ignored), and the server seats it directly through the `spawn` op's `aboard` and
+`seat` fields — harness-only, like the rest of `spawn`. A vehicle loaded by nobody would be unloaded
+on its first tick (an orphaned vehicle lets its riders out, docs/VEHICLES.md §5.3), so the boarding
+is issued by a strategist seat: the one named by the spawn's `"seat"`, or the scenario's only
+strategist seat. It is a separate field because a spawn already names exactly one of `peer`, `unit`
+and `structure`. All of it is checked when the file is read, and each refusal is a sentence naming
+the spawn: an `id`, `aboard` or `seat` on anything but a unit spawn, two spawns with one id, an
+`aboard` naming no earlier unit spawn (a forward reference is refused, not resolved), a unit aboard a
+passenger, a `seat` with no `aboard`, and an `aboard` with no strategist seat to answer to, or with
+two and no `seat` to choose between them. What only the server knows it refuses with
+`not_boarded`, and the harness stops (exit 2): a kind that cannot ride, a rider on another team than
+its vehicle (an `aboard` spawn's `team` defaults to `strategist`, as every unit spawn's does), and one
+rider more than the vehicle seats.
+
+**A strategist seat's script is commands, not input.** Its steps carry `commands` instead of
+`move`, `look` and `buttons`, naming units by spawn label:
+
+```json
+{"id":"chair","team":"strategist","policy":"strategist","step_mul":6,
+ "script":{"repeat":false,"steps":[
+   {"ticks":720,"commands":[{"cmd":"order","kind":"move","units":["truck"],"target":[10,60]}]},
+   {"ticks":780,"commands":[{"cmd":"unload","units":["truck"]}]}]}}
+```
+
+`cmd` is `embark` (with a `vehicle` label), `unload`, or `order` (with a `kind` of `move`, `attack`,
+`patrol`, `defend` or `stop`, and a `target` `[x, z]` unless it is `stop`). A step's commands are
+sent once, through `act` (§7.4), on the step's first tick — each pass of a repeating script enters
+its steps again — and apply on the server's next tick; a step with no commands holds. In the warm-up
+the seat sends one empty command list, which takes it from its bot — a seat that has never acted
+is still the bot's (§2.1) — without ordering anything, so `counters.pilot_fallbacks` stays zero. A ground seat's script with `commands`, a
+strategist seat's with input, an unknown command, kind or label, and a command missing its units,
+vehicle or target are refused when the file is read. `technical_boards_squad.json`,
+`technical_carries_squad.json` and `technical_wreck_ejects.json` are the three that use both.
 
 That is `Tests/Scenarios/rifle_lethality.json` as checked in. Two differences from the sketch above
 it are worth naming, because both are the published schema winning an argument with a document:

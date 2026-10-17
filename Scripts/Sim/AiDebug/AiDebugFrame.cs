@@ -160,6 +160,9 @@ public enum AiMarkerKey : byte
 
 	/// <summary>The nearest supply source's middle.</summary>
 	Supply = 18,
+
+	/// <summary>Unit: the vehicle it is walking to, to get in (docs/VEHICLES.md §10).</summary>
+	Vehicle = 19,
 }
 
 /// <summary>Numbers an inspected agent knows about.</summary>
@@ -214,6 +217,18 @@ public enum AiValueKey : byte
 
 	/// <summary>Ground: <c>Team</c> as a byte.</summary>
 	Team = 16,
+
+	/// <summary>Unit: the vehicle it is riding in, by unit id (docs/VEHICLES.md §10). Absent on foot.</summary>
+	RidingIn = 17,
+
+	/// <summary>Unit, a vehicle that carries units: how many are aboard.</summary>
+	Aboard = 18,
+
+	/// <summary>Unit, a vehicle that carries units: how many it seats.</summary>
+	Seats = 19,
+
+	/// <summary>Unit, an aircraft: its height above the ground, in centimetres (V6).</summary>
+	Altitude = 20,
 }
 
 public struct AiMarker

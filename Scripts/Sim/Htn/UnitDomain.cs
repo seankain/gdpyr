@@ -945,6 +945,10 @@ public sealed class UnitDomainBuilder : BaseDomainBuilder<UnitDomainBuilder, Uni
 /// supply source in range — a barracks' ring or a supply truck (D2) — and stands in
 /// it until it is healed. Nothing below it replaces it, so it ends only on its
 /// executing conditions: healed, a target of its own, the source gone, a new order.
+///
+/// Neither retreating nor resupplying takes a unit off a move, a build, a walk to a
+/// vehicle or an unload (docs/VEHICLES.md §9.2). A unit riding in a vehicle is never
+/// planned at all.
 /// </summary>
 public static class UnitDomain
 {
@@ -957,9 +961,12 @@ public static class UnitDomain
 					.If(UnitFact.Odds, OddsBand.Outnumbered)
 					.IfNot(UnitFact.Order, OrderKind.Move)
 					.IfNot(UnitFact.Order, OrderKind.Build)
+					.IfNot(UnitFact.Order, OrderKind.Embark)
+					.IfNot(UnitFact.Order, OrderKind.Unload)
 					.Act(UnitGoal.Retreat).While(UnitFact.Odds, OddsBand.Outnumbered)
 						.While(UnitFact.Stance, UnitStance.Autonomous)
-						.WhileNot(UnitFact.Order, OrderKind.Move).WhileNot(UnitFact.Order, OrderKind.Build).End()
+						.WhileNot(UnitFact.Order, OrderKind.Move).WhileNot(UnitFact.Order, OrderKind.Build)
+						.WhileNot(UnitFact.Order, OrderKind.Embark).WhileNot(UnitFact.Order, OrderKind.Unload).End()
 				.End()
 			.End()
 			.Select("resupply")
@@ -971,9 +978,12 @@ public static class UnitDomain
 					.If(UnitFact.Supplied, false)
 					.IfNot(UnitFact.Order, OrderKind.Move)
 					.IfNot(UnitFact.Order, OrderKind.Build)
+					.IfNot(UnitFact.Order, OrderKind.Embark)
+					.IfNot(UnitFact.Order, OrderKind.Unload)
 					.Act(UnitGoal.Resupply).While(UnitFact.Wounded).While(UnitFact.Supply)
 						.WhileNot(UnitFact.Contact, UnitContact.Own).While(UnitFact.Stance, UnitStance.Autonomous)
-						.WhileNot(UnitFact.Order, OrderKind.Move).WhileNot(UnitFact.Order, OrderKind.Build).End()
+						.WhileNot(UnitFact.Order, OrderKind.Move).WhileNot(UnitFact.Order, OrderKind.Build)
+						.WhileNot(UnitFact.Order, OrderKind.Embark).WhileNot(UnitFact.Order, OrderKind.Unload).End()
 				.End()
 			.End()
 			.Select("build")
@@ -1078,6 +1088,16 @@ public static class UnitDomain
 				.If(UnitFact.Order, OrderKind.Move)
 				.Sequence("obey")
 					.Act(UnitGoal.Obey).While(UnitFact.Order, OrderKind.Move).End()
+				.End()
+			.End()
+			// Walking to a vehicle to get in, and a vehicle letting its riders out
+			// (docs/VEHICLES.md §9.2): carried out as given, shooting on the way as a move
+			// does. Without a branch of their own they would fall back to the order all the
+			// same, but by a failed plan every tick.
+			.Select("carry")
+				.IfAny(UnitFact.Order, OrderKind.Embark, OrderKind.Unload)
+				.Sequence("carry")
+					.Act(UnitGoal.Obey).WhileAny(UnitFact.Order, OrderKind.Embark, OrderKind.Unload).End()
 				.End()
 			.End()
 			.Build();

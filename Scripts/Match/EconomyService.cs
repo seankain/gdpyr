@@ -227,7 +227,9 @@ public sealed class EconomyService
 		for (int i = 0; units != null && i < units.SlotCount; i++)
 		{
 			Unit unit = units.UnitAt(i);
-			if (unit == null || !unit.IsAlive || unit.Team != Team.Strategist)
+
+			// Riders hold nothing: a truck on a node with four aboard is one body on it.
+			if (unit == null || !unit.IsOnField || unit.Team != Team.Strategist)
 			{
 				continue;
 			}

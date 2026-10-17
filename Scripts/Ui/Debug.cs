@@ -174,7 +174,9 @@ public partial class Debug : PanelContainer
 			return;
 		}
 
+		int riding = units.RidingCount;
 		SetProperty("units", $"{units.LiveUnitCount}/{SimConfig.MaxUnits} live"
+			+ (riding > 0 ? $" ({riding} riding)" : string.Empty)
 			+ $"  {units.UnitsProduced} built  {units.UnitsLost} lost"
 			+ (units.NavigationReady ? string.Empty : "  (no navmesh)"));
 

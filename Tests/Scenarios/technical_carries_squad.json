@@ -1,0 +1,34 @@
+{
+  "name": "a technical with four aboard drives sixty metres and lets them all out where it stops",
+  "seeds": [2],
+  "duration_ticks": 1500,
+  "warmup_ticks": 60,
+  "roster": { "ground": 0, "strategists": 1 },
+
+  "seats": [
+    { "id": "chair", "team": "strategist", "policy": "strategist", "step_mul": 6,
+      "script": { "repeat": false, "steps": [
+        { "ticks": 720, "commands": [
+          { "cmd": "order", "kind": "move", "units": ["truck"], "target": [10, 60] }
+        ] },
+        { "ticks": 780, "commands": [
+          { "cmd": "unload", "units": ["truck"] }
+        ] }
+      ] } }
+  ],
+
+  "spawns": [
+    { "unit": "technical", "id": "truck", "team": "strategist", "at": [-50, 1, 60], "order": "none" },
+    { "unit": "infantry", "aboard": "truck" },
+    { "unit": "infantry", "aboard": "truck" },
+    { "unit": "infantry", "aboard": "truck" },
+    { "unit": "infantry", "aboard": "truck" }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.unit_disembarked.count", "op": "==", "value": 4 },
+    { "metric": "events.unit_disembarked[x>0].count", "op": "==", "value": 4 },
+    { "metric": "events.unit_lost.count", "op": "==", "value": 0 }
+  ]
+}
