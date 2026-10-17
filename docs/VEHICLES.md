@@ -5,8 +5,9 @@ checks are outstanding.** V1 (the engine-free cargo rules), V2 (the technical ca
 server), V3 (the wire and the strategist's controls), V4 (bots, agents, debugger), V5 (the harness
 and the technical's scenarios), V6 (the dropship) and V7 (the docs) are built. The four vehicle
 scenarios were first run headless in Godot 4.6 on 2026-10-17: three passed as written, and
-`technical_wreck_ejects` failed on its own set-up, not on the game, and passes as corrected (§12,
-*Engine-side checks*). The listen-host and dedicated-server checks of V2–V6 need a person at the
+`technical_wreck_ejects` failed on its own set-up, not on the game, and passes as corrected; the
+whole suite, 23 scenarios, passes, and the 19 that predate the vehicles report what they did before
+them, within the engine's run-to-run spread (§12, *Engine-side checks*). The listen-host and dedicated-server checks of V2–V6 need a person at the
 controls and are still to be taken. It replaced
 the "Dropships and troop carriers" scope cut in [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md)
 §5 with a design and a milestone list (M10 there); the cut is struck.
@@ -711,6 +712,8 @@ metric:
 `cee3f28` since changed the unit domain's Attack selector — the cause that section gives for that
 failure — and recorded no suite result. So V2 starts by running `./scripts/playtest.sh` over
 `Tests/Scenarios/*.json` at its own start commit, and that run is the baseline V5 compares against.
+It was taken on 2026-10-17, after V7: 19 of 19 at `574d402`, V2's start commit, and 23 of 23 with
+the vehicles (§12, *Engine-side checks*).
 
 ---
 
@@ -859,7 +862,7 @@ quiet policy's loaded technical is not recruited by its fallback commander.
   strategist's overlay has the pips, and a spectator has the header. The reference action space's
   centroid still counts riders, which stand where their vehicle does.
 
-### V5 — Harness and the technical's scenarios (1 day) — built; its scenarios pass in Godot, the suite re-run is outstanding
+### V5 — Harness and the technical's scenarios (1 day) — built; its scenarios and the suite re-run pass in Godot
 
 §11's spawn labels, `aboard`, strategist scripts, parser facts, and the three technical scenarios.
 The existing suite re-run against V2's baseline.
@@ -1047,6 +1050,16 @@ engine behaviours, two are now exercised on that path: the landing-spot check ac
 between grounded and floating motion at take-off and touchdown. The resized cylinder was queried,
 but nothing stood under the dropship, so a stale height would not have shown.
 
+**The suite against the baseline (§11).** `./scripts/playtest.sh Tests/Scenarios/*.json` at
+`574d402`, V2's start commit (V1 adds code that nothing calls): 19 of 19 pass. With the vehicles and
+the correction above: 23 of 23, the same 19 and the four vehicle scenarios. Of the 19, 18 report the
+same value for every assertion at both commits. The nineteenth, `htn_squad_retreats`, reads
+`squad_task[goal=4].count` 3..5 over its four seeds at the baseline and 3..6 with the vehicles; two
+runs of the same commit differ as much — 5, 5, 3, 3 per seed, then 3, 5, 2, 5, at the baseline — so
+that is the engine's run-to-run spread (`AGENT_API.md` §3), not this change. `htn_recon_finds_contact`,
+which §9.1 says must pass unchanged, does, with the same values. `htn_strategist_defends_node`, the
+one failure in the last recorded suite (`fcf2a5d`), passes at both commits.
+
 **Not exercised by any scenario, and still outstanding:** the listen-host and dedicated-server
 checks of V2–V6, which need a person at the controls — the right-click, `U`, `T`, the card and the
 overlay; a remote client's view (hidden riders, getting in and out at the render clock, the aboard
@@ -1056,8 +1069,8 @@ a refused roof; and a computer co-strategist beside a loaded vehicle. Riders not
 and not lighting the fog are checked in the code only.
 
 **About 8–9 days in all**; V1–V5 (the technical) stand on their own and ship first. All seven are
-built and the four vehicle scenarios pass in Godot; what remains is the listen-host and
-dedicated-server checks V2–V6 name.
+built, the four vehicle scenarios pass in Godot and the suite holds against its baseline; what
+remains is the listen-host and dedicated-server checks V2–V6 name.
 
 ---
 
