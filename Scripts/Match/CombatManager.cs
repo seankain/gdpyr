@@ -436,6 +436,8 @@ public partial class CombatManager : Node
 		fps_controller character = combat.Character;
 		SpawnProjectile(tick, OwnerId.ForPeer(combat.PeerId), WeaponCatalog.HandGrenade, character.EyePosition,
 			GrenadeSim.ThrowDirection(character.Yaw, character.Pitch), combat.LagCompensationTicks);
+		AgentEventBus.Emit(AgentEventKind.GrenadeThrown, tick, OwnerId.ForPeer(combat.PeerId), -1, -1,
+			character.SimPosition.X, character.SimPosition.Z);
 	}
 
 	/// <summary>
@@ -567,6 +569,10 @@ public partial class CombatManager : Node
 				victim = null;
 				point = unitPoint;
 			}
+
+			// A swing is fire too, from where the swinger stands (docs/TACTICS.md §4.1).
+			units.NoteRound(new FireSource(origin, OwnerId.ForPeer(attacker.PeerId), attacker.EquippedDefinitionId,
+				tick), attacker.Team, origin, point, unitVictim, 0f, tick);
 		}
 
 		HitFlags flags = HitFlags.Melee;
@@ -632,8 +638,16 @@ public partial class CombatManager : Node
 			return;
 		}
 
-		if (!FirstContact(segment, ownerId, ownerTeam, tick, out Vector3 point, out PlayerCombat victim,
-			out Unit unitVictim, out Structure structureVictim))
+		bool contact = FirstContact(segment, ownerId, ownerTeam, tick, out Vector3 point, out PlayerCombat victim,
+			out Unit unitVictim, out Structure structureVictim);
+
+		// Every round the other side's units see go by, hit or not, up to where it
+		// stopped (docs/TACTICS.md §4.1).
+		UnitManager.Instance?.NoteRound(new FireSource(segment.Origin, ownerId, segment.DefinitionId, segment.Id),
+			ownerTeam, segment.From, contact ? point : segment.To, contact ? unitVictim : null,
+			contact && stats.IsExplosive ? stats.ExplosionRadiusMeters : 0f, tick);
+
+		if (!contact)
 		{
 			return;
 		}
@@ -786,6 +800,10 @@ public partial class CombatManager : Node
 			return;
 		}
 
+		// A live grenade at a unit's feet is a round it has been sent (docs/TACTICS.md §4.1).
+		UnitManager.Instance?.NoteBlast(new FireSource(segment.Origin, segment.OwnerPeerId, segment.DefinitionId,
+			segment.Id), ownerTeam, point, stats.ExplosionRadiusMeters, FireKind.NearMiss, tick);
+
 		Broadcast(MethodName.ServerProjectileHit, ProjectileCodec.EncodeHit(new ProjectileHit
 		{
 			Id = segment.Id,
@@ -826,6 +844,8 @@ public partial class CombatManager : Node
 		PlayerCombat attacker = Find(OwnerId.PeerOf(ownerId));
 		HitFlags flags = HitFlags.Exploded | Explode(point, stats, attacker, ownerId, ownerTeam,
 			WeaponOnStream(attacker, segment.DefinitionId), null, null, null, tick);
+		UnitManager.Instance?.NoteBlast(new FireSource(segment.Origin, ownerId, segment.DefinitionId, segment.Id),
+			ownerTeam, point, stats.ExplosionRadiusMeters, FireKind.Hit, tick);
 
 		Broadcast(MethodName.ServerProjectileHit, ProjectileCodec.EncodeHit(new ProjectileHit
 		{

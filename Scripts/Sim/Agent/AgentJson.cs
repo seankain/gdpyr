@@ -186,7 +186,10 @@ public static class AgentJson
 
 	/// <summary>Every command a strategist seat may name (docs/AGENT_API.md §7.4).</summary>
 	public static readonly string[] CommandNames =
-		{ "order", "build", "cancel", "rally", "noop", "construct", "embark", "unload" };
+		{ "order", "build", "cancel", "rally", "noop", "construct", "embark", "unload", "autonomy", "autonomy_default" };
+
+	/// <summary>The modes an <c>autonomy</c> or <c>autonomy_default</c> command, or a spawn, may name (docs/TACTICS.md §5.9).</summary>
+	public static readonly string[] AutonomyNames = { MicroAutonomyNames.Off, MicroAutonomyNames.On };
 
 	/// <summary>
 	/// The structures a <c>construct</c> command may name, in structure-catalog order

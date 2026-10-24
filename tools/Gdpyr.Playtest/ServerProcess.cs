@@ -35,7 +35,7 @@ public sealed class ServerProcess : IDisposable
 
 	public static async Task<ServerProcess> StartAsync(string godot, string projectDirectory, int agentPort,
 		int gamePort, int groundBots, int strategistBots, string logPath, string botAi = null,
-		CancellationToken cancel = default)
+		string unitAutonomy = null, CancellationToken cancel = default)
 	{
 		var start = new ProcessStartInfo(godot)
 		{
@@ -62,6 +62,14 @@ public sealed class ServerProcess : IDisposable
 		{
 			start.ArgumentList.Add("--bot-ai");
 			start.ArgumentList.Add(botAi);
+		}
+
+		// Likewise what new units start with: the game mode's (off until docs/TACTICS.md T8)
+		// unless the scenario or the command line says.
+		if (!string.IsNullOrEmpty(unitAutonomy))
+		{
+			start.ArgumentList.Add("--unit-autonomy");
+			start.ArgumentList.Add(unitAutonomy);
 		}
 
 		Process process;

@@ -296,3 +296,6 @@ Stated rather than discovered:
   demos, and `DemoHeader.IsPlayable` is what makes that a refusal rather than a mystery. Version 2 is
   the first such change: the unit record's flag byte gained the aboard and flight bits, and an aboard
   record's yaw field names its vehicle ([`VEHICLES.md`](VEHICLES.md) §6). Version-1 demos are refused.
+  Version 3 is the second: the unit record grew to 14 bytes, its flag byte split into a body byte,
+  which carries the posture, and a flight byte ([`TACTICS.md`](TACTICS.md) §5.8). Version-2 demos are
+  refused, saying "demo format version 2; this build reads 3".

@@ -65,6 +65,9 @@ public sealed class GdpyrCommand
 	/// <summary>For an embark: the vehicle the units are to get into, by id.</summary>
 	public int Vehicle;
 
+	/// <summary>For <c>autonomy</c> and <c>autonomy_default</c>: <c>on</c> or <c>off</c> (docs/TACTICS.md §5.9).</summary>
+	public string Mode;
+
 	public static GdpyrCommand Build(int barracks, int tier) =>
 		new() { Cmd = "build", Barracks = barracks, Tier = tier };
 
@@ -81,6 +84,12 @@ public sealed class GdpyrCommand
 
 	/// <summary>Everybody aboard each of <paramref name="vehicles"/> gets out round it, where it is.</summary>
 	public static GdpyrCommand Unload(int[] vehicles) => new() { Cmd = "unload", Units = vehicles };
+
+	/// <summary><paramref name="units"/> use tactics on their own, or do not (<c>on</c>, <c>off</c>; docs/TACTICS.md §5.9).</summary>
+	public static GdpyrCommand Autonomy(int[] units, string mode) => new() { Cmd = "autonomy", Units = units, Mode = mode };
+
+	/// <summary>What the side's new units start with.</summary>
+	public static GdpyrCommand AutonomyDefault(string mode) => new() { Cmd = "autonomy_default", Mode = mode };
 }
 
 /// <summary>
@@ -340,6 +349,13 @@ public sealed class GdpyrConnection : IDisposable
 	/// <summary>The bot AI a server from before H6 ran, which is what one that does not say is taken to run.</summary>
 	public const string LegacyBotAi = "legacy";
 
+	/// <summary>
+	/// What the strategist side's new units start with, <c>on</c> or <c>off</c>
+	/// (docs/TACTICS.md §5.9). A server that does not say predates it, and its units had
+	/// no tactics: <c>off</c>.
+	/// </summary>
+	public string UnitAutonomy { get; private set; } = "off";
+
 	public uint Tick { get; private set; }
 
 	/// <summary>What the last <c>step</c> reported about the seats this session holds.</summary>
@@ -379,6 +395,10 @@ public sealed class GdpyrConnection : IDisposable
 		BotAi = welcome.TryGetProperty("bot_ai", out JsonElement botAi) && botAi.ValueKind == JsonValueKind.String
 			? botAi.GetString()
 			: LegacyBotAi;
+		UnitAutonomy = welcome.TryGetProperty("unit_autonomy", out JsonElement autonomy)
+			&& autonomy.ValueKind == JsonValueKind.String
+				? autonomy.GetString()
+				: "off";
 		Tick = welcome.TryGetProperty("tick", out JsonElement tick) ? tick.GetUInt32() : 0;
 
 		Schema = ReadSchema(welcome);
@@ -580,6 +600,11 @@ public sealed class GdpyrConnection : IDisposable
 			writer.WriteNumber("vehicle", command.Vehicle);
 		}
 
+		if (command.Mode != null)
+		{
+			writer.WriteString("mode", command.Mode);
+		}
+
 		writer.WriteNumber("barracks", command.Barracks);
 		writer.WriteNumber("tier", command.Tier);
 		writer.WriteEndObject();
@@ -662,7 +687,7 @@ public sealed class GdpyrConnection : IDisposable
 
 	/// <summary>Puts a unit on the field for a scenario. Returns its unit id.</summary>
 	public async Task<int> SpawnUnitAsync(string unit, string team, float[] at, string order = "none",
-		CancellationToken cancel = default)
+		CancellationToken cancel = default, string autonomy = null)
 	{
 		JsonElement response = await RequestAsync(writer =>
 		{
@@ -671,6 +696,12 @@ public sealed class GdpyrConnection : IDisposable
 			writer.WriteString("team", team ?? "strategist");
 			writer.WriteString("order", order ?? "none");
 			WriteVector(writer, "at", at);
+
+			// The unit's micro-autonomy; left out, the side's default (docs/TACTICS.md §5.9).
+			if (autonomy != null)
+			{
+				writer.WriteString("autonomy", autonomy);
+			}
 		}, cancel).ConfigureAwait(false);
 
 		return response.GetProperty("unit").GetInt32();
@@ -684,7 +715,7 @@ public sealed class GdpyrConnection : IDisposable
 	/// that is not one, is full, or is the other side's.
 	/// </summary>
 	public async Task<int> SpawnAboardAsync(string unit, string team, int vehicle, int loaderSeat,
-		CancellationToken cancel = default)
+		CancellationToken cancel = default, string autonomy = null)
 	{
 		JsonElement response = await RequestAsync(writer =>
 		{
@@ -694,6 +725,10 @@ public sealed class GdpyrConnection : IDisposable
 			writer.WriteString("order", "none");
 			writer.WriteNumber("aboard", vehicle);
 			writer.WriteNumber("seat", loaderSeat);
+			if (autonomy != null)
+			{
+				writer.WriteString("autonomy", autonomy);
+			}
 		}, cancel).ConfigureAwait(false);
 
 		return response.GetProperty("unit").GetInt32();

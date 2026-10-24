@@ -40,13 +40,17 @@ public readonly struct UnitTraits
 	/// <summary>How far a defending unit will stray from its anchor before turning back.</summary>
 	public readonly float LeashRadiusMeters;
 
+	/// <summary>How it fights when it has the say (docs/TACTICS.md §3). Nothing in the brain reads it; the planner does.</summary>
+	public readonly UnitDoctrine Doctrine;
+
 	public UnitTraits(float sensorRadiusMeters, float engageRangeMeters, float arrivalRadiusMeters,
-		float leashRadiusMeters)
+		float leashRadiusMeters, UnitDoctrine doctrine = UnitDoctrine.None)
 	{
 		SensorRadiusMeters = MathF.Max(sensorRadiusMeters, 0f);
 		EngageRangeMeters = MathF.Max(engageRangeMeters, 0f);
 		ArrivalRadiusMeters = MathF.Max(arrivalRadiusMeters, 0.1f);
 		LeashRadiusMeters = MathF.Max(leashRadiusMeters, 0f);
+		Doctrine = doctrine;
 	}
 }
 

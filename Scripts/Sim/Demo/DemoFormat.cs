@@ -94,13 +94,17 @@ public static class DemoFormat
 	/// bits, and an aboard record's yaw field names its vehicle (docs/VEHICLES.md §6).
 	/// Every version-1 record has those bits clear and would decode the same; the bump
 	/// is this constant's own rule, that a change to a copied codec is one.
+	///
+	/// 3: the unit record is 14 bytes, its flag byte split into a body byte, with the
+	/// posture, and a flight byte (docs/TACTICS.md §5.8). A version-2 unit record would
+	/// misread from its twelfth byte on, so a version-2 demo is refused with its reason.
 	/// </summary>
-	public const byte Version = 2;
+	public const byte Version = 3;
 
 	/// <summary>
 	/// Ceiling on one recorded payload. Comfortably over the largest thing either
 	/// snapshot codec produces (<see cref="UnitSnapshotCodec.MaxPayloadBytes"/> is
-	/// 837), and the bound on what a corrupt length field can ask a reader to
+	/// 901), and the bound on what a corrupt length field can ask a reader to
 	/// allocate.
 	/// </summary>
 	public const int MaxPayloadBytes = 4096;

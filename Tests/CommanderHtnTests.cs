@@ -1025,6 +1025,10 @@ public class CommanderHtnTests
 		Assert.Equal(Home, intent.Point);
 		Assert.Equal(SquadMission.Resupply, intent.Mission);
 
+		// Falling back on the board, so its units do not stop to take cover from fire on
+		// the way home (docs/TACTICS.md §5.6).
+		Assert.Equal(SquadPhase.FallingBack, intent.Phase);
+
 		// Production goes to it until it is back above 70 % of what it was: one
 		// rifleman makes 150 of 200, and the next goes elsewhere.
 		ushort fresh = rig.Add(Vector3.Zero);
@@ -1439,6 +1443,7 @@ public class CommanderHtnTests
 		squad.Tick();
 		Assert.Equal(CommandGoal.Refill, squad.Goal);
 		Assert.Equal(squad.C.SupplyPoint, squad.C.Intent.Point);
+		Assert.Equal(SquadPhase.FallingBack, squad.C.Intent.Phase);
 
 		// Home, and healing: it is not merged while it heals.
 		squad.C.AtHome = true;

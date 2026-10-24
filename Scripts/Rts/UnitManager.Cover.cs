@@ -1,5 +1,6 @@
 using System;
 using Gdpyr.Sim;
+using Gdpyr.Sim.Htn;
 using Godot;
 
 namespace Gdpyr.Rts;
@@ -78,12 +79,14 @@ public partial class UnitManager
 
 	/// <summary>
 	/// A cover search for one unit against a threat standing at <paramref name="threat"/>:
-	/// its own body's numbers, and the spots every other unit on its side has taken.
+	/// its own body's numbers, and the spots every other unit on its side has taken. The
+	/// body a box must hide is the one it has now, crouched or standing
+	/// (docs/TACTICS.md §5.8); the eye it fires from is its standing one, as it stands to
+	/// shoot.
 	/// </summary>
 	private CoverQuery UnitCoverQuery(Unit unit, Vector3 threat, bool mustFire, float searchMeters)
 	{
-		UnitDefinition definition = unit.Definition;
-		float height = definition?.HeightMeters ?? 1.8f;
+		UnitBody body = unit.Body;
 		return new CoverQuery
 		{
 			From = unit.GlobalPosition,
@@ -91,9 +94,9 @@ public partial class UnitManager
 			ThreatEyeMeters = CoverThreatEyeMeters,
 			ThreatAimMeters = CoverThreatChestMeters,
 			SearchMeters = searchMeters,
-			BodyRadiusMeters = definition?.RadiusMeters ?? 0.4f,
-			ProtectMeters = height * 0.5f,
-			EyeMeters = definition?.EyeHeightMeters ?? 1.5f,
+			BodyRadiusMeters = body.RadiusMeters,
+			ProtectMeters = body.ProtectMeters(unit.Posture),
+			EyeMeters = body.EyeHeight(UnitPosture.Standing),
 			MustFire = mustFire,
 			MinThreatMeters = mustFire ? CoverMinThreatMeters : 0f,
 			MaxThreatMeters = mustFire ? unit.Traits.EngageRangeMeters : 0f,
@@ -157,6 +160,11 @@ public partial class UnitManager
 			return false;
 		}
 
+		if (!CoverBoard.OnTheWay(at, query))
+		{
+			return false;
+		}
+
 		if (!query.MustFire)
 		{
 			return true;
@@ -169,6 +177,70 @@ public partial class UnitManager
 
 	private bool IsLow(int box, in CoverQuery query) =>
 		Cover.HeightOf(box) <= query.EyeMeters - CoverBoard.FireClearanceMeters;
+
+	/// <summary>
+	/// The unit's spot behind cover from where it was fired upon (docs/TACTICS.md §5.1), on
+	/// its scan, when it is one that reacts: micro-autonomy on, a doctrine, rounds in the
+	/// window, an order it reacts under, and nothing of its own to fight from cover. A low
+	/// wall it can fire over within <see cref="ReactCoverSearchMeters"/>, else anything
+	/// that hides it within <see cref="ReactHideSearchMeters"/>; on its way when its order
+	/// goes somewhere. A unit that must stand on a point does not leave it for one.
+	/// </summary>
+	private bool SenseFireCover(Unit unit, UnitContext plan, in UnitOrder order, uint tick, bool objective,
+		Vector3 point, bool holds)
+	{
+		plan.HasFireCoverPoint = false;
+		bool reacts = unit.Autonomy == MicroAutonomy.On && unit.Traits.Doctrine != UnitDoctrine.None
+			&& Cover.Count > 0 && FiredUpon.IsRecent(unit.Fire, tick)
+			&& order.Kind is not (OrderKind.Build or OrderKind.Embark or OrderKind.Unload)
+			&& (unit.TargetOwnerId == OwnerId.None || UnitContext.FightsOnTheWay(order.Kind))
+			&& !(objective && holds);
+		if (!reacts)
+		{
+			return false;
+		}
+
+		// Never round a box towards the fire: the walk to such a spot is down the line of it.
+		CoverQuery query = UnitCoverQuery(unit, FiredFromFeet(unit), mustFire: true, ReactCoverSearchMeters);
+		query.MinThreatMeters = 0f;
+		query.MaxThreatMeters = 0f;
+		query.StaySameSide = true;
+		if (UnitContext.GoesSomewhere(order.Kind))
+		{
+			query.HasToward = true;
+			query.Toward = OrderToward(plan, order, objective, point);
+			query.MaxBackMeters = ReactBackMeters;
+			query.MaxOffLineMeters = ReactOffLineMeters;
+		}
+
+		if (!UpdateUnitCover(unit, query, out CoverSpot spot))
+		{
+			query.MustFire = false;
+			query.SearchMeters = ReactHideSearchMeters;
+			if (!UpdateUnitCover(unit, query, out spot))
+			{
+				return false;
+			}
+		}
+
+		plan.HasFireCoverPoint = true;
+		plan.FireCoverPoint = spot.Position;
+		return true;
+	}
+
+	/// <summary>
+	/// Where an order that goes somewhere (<see cref="UnitContext.GoesSomewhere"/>) is
+	/// going now: the point it attacks, the end of the patrol it walks to, the advance's
+	/// next point, or the move's target.
+	/// </summary>
+	private static Vector3 OrderToward(UnitContext plan, in UnitOrder order, bool objective, Vector3 point) =>
+		objective ? point
+		: order.Kind == OrderKind.Patrol && order.Returning ? order.Anchor
+		: order.Kind == OrderKind.Attack ? plan.AdvancePoint
+		: order.Target;
+
+	/// <summary>The feet of whoever fired the latest round at the unit, as it reckons it: a standing body's eye below where the round came from.</summary>
+	private static Vector3 FiredFromFeet(Unit unit) => unit.Fire.Origin + (Vector3.Down * CoverThreatEyeMeters);
 
 	/// <summary>The board and its use, for the debug HUD: map boxes, sandbag walls, units holding a spot.</summary>
 	public string DescribeCover()
@@ -200,6 +272,18 @@ public partial class UnitManager
 
 	/// <summary>How far a builder under fire will go to get something between it and the shooter.</summary>
 	public const float BuilderCoverSearchMeters = 15f;
+
+	/// <summary>How far a unit fired upon goes for a low wall it can fire back over (docs/TACTICS.md §5.1).</summary>
+	public const float ReactCoverSearchMeters = 10f;
+
+	/// <summary>How far it goes for anything that hides it, when no such wall is in reach.</summary>
+	public const float ReactHideSearchMeters = 6f;
+
+	/// <summary>How much further from where its order goes than it stands a spot may be: cover on the way, not behind.</summary>
+	public const float ReactBackMeters = 3f;
+
+	/// <summary>How far off the line to where its order goes a spot may be.</summary>
+	public const float ReactOffLineMeters = 6f;
 
 	/// <summary>How far past its ring's far side a unit on a defended ring looks for a wall to stand behind.</summary>
 	public const float PostCoverSearchMeters = 5f;

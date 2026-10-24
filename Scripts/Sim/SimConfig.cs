@@ -202,7 +202,7 @@ public static class SimConfig
 	/// Units alive at once, server-wide. The design budgets for fifty
 	/// (docs/IMPLEMENTATION_PLAN.md §M3); the pool is sized a little over that so
 	/// the cap is a decision and not an accident, and it also bounds one unit
-	/// snapshot to 837 bytes — one datagram.
+	/// snapshot to 901 bytes — one datagram.
 	/// </summary>
 	public const int MaxUnits = 64;
 

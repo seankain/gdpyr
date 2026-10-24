@@ -470,7 +470,7 @@ obtained by cheating is not a result about this game.
 | `op` | Direction | Purpose |
 |---|---|---|
 | `hello` | → | protocol version, observation format, token |
-| `welcome` | ← | tick rate, build id, observation schema, current seed, and `bot_ai` — what the server's bots decide with, `legacy` or `htn` ([`HTN_BOTS.md`](HTN_BOTS.md) §8, D5; added in H6, and absent from a server that predates it, whose bots were legacy) |
+| `welcome` | ← | tick rate, build id, observation schema, current seed, `bot_ai` — what the server's bots decide with, `legacy` or `htn` ([`HTN_BOTS.md`](HTN_BOTS.md) §8, D5; added in H6, and absent from a server that predates it, whose bots were legacy) — and `unit_autonomy`, what the strategist side's new units start with, `on` or `off` ([`TACTICS.md`](TACTICS.md) §5.9; absent from a server that predates it, whose units had no tactics: off) |
 | `config` | → | `mode` (realtime/stepped), `step_timeout_ms`, feature planes on/off |
 | `list_seats` | → ← | every roster slot: peer id, team, controller (human/bot/agent), alive |
 | `list_units` | → ← | a strategist seat's army, in the order its observation carries it, **with the ids an order names** (§7.5) |
@@ -587,6 +587,23 @@ rather than order kinds on purpose: `OrderFromName` turns a kind it does not kno
 `"kind":"embark"` sent to an older server would march the units to the origin, whereas a `cmd` it
 does not know is skipped.
 
+`autonomy` and `autonomy_default` set micro-autonomy ([`TACTICS.md`](TACTICS.md) §5.9): whether
+units use tactics on their own, per unit, and what the side's new units start with. They go through
+`UnitManager.ServerSetAutonomy` and `ServerAutonomyDefault`, the checks a person's selection card
+gets — a strategist seat, the side's own units, a mode that exists — and a rejection is counted in
+`RejectedOrders` as an order's is:
+
+```json
+{"cmd":"autonomy","units":[12,13],"mode":"on"}
+{"cmd":"autonomy_default","mode":"off"}
+```
+
+A `mode` other than `on` or `off` skips the command, as an unknown `cmd` is skipped. The setting
+is a fact the unit's planner observes; it changes nothing under `--bot-ai legacy`, which plans
+nothing. A new round starts from the server's default again (`--unit-autonomy`, else the game
+mode's, off until TACTICS.md T8), whatever the last round set. The observation does not carry the
+mode yet: it joins the unit block, with a schema bump, in TACTICS.md T8.
+
 **Shipped**, with the two parity wrappers the sketch named — `ServerCancelBuild(peerId, index)` and
 `ServerSetRally(peerId, index, point)` — plus three things worth writing down:
 
@@ -675,6 +692,8 @@ from position deltas and gets it slightly wrong.
 | `node_contested` | node, owner, contested, ticks — a node's contest (both sides inside its radius) started (`contested` 1) or ended (0, with `ticks` it lasted). Either bot AI (H6) |
 | `unit_embarked` / `unit_disembarked` | unit, vehicle, tier (the passenger's), x, z — a unit got into a vehicle (at the vehicle) or out of one (where it got out): an unload, or thrown out alive from a wreck ([`VEHICLES.md`](VEHICLES.md) §10) |
 | `dropship_landed` | unit, aboard, x, z — a dropship touched down, with how many were aboard ([`VEHICLES.md`](VEHICLES.md) §8.2) |
+| `unit_task` | unit, tier, goal, x, z — a unit started one of the tactics of [`TACTICS.md`](TACTICS.md) §5, by its `UnitGoal` number, a protocol constant from here on: 18 take cover from fire, 19 return fire, 20 throw a grenade at an enemy hidden behind cover; where it was when it started. Only a unit whose micro-autonomy is on, under `--bot-ai htn` |
+| `grenade_thrown` | thrower (owner id), tier (its catalog id; −1 for a player), hidden (1 when a unit threw at something hidden from it — behind a wall with only its head showing, out of sight where a gunner is still firing, or, under micro-autonomy, an enemy the side knows is crouched behind cover — 0 when it could see it, −1 for a player, whose aim is its own), x, z (where the thrower stood) — a hand grenade left somebody's hand ([`NETCODE.md`](NETCODE.md) §10.9, [`TACTICS.md`](TACTICS.md) §5.4). Either bot AI |
 
 **A vehicle destroyed with passengers aboard** is several `unit_lost` records on one tick, all
 naming the killer: on the ground each passenger is thrown out (a `unit_disembarked`) and dealt half
@@ -777,6 +796,15 @@ two and no `seat` to choose between them. What only the server knows it refuses 
 its vehicle (an `aboard` spawn's `team` defaults to `strategist`, as every unit spawn's does), and one
 rider more than the vehicle seats.
 
+**A unit spawn can name its micro-autonomy** ([`TACTICS.md`](TACTICS.md) §5.9): `"autonomy": "on"`
+or `"off"`, through the `spawn` op's field of the same name; left out, the unit starts with the
+side's default for new units. So can the scenario, for every unit the round makes: `"unit_autonomy":
+"on"` starts the harness's server with `--unit-autonomy on`, and `--unit-autonomy` on the harness's
+command line overrides it, as `--bot-ai` overrides `bot_ai` — which is how one file's claims about
+the tactics are checked with them off. A server already listening (`--attach`) whose `welcome`
+names another default is a harness error, not a run. Anything but `on` or `off`, and an `autonomy` on
+a seat or a structure, are refused when the file is read.
+
 **A strategist seat's script is commands, not input.** Its steps carry `commands` instead of
 `move`, `look` and `buttons`, naming units by spawn label:
 
@@ -787,8 +815,9 @@ rider more than the vehicle seats.
    {"ticks":780,"commands":[{"cmd":"unload","units":["truck"]}]}]}}
 ```
 
-`cmd` is `embark` (with a `vehicle` label), `unload`, or `order` (with a `kind` of `move`, `attack`,
-`patrol`, `defend` or `stop`, and a `target` `[x, z]` unless it is `stop`). A step's commands are
+`cmd` is `embark` (with a `vehicle` label), `unload`, `order` (with a `kind` of `move`, `attack`,
+`patrol`, `defend` or `stop`, and a `target` `[x, z]` unless it is `stop`), `autonomy` (units and a
+`mode` of `on` or `off`) or `autonomy_default` (a `mode`, and no units). A step's commands are
 sent once, through `act` (§7.4), on the step's first tick — each pass of a repeating script enters
 its steps again — and apply on the server's next tick; a step with no commands holds. In the warm-up
 the seat sends one empty command list, which takes it from its bot — a seat that has never acted
@@ -950,6 +979,7 @@ The same rule the rest of the codebase follows: the interesting part is engine-f
 | Event filters: only matching events count, nothing matching reads zero, a field, kind or operator nothing answers to fails; a scenario's `bot_ai` | `Tests/ScenarioTests.cs` | H6 |
 | Every checked-in scenario parses, and every `events.*` metric in it names a kind, field and aggregate that exist | `Tests/ScenarioTests.cs` | H6 |
 | The harness knows every event kind and every field of each that the game's schema publishes; `squad_task`'s goal numbers | `Tests/AgentEventTests.cs` | H6 |
+| `autonomy` and `autonomy_default` keep their numbers after the vehicle commands; `grenade_thrown` and `unit_task` after the vehicle events, and `unit_task`'s goal numbers; a scenario's and a spawn's `autonomy`, the script commands, and each malformed one as a sentence | `Tests/AgentEventTests.cs`, `Tests/ScenarioTests.cs` | TACTICS T0–T2 |
 
 One test is not engine-free and is worth the exception: the **divergence probe** of §3 — two seeded
 600-tick episodes against one headless server, comparing `state_hash` per tick and reporting the

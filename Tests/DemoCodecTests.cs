@@ -79,17 +79,19 @@ public class DemoCodecTests
 		Assert.False(DemoHeader.TryDecode(ReadOnlySpan<byte>.Empty, out _, out _));
 	}
 
-	[Fact]
-	public void TheVersionIsTwo_SinceTheUnitRecordCarriesPassengers()
+	[Theory]
+	[InlineData(1)]
+	[InlineData(2)]
+	public void TheVersionIsThree_SinceTheUnitRecordCarriesPosture_AndAnOlderDemoIsRefusedWithItsReason(int older)
 	{
-		// docs/VEHICLES.md §6.2: a change to a copied codec is a version bump, and a
-		// version-1 demo is refused rather than read through the new rule.
-		Assert.Equal(2, DemoFormat.Version);
+		// docs/TACTICS.md §5.8: the unit record is 14 bytes, its flag byte split in two;
+		// a version-2 demo's 13-byte records would misread, so it is refused, saying why.
+		Assert.Equal(3, DemoFormat.Version);
 
 		DemoHeader old = Header();
-		old.Version = 1;
+		old.Version = (byte)older;
 		Assert.False(old.IsPlayable(out string reason));
-		Assert.Contains("version", reason);
+		Assert.Equal($"demo format version {older}; this build reads 3", reason);
 	}
 
 	[Fact]

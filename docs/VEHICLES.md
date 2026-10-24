@@ -379,6 +379,10 @@ rider at its vehicle's position, which pinning makes true, and `list_units` says
 
 ### 6.1 The unit record stays 13 bytes
 
+*Since the tactics plan's T3 the record is 14 bytes, its flag byte split into a body byte and a
+flight byte ([`NETCODE.md`](NETCODE.md) §6.1, [`TACTICS.md`](TACTICS.md) §5.8). What follows is the
+layout this phase built.*
+
 `UnitFlags` (`Scripts/Sim/UnitSnapshot.cs:50`) has state in bits 0–1 (all four `UnitStateId`
 values taken) and team in bit 2; bits 3–7 are free and today's decoders mask them off.
 

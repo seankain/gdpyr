@@ -69,6 +69,66 @@ public class TrainedUnitResourceTests
 		Assert.True(Int(lmg, "MagazineSize") / Float(lmg, "RoundsPerMinute") * 60f >= 15f);
 	}
 
+	[Theory]
+	[InlineData("infantry", Gdpyr.Sim.UnitDoctrine.Rifleman)]
+	[InlineData("heavy_gunner", Gdpyr.Sim.UnitDoctrine.Gunner)]
+	[InlineData("sniper", Gdpyr.Sim.UnitDoctrine.Marksman)]
+	[InlineData("builder", Gdpyr.Sim.UnitDoctrine.None)]
+	[InlineData("technical", Gdpyr.Sim.UnitDoctrine.None)]
+	[InlineData("tank", Gdpyr.Sim.UnitDoctrine.None)]
+	[InlineData("supply_truck", Gdpyr.Sim.UnitDoctrine.None)]
+	[InlineData("dropship", Gdpyr.Sim.UnitDoctrine.None)]
+	public void EveryUnit_SaysHowItFights(string unit, Gdpyr.Sim.UnitDoctrine doctrine)
+	{
+		// docs/TACTICS.md §3: named in every file, not left to the export's default.
+		Assert.Equal((int)doctrine, Int(Resource($"Units/{unit}.tres"), "Doctrine"));
+	}
+
+	[Fact]
+	public void EveryUnitInTheCatalog_NamesItsDoctrine()
+	{
+		// A unit added to the catalog without one would play as a rifleman by default.
+		foreach (string path in CatalogPaths("Scripts/Core/UnitCatalog.cs"))
+		{
+			Assert.True(Resource(path["res://".Length..]).ContainsKey("Doctrine"), $"{path} names no Doctrine");
+		}
+	}
+
+	[Theory]
+	[InlineData("infantry")]
+	[InlineData("heavy_gunner")]
+	[InlineData("sniper")]
+	[InlineData("builder")]
+	public void EveryUnitOnFoot_CrouchesBelowASandbagWall(string unit)
+	{
+		// docs/TACTICS.md §5.8: crouched, the whole body and the eye are under the wall's
+		// top, so it is hidden behind one, and blind over it.
+		Dictionary<string, string> definition = Resource($"Units/{unit}.tres");
+		float wall = WallHeight();
+
+		Assert.Equal(1.0f, Float(definition, "CrouchHeightMeters"));
+		Assert.Equal(0.85f, Float(definition, "CrouchEyeHeightMeters"));
+		Assert.True(Float(definition, "CrouchHeightMeters") < wall);
+		Assert.True(Float(definition, "CrouchHeightMeters") < Float(definition, "HeightMeters"));
+		Assert.True(Float(definition, "HeightMeters") > wall, "standing, its head shows");
+	}
+
+	[Theory]
+	[InlineData("technical")]
+	[InlineData("tank")]
+	[InlineData("supply_truck")]
+	[InlineData("dropship")]
+	public void NoVehicleCrouches(string unit)
+	{
+		Assert.False(Resource($"Units/{unit}.tres").ContainsKey("CrouchHeightMeters"));
+	}
+
+	private static float WallHeight()
+	{
+		string size = Resource("Structures/sandbag_wall.tres")["BodySize"];
+		return float.Parse(size.Split('(', ')')[1].Split(',')[1], System.Globalization.CultureInfo.InvariantCulture);
+	}
+
 	[Fact]
 	public void NoOtherUnitSuppresses()
 	{

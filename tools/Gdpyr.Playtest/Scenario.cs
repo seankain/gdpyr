@@ -46,7 +46,10 @@ public struct ScriptStep
 public sealed class ScriptCommand
 {
 	/// <summary>The names the step type knows.</summary>
-	public static readonly string[] Names = { "embark", "unload", "order" };
+	public static readonly string[] Names = { "embark", "unload", "order", "autonomy", "autonomy_default" };
+
+	/// <summary>The modes an <c>autonomy</c> or <c>autonomy_default</c> command names (docs/TACTICS.md §5.9).</summary>
+	public static readonly string[] Modes = { "on", "off" };
 
 	/// <summary>The order kinds an <c>order</c> may name, as the control plane spells them.</summary>
 	public static readonly string[] OrderKinds = { "move", "attack", "patrol", "defend", "stop" };
@@ -64,6 +67,9 @@ public sealed class ScriptCommand
 
 	/// <summary>For an order: where, as <c>[x, z]</c>.</summary>
 	public float[] Target = Array.Empty<float>();
+
+	/// <summary>For <c>autonomy</c> and <c>autonomy_default</c>: one of <see cref="Modes"/>.</summary>
+	public string Mode;
 }
 
 /// <summary>
@@ -206,6 +212,12 @@ public sealed class ScenarioSpawn
 
 	public string Order = "none";
 
+	/// <summary>
+	/// A unit spawn's micro-autonomy, <c>on</c> or <c>off</c> (docs/TACTICS.md §5.9); null
+	/// for the side's default for new units.
+	/// </summary>
+	public string Autonomy;
+
 	public float[] At = { 0f, 0f, 0f };
 
 	public float[] Look = { 0f, 0f };
@@ -274,6 +286,14 @@ public sealed class Scenario
 	/// line overrides it, which is how the same claim is checked against the other.
 	/// </summary>
 	public string BotAi;
+
+	/// <summary>
+	/// What the strategist side's new units start with, <c>on</c> or <c>off</c>
+	/// (docs/TACTICS.md §5.9); null for the server's default. A scenario that makes a
+	/// claim about the tactics names it; <c>--unit-autonomy</c> on the command line
+	/// overrides it, which is how the same claim is checked without them.
+	/// </summary>
+	public string UnitAutonomy;
 
 	public List<ScenarioSeat> Seats = new();
 
@@ -363,6 +383,17 @@ public sealed class Scenario
 				}
 
 				scenario.BotAi = named;
+			}
+
+			if (root.TryGetProperty("unit_autonomy", out JsonElement unitAutonomy))
+			{
+				string named = unitAutonomy.ValueKind == JsonValueKind.String ? unitAutonomy.GetString() : null;
+				if (Array.IndexOf(ScriptCommand.Modes, named) < 0)
+				{
+					throw new ScenarioException($"'{scenario.Name}': 'unit_autonomy' is \"on\" or \"off\"");
+				}
+
+				scenario.UnitAutonomy = named;
 			}
 
 			ReadSeats(scenario, root);
@@ -577,6 +608,7 @@ public sealed class Scenario
 				Units = Labels(scenario, element, "units"),
 				Vehicle = Text(element, "vehicle", null),
 				Target = Numbers(element, "target", Array.Empty<float>()),
+				Mode = Text(element, "mode", null),
 			};
 
 			if (Array.IndexOf(ScriptCommand.Names, command.Cmd) < 0)
@@ -586,10 +618,17 @@ public sealed class Scenario
 					+ $" not '{command.Cmd ?? "nothing"}'");
 			}
 
-			if (command.Units.Length == 0)
+			// The side's default for new units names no units; everything else does.
+			if (command.Units.Length == 0 && command.Cmd != "autonomy_default")
 			{
 				throw new ScenarioException(
 					$"'{scenario.Name}': a '{command.Cmd}' command names its units by spawn label, in 'units'");
+			}
+
+			if (command.Cmd is "autonomy" or "autonomy_default" && Array.IndexOf(ScriptCommand.Modes, command.Mode) < 0)
+			{
+				throw new ScenarioException(
+					$"'{scenario.Name}': an '{command.Cmd}' command's 'mode' is \"on\" or \"off\"");
 			}
 
 			if (command.Cmd == "embark" && command.Vehicle == null)
@@ -739,6 +778,7 @@ public sealed class Scenario
 				Yaw = (float)Number(element, "yaw", 0.0),
 				Team = Text(element, "team", "strategist"),
 				Order = Text(element, "order", "none"),
+				Autonomy = Text(element, "autonomy", null),
 				At = Numbers(element, "at", new[] { 0f, 0f, 0f }),
 				Look = Numbers(element, "look", new[] { 0f, 0f }),
 				Id = Text(element, "id", null),
@@ -752,6 +792,12 @@ public sealed class Scenario
 				throw new ScenarioException(
 					$"'{scenario.Name}': a spawn names exactly one of a 'peer' (a seat to place), a 'unit'"
 					+ " or a 'structure'");
+			}
+
+			if (spawn.Autonomy != null && (spawn.Unit == null || Array.IndexOf(ScriptCommand.Modes, spawn.Autonomy) < 0))
+			{
+				throw new ScenarioException(
+					$"'{scenario.Name}': a spawn's 'autonomy' is \"on\" or \"off\", and only a unit has one");
 			}
 
 			CheckVehicleFields(scenario, spawn);

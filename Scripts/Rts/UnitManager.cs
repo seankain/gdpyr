@@ -271,6 +271,7 @@ public partial class UnitManager : Node
 	public void ServerTick(uint tick)
 	{
 		EnsureStarted(server: true);
+		EnsureAutonomy();
 
 		ServerBuild(tick);
 		ResolveAi();
@@ -312,6 +313,7 @@ public partial class UnitManager : Node
 		if (tick % BarracksReportIntervalTicks == 0)
 		{
 			BroadcastBarracksState(tick);
+			SendAutonomyState();
 		}
 	}
 
@@ -490,7 +492,7 @@ public partial class UnitManager : Node
 			// names a player is a flight to where the click was (docs/VEHICLES.md §8.1).
 			if (unit.Traits.EngageRangeMeters > 0f)
 			{
-				AcquireTarget(unit);
+				AcquireTarget(unit, tick);
 			}
 
 			if (plan != null)
@@ -523,6 +525,20 @@ public partial class UnitManager : Node
 			hasTarget = Suppress(unit, tick, ref targetPoint, ref targetVelocity, ref targetDistance);
 		}
 
+		// Under micro-autonomy, a unit with nothing to shoot fires back at where fire came
+		// from when its plan says to (docs/TACTICS.md §5.1) — last tick's plan, as the
+		// squad focus is: a place, so nobody's focus and nothing to throw a grenade at.
+		bool firingAtPlace = false;
+		if (!hasTarget && plan is { Intent.FireAt: true })
+		{
+			firingAtPlace = hasTarget = FireAtPlace(unit, plan.Intent.FirePoint, ref targetPoint, ref targetVelocity,
+				ref targetDistance);
+		}
+
+		// What its weapon is doing, for a plan that crouches to reload in cover
+		// (docs/TACTICS.md §5.8).
+		plan?.SenseWeapon(unit.Weapon.IsReloading);
+
 		// Resolved before the plan looks at the order: a finished site stands the
 		// builder down this tick.
 		Structure site = unit.Order.Kind == OrderKind.Build ? ResolveBuildOrder(unit) : null;
@@ -536,8 +552,8 @@ public partial class UnitManager : Node
 		bool followsOrder = true;
 		if (plan != null)
 		{
-			destination = Planned(unit, plan, tick, hasTarget, targetPoint, out hasDestination, out holdsWhileEngaging,
-				out followsOrder);
+			destination = Planned(unit, plan, tick, hasTarget, firingAtPlace, targetPoint, out hasDestination,
+				out holdsWhileEngaging, out followsOrder);
 		}
 		else
 		{
@@ -545,6 +561,10 @@ public partial class UnitManager : Node
 				unit.Traits, out hasDestination);
 			holdsWhileEngaging = UnitBrain.HoldsWhileEngaging(unit.Order.Kind);
 		}
+
+		// Crouched or standing, as its plan says this tick (docs/TACTICS.md §5.8): legacy
+		// plans nothing, and stands.
+		unit.TakePosture(plan is { Intent.Crouch: true } ? UnitPosture.Crouched : UnitPosture.Standing);
 
 		// A builder with a site to work on works on it whenever it is in reach, and
 		// stands still to do it (docs/NETCODE.md §10.5). The structure counts it. One
@@ -596,7 +616,12 @@ public partial class UnitManager : Node
 		unit.FaceTowards(hasTarget ? targetPoint : working ? site.Pose.Base : destination, SimConfig.TickDelta);
 
 		ServerFire(unit, tick, hasTarget, targetPoint, targetVelocity);
-		ServerThrow(unit, tick, hasTarget, targetPoint, targetVelocity);
+		ServerThrow(unit, tick, hasTarget && !firingAtPlace, targetPoint, targetVelocity);
+		if (plan is { Intent.ThrowAt: true })
+		{
+			ThrowAtHidden(unit, plan, tick);
+		}
+
 		ServerResupply(unit, tick);
 	}
 
@@ -663,7 +688,9 @@ public partial class UnitManager : Node
 			return;
 		}
 
-		bool pullingTrigger = hasTarget && unit.State == UnitStateId.Engaging;
+		// A crouched unit does not fire — it stands to shoot (docs/TACTICS.md §5.8) — and
+		// its weapon still steps, so a reload runs on behind the wall.
+		bool pullingTrigger = hasTarget && unit.State == UnitStateId.Engaging && unit.Posture == UnitPosture.Standing;
 		InputButtons buttons = pullingTrigger ? InputButtons.Fire : InputButtons.None;
 
 		var frame = InputFrame.Create(tick, 0f, 0f, unit.Yaw, 0f, buttons);
@@ -712,6 +739,7 @@ public partial class UnitManager : Node
 		// arc is a few thousand integration steps, and a throw a sixth of a second late
 		// at somebody standing still lands in the same place.
 		if (!hasTarget || unit.State != UnitStateId.Engaging || !unit.Grenades.HasAny
+			|| unit.Posture != UnitPosture.Standing
 			|| (tick + unit.UnitId) % (uint)SimConfig.UnitTargetRefreshTicks != 0
 			|| CombatManager.Instance is not { } combat)
 		{
@@ -751,10 +779,7 @@ public partial class UnitManager : Node
 			return;
 		}
 
-		int owner = OwnerId.ForUnit(unit.UnitId);
-		Vector3 direction = Spread.Apply(aim, unit.Definition?.AccuracyConeRadians ?? 0f,
-			Spread.Seed(owner, WeaponCatalog.HandGrenade, unit.Grenades.Thrown));
-		combat.SpawnProjectile(tick, owner, WeaponCatalog.HandGrenade, eye, direction, catchUpTicks: 0);
+		LaunchGrenade(unit, combat, tick, aim, situation.TargetInCover);
 	}
 
 	/// <summary>
@@ -762,7 +787,7 @@ public partial class UnitManager : Node
 	/// has while that is still true. One line-of-sight ray per unit per scan, which
 	/// at fifty units and a ten-tick stagger is five rays a tick.
 	/// </summary>
-	private void AcquireTarget(Unit unit)
+	private void AcquireTarget(Unit unit, uint tick)
 	{
 		CombatManager combat = CombatManager.Instance;
 		if (combat == null)
@@ -787,13 +812,35 @@ public partial class UnitManager : Node
 			}
 		}
 
+		// Under micro-autonomy, whoever last fired at it next (docs/TACTICS.md §4.1): it
+		// shoots back at its shooter when it can see them, by the focus's rule below —
+		// one ray, which replaces the search's when it is clear.
+		int shooter = unit.Plan != null && unit.Autonomy == MicroAutonomy.On && FiredUpon.IsRecent(unit.Fire, tick)
+			? PeerId(unit.Fire.ShooterOwnerId)
+			: 0;
+		int blockedShooter = 0;
+		if (shooter != 0 && combat.Find(shooter) is { Character: not null, IsAlive: true } fired
+			&& fired.Team != unit.Team
+			&& UnitBrain.CanAcquire(eye.DistanceTo(fired.Character.EyePosition), unit.Traits))
+		{
+			if (HasLineOfSight(eye, fired.Character.EyePosition))
+			{
+				unit.TargetOwnerId = OwnerId.ForPeer(shooter);
+				unit.AimsHigh = AimsHigh(unit, eye, fired);
+				return;
+			}
+
+			blockedShooter = shooter;
+		}
+
 		// Under --bot-ai htn, the squad's focus next (docs/HTN_BOTS.md §5.2): a target
 		// a squad-mate holds, taken when this unit's sensor has it with a clear line.
 		// Its one ray replaces the search's when it is clear; when it is not, the search
 		// skips that player rather than paying for the same ray twice.
 		int focused = PeerId(unit.Plan?.Intent.TargetOwnerId ?? OwnerId.None);
 		int blocked = 0;
-		if (focused != 0 && combat.Find(focused) is { Character: not null, IsAlive: true } focus
+		if (focused != 0 && focused != blockedShooter
+			&& combat.Find(focused) is { Character: not null, IsAlive: true } focus
 			&& focus.Team != unit.Team
 			&& UnitBrain.CanAcquire(eye.DistanceTo(focus.Character.EyePosition), unit.Traits))
 		{
@@ -814,7 +861,7 @@ public partial class UnitManager : Node
 		{
 			PlayerCombat player = combat.PlayerAt(i);
 			if (player?.Character == null || !player.IsAlive || player.Team == unit.Team
-				|| (blocked != 0 && player.PeerId == blocked))
+				|| (blocked != 0 && player.PeerId == blocked) || (blockedShooter != 0 && player.PeerId == blockedShooter))
 			{
 				continue;
 			}
@@ -863,6 +910,25 @@ public partial class UnitManager : Node
 		point = at;
 		velocity = Vector3.Zero;
 		distance = eye.DistanceTo(at);
+		return true;
+	}
+
+	/// <summary>
+	/// Where a unit firing back at a place aims (docs/TACTICS.md §5.1): the point, while
+	/// it is inside the unit's engage range. Not led — it is a place.
+	/// </summary>
+	private static bool FireAtPlace(Unit unit, Vector3 at, ref Vector3 point, ref Vector3 velocity, ref float distance)
+	{
+		Vector3 eye = unit.EyePosition;
+		float range = eye.DistanceTo(at);
+		if (range > unit.Traits.EngageRangeMeters)
+		{
+			return false;
+		}
+
+		point = at;
+		velocity = Vector3.Zero;
+		distance = range;
 		return true;
 	}
 
@@ -1182,9 +1248,21 @@ public partial class UnitManager : Node
 		plan.ObjectivePoint = node;
 		plan.ObjectiveRadius = nodeRadius;
 
-		bool hasCover = SenseCover(unit, plan, order, nearest, nearestPoint,
+		// Cover from the fire when it is reacting to it (docs/TACTICS.md §5.1), else cover
+		// from the fight: one spot a unit, so one or the other.
+		bool hasFireCover = SenseFireCover(unit, plan, order, tick, objective, node, holds);
+		bool hasCover = !hasFireCover && SenseCover(unit, plan, order, tick, nearest, nearestPoint,
 			threat ? threatPoint : PlayerManager.Instance?.SpawnCentroid ?? order.Anchor, ringMeters,
 			objective, node, nodeRadius, holds, pointThreat);
+		if (hasFireCover)
+		{
+			plan.HasCoverPoint = false;
+		}
+
+		// A grenade at a hidden enemy (docs/TACTICS.md §5.4): on its way first, when its
+		// order goes somewhere.
+		SenseGrenade(unit, plan, order, tick, memory, UnitContext.GoesSomewhere(order.Kind),
+			OrderToward(plan, order, objective, node));
 
 		plan.FallbackPoint = plan.HasStaging ? plan.StagingPoint
 			: TryNearestRally(unit.Team, at, out Vector3 rally) ? rally
@@ -1213,6 +1291,8 @@ public partial class UnitManager : Node
 			HasCover = hasCover,
 			CoverHides = hasCover,
 			Objective = objective,
+			HasFireCover = hasFireCover,
+			FireCoverHides = hasFireCover,
 		});
 	}
 
@@ -1227,7 +1307,7 @@ public partial class UnitManager : Node
 	/// or hide from — what the <see cref="UnitFact.Cover"/> fact is about; a post behind
 	/// cover is just where its post is.
 	/// </summary>
-	private bool SenseCover(Unit unit, UnitContext plan, in UnitOrder order, bool nearest, Vector3 nearestPoint,
+	private bool SenseCover(Unit unit, UnitContext plan, in UnitOrder order, uint tick, bool nearest, Vector3 nearestPoint,
 		Vector3 ringThreat, float ringMeters, bool objective, Vector3 point, float pointRadius, bool holds,
 		Vector3 pointThreat)
 	{
@@ -1241,8 +1321,11 @@ public partial class UnitManager : Node
 		CoverSpot spot;
 		if (order.Kind == OrderKind.Build)
 		{
-			if (nearest && UpdateUnitCover(unit, UnitCoverQuery(unit, nearestPoint, mustFire: false,
-				BuilderCoverSearchMeters), out spot))
+			// From where it was shot at, under micro-autonomy, when it knows (docs/TACTICS.md
+			// §5.0.1); else from the nearest contact the side remembers, as before.
+			bool fired = unit.Autonomy == MicroAutonomy.On && FiredUpon.IsRecent(unit.Fire, tick);
+			if ((fired || nearest) && UpdateUnitCover(unit, UnitCoverQuery(unit, fired ? FiredFromFeet(unit) : nearestPoint,
+				mustFire: false, BuilderCoverSearchMeters), out spot))
 			{
 				return Use(spot);
 			}
@@ -1335,12 +1418,25 @@ public partial class UnitManager : Node
 	/// whether to stand to fight. An intent that follows the order asks
 	/// <see cref="UnitBrain.Destination"/>, as legacy does.
 	/// </summary>
-	private Vector3 Planned(Unit unit, UnitContext plan, uint tick, bool hasTarget, Vector3 targetPoint,
-		out bool hasDestination, out bool holdsWhileEngaging, out bool followsOrder)
+	private Vector3 Planned(Unit unit, UnitContext plan, uint tick, bool hasTarget, bool firingAtPlace,
+		Vector3 targetPoint, out bool hasDestination, out bool holdsWhileEngaging, out bool followsOrder)
 	{
 		plan.Tick = tick;
-		plan.Track(unit.GlobalPosition, unit.Order, hasTarget, targetPoint);
+		plan.SenseAutonomy(unit.Autonomy);
+		plan.SenseFire(FiredUpon.KindAt(unit.Fire, tick), unit.Fire.Origin, unit.Fire.LastTick, unit.Fire.LastHitTick);
+
+		// Firing back at a place is not a target of its own (docs/TACTICS.md §5.1): the
+		// plan that asked for it must not read it as one and end itself.
+		plan.Track(unit.GlobalPosition, unit.Order, hasTarget && !firingAtPlace, targetPoint);
+		UnitGoal before = plan.Intent.Goal;
 		_planning.Tick(plan);
+
+		// A unit starting one of the tactics of docs/TACTICS.md §5, for the agent stream.
+		if (plan.Intent.Goal != before && UnitContext.IsTactic(plan.Intent.Goal))
+		{
+			AgentEventBus.Emit(AgentEventKind.UnitTask, tick, unit.UnitId, unit.DefinitionId, (int)plan.Intent.Goal,
+				unit.GlobalPosition.X, unit.GlobalPosition.Z);
+		}
 
 		UnitIntent intent = plan.Intent;
 		followsOrder = intent.Goal == UnitGoal.None || intent.Move == UnitMove.Order;
@@ -2007,6 +2103,7 @@ public partial class UnitManager : Node
 				RidingIn = unit.IsAlive ? unit.RidingIn : (ushort)0,
 				Phase = unit.Phase,
 				CannotLand = unit.CannotLand,
+				Posture = unit.Posture,
 			};
 		}
 
@@ -2318,6 +2415,18 @@ public partial class UnitManager : Node
 			Position = position,
 		};
 
+		// What the side's new units start with (docs/TACTICS.md §5.9): on the authority
+		// the state, on a client the last the strategist's state message said.
+		if (team == Team.Strategist)
+		{
+			if (simulated)
+			{
+				EnsureAutonomy();
+			}
+
+			unit.Autonomy = AutonomyDefault;
+		}
+
 		_unitsRoot.AddChild(unit);
 		_units[id] = unit;
 		_ordered.Add(unit);
@@ -2423,6 +2532,9 @@ public partial class UnitManager : Node
 		HealthResupplied = 0f;
 		UnitsResupplied = 0;
 		_supplyCount = 0;
+		ResetFire();
+		ResetGrenades();
+		ResetAutonomy();
 	}
 
 	/// <summary>

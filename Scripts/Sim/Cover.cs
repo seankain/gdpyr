@@ -62,6 +62,30 @@ public struct CoverQuery
 
 	/// <summary>A spot further from the threat than this is not taken. Zero for no limit.</summary>
 	public float MaxThreatMeters;
+
+	/// <summary>
+	/// For a seeker on its way somewhere (docs/TACTICS.md §5.1): a spot must be on the way
+	/// to <see cref="Toward"/> — no further from it than <see cref="From"/> is plus
+	/// <see cref="MaxBackMeters"/>, and within <see cref="MaxOffLineMeters"/> of the line
+	/// from <see cref="From"/> to it, measured flat. Off unless set.
+	/// </summary>
+	public bool HasToward;
+
+	/// <inheritdoc cref="HasToward"/>
+	public Vector3 Toward;
+
+	/// <inheritdoc cref="HasToward"/>
+	public float MaxBackMeters;
+
+	/// <inheritdoc cref="HasToward"/>
+	public float MaxOffLineMeters;
+
+	/// <summary>
+	/// Only spots on the seeker's own side of their box: never one behind a box the seeker
+	/// stands in front of, towards the threat, which it would reach only by walking round
+	/// the box's end — along the line the fire is coming down (docs/TACTICS.md §5.1).
+	/// </summary>
+	public bool StaySameSide;
 }
 
 /// <summary>A place to stand behind one cover box.</summary>
@@ -253,6 +277,87 @@ public sealed class CoverBoard
 	}
 
 	/// <summary>
+	/// The first box on the board the segment from <paramref name="from"/> to
+	/// <paramref name="to"/> enters, and how far along the segment it does, as a
+	/// fraction in <paramref name="t"/>: -1 and 1 when it enters none. A box whose
+	/// middle is further from the segment, measured flat, than half its own diagonal
+	/// is not asked: a grenade's flight is a hundred of these (docs/TACTICS.md §5.4).
+	/// </summary>
+	public int FirstHit(Vector3 from, Vector3 to, out float t)
+	{
+		t = 1f;
+		int first = -1;
+		for (int i = 0; i < Capacity; i++)
+		{
+			if (_active[i] && IsNear(i, from, to, 0f))
+			{
+				Enters(i, from, to, ref t, ref first);
+			}
+		}
+
+		return first;
+	}
+
+	/// <summary>
+	/// As <see cref="FirstHit(Vector3, Vector3, out float)"/>, over only the boxes in
+	/// <paramref name="among"/> (<see cref="Near"/>): a grenade's flight asks for the
+	/// boxes near its line once, and then each of its chords asks only those.
+	/// </summary>
+	public int FirstHit(ReadOnlySpan<int> among, Vector3 from, Vector3 to, out float t)
+	{
+		t = 1f;
+		int first = -1;
+		for (int k = 0; k < among.Length; k++)
+		{
+			int i = among[k];
+			if (IsActive(i))
+			{
+				Enters(i, from, to, ref t, ref first);
+			}
+		}
+
+		return first;
+	}
+
+	/// <summary>
+	/// The boxes whose middle is within half their diagonal plus <paramref name="margin"/>
+	/// of the flat segment from <paramref name="from"/> to <paramref name="to"/>, into
+	/// <paramref name="into"/>: every box anything flying above that line could strike.
+	/// Returns how many.
+	/// </summary>
+	public int Near(Vector3 from, Vector3 to, float margin, Span<int> into)
+	{
+		int count = 0;
+		for (int i = 0; i < Capacity && count < into.Length; i++)
+		{
+			if (_active[i] && IsNear(i, from, to, margin))
+			{
+				into[count++] = i;
+			}
+		}
+
+		return count;
+	}
+
+	private bool IsNear(int index, Vector3 from, Vector3 to, float margin)
+	{
+		float reach = (0.5f * MathF.Sqrt((_size[index].X * _size[index].X) + (_size[index].Z * _size[index].Z)))
+			+ MathF.Max(margin, 0f);
+		return FlatToSegmentSquared(_base[index], from, to) <= reach * reach;
+	}
+
+	private void Enters(int index, Vector3 from, Vector3 to, ref float t, ref int first)
+	{
+		var pose = new StructurePose(_base[index], _yaw[index]);
+		StructureBox box = StructureBox.Standing(_size[index].X, _size[index].Z, _size[index].Y);
+		if (box.SegmentIntersects(pose.ToLocal(from), pose.ToLocal(to), 0f, out float entry) && entry < t)
+		{
+			t = entry;
+			first = index;
+		}
+	}
+
+	/// <summary>
 	/// Whether a body standing at <paramref name="position"/> is behind cover from
 	/// the query's threat: a box within <see cref="AdjacentMeters"/> of it hides the
 	/// point <see cref="CoverQuery.ProtectMeters"/> up its body from the threat's eye.
@@ -343,6 +448,7 @@ public sealed class CoverBoard
 
 			var pose = new StructurePose(_base[i], _yaw[i]);
 			Vector3 threat = pose.ToLocal(query.Threat);
+			Vector3 seeker = pose.ToLocal(query.From);
 			bool low = _size[i].Y <= query.EyeMeters - FireClearanceMeters;
 			if (query.MustFire && !low)
 			{
@@ -363,6 +469,12 @@ public sealed class CoverBoard
 
 				float halfAcross = alongX ? _size[i].Z * 0.5f : _size[i].X * 0.5f;
 				float halfAlong = alongX ? _size[i].X * 0.5f : _size[i].Z * 0.5f;
+
+				// The seeker past the box's other face, on the threat's side of it.
+				if (query.StaySameSide && ((alongX ? seeker.Z : seeker.X) * sign) < -halfAcross)
+				{
+					continue;
+				}
 				float usable = MathF.Max((2f * halfAlong) - (2f * body), 0f);
 				int slots = Math.Clamp((int)(usable / SlotSpacingMeters) + 1, 1, MaxSlotsPerFace);
 				float out_ = halfAcross + body + GapMeters;
@@ -376,7 +488,7 @@ public sealed class CoverBoard
 					Vector3 at = pose.ToWorld(local);
 
 					float walk = Flat(at, query.From);
-					if (walk > search)
+					if (walk > search || !OnTheWay(at, query))
 					{
 						continue;
 					}
@@ -405,6 +517,35 @@ public sealed class CoverBoard
 		}
 
 		return best.Object >= 0;
+	}
+
+	/// <summary>
+	/// Whether a spot at <paramref name="at"/> is on the seeker's way (<see cref="CoverQuery.HasToward"/>):
+	/// always, for a query that is not going anywhere.
+	/// </summary>
+	public static bool OnTheWay(Vector3 at, in CoverQuery query)
+	{
+		if (!query.HasToward)
+		{
+			return true;
+		}
+
+		if (Flat(at, query.Toward) > Flat(query.From, query.Toward) + MathF.Max(query.MaxBackMeters, 0f))
+		{
+			return false;
+		}
+
+		// Distance from the flat segment From → Toward.
+		float dx = query.Toward.X - query.From.X;
+		float dz = query.Toward.Z - query.From.Z;
+		float length = (dx * dx) + (dz * dz);
+		float t = length > 1e-6f
+			? Math.Clamp((((at.X - query.From.X) * dx) + ((at.Z - query.From.Z) * dz)) / length, 0f, 1f)
+			: 0f;
+		float ox = at.X - (query.From.X + (dx * t));
+		float oz = at.Z - (query.From.Z + (dz * t));
+		float off = MathF.Max(query.MaxOffLineMeters, 0f);
+		return (ox * ox) + (oz * oz) <= off * off;
 	}
 
 	/// <summary>Box <paramref name="index"/> hides the body at <paramref name="at"/> from the threat's eye.</summary>
@@ -480,6 +621,18 @@ public sealed class CoverBoard
 	}
 
 	private static float Flat(Vector3 a, Vector3 b) => MathF.Sqrt(FlatSquared(a, b));
+
+	/// <summary>The squared flat distance from <paramref name="point"/> to the segment from <paramref name="a"/> to <paramref name="b"/>.</summary>
+	private static float FlatToSegmentSquared(Vector3 point, Vector3 a, Vector3 b)
+	{
+		float dx = b.X - a.X;
+		float dz = b.Z - a.Z;
+		float length = (dx * dx) + (dz * dz);
+		float s = length > 1e-8f ? Math.Clamp((((point.X - a.X) * dx) + ((point.Z - a.Z) * dz)) / length, 0f, 1f) : 0f;
+		float ox = point.X - (a.X + (dx * s));
+		float oz = point.Z - (a.Z + (dz * s));
+		return (ox * ox) + (oz * oz);
+	}
 
 	private static float FlatSquared(Vector3 a, Vector3 b)
 	{

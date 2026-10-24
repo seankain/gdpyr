@@ -67,4 +67,13 @@ public partial class GameModeDefinition : Resource
 	/// </summary>
 	[Export]
 	public BotAi BotAi = BotAiNames.Default;
+
+	/// <summary>
+	/// Whether the strategist side's new units start with micro-autonomy on
+	/// (docs/TACTICS.md §5.9); <c>--unit-autonomy</c> overrides it, and a strategist
+	/// changes it in game. Off until the tactics are measured (T8), so a round plays as
+	/// it did unless somebody turns them on.
+	/// </summary>
+	[Export]
+	public MicroAutonomy UnitAutonomy = MicroAutonomyNames.Default;
 }

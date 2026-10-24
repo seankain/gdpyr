@@ -40,6 +40,24 @@ public class ProjectileSimTests
 	}
 
 	[Fact]
+	public void EveryChord_CarriesWhereTheRoundWasFiredFrom()
+	{
+		// What a unit it passes perceives as where the shot came from (docs/TACTICS.md §4.1).
+		ProjectileSim sim = NewSim();
+		var muzzle = new Vector3(3f, 1.5f, -2f);
+		uint id = sim.Spawn(0, 1, Bullet, muzzle, Vector3.Forward, catchUpTicks: 0);
+
+		Assert.True(sim.TryGet(id, out Projectile p));
+		Assert.Equal(muzzle, p.Origin);
+		for (int tick = 0; tick < 3; tick++)
+		{
+			sim.Step(SimConfig.TickDelta);
+			Assert.Equal(muzzle, sim.Segments[0].Origin);
+			Assert.NotEqual(muzzle, sim.Segments[0].To);
+		}
+	}
+
+	[Fact]
 	public void SpawnNormalizesTheDirection()
 	{
 		ProjectileSim sim = NewSim();

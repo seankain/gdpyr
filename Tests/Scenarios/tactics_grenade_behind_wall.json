@@ -1,0 +1,37 @@
+{
+  "name": "riflemen walking up to a wall bomb a player crouched behind it, whom only the side's dropship can see",
+  "bot_ai": "htn",
+  "unit_autonomy": "on",
+  "seeds": [1, 2, 3],
+  "duration_ticks": 1500,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 1 },
+
+  "seats": [
+    { "id": "hider", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/crouch_still.json" },
+    { "id": "chair", "team": "strategist", "policy": "strategist", "step_mul": 6,
+      "script": { "repeat": false, "steps": [
+        { "ticks": 1440, "commands": [
+          { "cmd": "order", "kind": "move", "units": ["r1"], "target": [-62, 34] },
+          { "cmd": "order", "kind": "move", "units": ["r2"], "target": [-60, 34] },
+          { "cmd": "order", "kind": "move", "units": ["r3"], "target": [-58, 34] }
+        ] }
+      ] } }
+  ],
+
+  "spawns": [
+    { "structure": "sandbag_wall", "team": "strategist", "at": [-60, 0.5, 48.6], "yaw": 3.14159 },
+    { "peer": "hider", "at": [-60, 1, 50], "look": [0, 0] },
+    { "unit": "dropship", "id": "spotter", "team": "strategist", "at": [-48, 0.5, 50], "order": "none" },
+    { "unit": "infantry", "id": "r1", "team": "strategist", "at": [-62, 0.5, -16], "order": "none" },
+    { "unit": "infantry", "id": "r2", "team": "strategist", "at": [-60, 0.5, -16], "order": "none" },
+    { "unit": "infantry", "id": "r3", "team": "strategist", "at": [-58, 0.5, -16], "order": "none" }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.grenade_thrown[hidden=1].count", "op": "over_seeds", "cmp": ">=", "value": 1, "fraction": 1.0 },
+    { "metric": "events.grenade_thrown[hidden=0].count", "op": "==", "value": 0 },
+    { "metric": "observation.hider.self.alive.min", "op": "over_seeds", "cmp": "==", "value": 0, "fraction": 0.5 }
+  ]
+}

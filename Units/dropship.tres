@@ -27,4 +27,5 @@ ArrivalRadiusMeters = 3.0
 WeaponId = 1
 AccuracyConeDegrees = 4.0
 Grenades = 0
+Doctrine = 0
 Color = Color(0.35, 0.5, 0.75, 1)

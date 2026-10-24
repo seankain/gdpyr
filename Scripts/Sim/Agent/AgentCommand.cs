@@ -37,6 +37,16 @@ public enum AgentCommandKind : byte
 
 	/// <summary>Let everybody out of the vehicles it names, where each is. Lands in <c>ServerUnload</c>.</summary>
 	Unload = 7,
+
+	/// <summary>
+	/// Set the micro-autonomy of the units it names (docs/TACTICS.md §5.9): whether they
+	/// use tactics on their own. Lands in <c>ServerSetAutonomy</c>, which checks what a
+	/// person's selection card does.
+	/// </summary>
+	Autonomy = 8,
+
+	/// <summary>Set what the side's new units start with. Lands in <c>ServerAutonomyDefault</c>.</summary>
+	AutonomyDefault = 9,
 }
 
 /// <summary>
@@ -94,6 +104,12 @@ public struct AgentCommand
 
 	/// <summary>The vehicle to get into, by unit id. Only meaningful for <see cref="AgentCommandKind.Embark"/>.</summary>
 	public int Vehicle;
+
+	/// <summary>
+	/// The <see cref="MicroAutonomy"/> to set. Only meaningful for
+	/// <see cref="AgentCommandKind.Autonomy"/> and <see cref="AgentCommandKind.AutonomyDefault"/>.
+	/// </summary>
+	public MicroAutonomy Autonomy;
 
 	/// <summary>Index into the seat's unit-id buffer, for an order.</summary>
 	public int UnitsOffset;

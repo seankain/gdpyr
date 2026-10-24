@@ -91,6 +91,13 @@ public static class Spread
 		return new Vector3(r * MathF.Cos(phi), 0f, r * MathF.Sin(phi));
 	}
 
+	/// <summary>
+	/// A number uniformly in [-1, 1), seeded as the cone is: for an error that is a
+	/// scale along a line rather than a direction off it — how far away a unit
+	/// reckons a shot came from (docs/TACTICS.md §4.1).
+	/// </summary>
+	public static float Signed(uint seed) => ((Mix(seed) >> 8) * UnitScale * 2f) - 1f;
+
 	/// <summary>Degrees as a designer authors them to the half-angle the cone is expressed in.</summary>
 	public static float ConeFromDegrees(float degrees) =>
 		degrees <= 0f ? 0f : Math.Clamp(degrees, 0f, 90f) * (MathF.PI / 180f);

@@ -314,6 +314,77 @@ public class LaunchOptionsTests
 		Assert.Contains($"--bot-ai {BotAiNames.Legacy}|{BotAiNames.Htn}", LaunchOptions.Usage);
 	}
 
+	// ---- micro-autonomy (docs/TACTICS.md §5.9) ------------------------------
+
+	[Fact]
+	public void NoUnitAutonomyFlag_LeavesItToTheGameMode()
+	{
+		var options = LaunchOptions.Parse(new[] { "--server" });
+
+		Assert.Null(options.Error);
+		Assert.Null(options.UnitAutonomy);
+	}
+
+	[Theory]
+	[InlineData("on", MicroAutonomy.On)]
+	[InlineData("off", MicroAutonomy.Off)]
+	[InlineData("ON", MicroAutonomy.On)]
+	public void UnitAutonomy_ParsesEitherChoice(string value, MicroAutonomy expected)
+	{
+		var options = LaunchOptions.Parse(new[] { "--server", "--bot-ai", "htn", "--unit-autonomy", value });
+
+		Assert.Null(options.Error);
+		Assert.Equal(expected, options.UnitAutonomy);
+		Assert.Equal(BotAi.Htn, options.BotAi);
+		Assert.Contains($"unit autonomy {MicroAutonomyNames.Name(expected)}", options.ToString());
+	}
+
+	[Theory]
+	[InlineData("yes")]
+	[InlineData("1")]
+	public void UnitAutonomy_OtherThanOnOrOff_Fails(string value)
+	{
+		Assert.Contains("is not on or off", LaunchOptions.Parse(new[] { "--unit-autonomy", value }).Error);
+	}
+
+	[Fact]
+	public void UnitAutonomy_WithoutAValue_OrTwice_Fails()
+	{
+		Assert.NotNull(LaunchOptions.Parse(new[] { "--unit-autonomy" }).Error);
+		Assert.NotNull(LaunchOptions.Parse(new[] { "--unit-autonomy", "--listen" }).Error);
+		Assert.Contains("twice", LaunchOptions.Parse(new[] { "--unit-autonomy", "on", "--unit-autonomy", "off" }).Error);
+	}
+
+	[Fact]
+	public void TheDefaultUnitAutonomyIsOff_AndTheFlagThenTheGameModeOverrideIt()
+	{
+		// Off until docs/TACTICS.md T8 has measured the tactics: a round plays as it did.
+		Assert.Equal(MicroAutonomy.Off, MicroAutonomyNames.Default);
+		Assert.Equal(MicroAutonomy.Off, MicroAutonomyNames.Resolve(null, null));
+		Assert.Equal(MicroAutonomy.On, MicroAutonomyNames.Resolve(null, MicroAutonomy.On));
+		Assert.Equal(MicroAutonomy.Off, MicroAutonomyNames.Resolve(MicroAutonomy.Off, MicroAutonomy.On));
+		Assert.Equal(MicroAutonomy.On, MicroAutonomyNames.Resolve(MicroAutonomy.On, MicroAutonomy.Off));
+
+		// The numbers a game mode resource and the wire store it as.
+		Assert.Equal(0, (int)MicroAutonomy.Off);
+		Assert.Equal(1, (int)MicroAutonomy.On);
+		Assert.True(MicroAutonomyNames.IsValid(1));
+		Assert.False(MicroAutonomyNames.IsValid(2));
+	}
+
+	[Fact]
+	public void EveryMicroAutonomy_HasASpellingThatParsesBackToIt()
+	{
+		foreach (MicroAutonomy mode in System.Enum.GetValues<MicroAutonomy>())
+		{
+			Assert.True(MicroAutonomyNames.TryParse(MicroAutonomyNames.Name(mode), out MicroAutonomy parsed));
+			Assert.Equal(mode, parsed);
+		}
+
+		Assert.False(MicroAutonomyNames.TryParse(null, out _));
+		Assert.Contains($"--unit-autonomy {MicroAutonomyNames.On}|{MicroAutonomyNames.Off}", LaunchOptions.Usage);
+	}
+
 	// ---- the agent channel (docs/AGENT_API.md §4.1) ------------------------
 
 	[Fact]

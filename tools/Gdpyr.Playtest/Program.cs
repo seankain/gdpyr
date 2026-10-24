@@ -42,6 +42,7 @@ public static class Program
 		bool attach = false;
 		bool json = false;
 		string botAi = null;
+		string unitAutonomy = null;
 
 		for (int i = 0; i < args.Length; i++)
 		{
@@ -55,6 +56,7 @@ public static class Program
 				case "--game-port" when i + 1 < args.Length: gamePort = int.Parse(args[++i]); break;
 				case "--token" when i + 1 < args.Length: token = args[++i]; break;
 				case "--bot-ai" when i + 1 < args.Length: botAi = args[++i]; break;
+				case "--unit-autonomy" when i + 1 < args.Length: unitAutonomy = args[++i]; break;
 				case "--attach": attach = true; break;
 				case "--json": json = true; break;
 				case "--help":
@@ -91,7 +93,7 @@ public static class Program
 			{
 				Scenario scenario = Scenario.Load(path);
 				result = await RunAsync(scenario, godot, project, host, port, gamePort, token, attach,
-					traceDirectory, botAi).ConfigureAwait(false);
+					traceDirectory, botAi, unitAutonomy).ConfigureAwait(false);
 			}
 			catch (ScenarioException error)
 			{
@@ -130,13 +132,15 @@ public static class Program
 	}
 
 	private static async Task<ScenarioResult> RunAsync(Scenario scenario, string godot, string project,
-		string host, int port, int gamePort, string token, bool attach, string traceDirectory, string botAi)
+		string host, int port, int gamePort, string token, bool attach, string traceDirectory, string botAi,
+		string unitAutonomy)
 	{
 		ServerProcess server = null;
 
 		// The command line wins over the scenario, so one file's claims can be checked
-		// against either bot AI.
+		// against either bot AI, and with the units' tactics on or off.
 		string wanted = botAi ?? scenario.BotAi;
+		string wantedAutonomy = unitAutonomy ?? scenario.UnitAutonomy;
 		try
 		{
 			if (!attach)
@@ -144,7 +148,7 @@ public static class Program
 				Directory.CreateDirectory(traceDirectory);
 				server = await ServerProcess.StartAsync(godot, project, port, gamePort, scenario.GroundBots,
 					scenario.StrategistBots,
-					Path.Combine(traceDirectory, $"server-{port}.log"), wanted).ConfigureAwait(false);
+					Path.Combine(traceDirectory, $"server-{port}.log"), wanted, wantedAutonomy).ConfigureAwait(false);
 			}
 
 			using GdpyrConnection connection = await GdpyrConnection.ConnectAsync(host, port, token)
@@ -159,6 +163,20 @@ public static class Program
 					Scenario = scenario,
 					BotAi = connection.BotAi,
 					Error = $"this server's bots decide with {connection.BotAi}, and the run asks for {wanted}",
+				};
+			}
+
+			// Likewise a claim about the tactics against a server whose units start without
+			// them, or the other way round (docs/TACTICS.md §5.9).
+			if (wantedAutonomy != null && connection.UnitAutonomy != wantedAutonomy)
+			{
+				return new ScenarioResult
+				{
+					Scenario = scenario,
+					BotAi = connection.BotAi,
+					UnitAutonomy = connection.UnitAutonomy,
+					Error = $"this server's new units start with micro-autonomy {connection.UnitAutonomy},"
+						+ $" and the run asks for {wantedAutonomy}",
 				};
 			}
 
@@ -190,7 +208,7 @@ public static class Program
 			+ $"  ({result.Ticks:N0} ticks, {simSeconds.ToString("0.0", CultureInfo.InvariantCulture)} s sim,"
 			+ $" {result.WallSeconds.ToString("0.0", CultureInfo.InvariantCulture)} s wall,"
 			+ $" {result.Episodes.Count} seed{(result.Episodes.Count == 1 ? string.Empty : "s")},"
-			+ $" bot ai {result.BotAi})");
+			+ $" bot ai {result.BotAi}, unit autonomy {result.UnitAutonomy})");
 
 		foreach (AssertionResult assertion in result.Assertions)
 		{
@@ -232,6 +250,11 @@ public static class Program
 				if (result.BotAi != null)
 				{
 					writer.WriteString("bot_ai", result.BotAi);
+				}
+
+				if (result.UnitAutonomy != null)
+				{
+					writer.WriteString("unit_autonomy", result.UnitAutonomy);
 				}
 
 				if (result.Error != null)
@@ -291,6 +314,9 @@ public static class Program
 		  --token <token>      agent token, when the server was started with one
 		  --bot-ai <ai>        what the server's bots decide with, legacy or htn: overrides a scenario's
 		                       own bot_ai; with neither, the server's default
+		  --unit-autonomy <m>  what the strategist's new units start with, on or off (docs/TACTICS.md
+		                       §5.9): overrides a scenario's own unit_autonomy; with neither, the
+		                       server's default
 		  --trace-dir <dir>    where traces and server logs go (default build/playtest)
 		  --json               print a machine-readable summary instead of the human one
 
