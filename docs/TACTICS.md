@@ -409,8 +409,25 @@ strategist or a scenario turns micro-autonomy on.
     node 0 captured by the strategist side. Its first runs found a defect the unit tests had not:
     riflemen between the wall and the shooter walked round the wall's end, down the line of fire,
     to the spot behind it, and died. `CoverQuery.StaySameSide` is the fix, and the scenario's wall
-    stands at z = −8. The runs on this build with micro-autonomy on and off, and the whole suite,
-    were in progress when this was committed; they are recorded in the next commit.
+    stands at z = −8. On the T1 commit's build, seeds 1–3:
+
+    | | micro-autonomy on | off (`"unit_autonomy": "off"`, otherwise the same file) |
+    |---|---|---|
+    | Claims | 3 of 3 held | `unit_task` 0 of 3 seeds — the claim fails, as it should; the other two held |
+    | `unit_task`: take cover from fire · return fire | 3 · 1, 2 · 1, 2 · 0 | none |
+    | Hits on the riflemen (20 damage each) | 6, 7, 6 | 6, 6, 6 |
+    | Riflemen killed | 0 | 0 |
+    | Node 0 captured, ticks after the round starts | 1,213 every seed | 1,234 every seed |
+
+    The riflemen take cover from fire they cannot see and still arrive (21 ticks sooner than with
+    it off): T1's claims. They are not hit less for it here (19 hits on, 18 off), and nobody dies in
+    either, so the plan's third claim, units lost below the off run, is not in the file: this
+    geometry, one 4 m × 1.1 m sandbag wall on the way, does not show a benefit. Whether reacting
+    to fire saves units is for T8 to measure, over rounds with more exposure than this one.
+  - **Suite**: `./scripts/playtest.sh Tests/Scenarios/*.json` on the same build, default `htn` and
+    micro-autonomy off except where a scenario sets it: 24 of 24 passed, 0 failed, in 38 min 35 s.
+    Among them, the two commander scenarios, `htn_squad_retreats` and
+    `htn_strategist_defends_node`, after the Refill moves were marked falling back.
   - **Display check** (Godot 4.6 .NET under Xvfb, `opengl3`, 1600 × 900: a host with
     `--listen --no-bots` and a client on it; a temporary probe, not committed, pressed keys, placed
     units, took screenshots and printed every unit's mode). Four riflemen and a builder selected:
