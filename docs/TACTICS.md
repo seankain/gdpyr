@@ -582,10 +582,12 @@ strategist or a scenario turns micro-autonomy on.
     engine refused one beyond the engage range: a unit answering a shooter at 56 m stood up to fire
     and did not, so it never crouched. The planner now applies the same range, and the T1 tests'
     shooter moved from 50 m to 35 m, inside it.
-  - **Suite**: `./scripts/playtest.sh Tests/Scenarios/*.json` on this build, default `htn` and
-    micro-autonomy off except where a scenario sets it, `sandbag_cover` among them: in progress
-    when this was committed — the first 6 had passed and none had failed; the whole run is recorded
-    in the next commit.
+  - **Suite**: `./scripts/playtest.sh Tests/Scenarios/*.json` on the T3 commit's build, default
+    `htn` and micro-autonomy off except where a scenario sets it: 25 of 25 passed, 0 failed, in
+    40 min 30 s; `sandbag_cover` among them, unchanged. `tactics_react_to_fire`, whose riflemen now
+    crouch in `ReturnFire`, passed with take cover from fire · return fire 3 · 1, 2 · 1, 3 · 1 a
+    seed (T1's: 3 · 1, 2 · 1, 2 · 0), hits on them 6, 7, 7 (6, 7, 6), none killed, and node 0
+    captured at 1,213 ticks, as before.
   - **Differences from the plan above.** Crouched 1.0 m with the eye at 0.85 m, not 1.1 m and
     0.95 m (§5.8 says why). A gunner's reload is any unit's reload in its spot under
     micro-autonomy; `Duck` waits for T4, which adds it. The display check's player was the host's
