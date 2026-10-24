@@ -513,9 +513,14 @@ strategist or a scenario turns micro-autonomy on.
     | Damage to the seat | 108.2, 110.5, 111.2: killed when the fuse ran out, 3 s after the throw | none; alive at the end |
 
     The side spots the seat 62 ticks into the round in every run, on and off. Off, the riflemen
-    walk up and stand 16 m from a player they cannot see, which is today's behaviour. The runs on
-    the commit's own build, and the whole suite, were in progress when this was committed; they are
-    recorded in the next commit.
+    walk up and stand 16 m from a player they cannot see, which is today's behaviour. On the T2
+    commit's own build, both runs gave the same results to the tick: the throw at tick 572, 568
+    and 570, the same damage, the kill 180 ticks later; off, no throw and the seat alive.
+  - **Suite**: `./scripts/playtest.sh Tests/Scenarios/*.json` on the T2 commit's build, default
+    `htn` and micro-autonomy off except where a scenario sets it: 25 of 25 passed, 0 failed, in
+    40 min 25 s. A first run reported `armour_small_arms` failed with a damage record naming a
+    seat the scenario does not have: a suite started before it, which had been meant to be
+    stopped, was still running on the same ports. With every stray server stopped, it passed.
   - **Found in T1, fixed here.** A unit firing back at a place (`FireAtPlace`) has no target of its
     own, but `Planned` passed the engine's "has a target" to `Track`, which banded it as one: under
     a defend order, an attack or none, the reaction's executing condition (nothing of its own to
