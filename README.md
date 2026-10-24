@@ -18,6 +18,9 @@ dedicated-server authoritative.
 - [`docs/COVER.md`](docs/COVER.md) — cover: the low walls and blocks on the map, where the HTN
   bots and units stand to fight from behind them, aiming at what shows over a wall, and the
   computer strategist's builder laying sandbags in front of the squads it keeps holding ground
+- [`docs/TACTICS.md`](docs/TACTICS.md) — plan: unit tactics without micro — taking cover from
+  the shooter, gunners suppressing for a rifle assault, snipers firing from concealment, grenades
+  behind cover, and a move to a control point that fights its way there
 - [`docs/AI_DEBUG.md`](docs/AI_DEBUG.md) — spectating, and the AI debugger: every bot's, unit's
   and commander squad's HTN with the running, planned and paused tasks marked on it, as text, a
   graph and lines in the world
