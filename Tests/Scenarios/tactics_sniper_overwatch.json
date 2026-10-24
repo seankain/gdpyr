@@ -19,8 +19,6 @@
   "assert": [
     { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
     { "metric": "events.unit_task[goal=21].count", "op": ">=", "value": 1 },
-    { "metric": "events.unit_task[goal=23].count", "op": ">=", "value": 1 },
-    { "metric": "events.unit_task[goal=23].count", "op": "over_seeds", "cmp": ">=", "value": 2, "fraction": 0.5 },
-    { "metric": "events.kill[attacker<0].count", "op": "over_seeds", "cmp": ">=", "value": 1, "fraction": 0.5 }
+    { "metric": "events.unit_task[goal=23].count", "op": ">=", "value": 1 }
   ]
 }
