@@ -20,7 +20,8 @@ dedicated-server authoritative.
   computer strategist's builder laying sandbags in front of the squads it keeps holding ground
 - [`docs/TACTICS.md`](docs/TACTICS.md) — plan: unit tactics without micro — taking cover from
   the shooter, gunners suppressing for a rifle assault, snipers firing from concealment, grenades
-  behind cover, and a move to a control point that fights its way there
+  behind cover, a move to a control point that fights its way there, and a per-unit switch the
+  strategist turns it off with
 - [`docs/AI_DEBUG.md`](docs/AI_DEBUG.md) — spectating, and the AI debugger: every bot's, unit's
   and commander squad's HTN with the running, planned and paused tasks marked on it, as text, a
   graph and lines in the world
