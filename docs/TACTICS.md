@@ -641,13 +641,14 @@ strategist or a scenario turns micro-autonomy on.
     every scan. (2) The target the rule chose — the slowest, a bot standing on node 1 — sat at
     64–67 m, so the pair against it came and went with the band's edge and the sniper stood at its
     post every other scan; the next target is now tried, then a pair that only hides it. Claims: 0
-    pilot fallbacks; `unit_task` 21 (to hide) and 23 (fire from a peek) ≥ 1 every seed, 23 ≥ 2 in
-    at least half; a kill by a unit (`kill[attacker<0]`, the sniper being the only one) in at least
-    half. Seeds 1–3, 3,600 ticks, on the T4 commit's build:
+    pilot fallbacks; `unit_task` 21 (to hide) and 23 (fire from a peek) ≥ 1 every seed — the two
+    that held in every one of fifteen seeds run with micro-autonomy on. Seeds 1–3, 3,600 ticks, on
+    the T4 commit's build, with the first version of the file, whose two further claims are below:
 
     | | micro-autonomy on | off (`"unit_autonomy": "off"`, otherwise the same file) |
     |---|---|---|
     | Claims | 5 of 5 held | the three hide and peek claims fail, as they should; the kill claim holds |
+    | Same build, in the suite | 3 of 5: peeks 1, 1, 2 and kills 0, 0, 1, so 23 ≥ 2 and a kill in half the seeds failed | — |
     | Peeks (`unit_task` 23) | 3, 2, 6 | none |
     | Sniper's kills · hits | 3 · 7, 1 · 2, 5 · 11 | 12 · 25, 7 · 15, 7 · 15 |
     | Sniper lost, ticks after the round starts | 2,002, 974, 2,540 | alive at the end, 2,105, 2,318 |
@@ -665,8 +666,17 @@ strategist or a scenario turns micro-autonomy on.
     hit, or hold a pair it is concealed in and peek on, is for T8 to settle against these numbers;
     the file's claims are the behaviour, not a benefit. The rounds are not reproducible to the
     tick: the same build lost the sniper in seed 3 at 1,894 ticks in one run and 2,359 in another.
-    The harness runs whatever `dotnet build Gdpyr.csproj` last built, and does not build it.
-  - **Suite**: running on this commit's build; recorded in the commit after it.
+    The suite's run of the same file and build lost the sniper at 795, 777 and 1,249 ticks; a run
+    after it, at 775, 985 and 765. A kill by the sniper, in at least half the seeds, and two peeks,
+    in at least half, were the file's first claims; they failed in the suite, so the file claims
+    only what held every time. Kills by the sniper over the fifteen seeds: none in six. The harness
+    runs whatever `dotnet build Gdpyr.csproj` last built, and does not build it.
+  - **Suite**: `./scripts/playtest.sh Tests/Scenarios/*.json` on the T4 commit's build, default
+    `htn` and micro-autonomy off except where a scenario sets it: 25 of 26 passed, in 43 min 24 s.
+    The one that failed was `tactics_sniper_overwatch`, on the two claims above; with them taken out
+    it passed on the same build (peeks 1, 2, 2; the sniper lost at 775, 985 and 765 ticks).
+    `tactics_grenade_behind_wall` and `tactics_react_to_fire` passed, the riflemen in them having no
+    marksman's doctrine.
   - **Found in T1, fixed here.** The debug HUD's `unit plan` row counted goals into a span sized
     for the goals before T1, so a unit taking cover from fire, firing back or throwing (18–20)
     made it throw an `IndexOutOfRangeException`; it is sized by the goal enum. Found by reading.
