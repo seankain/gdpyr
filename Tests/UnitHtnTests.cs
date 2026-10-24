@@ -803,6 +803,47 @@ public class UnitHtnTests
 	}
 
 	[Fact]
+	public void UnderMicroAutonomy_InItsSpot_ItCrouchesToReload_AndStandsWhenItHasReloaded()
+	{
+		// docs/TACTICS.md §5.8: down behind the wall while the magazine goes in; up to fire.
+		Squaddie unit = Ordered(OrderKind.Attack, Objective);
+		unit.C.SenseAutonomy(MicroAutonomy.On);
+		unit.ScanCover(CoverSpot);
+		unit.See(Anchor + new Vector3(0f, 0.5f, 20f));
+		unit.C.SenseWeapon(reloading: true);
+		unit.Tick();
+
+		// On the way to the spot it does not crouch: it walks there at its pace.
+		Assert.Equal(UnitGoal.HoldCover, unit.Goal);
+		Assert.Equal(UnitMove.Point, unit.C.Intent.Move);
+		Assert.False(unit.C.Intent.Crouch);
+
+		unit.C.Position = CoverSpot;
+		unit.Tick();
+		Assert.Equal(UnitMove.Hold, unit.C.Intent.Move);
+		Assert.True(unit.C.Intent.Crouch);
+
+		unit.C.SenseWeapon(reloading: false);
+		unit.Tick();
+		Assert.Equal(UnitGoal.HoldCover, unit.Goal);
+		Assert.False(unit.C.Intent.Crouch);
+	}
+
+	[Fact]
+	public void WithMicroAutonomyOff_ItReloadsStanding_AsItAlwaysHas()
+	{
+		Squaddie unit = Ordered(OrderKind.Attack, Objective);
+		unit.ScanCover(CoverSpot);
+		unit.See(Anchor + new Vector3(0f, 0.5f, 20f));
+		unit.C.SenseWeapon(reloading: true);
+		unit.C.Position = CoverSpot;
+		unit.Tick(2);
+
+		Assert.Equal(UnitGoal.HoldCover, unit.Goal);
+		Assert.False(unit.C.Intent.Crouch);
+	}
+
+	[Fact]
 	public void ADefenderFightsFromCoverInsideItsLeash()
 	{
 		Squaddie unit = Ordered(OrderKind.Defend, Anchor);

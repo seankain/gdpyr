@@ -269,10 +269,10 @@ best debugging aid you will have: dump it on a disputed kill.
 ### 6.1 Units
 
 **M3 took the custom packed replicator, not `MultiplayerSpawner` + `MultiplayerSynchronizer`.**
-One unreliable message at 20 Hz carrying an array of `{id, def, quantized pos, yaw, flags,
-health%}` — the flag byte is state and team, and since the vehicles whether a unit is aboard and how
-an aircraft is flying (below) — 13 bytes each, 837 bytes for a full field of 64 — plus a reliable spawn and despawn per
-unit per life. `Scripts/Sim/UnitSnapshotCodec.cs`, decoded into a `SnapshotInterpolator` per unit,
+One unreliable message at 20 Hz carrying an array of `{id, def, quantized pos, yaw, body, flight,
+health%}` — the body byte is state, team, whether the unit is aboard and its posture, the flight byte
+how an aircraft is flying (below) — 14 bytes each, 901 bytes for a full field of 64 — plus a reliable
+spawn and despawn per unit per life. `Scripts/Sim/UnitSnapshotCodec.cs`, decoded into a `SnapshotInterpolator` per unit,
 the same one remote characters use. Units never simulate on clients.
 
 The original plan said to use the built-in nodes because they would be the least code. In this
@@ -289,15 +289,22 @@ codebase they are not, and there were three reasons to change:
    in its packet and therefore no node. M4 does not need the spike.
 
 Cost: ~180 lines of codec and roster plumbing, and a manual roster replay to joining peers.
-Budget check at 50 units: 50 × 13 B × 20 Hz ≈ **13 KB/s** per client, against the ~25 KB/s §7
-budgets for everything.
+Budget check at 50 units: 50 × 14 B × 20 Hz ≈ **14 KB/s** per client (17.9 KB/s at a full 64),
+against the ~25 KB/s §7 budgets for everything.
 
-**Passengers cost nothing extra** ([`VEHICLES.md`](VEHICLES.md) §6). The flag byte packs the state in
-bits 0–1 and the team in bit 2; bit 3 says the unit is riding in a vehicle, bits 4–5 are an
-aircraft's flight phase (0 grounded, 1 taking off, 2 cruising, 3 landing) and bit 6 says an aircraft
-is holding for want of a landing spot; bit 7 is spare. A passenger's yaw field carries its vehicle's
-id instead of a heading, and its position is the vehicle's. A record marked aboard that names
-vehicle 0 decodes as a unit on foot, so decoding stays total. Still 13 bytes, still 837 for 64.
+**Passengers cost nothing extra** ([`VEHICLES.md`](VEHICLES.md) §6). The body byte packs the state
+in bits 0–1 and the team in bit 2; bit 3 says the unit is riding in a vehicle. A passenger's yaw
+field carries its vehicle's id instead of a heading, and its position is the vehicle's. A record
+marked aboard that names vehicle 0 decodes as a unit on foot, so decoding stays total.
+
+**Posture** ([`TACTICS.md`](TACTICS.md) §5.8) is bits 4–5 of the body byte: 0 standing, 1 crouched,
+2 and 3 reserved and read as standing; bits 6–7 are spare. A crouched unit is drawn, collides and is
+hit as its crouched capsule. The **flight byte** is an aircraft's phase in bits 0–1 (0 grounded, 1
+taking off, 2 cruising, 3 landing) and in bit 2 whether it is holding for want of a landing spot;
+bits 3–7 are spare, and it is 0 for everything that does not fly. These were one byte until T3 of
+the tactics plan — state, team, aboard, phase and cannot-land in 13 bytes, with one bit spare — and
+the record grew a byte rather than squeeze a posture into it (`UnitBodyFlags`, `UnitFlightFlags`;
+`DemoFormat.Version` 3).
 Riders stay in the packet: leaving them out would make demo playback despawn them and freeze live
 puppets, visible, where they boarded.
 
@@ -447,7 +454,7 @@ route, so there is no second behaviour to write.
 |---|---|---|---|---|
 | `Input` (3 frames) | C→S | Unreliable | 60 Hz | ~48 B |
 | `PlayerSnapshot` (visible players) | S→C | Unreliable | 30 Hz | 29 B × players |
-| `UnitSnapshot` (visible units) | S→C | Unreliable | 20 Hz | 5 B + 13 B × units |
+| `UnitSnapshot` (visible units) | S→C | Unreliable | 20 Hz | 5 B + 14 B × units |
 | `ServerSpawnUnit` / `ServerDespawnUnit` | S→C | Reliable | per unit per life | ~24 B / 8 B |
 | `ProjectileSpawn` | S→C | Reliable | per shot | 23 B |
 | `ProjectileHit` | S→C | Reliable | per hit | 15 B |
@@ -1214,9 +1221,9 @@ the world. It carries no gun, so it never picks a target: an attack order is som
 | exit slots for a rifleman | 26 | 36 |
 | flight | — | cruise 14 m, climb 4 m/s, descent 3 m/s, clear 10 m |
 
-**On the wire: no new server message.** The unit record stays 13 bytes (§6.1): bit 3 of its flag
-byte says aboard, bits 4–5 are the flight phase, bit 6 says no room to land, and a passenger's yaw
-field names its vehicle. A client counts each vehicle's passengers from the records that name it.
+**On the wire: no new server message.** The unit record stayed 13 bytes (§6.1; 14 since the tactics
+plan's T3 split its flag byte): bit 3 of its flag byte said aboard, bits 4–5 the flight phase, bit 6
+no room to land, and a passenger's yaw field names its vehicle. A client counts each vehicle's passengers from the records that name it.
 The two requests are `ClientEmbark` and `ClientUnload` (§6.3, §7), checked as an order is. The
 dropship is one catalog line, appended, so every older id means what it did; `DemoFormat.Version`
 went to 2 for the flag byte ([`DEMOS.md`](DEMOS.md) §6). The agent API is additive

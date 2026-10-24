@@ -242,6 +242,13 @@ public struct UnitIntent
 
 	/// <inheritdoc cref="ThrowAt"/>
 	public Vector3 ThrowPoint;
+
+	/// <summary>
+	/// Crouch (docs/TACTICS.md §5.8): down behind its cover, not firing, as it is in
+	/// <see cref="UnitGoal.ReturnFire"/> between the bursts it answers rounds with, and
+	/// in any spot behind cover while it reloads. It stands to shoot.
+	/// </summary>
+	public bool Crouch;
 }
 
 /// <summary>
@@ -582,6 +589,9 @@ public sealed class UnitContext : BaseContext
 	/// <summary>Where a hidden enemy's feet are reckoned to be, for a grenade. Only with <see cref="UnitFact.Grenade"/>.</summary>
 	public Vector3 ThrowPoint;
 
+	/// <summary>Its weapon is reloading, this tick (docs/TACTICS.md §5.8). Not a fact: nothing is planned on it.</summary>
+	public bool Reloading;
+
 	/// <summary>Ticks it has spent reacting to fire under its current order, against <see cref="UnitPlanTraits.ReactMaxTicks"/>.</summary>
 	public int ReactedTicks;
 
@@ -678,6 +688,9 @@ public sealed class UnitContext : BaseContext
 
 	/// <summary>The unit has tried its throw, whether a grenade left its hand or not: nothing to throw at until the next scan.</summary>
 	public void Threw() => Sense(UnitFact.Grenade, false);
+
+	/// <summary>What its weapon is doing, every tick: reloading or not.</summary>
+	public void SenseWeapon(bool reloading) => Reloading = reloading;
 
 	/// <summary>A context with no squad is moving, not gathering: 0 is <see cref="Htn.SquadPhase.Gathering"/>.</summary>
 	public override void Init()
@@ -815,6 +828,26 @@ public sealed class UnitContext : BaseContext
 
 	// ---- operators ---------------------------------------------------------
 
+	/// <summary>
+	/// Under micro-autonomy, a unit in its spot behind cover crouches while it reloads
+	/// (docs/TACTICS.md §5.8): the spot the fight's cover operators and ReturnFire stand
+	/// in. Applied after the operator has written its intent.
+	/// </summary>
+	private void CrouchToReload(UnitGoal goal)
+	{
+		bool inSpot = goal switch
+		{
+			UnitGoal.HoldCover or UnitGoal.HoldPointCover => Get(UnitFact.Cover) == (byte)CoverState.In,
+			UnitGoal.ReturnFire => Get(UnitFact.FireCover) == (byte)CoverState.In,
+			_ => false,
+		};
+
+		if (inSpot && Reloading && Get(UnitFact.MicroAutonomy) == (byte)MicroAutonomy.On)
+		{
+			Intent.Crouch = true;
+		}
+	}
+
 	/// <summary>Starts an operator: the intent is new, and so is its clock.</summary>
 	public TaskStatus Begin(UnitGoal goal)
 	{
@@ -838,7 +871,14 @@ public sealed class UnitContext : BaseContext
 	public TaskStatus Perform(UnitGoal goal)
 	{
 		Intent = new UnitIntent { Goal = goal, TargetOwnerId = FocusOwnerId };
+		TaskStatus status = Operate(goal);
+		CrouchToReload(goal);
+		return status;
+	}
 
+	/// <summary>The operator for <paramref name="goal"/>: where to go and how, written into <see cref="Intent"/>.</summary>
+	private TaskStatus Operate(UnitGoal goal)
+	{
 		switch (goal)
 		{
 			case UnitGoal.Retreat:
@@ -919,7 +959,10 @@ public sealed class UnitContext : BaseContext
 					return TaskStatus.Failure;
 				}
 
+				// Down behind the wall between bursts; up for the two seconds after a round
+				// that it answers, and for a target of its own (docs/TACTICS.md §5.8).
 				FireBack();
+				Intent.Crouch = !Intent.FireAt && Get(UnitFact.Contact) != (byte)UnitContact.Own;
 				return Hold();
 
 			case UnitGoal.ThrowGrenade:
@@ -1007,12 +1050,16 @@ public sealed class UnitContext : BaseContext
 
 	/// <summary>
 	/// Fire at where the fire came from, for <see cref="UnitPlanTraits.ReturnFireTicks"/>
-	/// after each round that reaches it: a place, with no player named, so it is
-	/// nobody's focus. A target of its own it fires at anyway.
+	/// after each round that reaches it, when that is inside its engage range: a place,
+	/// with no player named, so it is nobody's focus. A shooter further off is hidden
+	/// from, not answered — the engine would not fire at it (<c>FireAtPlace</c>), and a
+	/// unit standing up to fire at it would only be standing (docs/TACTICS.md §5.8). A
+	/// target of its own it fires at anyway.
 	/// </summary>
 	private void FireBack()
 	{
-		if (Tick >= LastFiredUponTick && Tick - LastFiredUponTick <= (uint)Traits.ReturnFireTicks)
+		if (Tick >= LastFiredUponTick && Tick - LastFiredUponTick <= (uint)Traits.ReturnFireTicks
+			&& Flat(Position, FiredFromPoint) <= UnitTraits.EngageRangeMeters)
 		{
 			Intent.FireAt = true;
 			Intent.FirePoint = FiredFromPoint;

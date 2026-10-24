@@ -24,8 +24,8 @@ public class ReactToFireTests
 	private static readonly Vector3 Anchor = new(10f, 0.5f, 10f);
 	private static readonly Vector3 Objective = new(10f, 0.5f, 110f);
 
-	/// <summary>Where the fire comes from: 50 m off, beyond a rifleman's sensor.</summary>
-	private static readonly Vector3 Shooter = new(60f, 2f, 10f);
+	/// <summary>Where the fire comes from: 35 m off, unseen, inside a rifleman's 40 m engage range, so it answers.</summary>
+	private static readonly Vector3 Shooter = new(45f, 2f, 10f);
 
 	/// <summary>A spot behind cover from there, two metres off.</summary>
 	private static readonly Vector3 Spot = Anchor + new Vector3(2f, 0f, 0f);
@@ -176,6 +176,70 @@ public class ReactToFireTests
 
 		unit.Tick(Second);
 		Assert.Equal(UnitGoal.HoldPost, unit.Goal);
+	}
+
+	[Fact]
+	public void InItsSpot_ItCrouchesBetweenBursts_AndStandsToFireBack()
+	{
+		// docs/TACTICS.md §5.8: up for the two seconds it answers a round, down after.
+		Rig unit = FiredUponHolding();
+		Assert.Equal(UnitGoal.TakeCoverFromFire, unit.Goal);
+		Assert.False(unit.C.Intent.Crouch);
+
+		unit.C.Position = Spot;
+		unit.Tick();
+		Assert.Equal(UnitGoal.ReturnFire, unit.Goal);
+		Assert.True(unit.C.Intent.FireAt);
+		Assert.False(unit.C.Intent.Crouch);
+
+		unit.Tick((2 * Second) + 2);
+		Assert.Equal(UnitGoal.ReturnFire, unit.Goal);
+		Assert.False(unit.C.Intent.FireAt);
+		Assert.True(unit.C.Intent.Crouch);
+
+		unit.Round();
+		unit.Tick();
+		Assert.True(unit.C.Intent.FireAt);
+		Assert.False(unit.C.Intent.Crouch);
+	}
+
+	[Fact]
+	public void AShooterBeyondItsEngageRange_IsHiddenFrom_NotAnswered_SoItStaysDown()
+	{
+		var unit = new Rig();
+		unit.Order(OrderKind.None, Anchor);
+		unit.Tick();
+		FiredUpon.Record(ref unit.Fire, FireKind.NearMiss, Anchor + new Vector3(55f, 1.5f, 0f), OwnerId.ForPeer(7),
+			unit.C.Tick);
+		unit.Scan(Spot);
+		unit.Tick();
+		Assert.Equal(UnitGoal.TakeCoverFromFire, unit.Goal);
+		Assert.False(unit.C.Intent.FireAt);
+
+		unit.C.Position = Spot;
+		unit.Tick();
+		Assert.Equal(UnitGoal.ReturnFire, unit.Goal);
+		Assert.False(unit.C.Intent.FireAt);
+		Assert.True(unit.C.Intent.Crouch);
+	}
+
+	[Fact]
+	public void InItsSpot_WithATargetOfItsOwn_ItStandsToFightIt()
+	{
+		// Under a move, a unit with a target of its own still reacts (it shoots on the
+		// walk); in its spot it does not crouch away from that target.
+		var unit = new Rig { HasTarget = true, TargetPoint = Shooter };
+		unit.Order(OrderKind.Move, Objective);
+		unit.Tick();
+		unit.Round();
+		unit.Scan(Spot);
+		unit.C.Position = Spot;
+		unit.Tick();
+		unit.Tick((2 * Second) + 2);
+
+		Assert.Equal(UnitGoal.ReturnFire, unit.Goal);
+		Assert.False(unit.C.Intent.FireAt);
+		Assert.False(unit.C.Intent.Crouch);
 	}
 
 	[Fact]

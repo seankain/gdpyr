@@ -201,7 +201,7 @@ As built in T1 (`UnitDomain.cs`'s "react to fire" select, below Retreat and abov
 | Facts | `FiredUpon` (§4.1, every tick); `FireCover`: `CoverState` against the fired-from point, the spot found on the scan and banded every tick as `Cover` is; `ReactSpent`, the cap below. |
 | When | Fired upon, with a spot, the cap not spent, its board squad not falling back (§5.6), its order not a build, a walk to a vehicle or an unload — and nothing of its own to fight from cover: no target, or an order that shoots on the walk (a move or a patrol). A unit under an attack or a defend order that can see its target fights it from cover against it, as before (COVER.md §6). |
 | Spot | A low wall it can fire over within 10 m (`ReactCoverSearchMeters`), at any range from the shooter, else anything that hides it within 6 m (`ReactHideSearchMeters`). Under an order that goes somewhere — a move, a patrol, an attack — it must be on the way (`CoverQuery.HasToward`): no further from where the order goes than the unit is plus 3 m, and within 6 m of the line to it. Only behind a box the unit is not already in front of (`CoverQuery.StaySameSide`): a unit between a wall and the shooter would reach the wall's far face only by walking round its end, down the line the fire comes along. One spot a unit: while it reacts, the fire spot is its claimed spot, and the fight's is not looked for. A unit that must stand on a point (`ControlPoint.Holds`) does not leave it for one; T6 revisits that. |
-| Operators | `TakeCoverFromFire`: to the spot without stopping. `ReturnFire`: in it, holding. Both fire at the fired-from point for `ReturnFireTicks` (2 s) after each round that reaches it (`UnitIntent.FireAt`), when it is inside the unit's engage range — a shooter beyond 40 m is hidden from, not answered — and never throw a grenade at that point: it is a place, not a player, and nobody's focus. Crouching waits for T3. |
+| Operators | `TakeCoverFromFire`: to the spot without stopping. `ReturnFire`: in it, holding. Both fire at the fired-from point for `ReturnFireTicks` (2 s) after each round that reaches it (`UnitIntent.FireAt`), when it is inside the unit's engage range — a shooter beyond 40 m is hidden from, not answered, and since T3 the planner says so too (`FireBack` measures it), rather than leaving the engine to refuse — and never throw a grenade at that point: it is a place, not a player, and nobody's focus. From T3, `ReturnFire` crouches whenever it is not firing back and has no target of its own (§5.8). |
 | Shooter | `AcquireTarget` tries whoever last fired at it before the squad focus (§4.1): a unit that can see its shooter shoots them, and then fights them as its target. |
 | Ends | The window (3 s after the last round); a target of its own under an order with a fight of its own; the spot no longer hiding it; its squad falling back; a build order; micro-autonomy off — each an executing condition, each a test. |
 | Cap | Under an order that goes somewhere, `ReactMaxTicks` (8 s) in all since the order, the windows' tails included; then `ReactSpent` until the next hit (`FireMemory.LastHitTick`) or a new order, so the order still arrives. Under a defend order or none there is no cap: holding in cover while fire keeps coming is what holding is. The plan had the cap on a move only; an attack with no drill yet (T6) would otherwise be pinned for ever by one shooter it cannot see. |
@@ -291,10 +291,15 @@ spot exists. People and legacy bots: nothing (T-D6).
 ### 5.8 Posture, and the unit snapshot v2
 
 Needed for a sniper's low-wall peek (§5.3) and for reloading or returning fire behind a 1.2 m wall
-(§5.1, §5.2). `Unit.Posture`, server-side, from `UnitIntent.Crouch`. Crouched: hitbox height
-`CrouchHeightMeters` (1.1 m; 0 for a unit that cannot), eye 0.95 m, half move speed, no fire — it
-stands to shoot, which is the pop-up. `VisibilityService` sees from the lower eye, so concealment
-cuts both ways. `CoverBoard`'s protect height for a crouched unit is its crouched chest.
+(§5.1, §5.2). As built in T3:
+
+| | |
+|---|---|
+| Body | `UnitBody` (`Scripts/Sim/UnitBody.cs`, engine-free): height, eye, hitbox, protect height and speed by posture. `UnitDefinition.CrouchHeightMeters` and `CrouchEyeHeightMeters`, 1.0 m and 0.85 m for the four units on foot, nothing for a vehicle or an aircraft, which stand. The plan's 1.1 m is the sandbag wall's own height: a standing player's line over the wall's back edge still clips the crown of a 1.1 m capsule 0.6 m behind it, at every range from 5 to 60 m, and 1.0 m is clear at all of them (`UnitBodyTests`). |
+| Crouched | `Unit.Posture`, set every tick from `UnitIntent.Crouch` (legacy plans nothing, and stands). The hitbox and the collider are the crouched capsule, the eye is 0.85 m, it walks at half speed, and it does not fire or throw: the weapon still steps, so a reload runs on. `VisibilityService` and every line of sight start at `EyePosition`, so a crouched unit sees nothing over a wall it is hidden behind. |
+| When | `ReturnFire`, whenever it is not firing back (more than 2 s since a round, or a shooter beyond its engage range) and has no target of its own. Under micro-autonomy, any unit in its spot behind cover — `HoldCover`, `HoldPointCover`, `ReturnFire` — while its weapon reloads (`UnitContext.SenseWeapon`, a field, not a fact: nothing is planned on it). The sniper's `Duck` comes with T4. |
+| Cover | `UnitCoverQuery` protects the body the unit has now — a crouched unit is behind cover behind a box that would leave it standing in the open — and fires from its standing eye, as it stands to shoot. |
+| Client | `Unit.TakePosture` on each record, the collider and the drawing reshaped from the feet; demo playback goes through the same call. The posture is applied when the record is decoded, a snapshot interval before the drawn transform reaches its tick, as the state already is. |
 
 The record is redesigned rather than squeezed (T-D4). Today's one flag byte packs a unit's body and
 an aircraft's flight into eight bits with one spare (NETCODE.md §6.1); posture as an enum with room
@@ -551,6 +556,42 @@ strategist or a scenario turns micro-autonomy on.
 - **Done when:** `sandbag_cover` and the existing suite pass unchanged, a demo recorded on this
   build plays back with crouched units drawn crouched, and a display check shows a crouched unit
   behind a low wall hidden from a standing player.
+- **Result — built.**
+  - `dotnet test`: 1901 passed, 0 failed (1868 before; 33 new: 10 in `UnitBodyTests`, 9 in
+    `UnitSnapshotCodecTests`, 8 in `TrainedUnitResourceTests`, 3 in `ReactToFireTests`, 2 in
+    `UnitHtnTests`, 1 in `DemoCodecTests`). `dotnet build Gdpyr.csproj`: 0 warnings, 0 errors; the
+    harness builds.
+  - **The tests test something.** One piece changed at a time, the count of tests that failed:
+    `ReturnFire`'s crouch removed 2; crouching with a target of its own 1; `FireBack`'s range
+    check removed 1; the reload crouch without micro-autonomy 1, or out of its spot 1; reserved
+    postures read raw 3; the posture left off the wire 1; a body that cannot crouch crouching 1;
+    the protect height ignoring posture 2; the crouched height ignoring posture 8.
+  - **Display check and demo** (Godot 4.6 .NET under Xvfb, `opengl3`, 1600 × 900; a temporary
+    probe, not committed). A `--listen` host recording a demo put a sandbag wall at (−60, 48.6), a
+    rifleman behind it under a defend order with micro-autonomy on, and its own player standing
+    56 m in front of it, beyond the rifleman's 45 m sensor; from 7.5 s to 16 s it wrote a near miss
+    from the player's position into the rifleman's fire memory every half second. The rifleman
+    went to `ReturnFire` and crouched — top of the capsule 1.50 m against the wall's 1.6 m, eye
+    1.35 m (the ground is at 0.5) — and stood again when the window closed, 3 s after the last
+    round. Through an 8° camera at the standing player's eye: standing, its head showed over the
+    wall; crouched, nothing did. The demo, played back, showed the rifleman crouched from 8.6 s to
+    18.2 s and standing before and after, its client copy's posture from the records, drawn as the
+    short capsule. The playback draws no sandbag wall: demos record no structures (`DemoRecordKind`
+    has no kind for one), which predates T3.
+  - **Found by the display check.** `FireBack` asked for fire at any fired-from point, and the
+    engine refused one beyond the engage range: a unit answering a shooter at 56 m stood up to fire
+    and did not, so it never crouched. The planner now applies the same range, and the T1 tests'
+    shooter moved from 50 m to 35 m, inside it.
+  - **Suite**: `./scripts/playtest.sh Tests/Scenarios/*.json` on this build, default `htn` and
+    micro-autonomy off except where a scenario sets it, `sandbag_cover` among them: in progress
+    when this was committed — the first 6 had passed and none had failed; the whole run is recorded
+    in the next commit.
+  - **Differences from the plan above.** Crouched 1.0 m with the eye at 0.85 m, not 1.1 m and
+    0.95 m (§5.8 says why). A gunner's reload is any unit's reload in its spot under
+    micro-autonomy; `Duck` waits for T4, which adds it. The display check's player was the host's
+    own; a second machine's client was not used, the demo playback being the client path.
+  - **Not checked.** A remote client's view of a crouched unit, beyond the demo playback that
+    decodes the same records; `unit ms` at 64 units.
 
 ### T4 — Sniper (2 days)
 

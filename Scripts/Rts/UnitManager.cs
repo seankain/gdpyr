@@ -535,6 +535,10 @@ public partial class UnitManager : Node
 				ref targetDistance);
 		}
 
+		// What its weapon is doing, for a plan that crouches to reload in cover
+		// (docs/TACTICS.md §5.8).
+		plan?.SenseWeapon(unit.Weapon.IsReloading);
+
 		// Resolved before the plan looks at the order: a finished site stands the
 		// builder down this tick.
 		Structure site = unit.Order.Kind == OrderKind.Build ? ResolveBuildOrder(unit) : null;
@@ -557,6 +561,10 @@ public partial class UnitManager : Node
 				unit.Traits, out hasDestination);
 			holdsWhileEngaging = UnitBrain.HoldsWhileEngaging(unit.Order.Kind);
 		}
+
+		// Crouched or standing, as its plan says this tick (docs/TACTICS.md §5.8): legacy
+		// plans nothing, and stands.
+		unit.TakePosture(plan is { Intent.Crouch: true } ? UnitPosture.Crouched : UnitPosture.Standing);
 
 		// A builder with a site to work on works on it whenever it is in reach, and
 		// stands still to do it (docs/NETCODE.md §10.5). The structure counts it. One
@@ -680,7 +688,9 @@ public partial class UnitManager : Node
 			return;
 		}
 
-		bool pullingTrigger = hasTarget && unit.State == UnitStateId.Engaging;
+		// A crouched unit does not fire — it stands to shoot (docs/TACTICS.md §5.8) — and
+		// its weapon still steps, so a reload runs on behind the wall.
+		bool pullingTrigger = hasTarget && unit.State == UnitStateId.Engaging && unit.Posture == UnitPosture.Standing;
 		InputButtons buttons = pullingTrigger ? InputButtons.Fire : InputButtons.None;
 
 		var frame = InputFrame.Create(tick, 0f, 0f, unit.Yaw, 0f, buttons);
@@ -729,6 +739,7 @@ public partial class UnitManager : Node
 		// arc is a few thousand integration steps, and a throw a sixth of a second late
 		// at somebody standing still lands in the same place.
 		if (!hasTarget || unit.State != UnitStateId.Engaging || !unit.Grenades.HasAny
+			|| unit.Posture != UnitPosture.Standing
 			|| (tick + unit.UnitId) % (uint)SimConfig.UnitTargetRefreshTicks != 0
 			|| CombatManager.Instance is not { } combat)
 		{
@@ -2092,6 +2103,7 @@ public partial class UnitManager : Node
 				RidingIn = unit.IsAlive ? unit.RidingIn : (ushort)0,
 				Phase = unit.Phase,
 				CannotLand = unit.CannotLand,
+				Posture = unit.Posture,
 			};
 		}
 

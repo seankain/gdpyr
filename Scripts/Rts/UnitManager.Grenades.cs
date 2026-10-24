@@ -117,7 +117,8 @@ public partial class UnitManager
 			targetInCover: true,
 			endangersFriends: false);
 
-		if (CombatManager.Instance is not { } combat || claims.IsClaimedByOther(unit.ThrowKey, tick, unit.UnitId)
+		if (CombatManager.Instance is not { } combat || unit.Posture != UnitPosture.Standing
+			|| claims.IsClaimedByOther(unit.ThrowKey, tick, unit.UnitId)
 			|| !GrenadeSim.ShouldThrow(situation)
 			|| !GrenadeSim.TrySolveOver(eye, feet, HandGrenadeRound, Cover, KillReachMeters, out Vector3 aim, out _)
 			|| !GrenadeSim.TrySpend(ref unit.Grenades, tick, GrenadeSim.ThrowIntervalTicks))

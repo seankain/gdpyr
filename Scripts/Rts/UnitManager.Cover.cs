@@ -79,12 +79,14 @@ public partial class UnitManager
 
 	/// <summary>
 	/// A cover search for one unit against a threat standing at <paramref name="threat"/>:
-	/// its own body's numbers, and the spots every other unit on its side has taken.
+	/// its own body's numbers, and the spots every other unit on its side has taken. The
+	/// body a box must hide is the one it has now, crouched or standing
+	/// (docs/TACTICS.md §5.8); the eye it fires from is its standing one, as it stands to
+	/// shoot.
 	/// </summary>
 	private CoverQuery UnitCoverQuery(Unit unit, Vector3 threat, bool mustFire, float searchMeters)
 	{
-		UnitDefinition definition = unit.Definition;
-		float height = definition?.HeightMeters ?? 1.8f;
+		UnitBody body = unit.Body;
 		return new CoverQuery
 		{
 			From = unit.GlobalPosition,
@@ -92,9 +94,9 @@ public partial class UnitManager
 			ThreatEyeMeters = CoverThreatEyeMeters,
 			ThreatAimMeters = CoverThreatChestMeters,
 			SearchMeters = searchMeters,
-			BodyRadiusMeters = definition?.RadiusMeters ?? 0.4f,
-			ProtectMeters = height * 0.5f,
-			EyeMeters = definition?.EyeHeightMeters ?? 1.5f,
+			BodyRadiusMeters = body.RadiusMeters,
+			ProtectMeters = body.ProtectMeters(unit.Posture),
+			EyeMeters = body.EyeHeight(UnitPosture.Standing),
 			MustFire = mustFire,
 			MinThreatMeters = mustFire ? CoverMinThreatMeters : 0f,
 			MaxThreatMeters = mustFire ? unit.Traits.EngageRangeMeters : 0f,

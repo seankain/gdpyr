@@ -99,6 +99,18 @@ public partial class UnitDefinition : Resource
 	public float EyeHeightMeters = 1.5f;
 
 	/// <summary>
+	/// Its height crouched (docs/TACTICS.md §5.8): the hitbox and collider then, below
+	/// a 1.1 m sandbag wall. Zero for a body that cannot crouch, which is what a file
+	/// that says nothing gets — a vehicle, an aircraft.
+	/// </summary>
+	[Export]
+	public float CrouchHeightMeters;
+
+	/// <summary>Where its eye is crouched: below the wall it crouches behind, so concealment cuts both ways.</summary>
+	[Export]
+	public float CrouchEyeHeightMeters;
+
+	/// <summary>
 	/// How many units on foot can ride in it (docs/VEHICLES.md V-D1, V-D2): the
 	/// technical's four. Zero carries nobody, which is what a file that says nothing
 	/// gets. More than <see cref="SimConfig.MaxPassengers"/> is that many.
@@ -230,6 +242,10 @@ public partial class UnitDefinition : Resource
 	public Color Color = new(0.85f, 0.25f, 0.2f);
 
 	public byte WeaponDefinitionId => (byte)Mathf.Clamp(WeaponId, 0, SimConfig.MaxWeaponDefinitions - 1);
+
+	/// <summary>Its body, standing and crouched (docs/TACTICS.md §5.8).</summary>
+	public UnitBody ToBody() =>
+		new(HeightMeters, RadiusMeters, EyeHeightMeters, CrouchHeightMeters, CrouchEyeHeightMeters);
 
 	/// <summary>The brain's view of this unit: four radii and how it fights.</summary>
 	public UnitTraits ToTraits() => new(

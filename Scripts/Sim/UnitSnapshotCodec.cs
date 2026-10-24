@@ -32,7 +32,7 @@ public static class UnitSnapshotCodec
 {
 	/// <summary>
 	/// Units in one packet. At <see cref="UnitSnapshot.SizeBytes"/> each this is
-	/// 837 bytes with the header, which stays inside a single datagram — the
+	/// 901 bytes with the header, which stays inside a single datagram — the
 	/// broadcast is unreliable, so a fragmented one would be a packet that is
 	/// mostly lost rather than mostly late.
 	/// </summary>
@@ -75,8 +75,9 @@ public static class UnitSnapshotCodec
 
 			// A passenger's heading means nothing; the field carries its vehicle instead.
 			BinaryPrimitives.WriteUInt16LittleEndian(into[(offset + 9)..], aboard ? u.RidingIn : Quantize.YawToU16(u.Yaw));
-			into[offset + 11] = UnitFlags.Pack(u.State, u.Team, aboard, u.Phase, u.CannotLand);
-			into[offset + 12] = u.HealthPercent;
+			into[offset + 11] = UnitBodyFlags.Pack(u.State, u.Team, aboard, u.Posture);
+			into[offset + 12] = UnitFlightFlags.Pack(u.Phase, u.CannotLand);
+			into[offset + 13] = u.HealthPercent;
 			offset += UnitSnapshot.SizeBytes;
 		}
 
@@ -102,21 +103,23 @@ public static class UnitSnapshotCodec
 		int offset = HeaderBytes;
 		for (int i = 0; i < units; i++)
 		{
-			byte flags = payload[offset + 11];
+			byte body = payload[offset + 11];
+			byte flight = payload[offset + 12];
 			ushort yawField = BinaryPrimitives.ReadUInt16LittleEndian(payload[(offset + 9)..]);
-			ushort ridingIn = UnitFlags.IsAboard(flags) ? yawField : (ushort)0;
+			ushort ridingIn = UnitBodyFlags.IsAboard(body) ? yawField : (ushort)0;
 			into[i] = new UnitSnapshot
 			{
 				UnitId = BinaryPrimitives.ReadUInt16LittleEndian(payload[offset..]),
 				DefinitionId = payload[offset + 2],
 				Position = ReadVector(payload[(offset + 3)..]),
 				Yaw = ridingIn != 0 ? 0f : Quantize.U16ToYaw(yawField),
-				State = UnitFlags.State(flags),
-				Team = UnitFlags.TeamOf(flags),
-				HealthPercent = payload[offset + 12],
+				State = UnitBodyFlags.State(body),
+				Team = UnitBodyFlags.TeamOf(body),
+				HealthPercent = payload[offset + 13],
 				RidingIn = ridingIn,
-				Phase = UnitFlags.PhaseOf(flags),
-				CannotLand = UnitFlags.CannotLand(flags),
+				Phase = UnitFlightFlags.PhaseOf(flight),
+				CannotLand = UnitFlightFlags.CannotLand(flight),
+				Posture = UnitBodyFlags.PostureOf(body),
 			};
 			offset += UnitSnapshot.SizeBytes;
 		}

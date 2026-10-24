@@ -264,17 +264,25 @@ public partial class Unit : CharacterBody3D
 
 	public float Yaw { get; private set; }
 
-	/// <summary>Where a shot leaves from, and where a line-of-sight ray starts.</summary>
-	public Vector3 EyePosition => GlobalPosition + (Vector3.Up * (Definition?.EyeHeightMeters ?? 1.5f));
+	/// <summary>
+	/// Standing or crouched (docs/TACTICS.md §5.8): on the server what its plan asked for
+	/// this tick, if its body can; on a client what the newest record said.
+	/// </summary>
+	public UnitPosture Posture { get; private set; }
+
+	/// <summary>Its body, standing and crouched, from its definition.</summary>
+	public UnitBody Body => Definition?.ToBody() ?? new UnitBody(1.8f, 0.4f, 1.5f);
+
+	/// <summary>Where a shot leaves from, and where a line-of-sight ray starts: lower crouched.</summary>
+	public Vector3 EyePosition => GlobalPosition + (Vector3.Up * Body.EyeHeight(Posture));
 
 	/// <summary>
-	/// This unit's damageable volume, from the same capsule it collides with. Units
-	/// keep no hitbox history: a projectile is already compensated by the shooter's
-	/// latency when it spawns (docs/NETCODE.md §4.3), and a unit moves at 4.5 m/s,
-	/// so the rewind the ring exists for is worth about seven centimetres here.
+	/// This unit's damageable volume, from the same capsule it collides with, crouched or
+	/// standing. Units keep no hitbox history: a projectile is already compensated by the
+	/// shooter's latency when it spawns (docs/NETCODE.md §4.3), and a unit moves at
+	/// 4.5 m/s, so the rewind the ring exists for is worth about seven centimetres here.
 	/// </summary>
-	public HitCapsule Hitbox => HitCapsule.FromFeet(GlobalPosition,
-		Definition?.HeightMeters ?? 1.8f, Definition?.RadiusMeters ?? 0.4f);
+	public HitCapsule Hitbox => Body.Hitbox(GlobalPosition, Posture);
 
 	private NavigationAgent3D _agent;
 	private MeshInstance3D _mesh;
@@ -362,7 +370,7 @@ public partial class Unit : CharacterBody3D
 
 			if (toNext.LengthSquared() > 0.0001f)
 			{
-				desired = toNext.Normalized() * (Definition?.MoveSpeed ?? 4.5f);
+				desired = toNext.Normalized() * (Definition?.MoveSpeed ?? 4.5f) * Body.SpeedFactor(Posture);
 			}
 		}
 
@@ -511,6 +519,7 @@ public partial class Unit : CharacterBody3D
 	{
 		bool wasAlive = IsAlive;
 		FlightPhase wasPhase = Phase;
+		TakePosture(record.Posture);
 		State = record.State;
 		Health = record.HealthPercent / (float)byte.MaxValue * (Definition?.MaxHealth ?? 100f);
 		Phase = record.Phase;
@@ -632,6 +641,36 @@ public partial class Unit : CharacterBody3D
 		{
 			// Alternate ways round, as a tandem pair does.
 			_rotors[i].RotateY(i % 2 == 0 ? turn : -turn);
+		}
+	}
+
+	// ---- posture (docs/TACTICS.md §5.8) ---------------------------------------
+
+	/// <summary>
+	/// Stands or crouches: the server's from its plan, every tick; a client's from a
+	/// record. A body that cannot crouch, one riding in a vehicle and an aircraft stand.
+	/// The collider and the drawing change height with it, the feet where they were.
+	/// </summary>
+	public void TakePosture(UnitPosture wanted)
+	{
+		UnitPosture posture = IsAircraft || RidingIn != 0 ? UnitPosture.Standing : Body.Take(wanted);
+		if (posture == Posture)
+		{
+			return;
+		}
+
+		Posture = posture;
+		float height = Body.Height(posture);
+		if (_collision?.Shape is CapsuleShape3D shape)
+		{
+			shape.Height = height;
+			_collision.Position = new Vector3(0f, height * 0.5f, 0f);
+		}
+
+		if (_mesh?.Mesh is CapsuleMesh mesh)
+		{
+			mesh.Height = height;
+			_mesh.Position = new Vector3(0f, height * 0.5f, 0f);
 		}
 	}
 
