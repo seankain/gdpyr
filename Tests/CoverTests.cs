@@ -42,6 +42,81 @@ public class CoverTests
 		return board;
 	}
 
+	// ---- the first box along a line (docs/TACTICS.md §5.4) ----------------------
+
+	[Fact]
+	public void TheFirstBoxAlongALine_IsTheNearerOfTwo_AtWhereItEntersIt()
+	{
+		CoverBoard board = WallAtOrigin(LowWall);
+		Assert.Equal(1, board.AddLevel(new Vector3(0f, 0.6f, -10f), 0f, LowWall));
+
+		// From z = 20 to z = -20 at knee height: the wall at the origin first, entered at its near face.
+		int first = board.FirstHit(new Vector3(0f, 0.5f, 20f), new Vector3(0f, 0.5f, -20f), out float t);
+		Assert.Equal(0, first);
+		Assert.Equal((20f - (LowWall.Z * 0.5f)) / 40f, t, 4);
+
+		// The other way, the other wall.
+		Assert.Equal(1, board.FirstHit(new Vector3(0f, 0.5f, -20f), new Vector3(0f, 0.5f, 20f), out _));
+	}
+
+	[Fact]
+	public void ALineOverOrPastEveryBox_EntersNone()
+	{
+		CoverBoard board = WallAtOrigin(LowWall);
+
+		Assert.Equal(-1, board.FirstHit(new Vector3(0f, 1.5f, 20f), new Vector3(0f, 1.5f, -20f), out float t));
+		Assert.Equal(1f, t);
+		Assert.Equal(-1, board.FirstHit(new Vector3(3f, 0.5f, 20f), new Vector3(3f, 0.5f, -20f), out _));
+		Assert.Equal(-1, new CoverBoard().FirstHit(Vector3.Zero, new Vector3(0f, 0f, 5f), out _));
+	}
+
+	[Theory]
+	[InlineData(0f)]
+	[InlineData(0.7854f)]
+	[InlineData(1.5708f)]
+	public void ATurnedWall_IsFoundWhereverTheLineCrossesIt(float yaw)
+	{
+		// The broad phase is a circle round the box's middle, half its diagonal across:
+		// the wall's ends are inside it however it is turned.
+		CoverBoard board = WallAtOrigin(LowWall, yaw);
+		Vector3 end = new Vector3(1.9f, 0f, 0f).Rotated(Vector3.Up, yaw);
+		Vector3 across = new Vector3(0f, 0f, 10f).Rotated(Vector3.Up, yaw);
+
+		Assert.Equal(0, board.FirstHit(end + across + (Vector3.Up * 0.5f), end - across + (Vector3.Up * 0.5f), out _));
+	}
+
+	[Fact]
+	public void TheBoxesNearALine_AnswerEveryChordOnIt_AsTheWholeBoardDoes()
+	{
+		// What a grenade's flight relies on: gather once, then ask each chord of the arc.
+		var board = new CoverBoard();
+		var random = new Random(7);
+		for (int i = 0; i < CoverBoard.LevelCapacity; i++)
+		{
+			board.AddLevel(new Vector3(random.Next(-30, 30), 0.6f, random.Next(-30, 30)), (float)random.NextDouble() * 3f,
+				random.Next(2) == 0 ? LowWall : Block);
+		}
+
+		Span<int> near = stackalloc int[CoverBoard.Capacity];
+		for (int line = 0; line < 200; line++)
+		{
+			var from = new Vector3(random.Next(-35, 35), 1.6f, random.Next(-35, 35));
+			var to = new Vector3(random.Next(-35, 35), 0f, random.Next(-35, 35));
+			int count = board.Near(from, to, 0.1f, near);
+
+			for (int chord = 0; chord < 20; chord++)
+			{
+				Vector3 a = from.Lerp(to, chord / 20f) + (Vector3.Up * (float)random.NextDouble());
+				Vector3 b = from.Lerp(to, (chord + 1) / 20f);
+				int all = board.FirstHit(a, b, out float tAll);
+				int some = board.FirstHit(near[..count], a, b, out float tSome);
+
+				Assert.Equal(all, some);
+				Assert.Equal(tAll, tSome);
+			}
+		}
+	}
+
 	// ---- on the way (docs/TACTICS.md §5.1) -----------------------------------
 
 	/// <summary>A unit at the origin walking to +X, as a move order would send it.</summary>

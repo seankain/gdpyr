@@ -247,8 +247,10 @@ public class AgentEventTests
 		Assert.Equal(new[] { "unit", "tier", "goal", "x", "z" }, AgentEventSchema.FieldsOf(AgentEventKind.UnitTask).ToArray());
 		Assert.Equal(18, (int)UnitGoal.TakeCoverFromFire);
 		Assert.Equal(19, (int)UnitGoal.ReturnFire);
+		Assert.Equal(20, (int)UnitGoal.ThrowGrenade);
 		Assert.True(UnitContext.IsTactic(UnitGoal.TakeCoverFromFire));
 		Assert.True(UnitContext.IsTactic(UnitGoal.ReturnFire));
+		Assert.True(UnitContext.IsTactic(UnitGoal.ThrowGrenade));
 		Assert.False(UnitContext.IsTactic(UnitGoal.HoldCover));
 	}
 

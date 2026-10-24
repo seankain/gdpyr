@@ -548,8 +548,8 @@ public partial class UnitManager : Node
 		bool followsOrder = true;
 		if (plan != null)
 		{
-			destination = Planned(unit, plan, tick, hasTarget, targetPoint, out hasDestination, out holdsWhileEngaging,
-				out followsOrder);
+			destination = Planned(unit, plan, tick, hasTarget, firingAtPlace, targetPoint, out hasDestination,
+				out holdsWhileEngaging, out followsOrder);
 		}
 		else
 		{
@@ -609,6 +609,11 @@ public partial class UnitManager : Node
 
 		ServerFire(unit, tick, hasTarget, targetPoint, targetVelocity);
 		ServerThrow(unit, tick, hasTarget && !firingAtPlace, targetPoint, targetVelocity);
+		if (plan is { Intent.ThrowAt: true })
+		{
+			ThrowAtHidden(unit, plan, tick);
+		}
+
 		ServerResupply(unit, tick);
 	}
 
@@ -763,12 +768,7 @@ public partial class UnitManager : Node
 			return;
 		}
 
-		int owner = OwnerId.ForUnit(unit.UnitId);
-		Vector3 direction = Spread.Apply(aim, unit.Definition?.AccuracyConeRadians ?? 0f,
-			Spread.Seed(owner, WeaponCatalog.HandGrenade, unit.Grenades.Thrown));
-		combat.SpawnProjectile(tick, owner, WeaponCatalog.HandGrenade, eye, direction, catchUpTicks: 0);
-		AgentEventBus.Emit(AgentEventKind.GrenadeThrown, tick, owner, unit.DefinitionId,
-			situation.TargetInCover ? 1 : 0, unit.GlobalPosition.X, unit.GlobalPosition.Z);
+		LaunchGrenade(unit, combat, tick, aim, situation.TargetInCover);
 	}
 
 	/// <summary>
@@ -1248,6 +1248,11 @@ public partial class UnitManager : Node
 			plan.HasCoverPoint = false;
 		}
 
+		// A grenade at a hidden enemy (docs/TACTICS.md §5.4): on its way first, when its
+		// order goes somewhere.
+		SenseGrenade(unit, plan, order, tick, memory, UnitContext.GoesSomewhere(order.Kind),
+			OrderToward(plan, order, objective, node));
+
 		plan.FallbackPoint = plan.HasStaging ? plan.StagingPoint
 			: TryNearestRally(unit.Team, at, out Vector3 rally) ? rally
 			: order.Anchor;
@@ -1402,13 +1407,16 @@ public partial class UnitManager : Node
 	/// whether to stand to fight. An intent that follows the order asks
 	/// <see cref="UnitBrain.Destination"/>, as legacy does.
 	/// </summary>
-	private Vector3 Planned(Unit unit, UnitContext plan, uint tick, bool hasTarget, Vector3 targetPoint,
-		out bool hasDestination, out bool holdsWhileEngaging, out bool followsOrder)
+	private Vector3 Planned(Unit unit, UnitContext plan, uint tick, bool hasTarget, bool firingAtPlace,
+		Vector3 targetPoint, out bool hasDestination, out bool holdsWhileEngaging, out bool followsOrder)
 	{
 		plan.Tick = tick;
 		plan.SenseAutonomy(unit.Autonomy);
 		plan.SenseFire(FiredUpon.KindAt(unit.Fire, tick), unit.Fire.Origin, unit.Fire.LastTick, unit.Fire.LastHitTick);
-		plan.Track(unit.GlobalPosition, unit.Order, hasTarget, targetPoint);
+
+		// Firing back at a place is not a target of its own (docs/TACTICS.md §5.1): the
+		// plan that asked for it must not read it as one and end itself.
+		plan.Track(unit.GlobalPosition, unit.Order, hasTarget && !firingAtPlace, targetPoint);
 		UnitGoal before = plan.Intent.Goal;
 		_planning.Tick(plan);
 
@@ -2513,6 +2521,7 @@ public partial class UnitManager : Node
 		UnitsResupplied = 0;
 		_supplyCount = 0;
 		ResetFire();
+		ResetGrenades();
 		ResetAutonomy();
 	}
 

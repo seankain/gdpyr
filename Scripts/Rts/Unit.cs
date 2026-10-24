@@ -117,6 +117,18 @@ public partial class Unit : CharacterBody3D
 	public FireMemory Fire;
 
 	/// <summary>
+	/// Server-side, under micro-autonomy: what the grenade its plan means to throw claims
+	/// (docs/TACTICS.md §5.4), from its last scan. Never replicated.
+	/// </summary>
+	public long ThrowKey;
+
+	/// <summary>
+	/// Server-side: the tick before which it does not look for a grenade's arc again,
+	/// after a scan that found a hidden enemy and no arc to them. Never replicated.
+	/// </summary>
+	public uint NoArcUntilTick;
+
+	/// <summary>
 	/// Whether it uses the tactics of docs/TACTICS.md §5 on its own (§5.9): the side's
 	/// default for new units when it is made, and the strategist's to change. Its
 	/// planner reads it every tick. On a client, what the strategist's state message

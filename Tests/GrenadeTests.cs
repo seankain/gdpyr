@@ -585,6 +585,265 @@ public class GrenadeTests
 		Assert.Single(Regex.Matches(project, @"""physical_keycode"":71\b"));
 	}
 
+	// ---- behind cover (docs/TACTICS.md §5.4) ------------------------------------
+
+	/// <summary>A 1.2 m sandbag wall, four metres across and 0.8 deep, its middle on the origin, its faces to ±Z.</summary>
+	private static readonly Vector3 Wall = new(4f, 1.2f, 0.8f);
+
+	/// <summary>A block nothing standing throws a grenade through: three metres a side, 2.8 high.</summary>
+	private static readonly Vector3 Block = new(3f, 2.8f, 3f);
+
+	private static CoverBoard BoardWith(Vector3 size)
+	{
+		var board = new CoverBoard();
+		Assert.Equal(0, board.AddLevel(new Vector3(0f, size.Y * 0.5f, 0f), 0f, size));
+		return board;
+	}
+
+	/// <summary>A body crouched a metre behind the box's middle, on the far side from a thrower at +Z.</summary>
+	private static readonly Vector3 Hider = new(0f, 0f, -1f);
+
+	private static float Reach(ProjectileStats round) => GrenadeSim.KillReach(round, SimConfig.MaxHealth, 0.5f);
+
+	[Theory]
+	[InlineData(8f)]
+	[InlineData(12f)]
+	[InlineData(15f)]
+	[InlineData(20f)]
+	[InlineData(28f)]
+	public void OverALowWall_TheArcStopsAtItsFoot_WithinReachOfWhoIsBehindIt(float distance)
+	{
+		ProjectileStats round = HandGrenade();
+		CoverBoard board = BoardWith(Wall);
+		var eye = new Vector3(0.3f, 1.6f, Hider.Z + distance);
+
+		Assert.True(GrenadeSim.TrySolveOver(eye, Hider, round, board, Reach(round), out Vector3 direction, out Vector3 rest));
+		Assert.Equal(1f, direction.Length(), 4);
+
+		// It strikes the wall's near face, below its top: the low arc never clears it.
+		Assert.InRange(rest.Z, Wall.Z * 0.5f - 0.01f, Wall.Z * 0.5f + 0.01f);
+		Assert.InRange(rest.Y, 0f, Wall.Y);
+	}
+
+	[Theory]
+	[InlineData(8f)]
+	[InlineData(15f)]
+	[InlineData(28f)]
+	public void BehindABlock_ItWouldStopTooFarShort_SoThereIsNoThrow(float distance)
+	{
+		ProjectileStats round = HandGrenade();
+		CoverBoard board = BoardWith(Block);
+		var target = new Vector3(0f, 0f, -(Block.Z * 0.5f) - 1f);
+		var eye = new Vector3(0.3f, 1.6f, target.Z + distance);
+
+		Assert.False(GrenadeSim.TrySolveOver(eye, target, round, board, Reach(round), out _, out Vector3 rest));
+		Assert.True(rest.Z >= (Block.Z * 0.5f) - 0.01f, $"stopped at z = {rest.Z:0.00}, not at the block's face");
+	}
+
+	[Fact]
+	public void InTheOpen_ItComesDownWhereItWasAimed()
+	{
+		ProjectileStats round = HandGrenade();
+		var board = new CoverBoard();
+		var target = new Vector3(5f, 0f, -3f);
+		var eye = new Vector3(5f, 1.6f, 15f);
+
+		Assert.True(GrenadeSim.TrySolveOver(eye, target, round, board, Reach(round), out _, out Vector3 rest));
+		Assert.True(new Vector2(rest.X - target.X, rest.Z - target.Z).Length() < 0.3f);
+	}
+
+	[Fact]
+	public void BeyondAnArm_ThereIsNoArc()
+	{
+		ProjectileStats round = HandGrenade();
+		Assert.False(GrenadeSim.TrySolveOver(new Vector3(0f, 1.6f, 45f), Vector3.Zero, round, new CoverBoard(),
+			Reach(round), out _, out _));
+	}
+
+	[Fact]
+	public void AWallTheArcPassesOver_DoesNotStopIt()
+	{
+		// The thrower's own wall, under its eye on the way up: a grenade leaves cover.
+		ProjectileStats round = HandGrenade();
+		CoverBoard board = BoardWith(Wall);
+		var eye = new Vector3(0f, 1.6f, -1f);
+		var target = new Vector3(0f, 0f, -20f);
+
+		Assert.True(GrenadeSim.TrySolveOver(eye, target, round, board, Reach(round), out _, out Vector3 rest));
+		Assert.True(rest.Z < -19.5f);
+	}
+
+	[Theory]
+	[InlineData(6f)]
+	[InlineData(10f)]
+	[InlineData(15f)]
+	[InlineData(20f)]
+	[InlineData(25f)]
+	[InlineData(28f)]
+	public void NoHighArcComesDownBeforeTheFuseRunsOut_InsideThrowingRange(float distance)
+	{
+		// Why TrySolveOver has no high arc: the steep root, from a standing eye to the
+		// ground, is still in the air when the fuse goes, at every range a unit throws.
+		ProjectileStats round = HandGrenade();
+		float v2 = round.MuzzleVelocity * round.MuzzleVelocity;
+		const float g = Ballistics.Gravity;
+		const float height = -1.6f;
+		float discriminant = (v2 * v2) - (g * ((g * distance * distance) + (2f * height * v2)));
+		Assert.True(discriminant >= 0f);
+		float high = MathF.Atan((v2 + MathF.Sqrt(discriminant)) / (g * distance));
+		var direction = new Vector3(0f, MathF.Sin(high), -MathF.Cos(high));
+
+		Assert.Equal(-1f, GrenadeSim.Carry(new Vector3(0f, 1.6f, 0f), direction, round, 0f));
+	}
+
+	[Fact]
+	public void TheKillReach_IsWhereExplodesArithmeticStillKills()
+	{
+		ProjectileStats round = HandGrenade();
+		float reach = Reach(round);
+		Assert.InRange(reach, 2.4f, 2.5f);
+
+		// Explode's own measure (CombatManager): the blast's distance to the capsule's
+		// axis, less its radius. Standing and crouched alike: the capsule ends at the feet.
+		foreach (float height in new[] { 2f, 1.2f })
+		{
+			HitCapsule body = HitCapsule.FromFeet(Vector3.Zero, height, 0.5f);
+			float Damage(float x) => round.SplashDamageAt(
+				MathF.Max(0f, MathF.Sqrt(Hitbox.DistanceToAxisSquared(body, new Vector3(x, 0f, 0f))) - body.Radius));
+
+			Assert.True(Damage(reach - 0.01f) >= SimConfig.MaxHealth);
+			Assert.True(Damage(reach + 0.05f) < SimConfig.MaxHealth);
+		}
+
+		Assert.Equal(0f, GrenadeSim.KillReach(round, 200f, 0.5f));
+		Assert.Equal(0f, GrenadeSim.KillReach(default, SimConfig.MaxHealth, 0.5f));
+	}
+
+	// ---- which hidden enemy -------------------------------------------------------
+
+	private const uint Now = 10_000;
+
+	/// <summary>The thrower's eye, sixteen metres in front of the wall.</summary>
+	private static readonly Vector3 Eye = new(0.3f, 1.6f, 15f);
+
+	[Fact]
+	public void ACandidate_IsFresh_InRange_AndBehindABox()
+	{
+		CoverBoard board = BoardWith(Wall);
+		GrenadeCandidate Seen(Vector3 feet, uint age) => GrenadeCandidate.Contact(7, feet, Now - age);
+
+		Assert.True(GrenadePlan.IsCandidate(Seen(Hider, 0), Eye, Now, board));
+		Assert.True(GrenadePlan.IsCandidate(Seen(Hider, GrenadePlan.FreshTicks), Eye, Now, board));
+		Assert.False(GrenadePlan.IsCandidate(Seen(Hider, GrenadePlan.FreshTicks + 1), Eye, Now, board));
+		Assert.False(GrenadePlan.IsCandidate(GrenadeCandidate.Contact(7, Hider, Now + 1), Eye, Now, board));
+
+		// Somebody the unit could see — in the open beside the wall — is shot, not bombed.
+		Assert.False(GrenadePlan.IsCandidate(Seen(new Vector3(6f, 0f, -1f), 0), Eye, Now, board));
+
+		// Too near for a grenade, and too far.
+		Assert.False(GrenadePlan.IsCandidate(Seen(Hider, 0), new Vector3(0f, 1.6f, 3f), Now, board));
+		Assert.False(GrenadePlan.IsCandidate(Seen(Hider, 0), new Vector3(0f, 1.6f, 30f), Now, board));
+		Assert.True(GrenadePlan.IsCandidate(Seen(Hider, 0), new Vector3(0f, 1.6f, 26f), Now, board));
+	}
+
+	[Fact]
+	public void OnTheWayFirst_ThenTheNearest()
+	{
+		var board = new CoverBoard();
+		Assert.Equal(0, board.AddLevel(new Vector3(0f, 0.6f, 0f), 0f, Wall));
+		Assert.Equal(1, board.AddLevel(new Vector3(12f, 0.6f, 6f), 0f, Wall));
+		GrenadeCandidate[] candidates =
+		{
+			GrenadeCandidate.Contact(7, new Vector3(0f, 0f, -1f), Now),  // 16 m, ahead
+			GrenadeCandidate.Contact(8, new Vector3(12f, 0f, 5f), Now),  // 15 m, to the side
+		};
+
+		// Nothing to be on the way to: the nearer.
+		Assert.Equal(1, GrenadePlan.Choose(candidates, Eye, Now, board, null, 3, false, default, default));
+
+		// Walking towards -Z: the one ahead, though further.
+		Assert.Equal(0, GrenadePlan.Choose(candidates, Eye, Now, board, null, 3, true, Eye, new Vector3(0f, 0f, -40f)));
+	}
+
+	[Fact]
+	public void AClaimedEnemy_IsLeftToItsThrower_UntilTheClaimRunsOut()
+	{
+		CoverBoard board = BoardWith(Wall);
+		GrenadeCandidate[] candidates = { GrenadeCandidate.Contact(7, Hider, Now) };
+		var claims = new GrenadeClaims(4);
+
+		claims.Claim(candidates[0].Key, Now, unitId: 5);
+		Assert.Equal(-1, GrenadePlan.Choose(candidates, Eye, Now, board, claims, 3, false, default, default));
+		Assert.Equal(0, GrenadePlan.Choose(candidates, Eye, Now, board, claims, 5, false, default, default));
+
+		uint later = Now + GrenadePlan.ClaimTicks;
+		GrenadeCandidate[] stillThere = { GrenadeCandidate.Contact(7, Hider, later) };
+		Assert.Equal(0, GrenadePlan.Choose(stillThere, Eye, later, board, claims, 3, false, default, default));
+
+		claims.Claim(candidates[0].Key, Now, unitId: 5);
+		claims.Clear();
+		Assert.False(claims.IsClaimedByOther(candidates[0].Key, Now, 3));
+	}
+
+	[Fact]
+	public void AFullTable_GivesUpItsOldestClaim()
+	{
+		var claims = new GrenadeClaims(2);
+		claims.Claim(1, Now, 1);
+		claims.Claim(2, Now + 10, 1);
+		claims.Claim(3, Now + 20, 1);
+
+		Assert.False(claims.IsClaimedByOther(1, Now + 20, 9));
+		Assert.True(claims.IsClaimedByOther(2, Now + 20, 9));
+		Assert.True(claims.IsClaimedByOther(3, Now + 20, 9));
+	}
+
+	[Fact]
+	public void WhereARoundCameFrom_IsACandidate_UnlessItIsAContactAlreadyInTheList()
+	{
+		CoverBoard board = BoardWith(Wall);
+		GrenadeCandidate fired = GrenadeCandidate.Fired(new Vector3(0.5f, 0f, -1.2f), Now);
+		Assert.True(fired.FiredFrom);
+		Assert.True(GrenadePlan.IsCandidate(fired, Eye, Now, board));
+		Assert.Equal(0, GrenadePlan.Choose(new[] { fired }, Eye, Now, board, null, 3, false, default, default));
+
+		// The same enemy, seen: one enemy, the contact.
+		GrenadeCandidate[] both = { fired, GrenadeCandidate.Contact(7, Hider, Now - GrenadePlan.FreshTicks - 60) };
+		Assert.Equal(-1, GrenadePlan.Choose(both, Eye, Now, board, null, 3, false, default, default));
+
+		// Two rounds from one place are one place to claim; a contact is not a cell.
+		Assert.Equal(fired.Key, GrenadeCandidate.Fired(new Vector3(1.2f, 0f, -0.4f), Now).Key);
+		Assert.NotEqual(fired.Key, GrenadeCandidate.Fired(new Vector3(4f, 0f, -1.2f), Now).Key);
+		Assert.NotEqual(fired.Key, GrenadeCandidate.Contact(7, Hider, Now).Key);
+	}
+
+	[Fact]
+	public void ChoosingAndSolving_AllocateNothing()
+	{
+		ProjectileStats round = HandGrenade();
+		CoverBoard board = BoardWith(Wall);
+		var claims = new GrenadeClaims(8);
+		var candidates = new GrenadeCandidate[]
+		{
+			GrenadeCandidate.Contact(7, Hider, Now), GrenadeCandidate.Fired(new Vector3(3f, 0f, -2f), Now),
+		};
+
+		Run();
+		long before = GC.GetAllocatedBytesForCurrentThread();
+		Run();
+		Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
+
+		void Run()
+		{
+			for (int i = 0; i < 200; i++)
+			{
+				int chosen = GrenadePlan.Choose(candidates, Eye, Now, board, claims, 3, true, Eye, Vector3.Zero);
+				GrenadeSim.TrySolveOver(Eye, candidates[chosen].Feet, round, board, Reach(round), out _, out _);
+				claims.Claim(candidates[chosen].Key, Now + (uint)i, 3);
+			}
+		}
+	}
+
 	private static string Repo(string relative)
 	{
 		for (var at = new DirectoryInfo(AppContext.BaseDirectory); at != null; at = at.Parent)

@@ -1526,16 +1526,17 @@ public class UnitHtnTests
 	// ---- sharing and allocation --------------------------------------------
 
 	/// <summary>How many situations <see cref="Situation"/> has.</summary>
-	private const int Situations = 21;
+	private const int Situations = 22;
 
 	/// <summary>
-	/// Twenty-one situations, one per operator of §5.2 and two for Advance, as an order and
+	/// Twenty-two situations, one per operator of §5.2 and two for Advance, as an order and
 	/// facts. Fourteen to sixteen are an attack on a control point: on its way, on the
 	/// point, and with cover there; a unit on the point has the point where it stands. The
 	/// next two are a walk to a vehicle and an unload (docs/VEHICLES.md §9.2), the second
 	/// on a computer strategist's word and losing, which does not make it retreat. The last
-	/// two are a defender fired upon with micro-autonomy on (docs/TACTICS.md §5.1): on its
-	/// way to a spot behind cover from the fire, and in it.
+	/// two of §5.1's are a defender fired upon with micro-autonomy on (docs/TACTICS.md):
+	/// on its way to a spot behind cover from the fire, and in it. The last is a defender
+	/// with a hidden enemy to throw a grenade at (§5.4).
 	/// </summary>
 	private static void Situation(UnitContext c, int phase, out OrderKind order, out bool hasTarget)
 	{
@@ -1555,7 +1556,8 @@ public class UnitHtnTests
 			HasFireCover = fired,
 			FireCoverHides = fired,
 		});
-		c.SenseAutonomy(fired ? MicroAutonomy.On : MicroAutonomy.Off);
+		c.SenseAutonomy(fired || phase == 21 ? MicroAutonomy.On : MicroAutonomy.Off);
+		c.SenseGrenade(phase == 21, Anchor + new Vector3(0f, 0f, 18f));
 		c.SenseFire(fired ? FireKind.NearMiss : FireKind.None, Anchor + new Vector3(50f, 1.5f, 0f), c.Tick, 0);
 
 		order = phase switch
@@ -1563,7 +1565,7 @@ public class UnitHtnTests
 			0 or 4 or 5 or 6 or 7 or 13 or 14 or 15 or 16 => OrderKind.Attack,
 			1 or 2 => OrderKind.Build,
 			3 => OrderKind.Attack,
-			8 or 9 or 10 or 19 or 20 => OrderKind.Defend,
+			8 or 9 or 10 or 19 or 20 or 21 => OrderKind.Defend,
 			11 => OrderKind.Patrol,
 			17 => OrderKind.Embark,
 			18 => OrderKind.Unload,
@@ -1667,7 +1669,7 @@ public class UnitHtnTests
 			UnitGoal.EngageFocus, UnitGoal.Support, UnitGoal.Advance, UnitGoal.EngageInLeash, UnitGoal.AnswerCall,
 			UnitGoal.HoldPost, UnitGoal.Patrol, UnitGoal.Obey, UnitGoal.Resupply, UnitGoal.TakePoint,
 			UnitGoal.HoldPoint, UnitGoal.HoldPointCover, UnitGoal.Obey, UnitGoal.Obey, UnitGoal.TakeCoverFromFire,
-			UnitGoal.ReturnFire,
+			UnitGoal.ReturnFire, UnitGoal.ThrowGrenade,
 		};
 		Assert.Equal(Situations, expected.Length);
 

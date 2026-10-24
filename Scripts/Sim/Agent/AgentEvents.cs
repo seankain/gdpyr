@@ -54,8 +54,8 @@ public enum AgentEventKind : byte
 
 	/// <summary>
 	/// A unit started one of the tactics of docs/TACTICS.md §5 — taking cover from fire,
-	/// firing back from it — by its <c>UnitGoal</c> number. Only a unit whose
-	/// micro-autonomy is on, under <c>--bot-ai htn</c>.
+	/// firing back from it, a grenade at a hidden enemy — by its <c>UnitGoal</c> number.
+	/// Only a unit whose micro-autonomy is on, under <c>--bot-ai htn</c>.
 	/// </summary>
 	UnitTask = 19,
 }
@@ -136,7 +136,7 @@ public static class AgentEventSchema
 		// is its own; and where the thrower stood.
 		new[] { "thrower", "tier", "hidden", "x", "z" },                                       // GrenadeThrown
 		// The unit, its catalog id, the goal by its UnitGoal number — 18 take cover from
-		// fire, 19 return fire — and where it was when it started it.
+		// fire, 19 return fire, 20 throw a grenade — and where it was when it started it.
 		new[] { "unit", "tier", "goal", "x", "z" },                                            // UnitTask
 	};
 

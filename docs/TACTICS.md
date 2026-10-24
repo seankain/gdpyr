@@ -168,6 +168,8 @@ New branches in bold; `{…}` are executing conditions. Every new method also re
 ```
 unit
 ├─ Retreat                      unchanged
+├─ **Grenade**                  [Grenade ∧ Doctrine≠none ∧ Contact≠own ∧ SquadPhase≠falling back
+│                                ∧ Order∉{Build,Embark,Unload}]  ThrowGrenade {the same}            §5.4
 ├─ **React to fire**            [FiredUpon≠none ∧ Contact≠own ∧ FireCover≠none ∧ ¬Bounding
 │   │                            ∧ SquadPhase≠falling back ∧ Order∉{Build,Embark,Unload}]          §5.1
 │   ├─ return fire from cover   [FireCover=in]  ReturnFire {FiredUpon≠none, FireCover=in}
@@ -233,12 +235,19 @@ As built in T1 (`UnitDomain.cs`'s "react to fire" select, below Retreat and abov
 
 | | |
 |---|---|
-| Who | Any unit on foot with grenades (`UnitDefinition.Grenades`, 3 by default). |
-| Candidates | On the unit's scan: §4.2's entries last seen or fired from ≤ 3 s ago, 6–28 m from its eye (`GrenadeSim.MinThrowMeters` / `MaxThrowMeters`), that a `CoverBoard` box hides from it (the line from its eye to the contact's chest crosses one). Nearest the objective line first, then nearest. Older entries are not: a grenade has a 3 s fuse, and a position older than that is where the enemy was, not where the blast will find them. Today's current-target path stays as it is. |
-| Arc | `GrenadeSim.TrySolveOver`: today's low arc, its integrated path (`Carry`) checked chord by chord against `CoverBoard.Occludes`; if a box stops it, `LowArc`'s high root when it lands with ≥ `FuseMarginSeconds` (0.3 s) of fuse left. No arc, no throw. |
-| Claims | One claim per contact — per 3 m cell for a fired-from point — for `GrenadeClaimTicks` (4 s), on the squad's `DrillBoard`, or the side's for a unit in no squad: one grenade per hidden enemy at a time. |
-| In an assault | The two assault-element units nearest the threat point and in range throw first. The rush starts on the throw: a unit's blast spares its own side (`CombatManager.Explode`). |
-| Engine half | `UnitIntent.ThrowAt`. `ServerThrow` gains a second path for a unit with no target: the planned point, `targetInCover: true`, `targetSpeed: 0`. `ShouldThrow` is unchanged. The second path is `htn` only. |
+As built in T2 (`Grenades.cs`'s `GrenadePlan`, `GrenadeClaims` and `GrenadeSim.TrySolveOver`;
+`UnitManager.Grenades.cs`; the unit domain's "grenade" select, below Retreat and above React to
+fire):
+
+| | |
+|---|---|
+| Who | A unit with a doctrine and a grenade ready (`GrenadeSim.AiReady`: one left, 6 s since its last), its micro-autonomy on, no target of its own, its order not a build, a walk to a vehicle or an unload, its squad not falling back. The plan had any unit on foot; a builder's micro-autonomy means nothing on the card (§5.9), so it does not throw on its own either. |
+| Candidates | On the unit's scan: every ground-force player the side remembers (`ContactMemory`) seen ≤ 3 s ago (`GrenadePlan.FreshTicks`) and still alive — as a gunner stops firing at a dead target (`Suppress`) — and the unit's own fired-from point while its window is open; 6–28 m from its eye; behind a `CoverBoard` box — the line from its eye to 0.5 m above where the enemy was recorded crosses one (`HiddenAimMeters`: a crouched player's recorded position is its origin, 0.3 m off the ground, so the plan's chest is over a 1.1 m wall). A fired-from point within 3 m of a contact in the list is that contact. On the way first (within 6 m of the line to where its order goes), then the nearest. Squad-mates' fired-from points wait for T6's `DrillBoard` (§4.2). |
+| Arc | `GrenadeSim.TrySolveOver`: today's low arc, flown tick by tick through the projectile integrator against `CoverBoard.FirstHit`; it comes to rest against the first box it strikes, else where it comes down, and the throw is made only if that is within `KillReach` of the enemy, measured flat: the blast's lethal distance from a full-health body (140 × (1 − d/7) ≥ 100 → 2 m) against a 0.5 m capsule ending at the feet, 2.45 m. A blast is not stopped by walls (`CombatManager.Explode`), so a grenade that stops against the near face of the wall an enemy crouches behind kills them, and one that stops against a 3 m block between them does not. **No high arc**: at 18 m/s the high root is still in the air when the 3 s fuse runs out at every range `GrenadeTests` tries, 6 to 28 m, so the plan's fallback never lands. Seen from above a flight is a straight line (drag acts along the velocity), so the boxes near it are gathered once (`CoverBoard.Near`) and each chord asks only those. A unit that finds no arc does not look again for a second (`Unit.NoArcUntilTick`). |
+| Claims | `GrenadeClaims`, one table per side: one claim per contact, per 3 m cell for a fired-from point, for 4 s (`GrenadePlan.ClaimTicks`) after the throw — one grenade per hidden enemy at a time. Checked on the scan and again at the throw. The plan put them on the squad's `DrillBoard`; that waits for T6, and a side-wide table is the stricter of the two. |
+| Planner | `UnitFact.Grenade`, set on the scan; `ThrowGrenade` stands for one tick with `UnitIntent.ThrowAt` and `ThrowPoint`, and the engine throws that tick and clears the fact, thrown or not (`UnitContext.Threw`). Above React to fire: a unit running for cover throws on the way. `unit_task` goal 20. |
+| Engine half | `UnitManager.ThrowAtHidden`, a second path beside `ServerThrow`'s (unchanged): from where the unit stands that tick, `ShouldThrow` with `targetInCover: true`, `targetSpeed: 0`, the claim, then `TrySolveOver` again; `grenade_thrown` with `hidden` 1. `htn` only, as every plan is. |
+| In an assault | T6. |
 
 ### 5.5 The squad drill: fire and manoeuvre — requirements 1 and 5
 
@@ -462,6 +471,69 @@ strategist or a scenario turns micro-autonomy on.
   (`scripts/crouch_still.json`) 15 m from three riflemen under an attack order. Claims:
   `grenade_thrown[hidden=1]` ≥ 1 every seed; the seat killed in ≥ half. Off, no hidden throw
   happens: today's rule needs the head to show.
+- **Result — built.**
+  - `dotnet test`: 1868 passed, 0 failed (1823 before; 45 new: 24 in `GrenadeTests`, 15 in
+    `ThrowGrenadeTests`, 6 in `CoverTests`). `UnitHtnTests`' 0 B population has a 22nd situation,
+    a defender with a hidden enemy to throw at; `AgentEventTests` pins goal 20. `dotnet build
+    Gdpyr.csproj`: 0 warnings, 0 errors; the harness builds.
+  - **The tests test something.** One piece removed at a time; the count of tests that failed:
+    the micro-autonomy condition 2, the doctrine condition 1, the no-target condition 1, the
+    falling-back condition 1, the executing conditions 6, the hidden test 1, freshness 2, claims 1,
+    a box stopping the arc 8, the reach check 3. The no-target condition first failed nothing:
+    the executing condition still kept the throw from running, so the test only saw "not
+    throwing". Without the condition the planner plans the throw, aborts it and has nothing to
+    do, every tick; the test now asks for the same goal as a unit with nothing to throw at, and
+    fails without it.
+  - **Cost** (a temporary test, not committed; Release, Intel Xeon @ 2.80 GHz, while a scenario
+    suite ran on the same four cores): `TrySolveOver` against a board of 128 boxes, 257 and 261 µs
+    a call — `TrySolve`, today's solver, is 165 µs of it — down from 347–365 µs before the flight
+    gathered its boxes once (one `FirstHit` over the whole board is about 2 µs, and a flight is
+    about 90 chords). `Choose` over seven candidates, 3.5–4.7 µs. A unit solves on its scan only
+    with a grenade ready (6 s after its last), a hidden candidate and no failed solve in the last
+    second, and once more at the throw.
+  - **Scenario** `tactics_grenade_behind_wall`. As planned it showed nothing about T2, and its
+    runs found four things. (1) Riflemen placed in sight of the seat saw it standing before its
+    first crouch, and today's rule threw at it in the open (`hidden` 0) and killed it; they now
+    walk in from 66 m on a move order, after it is down. (2) The plan's 1 m chest, above a crouched
+    player's recorded position, is over a 1.1 m wall: no candidate was ever hidden;
+    `HiddenAimMeters` is 0.5 m. (3) A crouched player behind the wall is hidden from the riflemen
+    and from the side's fog alike, so the side needs eyes on the flank: a dropship, which sees and
+    never shoots. At 25 m it lost the seat as the riflemen closed in — the fog asks only the 3
+    nearest sensors per contact (`SimConfig.FogLineOfSightCandidates`), and three riflemen nearer
+    than it, all blind, crowded it out — so it stands 12 m off. (4) A second rifleman threw at the
+    dead seat's last position after the first claim ran out; dead contacts are no longer candidates.
+    Claims: 0 pilot fallbacks; `grenade_thrown[hidden=1]` ≥ 1 and `[hidden=0]` none, every seed; the
+    seat killed in at least half. Seeds 1–3, on the build before the flight gathered its boxes once
+    (which gives the same answers, `CoverTests`) and before the one-second back-off:
+
+    | | micro-autonomy on | off (`"unit_autonomy": "off"`, otherwise the same file) |
+    |---|---|---|
+    | Claims | 4 of 4 held | the hidden throw and the kill fail on every seed, as they should |
+    | `grenade_thrown`, hidden | 1 a seed, by the same rifleman on its walk, about 28 m from the seat | none |
+    | Damage to the seat | 108.2, 110.5, 111.2: killed when the fuse ran out, 3 s after the throw | none; alive at the end |
+
+    The side spots the seat 62 ticks into the round in every run, on and off. Off, the riflemen
+    walk up and stand 16 m from a player they cannot see, which is today's behaviour. The runs on
+    the commit's own build, and the whole suite, were in progress when this was committed; they are
+    recorded in the next commit.
+  - **Found in T1, fixed here.** A unit firing back at a place (`FireAtPlace`) has no target of its
+    own, but `Planned` passed the engine's "has a target" to `Track`, which banded it as one: under
+    a defend order, an attack or none, the reaction's executing condition (nothing of its own to
+    fight from cover) ended it the tick after it began firing, and the next tick, with no fire at a
+    place, began it again. `Planned` now passes `hasTarget && !firingAtPlace`. Found by reading;
+    no scenario shows it, because a unit fires at a place only when the shooter is within its
+    40 m engage range and out of its sight, and every round from a shooter it can see within its
+    45 m sensor makes that shooter its target. T1's scenario is a move order, which reacts either
+    way.
+  - **Differences from the plan above.** No high arc, and the arc is judged by where it comes to
+    rest, not by clearing the wall (§5.4 says why). A doctrine is required, as for every tactic.
+    Claims are per side, not on a squad's `DrillBoard`; squad-mates' fired-from points and the
+    assault's first throws wait for T6. The hidden test aims 0.5 m above the recorded position,
+    not at the chest. Contacts that have died since they were seen are not candidates. The tests
+    are in `ThrowGrenadeTests`, not `UnitHtnTests`. Legacy is untouched: it has no plan, and
+    `ServerThrow`'s path is the same code, with its launch (the throwing error, the spawn, the event)
+    moved into `LaunchGrenade` for both paths to share.
+  - **Not checked.** A grenade's cost per tick in the engine with many units; a display.
 
 ### T3 — Posture and the unit snapshot v2 (1.5 days)
 

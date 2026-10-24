@@ -116,6 +116,14 @@ public enum UnitFact : byte
 	/// </summary>
 	ReactSpent,
 
+	/// <summary>
+	/// A hidden enemy to throw a grenade at (docs/TACTICS.md §5.4): one the side saw, or
+	/// a round came from, within the fuse, behind a box from the unit, an arc that comes
+	/// to rest within a kill of it, nobody else's grenade on its way there, and one in
+	/// the unit's hand. On the scan; off once the unit has tried.
+	/// </summary>
+	Grenade,
+
 	Count,
 }
 
@@ -176,6 +184,9 @@ public enum UnitGoal : byte
 
 	/// <summary>In that spot: firing back at where the fire came from while it keeps coming, then holding.</summary>
 	ReturnFire,
+
+	/// <summary>A grenade at a hidden enemy, standing for the throw (docs/TACTICS.md §5.4).</summary>
+	ThrowGrenade,
 }
 
 /// <summary>How the unit manager picks where to walk for an intent.</summary>
@@ -222,6 +233,15 @@ public struct UnitIntent
 
 	/// <inheritdoc cref="FireAt"/>
 	public Vector3 FirePoint;
+
+	/// <summary>
+	/// Throw a grenade at <see cref="ThrowPoint"/>: where a hidden enemy is reckoned to
+	/// be, with no target of its own (docs/TACTICS.md §5.4).
+	/// </summary>
+	public bool ThrowAt;
+
+	/// <inheritdoc cref="ThrowAt"/>
+	public Vector3 ThrowPoint;
 }
 
 /// <summary>
@@ -559,6 +579,9 @@ public sealed class UnitContext : BaseContext
 	public bool HasFireCoverPoint;
 	public Vector3 FireCoverPoint;
 
+	/// <summary>Where a hidden enemy's feet are reckoned to be, for a grenade. Only with <see cref="UnitFact.Grenade"/>.</summary>
+	public Vector3 ThrowPoint;
+
 	/// <summary>Ticks it has spent reacting to fire under its current order, against <see cref="UnitPlanTraits.ReactMaxTicks"/>.</summary>
 	public int ReactedTicks;
 
@@ -584,7 +607,8 @@ public sealed class UnitContext : BaseContext
 	public static bool Paces(UnitGoal goal) => goal is UnitGoal.Advance or UnitGoal.TakePoint;
 
 	/// <summary>The goals of docs/TACTICS.md §5: what the agent stream's <c>unit_task</c> reports a unit starting.</summary>
-	public static bool IsTactic(UnitGoal goal) => goal is UnitGoal.TakeCoverFromFire or UnitGoal.ReturnFire;
+	public static bool IsTactic(UnitGoal goal) =>
+		goal is UnitGoal.TakeCoverFromFire or UnitGoal.ReturnFire or UnitGoal.ThrowGrenade;
 
 	/// <summary>
 	/// An order that goes somewhere: one that reacting to fire must not stop for good,
@@ -641,6 +665,19 @@ public sealed class UnitContext : BaseContext
 		_reactSpentTick = 0;
 		Sense(UnitFact.ReactSpent, false);
 	}
+
+	/// <summary>
+	/// A hidden enemy to throw a grenade at, from the unit's scan (docs/TACTICS.md §5.4),
+	/// or none. The engine has already found the arc; the planner says when.
+	/// </summary>
+	public void SenseGrenade(bool hasThrow, Vector3 throwPoint)
+	{
+		ThrowPoint = throwPoint;
+		Sense(UnitFact.Grenade, hasThrow);
+	}
+
+	/// <summary>The unit has tried its throw, whether a grenade left its hand or not: nothing to throw at until the next scan.</summary>
+	public void Threw() => Sense(UnitFact.Grenade, false);
 
 	/// <summary>A context with no squad is moving, not gathering: 0 is <see cref="Htn.SquadPhase.Gathering"/>.</summary>
 	public override void Init()
@@ -883,6 +920,12 @@ public sealed class UnitContext : BaseContext
 				}
 
 				FireBack();
+				return Hold();
+
+			case UnitGoal.ThrowGrenade:
+				// It stands for the throw, which the engine makes this tick (docs/TACTICS.md §5.4).
+				Intent.ThrowAt = true;
+				Intent.ThrowPoint = ThrowPoint;
 				return Hold();
 
 			default:
@@ -1142,6 +1185,17 @@ public sealed class UnitDomainBuilder : BaseDomainBuilder<UnitDomainBuilder, Uni
 			.WhileNot(UnitFact.Order, OrderKind.Unload).WhileNothingToFightFromCover();
 
 	/// <summary>
+	/// The executing conditions a throw holds by (docs/TACTICS.md §5.4): the strategist
+	/// still lets it, there is still a hidden enemy to throw at, it has no target of its
+	/// own, its squad is not falling back, and its order is not one it never throws under.
+	/// </summary>
+	public UnitDomainBuilder WhileThrowing() =>
+		While(UnitFact.MicroAutonomy, MicroAutonomy.On).While(UnitFact.Grenade, true)
+			.WhileNot(UnitFact.Contact, UnitContact.Own).WhileNot(UnitFact.SquadPhase, SquadPhase.FallingBack)
+			.WhileNot(UnitFact.Order, OrderKind.Build).WhileNot(UnitFact.Order, OrderKind.Embark)
+			.WhileNot(UnitFact.Order, OrderKind.Unload);
+
+	/// <summary>
 	/// A primitive task whose operator asks the unit for <paramref name="goal"/>. Set
 	/// directly rather than through <c>Do</c>, which takes no abort callback: an
 	/// operator ended by a failed executing condition must clear its intent too (§3.7).
@@ -1200,6 +1254,22 @@ public static class UnitDomain
 						.While(UnitFact.Stance, UnitStance.Autonomous)
 						.WhileNot(UnitFact.Order, OrderKind.Move).WhileNot(UnitFact.Order, OrderKind.Build)
 						.WhileNot(UnitFact.Order, OrderKind.Embark).WhileNot(UnitFact.Order, OrderKind.Unload).End()
+				.End()
+			.End()
+			// A grenade at a hidden enemy (docs/TACTICS.md §5.4): only with the strategist's
+			// leave, below Retreat, and above reacting to fire, as a throw is one tick's
+			// standing still — a unit running for cover throws on the way.
+			.Select("grenade")
+				.Sequence("throw at a hidden enemy")
+					.If(UnitFact.MicroAutonomy, MicroAutonomy.On)
+					.IfHasDoctrine()
+					.If(UnitFact.Grenade, true)
+					.IfNot(UnitFact.Contact, UnitContact.Own)
+					.IfNot(UnitFact.SquadPhase, SquadPhase.FallingBack)
+					.IfNot(UnitFact.Order, OrderKind.Build)
+					.IfNot(UnitFact.Order, OrderKind.Embark)
+					.IfNot(UnitFact.Order, OrderKind.Unload)
+					.Act(UnitGoal.ThrowGrenade).WhileThrowing().End()
 				.End()
 			.End()
 			// Reacting to fire (docs/TACTICS.md §5.1): only with the strategist's leave

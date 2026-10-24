@@ -206,10 +206,7 @@ public partial class UnitManager
 		if (UnitContext.GoesSomewhere(order.Kind))
 		{
 			query.HasToward = true;
-			query.Toward = objective ? point
-				: order.Kind == OrderKind.Patrol && order.Returning ? order.Anchor
-				: order.Kind == OrderKind.Attack ? plan.AdvancePoint
-				: order.Target;
+			query.Toward = OrderToward(plan, order, objective, point);
 			query.MaxBackMeters = ReactBackMeters;
 			query.MaxOffLineMeters = ReactOffLineMeters;
 		}
@@ -228,6 +225,17 @@ public partial class UnitManager
 		plan.FireCoverPoint = spot.Position;
 		return true;
 	}
+
+	/// <summary>
+	/// Where an order that goes somewhere (<see cref="UnitContext.GoesSomewhere"/>) is
+	/// going now: the point it attacks, the end of the patrol it walks to, the advance's
+	/// next point, or the move's target.
+	/// </summary>
+	private static Vector3 OrderToward(UnitContext plan, in UnitOrder order, bool objective, Vector3 point) =>
+		objective ? point
+		: order.Kind == OrderKind.Patrol && order.Returning ? order.Anchor
+		: order.Kind == OrderKind.Attack ? plan.AdvancePoint
+		: order.Target;
 
 	/// <summary>The feet of whoever fired the latest round at the unit, as it reckons it: a standing body's eye below where the round came from.</summary>
 	private static Vector3 FiredFromFeet(Unit unit) => unit.Fire.Origin + (Vector3.Down * CoverThreatEyeMeters);
