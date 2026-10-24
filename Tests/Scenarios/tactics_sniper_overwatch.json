@@ -1,0 +1,26 @@
+{
+  "name": "a sniper defending between a block and a low wall hides from ground bots coming at it, peeks out to fire, and moves on",
+  "bot_ai": "htn",
+  "unit_autonomy": "on",
+  "seeds": [1, 2, 3],
+  "duration_ticks": 3600,
+  "warmup_ticks": 60,
+  "roster": { "ground": 3, "strategists": 0 },
+
+  "seats": [
+    { "id": "idle", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json" }
+  ],
+
+  "spawns": [
+    { "peer": "idle", "at": [110, 1, 110], "look": [0, 0] },
+    { "unit": "sniper", "id": "s1", "team": "strategist", "at": [-43, 0.5, -60], "order": "defend" }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.unit_task[goal=21].count", "op": ">=", "value": 1 },
+    { "metric": "events.unit_task[goal=23].count", "op": ">=", "value": 1 },
+    { "metric": "events.unit_task[goal=23].count", "op": "over_seeds", "cmp": ">=", "value": 2, "fraction": 0.5 },
+    { "metric": "events.kill[attacker<0].count", "op": "over_seeds", "cmp": ">=", "value": 1, "fraction": 0.5 }
+  ]
+}

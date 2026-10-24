@@ -1567,7 +1567,9 @@ public class UnitHtnTests
 	// ---- sharing and allocation --------------------------------------------
 
 	/// <summary>How many situations <see cref="Situation"/> has.</summary>
-	private const int Situations = 22;
+	private const int Situations = 24;
+
+	private static readonly UnitTraits Sniper = new(70f, 70f, 1.5f, 20f, UnitDoctrine.Marksman);
 
 	/// <summary>
 	/// Twenty-two situations, one per operator of §5.2 and two for Advance, as an order and
@@ -1576,13 +1578,16 @@ public class UnitHtnTests
 	/// next two are a walk to a vehicle and an unload (docs/VEHICLES.md §9.2), the second
 	/// on a computer strategist's word and losing, which does not make it retreat. The last
 	/// two of §5.1's are a defender fired upon with micro-autonomy on (docs/TACTICS.md):
-	/// on its way to a spot behind cover from the fire, and in it. The last is a defender
-	/// with a hidden enemy to throw a grenade at (§5.4).
+	/// on its way to a spot behind cover from the fire, and in it. Then a defender with a
+	/// hidden enemy to throw a grenade at (§5.4). The last two are a defending marksman
+	/// with a peek pair (§5.3): away from it, and in its hide spot with somebody to peek
+	/// at — which a rifleman, offered the same, does not take.
 	/// </summary>
 	private static void Situation(UnitContext c, int phase, out OrderKind order, out bool hasTarget)
 	{
 		bool point = phase is >= 14 and <= 16;
 		bool fired = phase is 19 or 20;
+		bool peek = phase is 22 or 23;
 		c.ObjectivePoint = phase == 15 ? c.Position : Objective;
 		c.HasCoverPoint = phase == 16;
 		c.CoverPoint = Objective + new Vector3(0f, 0f, -6f);
@@ -1597,16 +1602,18 @@ public class UnitHtnTests
 			HasFireCover = fired,
 			FireCoverHides = fired,
 		});
-		c.SenseAutonomy(fired || phase == 21 ? MicroAutonomy.On : MicroAutonomy.Off);
+		c.SenseAutonomy(fired || phase == 21 || peek ? MicroAutonomy.On : MicroAutonomy.Off);
 		c.SenseGrenade(phase == 21, Anchor + new Vector3(0f, 0f, 18f));
 		c.SenseFire(fired ? FireKind.NearMiss : FireKind.None, Anchor + new Vector3(50f, 1.5f, 0f), c.Tick, 0);
+		Vector3 hide = phase == 23 ? c.Position : Anchor + new Vector3(-6f, 0f, 0f);
+		c.SensePeek(peek, hide, hide, true, peek ? OwnerId.ForPeer(7) : OwnerId.None, standoff: false);
 
 		order = phase switch
 		{
 			0 or 4 or 5 or 6 or 7 or 13 or 14 or 15 or 16 => OrderKind.Attack,
 			1 or 2 => OrderKind.Build,
 			3 => OrderKind.Attack,
-			8 or 9 or 10 or 19 or 20 or 21 => OrderKind.Defend,
+			8 or 9 or 10 or 19 or 20 or 21 or 22 or 23 => OrderKind.Defend,
 			11 => OrderKind.Patrol,
 			17 => OrderKind.Embark,
 			18 => OrderKind.Unload,
@@ -1649,8 +1656,9 @@ public class UnitHtnTests
 		for (int i = 0; i < agents; i++)
 		{
 			// Inside the leash round the anchor, and for three in five, far enough ahead
-			// of the squad on the way to the objective to wait for it.
-			UnitContext c = planning.CreateContext(Rifleman);
+			// of the squad on the way to the objective to wait for it. One in four is a
+			// marksman.
+			UnitContext c = planning.CreateContext(i % 4 == 3 ? Sniper : Rifleman);
 			c.Position = Anchor + new Vector3(i * 0.1f, 0f, 3f);
 			c.HasSquad = true;
 			c.SquadAlive = 4;
@@ -1710,7 +1718,7 @@ public class UnitHtnTests
 			UnitGoal.EngageFocus, UnitGoal.Support, UnitGoal.Advance, UnitGoal.EngageInLeash, UnitGoal.AnswerCall,
 			UnitGoal.HoldPost, UnitGoal.Patrol, UnitGoal.Obey, UnitGoal.Resupply, UnitGoal.TakePoint,
 			UnitGoal.HoldPoint, UnitGoal.HoldPointCover, UnitGoal.Obey, UnitGoal.Obey, UnitGoal.TakeCoverFromFire,
-			UnitGoal.ReturnFire, UnitGoal.ThrowGrenade,
+			UnitGoal.ReturnFire, UnitGoal.ThrowGrenade, UnitGoal.HoldPost, UnitGoal.HoldPost,
 		};
 		Assert.Equal(Situations, expected.Length);
 
@@ -1723,6 +1731,28 @@ public class UnitHtnTests
 			planning.Tick(c);
 
 			Assert.Equal(expected[phase], c.Intent.Goal);
+		}
+
+		// The marksman's two: to its hide spot; and in it, hidden two seconds, out on a peek.
+		UnitContext sniper = planning.CreateContext(Sniper);
+		sniper.Position = c.Position;
+		sniper.HasPost = true;
+		sniper.PostPoint = c.PostPoint;
+		for (int phase = 22; phase < Situations; phase++)
+		{
+			planning.Reset(sniper);
+			Situation(sniper, phase, out OrderKind order, out bool hasTarget);
+			var standing = new UnitOrder { Kind = order, Target = sniper.ObjectivePoint, Anchor = Anchor };
+			// The scan finds it in its hide spot, which starts the clock.
+			int ticks = phase == 23 ? UnitPlanTraits.Default.MinHideTicks : 1;
+			for (int t = 0; t < ticks; t++)
+			{
+				sniper.Tick++;
+				sniper.Track(sniper.Position, standing, hasTarget, Anchor + new Vector3(0f, 0.5f, 5f));
+				planning.Tick(sniper);
+			}
+
+			Assert.Equal(phase == 22 ? UnitGoal.ToHide : UnitGoal.PopOut, sniper.Intent.Goal);
 		}
 	}
 

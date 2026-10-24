@@ -102,6 +102,103 @@ public struct CoverSpot
 }
 
 /// <summary>
+/// One search for a marksman's peek pair (docs/TACTICS.md §5.3): a spot to hide in that
+/// no threat's eye sees, and beside it a spot to fire from that sees the target. Heights
+/// are above the feet of the body they belong to, as a <see cref="CoverQuery"/>'s are.
+/// </summary>
+public struct PeekQuery
+{
+	/// <summary>The seeker's feet.</summary>
+	public Vector3 From;
+
+	/// <summary>
+	/// The primary threat's feet: the target it would shoot, else the threat it hides from.
+	/// The fire spot must see its eye, and the hide spot is on a face turned away from it.
+	/// </summary>
+	public Vector3 Target;
+
+	/// <summary>Where every threat's eye is above its feet, the target's included.</summary>
+	public float ThreatEyeMeters;
+
+	/// <summary>How far from <see cref="From"/> the hide spot may be, measured flat.</summary>
+	public float SearchMeters;
+
+	/// <summary>The fire spot's band from the target, measured flat.</summary>
+	public float MinRangeMeters;
+
+	/// <inheritdoc cref="MinRangeMeters"/>
+	public float MaxRangeMeters;
+
+	/// <summary>Neither spot is nearer than this to any threat.</summary>
+	public float StandoffMeters;
+
+	/// <summary>How far from the hide spot the fire spot may be.</summary>
+	public float PairMeters;
+
+	/// <summary>The seeker's capsule radius.</summary>
+	public float BodyRadiusMeters;
+
+	/// <summary>Its height standing: the crown a tall box must hide.</summary>
+	public float HeightMeters;
+
+	/// <summary>Its eye standing: where it fires from.</summary>
+	public float EyeMeters;
+
+	/// <summary>Its height crouched: the crown a low wall must hide. 0 for a body that cannot crouch.</summary>
+	public float CrouchHeightMeters;
+
+	/// <summary>Both spots inside <see cref="LeashMeters"/> of <see cref="LeashAnchor"/>. Off unless set.</summary>
+	public bool HasLeash;
+
+	/// <inheritdoc cref="HasLeash"/>
+	public Vector3 LeashAnchor;
+
+	/// <inheritdoc cref="HasLeash"/>
+	public float LeashMeters;
+
+	/// <summary>
+	/// Where its squad is: of two pairs otherwise equal, the one whose fire spot is the
+	/// wider angle off the line from the target to here — a flank. Off unless set.
+	/// </summary>
+	public bool HasAxis;
+
+	/// <inheritdoc cref="HasAxis"/>
+	public Vector3 AxisFrom;
+
+	/// <summary>
+	/// Relocating (docs/TACTICS.md §5.3, "displace"): the fire spot at least
+	/// <see cref="LastMeters"/> from <see cref="Last"/>, the one it last fired from. Off
+	/// unless set.
+	/// </summary>
+	public bool HasLast;
+
+	/// <inheritdoc cref="HasLast"/>
+	public Vector3 Last;
+
+	/// <inheritdoc cref="HasLast"/>
+	public float LastMeters;
+
+	/// <summary>The fire spot at least this far from every recent one a search is given.</summary>
+	public float RecentMeters;
+}
+
+/// <summary>A marksman's place to hide and the place beside it to fire from (docs/TACTICS.md §5.3).</summary>
+public struct PeekPair
+{
+	/// <summary>On the ground, at the box's base height: where it waits, hidden from every threat.</summary>
+	public Vector3 Hide;
+
+	/// <summary>Where it stands to fire: past the box's end, or the hide spot itself behind a low wall.</summary>
+	public Vector3 Fire;
+
+	/// <summary>Behind a low wall: it hides crouched and fires standing, from the one spot.</summary>
+	public bool Low;
+
+	/// <summary>The board index of the box it hides behind.</summary>
+	public int Object;
+}
+
+/// <summary>
 /// The cover on the field, and where to stand behind it (docs/COVER.md).
 ///
 /// Cover is already physical: a box on the world layer stops rounds, bodies and
@@ -546,6 +643,302 @@ public sealed class CoverBoard
 		float oz = at.Z - (query.From.Z + (dz * t));
 		float off = MathF.Max(query.MaxOffLineMeters, 0f);
 		return (ox * ox) + (oz * oz) <= off * off;
+	}
+
+	/// <summary>
+	/// Whether no box on the board stands across the segment from <paramref name="from"/>
+	/// to <paramref name="to"/>, each grown by <paramref name="grow"/>: a line of fire with
+	/// that much air round it.
+	/// </summary>
+	public bool ClearLine(Vector3 from, Vector3 to, float grow = 0f)
+	{
+		for (int i = 0; i < Capacity; i++)
+		{
+			if (_active[i] && IsNear(i, from, to, grow) && Occludes(i, from, to, grow))
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	/// <summary>
+	/// Whether a body at <paramref name="at"/> whose crown is <paramref name="crownMeters"/>
+	/// above it is concealed (docs/TACTICS.md §5.3): for every threat, a box crosses the
+	/// line from the threat's eye, <paramref name="threatEyeMeters"/> above its feet, to
+	/// the crown. Range alone is not concealment. True for no threats at all.
+	/// </summary>
+	public bool Concealed(Vector3 at, float crownMeters, ReadOnlySpan<Vector3> threats, float threatEyeMeters)
+	{
+		Vector3 crown = at + (Vector3.Up * crownMeters);
+		for (int t = 0; t < threats.Length; t++)
+		{
+			if (FirstHit(threats[t] + (Vector3.Up * threatEyeMeters), crown, out _) < 0)
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	/// <summary>
+	/// The best peek pair for the query that nobody has claimed (docs/TACTICS.md §5.3): a
+	/// hide spot on a face turned away from the target, within the search, concealed from
+	/// the target and every threat in <paramref name="threats"/> at the posture it waits in
+	/// there — crouched behind a low wall, standing behind anything taller — and a fire
+	/// spot within the pair's reach of it that sees the target's eye with
+	/// <see cref="FireClearanceMeters"/> of air, in the band, and not near a threat or a
+	/// spot in <paramref name="recent"/>. Behind a low wall the fire spot is the hide spot,
+	/// stood up in; behind a taller box it is one slot past the face's end.
+	///
+	/// Best is the shortest walk, by bands of the pair's reach, then the fewest threats
+	/// whose eye sees the fire spot, then the widest angle off the squad's axis, then the
+	/// shortest walk; ties go to the lower box index and the earlier slot, so the answer is
+	/// the same every time.
+	/// </summary>
+	public bool TryFindPeek(in PeekQuery query, ReadOnlySpan<Vector3> threats, ReadOnlySpan<Vector3> recent,
+		ReadOnlySpan<Vector3> claimed, out PeekPair best)
+	{
+		best = default;
+		best.Object = -1;
+		int bestBand = int.MaxValue;
+		int bestSeen = int.MaxValue;
+		float bestFlank = -1f;
+		float bestWalk = float.MaxValue;
+
+		float search = MathF.Max(query.SearchMeters, 0f);
+		float body = MathF.Max(query.BodyRadiusMeters, 0f);
+		float band = MathF.Max(query.PairMeters, 0.1f);
+		Span<Vector3> fires = stackalloc Vector3[2];
+
+		for (int i = 0; i < Capacity; i++)
+		{
+			if (!_active[i] || FootprintOf(i).DistanceTo(query.From) > search + body + GapMeters)
+			{
+				continue;
+			}
+
+			// A low wall hides a body crouched, and it fires over the wall standing; a body
+			// that cannot crouch is not hidden by one.
+			bool low = _size[i].Y <= query.EyeMeters - FireClearanceMeters;
+			if (low && query.CrouchHeightMeters <= 0f)
+			{
+				continue;
+			}
+
+			float crown = low ? query.CrouchHeightMeters : query.HeightMeters;
+			var pose = new StructurePose(_base[i], _yaw[i]);
+			Vector3 target = pose.ToLocal(query.Target);
+
+			for (int face = 0; face < 4; face++)
+			{
+				bool alongX = face >= 2;
+				float sign = (face & 1) == 0 ? 1f : -1f;
+				if ((alongX ? target.Z : target.X) * sign >= 0f)
+				{
+					continue;
+				}
+
+				float halfAcross = alongX ? _size[i].Z * 0.5f : _size[i].X * 0.5f;
+				float halfAlong = alongX ? _size[i].X * 0.5f : _size[i].Z * 0.5f;
+				float usable = MathF.Max((2f * halfAlong) - (2f * body), 0f);
+				int slots = Math.Clamp((int)(usable / SlotSpacingMeters) + 1, 1, MaxSlotsPerFace);
+				float out_ = halfAcross + body + GapMeters;
+
+				for (int s = 0; s < slots; s++)
+				{
+					float along = (s - ((slots - 1) * 0.5f)) * SlotSpacingMeters;
+					Vector3 hide = pose.ToWorld(Local(alongX, along, sign * out_));
+					float walk = Flat(hide, query.From);
+					int walkBand = (int)(walk / band);
+					if (walk > search || walkBand > bestBand || !PeekSpotAllowed(hide, query, threats)
+						|| IsClaimed(hide, claimed, default) || IsInsideOther(i, hide, body))
+					{
+						continue;
+					}
+
+					// Where it fires from: the spot itself over a low wall; past an end of the
+					// face beside a taller box.
+					int fireCount = 0;
+					if (low)
+					{
+						fires[fireCount++] = hide;
+					}
+					else
+					{
+						if (s == 0)
+						{
+							fires[fireCount++] = pose.ToWorld(Local(alongX, along - SlotSpacingMeters, sign * out_));
+						}
+
+						if (s == slots - 1)
+						{
+							fires[fireCount++] = pose.ToWorld(Local(alongX, along + SlotSpacingMeters, sign * out_));
+						}
+					}
+
+					int concealed = -1;
+					for (int f = 0; f < fireCount; f++)
+					{
+						Vector3 fire = fires[f];
+						if (Flat(fire, hide) > query.PairMeters || !FireSpotAllowed(i, fire, hide, query, threats, recent,
+							body))
+						{
+							continue;
+						}
+
+						// The two dearest questions last, and the hide spot's once.
+						if (concealed < 0)
+						{
+							concealed = HidesPeek(hide, crown, query, threats) ? 1 : 0;
+						}
+
+						if (concealed == 0)
+						{
+							break;
+						}
+
+						int seen = SeenBy(fire, query, threats);
+						float flank = query.HasAxis ? FlatAngle(query.Target, fire, query.AxisFrom) : 0f;
+						bool better = walkBand < bestBand
+							|| (walkBand == bestBand && (seen < bestSeen
+								|| (seen == bestSeen && (flank > bestFlank
+									|| (flank == bestFlank && walk < bestWalk)))));
+						if (!better)
+						{
+							continue;
+						}
+
+						bestBand = walkBand;
+						bestSeen = seen;
+						bestFlank = flank;
+						bestWalk = walk;
+						best = new PeekPair { Hide = hide, Fire = fire, Low = low, Object = i };
+					}
+				}
+			}
+		}
+
+		return best.Object >= 0;
+	}
+
+	/// <summary>
+	/// Whether a pair already taken still does for the query (docs/TACTICS.md §5.3): its
+	/// box still stands, the hide spot is within the search and still concealed, and the
+	/// fire spot still sees the target from inside the band, clear of every threat and of
+	/// the spots it is to avoid. A kept pair is what stops a marksman shuffling between
+	/// walls every scan.
+	/// </summary>
+	public bool KeepsPeek(in PeekPair pair, in PeekQuery query, ReadOnlySpan<Vector3> threats,
+		ReadOnlySpan<Vector3> recent)
+	{
+		float body = MathF.Max(query.BodyRadiusMeters, 0f);
+		if (!IsActive(pair.Object) || Flat(pair.Hide, query.From) > MathF.Max(query.SearchMeters, 0f)
+			|| (pair.Low && query.CrouchHeightMeters <= 0f)
+			|| !PeekSpotAllowed(pair.Hide, query, threats)
+			|| !FireSpotAllowed(pair.Object, pair.Fire, pair.Hide, query, threats, recent, body))
+		{
+			return false;
+		}
+
+		return HidesPeek(pair.Hide, pair.Low ? query.CrouchHeightMeters : query.HeightMeters, query, threats);
+	}
+
+	/// <summary>Inside the leash, when there is one, and no nearer a threat than the standoff.</summary>
+	private static bool PeekSpotAllowed(Vector3 at, in PeekQuery query, ReadOnlySpan<Vector3> threats)
+	{
+		if (query.HasLeash && Flat(at, query.LeashAnchor) > query.LeashMeters)
+		{
+			return false;
+		}
+
+		float standoff = MathF.Max(query.StandoffMeters, 0f) * MathF.Max(query.StandoffMeters, 0f);
+		if (FlatSquared(at, query.Target) < standoff)
+		{
+			return false;
+		}
+
+		for (int t = 0; t < threats.Length; t++)
+		{
+			if (FlatSquared(at, threats[t]) < standoff)
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	/// <summary>
+	/// A fire spot at <paramref name="fire"/>, beside box <paramref name="index"/>: allowed
+	/// where the hide spot is, in the band, away from the last and the recent fire spots,
+	/// not inside another box, and with a clear line from its standing eye to the target's.
+	/// </summary>
+	private bool FireSpotAllowed(int index, Vector3 fire, Vector3 hide, in PeekQuery query,
+		ReadOnlySpan<Vector3> threats, ReadOnlySpan<Vector3> recent, float body)
+	{
+		float range = Flat(fire, query.Target);
+		if (range < query.MinRangeMeters || range > query.MaxRangeMeters)
+		{
+			return false;
+		}
+
+		if (query.HasLast && Flat(fire, query.Last) < query.LastMeters)
+		{
+			return false;
+		}
+
+		for (int r = 0; r < recent.Length; r++)
+		{
+			if (Flat(fire, recent[r]) < query.RecentMeters)
+			{
+				return false;
+			}
+		}
+
+		if (fire != hide && (!PeekSpotAllowed(fire, query, threats) || IsInsideOther(index, fire, body)))
+		{
+			return false;
+		}
+
+		return ClearLine(fire + (Vector3.Up * query.EyeMeters), query.Target + (Vector3.Up * query.ThreatEyeMeters),
+			FireClearanceMeters);
+	}
+
+	/// <summary>The hide spot is concealed from the target and from every threat, its crown at <paramref name="crown"/>.</summary>
+	private bool HidesPeek(Vector3 hide, float crown, in PeekQuery query, ReadOnlySpan<Vector3> threats) =>
+		FirstHit(query.Target + (Vector3.Up * query.ThreatEyeMeters), hide + (Vector3.Up * crown), out _) >= 0
+		&& Concealed(hide, crown, threats, query.ThreatEyeMeters);
+
+	/// <summary>How many threats' eyes see the standing eye at <paramref name="fire"/>: no box between.</summary>
+	private int SeenBy(Vector3 fire, in PeekQuery query, ReadOnlySpan<Vector3> threats)
+	{
+		Vector3 eye = fire + (Vector3.Up * query.EyeMeters);
+		int seen = 0;
+		for (int t = 0; t < threats.Length; t++)
+		{
+			seen += FirstHit(threats[t] + (Vector3.Up * query.ThreatEyeMeters), eye, out _) < 0 ? 1 : 0;
+		}
+
+		return seen;
+	}
+
+	private static Vector3 Local(bool alongX, float along, float across) =>
+		alongX ? new Vector3(along, 0f, across) : new Vector3(across, 0f, along);
+
+	/// <summary>The flat angle at <paramref name="apex"/> between the directions to <paramref name="a"/> and <paramref name="b"/>, in radians.</summary>
+	private static float FlatAngle(Vector3 apex, Vector3 a, Vector3 b)
+	{
+		var u = new Vector2(a.X - apex.X, a.Z - apex.Z);
+		var v = new Vector2(b.X - apex.X, b.Z - apex.Z);
+		if (u.LengthSquared() < 1e-8f || v.LengthSquared() < 1e-8f)
+		{
+			return 0f;
+		}
+
+		return MathF.Abs(MathF.Atan2((u.X * v.Y) - (u.Y * v.X), (u.X * v.X) + (u.Y * v.Y)));
 	}
 
 	/// <summary>Box <paramref name="index"/> hides the body at <paramref name="at"/> from the threat's eye.</summary>

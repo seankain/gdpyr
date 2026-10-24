@@ -537,6 +537,301 @@ public class CoverTests
 		}
 	}
 
+	// ---- peek pairs (docs/TACTICS.md §5.3) -------------------------------------------
+
+	/// <summary>A sniper looking for a pair against a target at <paramref name="target"/>: the scan's numbers.</summary>
+	private static PeekQuery Sniper(Vector3 from, Vector3 target, float crouch = 1.0f) => new()
+	{
+		From = from,
+		Target = target,
+		ThreatEyeMeters = 1.5f,
+		SearchMeters = MarksmanPlan.SearchMeters,
+		MinRangeMeters = MarksmanPlan.MinRangeMeters,
+		MaxRangeMeters = MarksmanPlan.MaxRangeMeters,
+		StandoffMeters = MarksmanPlan.StandoffMeters,
+		PairMeters = MarksmanPlan.PairMeters,
+		BodyRadiusMeters = 0.4f,
+		HeightMeters = 1.8f,
+		EyeMeters = 1.5f,
+		CrouchHeightMeters = crouch,
+	};
+
+	private static readonly Vector3 Ahead = new(0f, 0f, 50f);
+
+	[Fact]
+	public void BehindALowWall_ItHidesCrouched_AndFiresStandingFromTheSameSpot()
+	{
+		CoverBoard board = WallAtOrigin(LowWall);
+		PeekQuery query = Sniper(new Vector3(0f, 0f, -3f), Ahead);
+
+		Assert.True(board.TryFindPeek(query, new[] { Ahead }, default, default, out PeekPair pair));
+		Assert.True(pair.Low);
+		Assert.Equal(pair.Hide, pair.Fire);
+		Assert.Equal(0, pair.Object);
+
+		// On the far side of the wall, the nearest slot: its crouched crown hidden from the
+		// target, its standing crown not, and its standing eye clear over the wall to the target's.
+		Assert.Equal(-1.0f, pair.Hide.Z, 3);
+		Assert.Equal(0f, pair.Hide.X, 3);
+		Assert.True(board.Concealed(pair.Hide, 1.0f, new[] { Ahead }, 1.5f));
+		Assert.False(board.Concealed(pair.Hide, 1.8f, new[] { Ahead }, 1.5f));
+		Assert.True(board.ClearLine(pair.Fire + (Vector3.Up * 1.5f), Ahead + (Vector3.Up * 1.5f),
+			CoverBoard.FireClearanceMeters));
+	}
+
+	[Fact]
+	public void BehindABlock_ItHidesStanding_AndFiresFromOneSlotPastItsEnd()
+	{
+		CoverBoard board = WallAtOrigin(Block);
+		PeekQuery query = Sniper(new Vector3(0f, 0f, -5f), Ahead);
+
+		Assert.True(board.TryFindPeek(query, new[] { Ahead }, default, default, out PeekPair pair));
+		Assert.False(pair.Low);
+		Assert.Equal(-2.1f, pair.Hide.Z, 3);
+		Assert.Equal(-2.1f, pair.Fire.Z, 3);
+		Assert.Equal(CoverBoard.SlotSpacingMeters, Flat(pair.Hide, pair.Fire), 3);
+
+		// The fire spot is past the block's edge, the hide spot behind it.
+		Assert.True(MathF.Abs(pair.Fire.X) > Block.X * 0.5f);
+		Assert.True(MathF.Abs(pair.Hide.X) < Block.X * 0.5f);
+		Assert.True(board.Concealed(pair.Hide, 1.8f, new[] { Ahead }, 1.5f));
+		Assert.False(board.Concealed(pair.Fire, 1.8f, new[] { Ahead }, 1.5f));
+	}
+
+	[Fact]
+	public void ABodyThatCannotCrouch_IsNotHiddenByALowWall()
+	{
+		CoverBoard board = WallAtOrigin(LowWall);
+		PeekQuery query = Sniper(new Vector3(0f, 0f, -3f), Ahead, crouch: 0f);
+
+		Assert.False(board.TryFindPeek(query, new[] { Ahead }, default, default, out _));
+	}
+
+	[Fact]
+	public void ConcealmentIsFromEveryThreat_AndAFlankThatSeesTheSpotRulesItOut()
+	{
+		CoverBoard board = WallAtOrigin(LowWall);
+		var flank = new Vector3(45f, 0f, -1f);
+		Vector3[] both = { Ahead, flank };
+		PeekQuery query = Sniper(new Vector3(0f, 0f, -3f), Ahead);
+
+		Assert.True(board.Concealed(new Vector3(0f, 0f, -1f), 1.0f, new[] { Ahead }, 1.5f));
+		Assert.False(board.Concealed(new Vector3(0f, 0f, -1f), 1.0f, both, 1.5f));
+		Assert.True(board.Concealed(new Vector3(0f, 0f, -1f), 1.0f, default, 1.5f));
+		Assert.False(board.TryFindPeek(query, both, default, default, out _));
+
+		// A block between the flank and the wall's spots: hidden from both again.
+		Assert.Equal(1, board.AddLevel(new Vector3(3f, 1.4f, -1f), 0f, new Vector3(0.8f, 2.8f, 4f)));
+		Assert.True(board.TryFindPeek(query, both, default, default, out PeekPair pair));
+		Assert.Equal(0, pair.Object);
+		Assert.True(board.Concealed(pair.Hide, 1.0f, both, 1.5f));
+	}
+
+	[Fact]
+	public void AFireSpotThatCannotSeeTheTarget_IsNoFireSpot()
+	{
+		// A block ten metres in front of the wall stands across every line from the wall's
+		// spots to the target: the block's own spot, further off, is the pair.
+		CoverBoard board = WallAtOrigin(LowWall);
+		Assert.Equal(1, board.AddLevel(new Vector3(0f, 1.4f, 10f), 0f, Block));
+		PeekQuery query = Sniper(new Vector3(0f, 0f, -3f), Ahead);
+
+		Assert.True(board.TryFindPeek(query, new[] { Ahead }, default, default, out PeekPair pair));
+		Assert.Equal(1, pair.Object);
+		Assert.True(board.ClearLine(pair.Fire + (Vector3.Up * 1.5f), Ahead + (Vector3.Up * 1.5f)));
+	}
+
+	[Theory]
+	[InlineData(20f, false)]  // too near: inside the band, and the standoff
+	[InlineData(34f, false)]  // inside the band
+	[InlineData(40f, true)]
+	[InlineData(64f, true)]
+	[InlineData(70f, false)]  // beyond it
+	public void TheFireSpotIsInTheBandFromItsTarget(float range, bool found)
+	{
+		CoverBoard board = WallAtOrigin(LowWall);
+		var target = new Vector3(0f, 0f, range - 1f);
+
+		Assert.Equal(found, board.TryFindPeek(Sniper(new Vector3(0f, 0f, -3f), target), new[] { target }, default,
+			default, out _));
+	}
+
+	[Fact]
+	public void NoSpotIsTakenNearerAnyThreatThanTheStandoff()
+	{
+		CoverBoard board = WallAtOrigin(LowWall);
+		PeekQuery query = Sniper(new Vector3(0f, 0f, -3f), Ahead);
+		// A second threat in front, 29 m from the wall's spots and then 31 m.
+		var near = new Vector3(0f, 0f, 28f);
+
+		Assert.False(board.TryFindPeek(query, new[] { Ahead, near }, default, default, out _));
+		Assert.True(board.TryFindPeek(query, new[] { Ahead, near + new Vector3(0f, 0f, 2f) }, default, default, out _));
+	}
+
+	[Fact]
+	public void UnderALeash_BothSpotsAreInsideIt()
+	{
+		CoverBoard board = WallAtOrigin(LowWall);
+		PeekQuery query = Sniper(new Vector3(0f, 0f, -3f), Ahead);
+		query.HasLeash = true;
+		query.LeashAnchor = new Vector3(0f, 0f, -20f);
+		query.LeashMeters = 15f;
+		Assert.False(board.TryFindPeek(query, new[] { Ahead }, default, default, out _));
+
+		query.LeashMeters = 20f;
+		Assert.True(board.TryFindPeek(query, new[] { Ahead }, default, default, out _));
+	}
+
+	[Fact]
+	public void Relocating_ItGoesEightMetresFromTheLastFireSpot_AndSixFromEveryRecentOne()
+	{
+		CoverBoard board = WallAtOrigin(LowWall);
+		board.AddLevel(new Vector3(12f, 0.575f, 0f), 0f, LowWall);
+		board.AddLevel(new Vector3(-20f, 0.575f, 0f), 0f, LowWall);
+		PeekQuery query = Sniper(new Vector3(0f, 0f, -3f), Ahead);
+		Assert.True(board.TryFindPeek(query, new[] { Ahead }, default, default, out PeekPair first));
+		Assert.Equal(0, first.Object);
+
+		query.HasLast = true;
+		query.Last = first.Fire;
+		query.LastMeters = 8f;
+		Assert.True(board.TryFindPeek(query, new[] { Ahead }, default, default, out PeekPair next));
+		Assert.Equal(1, next.Object);
+		Assert.True(Flat(next.Fire, first.Fire) >= 8f);
+
+		// And from there, away from both.
+		query.Last = next.Fire;
+		query.RecentMeters = 6f;
+		Assert.True(board.TryFindPeek(query, new[] { Ahead }, new[] { first.Fire, next.Fire }, default,
+			out PeekPair third));
+		Assert.Equal(2, third.Object);
+	}
+
+	[Fact]
+	public void OfTwoSpotsAsNear_TheOneFewerThreatsSee_IsTaken()
+	{
+		// An 8 m wall, a target ahead and a second threat ahead and to the right, a block
+		// shielding all but the right-hand end of the wall from it.
+		var board = new CoverBoard();
+		board.AddLevel(new Vector3(0f, 0.575f, 0f), 0f, new Vector3(8f, 1.15f, 0.8f));
+		board.AddLevel(new Vector3(4.8f, 1.4f, 20f), 0f, Block);
+		var second = new Vector3(10f, 0f, 40f);
+		PeekQuery query = Sniper(new Vector3(3.25f, 0f, -3.5f), Ahead);
+
+		Assert.True(board.TryFindPeek(query, new[] { Ahead }, default, default, out PeekPair alone));
+		Assert.Equal(3.25f, alone.Fire.X, 2);
+
+		Assert.True(board.TryFindPeek(query, new[] { Ahead, second }, default, default, out PeekPair seen));
+		Assert.Equal(1.95f, seen.Fire.X, 2);
+	}
+
+	[Fact]
+	public void OfTwoSpotsAsNearAndAsSeen_TheWiderFlank_IsTaken()
+	{
+		var board = new CoverBoard();
+		board.AddLevel(new Vector3(0f, 0.575f, 0f), 0f, new Vector3(8f, 1.15f, 0.8f));
+		PeekQuery query = Sniper(new Vector3(3.25f, 0f, -3.5f), Ahead);
+		query.HasAxis = true;
+		query.AxisFrom = new Vector3(20f, 0f, -1f);
+
+		Assert.True(board.TryFindPeek(query, new[] { Ahead }, default, default, out PeekPair pair));
+		Assert.Equal(-0.65f, pair.Fire.X, 2);
+	}
+
+	[Fact]
+	public void AClaimedHideSpotIsLeftForWhoeverClaimedIt()
+	{
+		CoverBoard board = WallAtOrigin(LowWall);
+		PeekQuery query = Sniper(new Vector3(0f, 0f, -3f), Ahead);
+		Assert.True(board.TryFindPeek(query, new[] { Ahead }, default, default, out PeekPair first));
+		Assert.True(board.TryFindPeek(query, new[] { Ahead }, default, new[] { first.Hide }, out PeekPair second));
+
+		Assert.True(Flat(first.Hide, second.Hide) >= CoverBoard.ClaimMeters);
+	}
+
+	[Fact]
+	public void APairIsKeptWhileItStillDoes_AndNotOnceAThreatSeesIt_ItsBoxGoes_OrItIsMovingOn()
+	{
+		var board = new CoverBoard();
+		board.SetStructure(0, Vector3.Zero, 0f, LowWall);
+		PeekQuery query = Sniper(new Vector3(0f, 0f, -3f), Ahead);
+		Assert.True(board.TryFindPeek(query, new[] { Ahead }, default, default, out PeekPair pair));
+
+		query.From = pair.Hide;
+		Assert.True(board.KeepsPeek(pair, query, new[] { Ahead }, default));
+		Assert.False(board.KeepsPeek(pair, query, new[] { Ahead, new Vector3(45f, 0f, -1f) }, default));
+
+		PeekQuery moving = query;
+		moving.HasLast = true;
+		moving.Last = pair.Fire;
+		moving.LastMeters = 8f;
+		Assert.False(board.KeepsPeek(pair, moving, new[] { Ahead }, default));
+
+		board.ClearStructure(0);
+		Assert.False(board.KeepsPeek(pair, query, new[] { Ahead }, default));
+	}
+
+	[Fact]
+	public void TheSamePeekQueryFindsTheSamePair()
+	{
+		var board = new CoverBoard();
+		for (int i = 0; i < 12; i++)
+		{
+			board.AddLevel(new Vector3((i % 4) * 6f, 0.6f, (i / 4) * 6f), i * 0.4f, i % 3 == 0 ? Block : LowWall);
+		}
+
+		var target = new Vector3(9f, 0f, 60f);
+		Vector3[] threats = { target, new Vector3(-20f, 0f, 55f) };
+		PeekQuery query = Sniper(new Vector3(9f, 0f, -3f), target);
+		Assert.True(board.TryFindPeek(query, threats, default, default, out PeekPair a));
+		Assert.True(board.TryFindPeek(query, threats, default, default, out PeekPair b));
+		Assert.Equal(a.Hide, b.Hide);
+		Assert.Equal(a.Fire, b.Fire);
+		Assert.Equal(a.Object, b.Object);
+	}
+
+	[Fact]
+	public void LookingForAPeekCostsNothing()
+	{
+		var board = new CoverBoard();
+		for (int i = 0; i < CoverBoard.LevelCapacity; i++)
+		{
+			board.AddLevel(new Vector3((i % 12) * 7f, 0.6f, (i / 12) * 7f), i * 0.3f, i % 3 == 0 ? Block : LowWall);
+		}
+
+		Vector3[] threats = { new(40f, 0f, 100f), new(10f, 0f, 95f), new(70f, 0f, 90f), new(30f, 0f, 110f) };
+		Vector3[] recent = { new(30f, 0f, 30f), new(35f, 0f, 28f) };
+		Vector3[] claimed = { new(31f, 0f, 29f) };
+		Run();
+		long before = GC.GetAllocatedBytesForCurrentThread();
+		int found = Run();
+		Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
+		Assert.True(found > 0);
+
+		int Run()
+		{
+			int pairs = 0;
+			for (int i = 0; i < 50; i++)
+			{
+				PeekQuery query = Sniper(new Vector3(i % 80, 0f, (i % 40) + 10f), threats[i % threats.Length]);
+				query.HasLast = i % 2 == 0;
+				query.Last = recent[0];
+				query.LastMeters = 8f;
+				query.RecentMeters = 6f;
+				if (board.TryFindPeek(query, threats, recent, claimed, out PeekPair pair))
+				{
+					pairs++;
+					board.KeepsPeek(pair, query, threats, recent);
+				}
+
+				board.Concealed(query.From, 1.0f, threats, 1.5f);
+				board.ClearLine(query.From, query.Target, 0.15f);
+			}
+
+			return pairs;
+		}
+	}
+
 	// ---- exposure ----------------------------------------------------------------
 
 	[Fact]

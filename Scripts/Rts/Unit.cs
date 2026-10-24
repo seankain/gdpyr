@@ -129,6 +129,16 @@ public partial class Unit : CharacterBody3D
 	public uint NoArcUntilTick;
 
 	/// <summary>
+	/// Server-side, for a marksman under micro-autonomy: the peek pair it has taken
+	/// (docs/TACTICS.md §5.3), whose hide spot other units' searches leave alone. Never
+	/// replicated.
+	/// </summary>
+	public bool HasPeek;
+
+	/// <inheritdoc cref="HasPeek"/>
+	public PeekPair Peek;
+
+	/// <summary>
 	/// Whether it uses the tactics of docs/TACTICS.md §5 on its own (§5.9): the side's
 	/// default for new units when it is made, and the strategist's to change. Its
 	/// planner reads it every tick. On a client, what the strategist's state message

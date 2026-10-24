@@ -1,6 +1,6 @@
 # Unit tactics — implementation plan
 
-Status: **T0 built (§6); T1–T8 are plan. Decisions T-D1 to T-D7 taken (§8).** Planned from the
+Status: **T0–T4 built (§6); T5–T8 are plan. Decisions T-D1 to T-D7 taken (§8).** Planned from the
 code at `6213d05`. Extends the unit HTN of [`HTN_BOTS.md`](HTN_BOTS.md) §5.2 and the cover of
 [`COVER.md`](COVER.md).
 
@@ -85,7 +85,8 @@ HTN_BOTS.md §4.2 holds. Added:
 | `FireMemory` | `Scripts/Sim/FireMemory.cs` (T0) | Per unit (`Unit.Fire`): the worst round this window (near miss · hit), the perceived origin and the shooter of the latest, its tick, rounds in the window. Pure functions in `FiredUpon`, as `Suppression` is for its memory. |
 | `NearMiss` | `Scripts/Sim/NearMiss.cs` (T0), called through `UnitManager.NoteRound` / `NoteBlast` (`UnitManager.Fire.cs`) from `CombatManager.ResolveSegment`, `ResolveFused`, `Detonate` and `ResolveMelee` | A round's chord, up to what it hit, against every enemy body near it, behind a per-chord box (`NearMiss.Chord`). Feeds `FireMemory` (units, T0) and the ground sensor (bots, T5). |
 | `Doctrine` | `UnitDefinition` export, mirrored in `UnitTraits` | `Rifleman`, `Gunner`, `Marksman`, `None` (builders, vehicles, trucks). Explicit in each `.tres`, not inferred from `SuppressSeconds` or range. |
-| `CoverBoard` additions | `Scripts/Sim/Cover.cs` | `Concealed` (no remembered threat's eye sees a point); `TryFindPeek` (a hide spot and a fire spot beside it); `CoverQuery.Toward` and `MinProgressMeters` (spots that gain ground). |
+| `CoverBoard` additions | `Scripts/Sim/Cover.cs` | `Concealed` (no remembered threat's eye sees a point); `ClearLine`; `TryFindPeek` and `KeepsPeek` over a `PeekQuery` (a hide spot and a fire spot beside it, T4); `CoverQuery.Toward` and `MinProgressMeters` (spots that gain ground). |
+| Marksman | `Scripts/Sim/Marksman.cs` (`MarksmanPlan`), `Scripts/Rts/UnitManager.Marksman.cs` (T4) | The scan's geometry and whom to peek at, as pure functions; the engine half gathers the threats, keeps or finds the pair, and holds a marksman's fire (§5.3). |
 | Posture | `Unit.cs`; unit snapshot v2 (§5.8); `UnitDefinition.CrouchHeightMeters` | Units on foot crouch: lower hitbox and eye, slower, no fire. Replicated as a field of its own. |
 | Squad drill | `Scripts/Sim/Htn/DrillDomain.cs`, `SquadDrill.cs` (new) | A FluidHTN domain per board squad: the squad's half of "take the point" and of an attack. Roles are a plain function (`DrillRoles.Assign`), as the ground coordinator's are. Writes a `DrillDirective` per squad. |
 | `GrenadePlan` | `Scripts/Sim/Grenades.cs` | Choosing a remembered contact behind cover; `TrySolveOver`: the low arc, else the high one, checked against `CoverBoard` boxes. |
@@ -170,13 +171,16 @@ unit
 ├─ Retreat                      unchanged
 ├─ **Grenade**                  [Grenade ∧ Doctrine≠none ∧ Contact≠own ∧ SquadPhase≠falling back
 │                                ∧ Order∉{Build,Embark,Unload}]  ThrowGrenade {the same}            §5.4
-├─ **React to fire**            [FiredUpon≠none ∧ Contact≠own ∧ FireCover≠none ∧ ¬Bounding
+├─ **React to fire**            [FiredUpon≠none ∧ Contact≠own ∧ FireCover≠none ∧ ¬Bounding ∧ Peek=none
 │   │                            ∧ SquadPhase≠falling back ∧ Order∉{Build,Embark,Unload}]          §5.1
 │   ├─ return fire from cover   [FireCover=in]  ReturnFire {FiredUpon≠none, FireCover=in}
 │   └─ get to cover             TakeCoverFromFire {FiredUpon≠none, FireCover≠none}
 ├─ Resupply                     unchanged
 ├─ Build                        "hide behind cover" hides from the fired-from point when there is one
-├─ **Marksman**                 [Doctrine=marksman ∧ (Order∈{Attack,Defend,None} ∨ Objective)]       §5.3
+├─ **Marksman**                 [Doctrine=marksman ∧ (Order∈{Attack,Defend,None} ∨ Objective) ∧ Peek≠none]  §5.3
+│   ├─ displace                 [Burned ∨ Standoff]  Relocate
+│   ├─ engage                   [Peek=ready ∧ PeekTarget]  PopOut → FireFromPeek → Duck
+│   └─ hide                     ToHide
 ├─ **Take the point**           [Objective]                                                          §5.0, §5.6
 │   ├─ wait for squad
 │   ├─ **drill**                [DrillRole≠none ∧ DrillPhase≠approach]                              §5.5
@@ -221,15 +225,23 @@ As built in T1 (`UnitDomain.cs`'s "react to fire" select, below Retreat and abov
 
 ### 5.3 Sniper: concealment, pop out, relocate — requirement 2
 
+As built in T4 (`Cover.cs`'s `PeekQuery`, `TryFindPeek`, `KeepsPeek`, `Concealed` and `ClearLine`;
+`Marksman.cs`'s `MarksmanPlan`; `UnitManager.Marksman.cs`; the unit domain's "marksman" select,
+below Build and above Attack):
+
 | | |
 |---|---|
-| Threats | §4.2's entries within 90 m. |
-| Concealed | For every threat, a `CoverBoard` box crosses the line from the threat's eye (1.5 m) to the unit's head at the posture it would hold there. Range alone is not concealment: a unit cannot tell a bot with a 45 m sensor from a person with a scope. |
-| Peek pair | `CoverBoard.TryFindPeek`: a concealed hide spot, and a fire spot within 2.5 m of it with a clear box line to the target's last-known eye. Behind a block, the fire spot is one slot past its edge. Behind a low wall, it is the same spot, crouched then standing (§5.8). Search: 35–65 m from the primary threat, within 25 m of the sniper, inside its leash under Defend. Best: shortest walk, then fewest threats that see the fire spot, then the widest angle off its squad's axis (a flank). |
-| Facts | `Doctrine`; `Peek` none · hidden · exposed; `PeekTarget` (a contact in band the fire spot sees); `Standoff` (a threat inside 30 m); `Burned` (fired upon while exposed, or two peeks from one pair). |
-| Domain | `displace` [Burned ∨ Standoff] `Relocate`: to a pair ≥ 8 m from the last fire spot and ≥ 6 m from any it fired from in the last 20 s. `engage` [Peek=hidden ∧ PeekTarget ∧ hidden ≥ `MinHideTicks` (2 s)] `PopOut` → `FireFromPeek` {≤ `PeekMaxTicks` (4.5 s), ≤ `ShotsPerPeek` (2; the rifle fires every 2 s)} → `Duck`. `hide` [a pair exists] `ToHide`, holding fire beyond 30 m on the way (`UnitIntent.HoldFire`). No pair: fall through to the order's branches, as a rifleman. |
-| Targets | The squad's focus when in band; else a contact a friend is engaging (it is looking the other way); else the slowest, the weakest, the lowest id. |
-| In a drill | Overwatch: not an element. Its peeks are timed to the bound phases, so it fires while an element moves. |
+| Who | A unit whose doctrine is `Marksman` (the sniper), its micro-autonomy on, under an attack, a defend, no order, or a point to take (`UnitContext.PeeksUnder`). A move, a patrol, a build or a ride is carried out as given. |
+| Threats | On its scan: every ground-force player the side remembers within 90 m (`MarksmanPlan.ThreatMeters`: the band's far edge plus the search), live or a ghost, and not dead since; and its own fired-from point while its window is open. Squad-mates' fired-from points wait for T6's `DrillBoard` (§4.2). |
+| Concealed | `CoverBoard.Concealed`: for every threat, a box crosses the line from its eye (1.5 m above where it was recorded) to the unit's crown at the posture it waits in — crouched (1.0 m) behind a low wall, standing (1.8 m) behind anything taller. The crown, not the eye: T3 found a standing player's line over a sandbag wall clears a 1.0 m crown and clips a 1.1 m one. Range alone is not concealment. |
+| Peek pair | `CoverBoard.TryFindPeek`: a hide spot on a face turned away from the target, concealed from the target and every threat, and a fire spot within 2.5 m of it (`PairMeters`) whose standing eye has a clear line, with `FireClearanceMeters` of air, to the target's eye. Behind a low wall the fire spot is the hide spot, stood up in; behind a taller box it is one slot past the face's end. Search: the hide spot within 25 m of the sniper (`SearchMeters`), the fire spot 35–65 m from the target (`MinRangeMeters`, `MaxRangeMeters`, and never beyond the rifle's 70 m), both inside its leash under Defend or no order, neither nearer any threat than 30 m (`StandoffMeters`), the hide spot not claimed by another unit's cover or hide spot. Best: the shortest walk in bands of the pair's 2.5 m, then the fewest threats that see the fire spot, then the widest angle off its squad's axis (a flank), then the shortest walk. A pair is kept while `KeepsPeek` says it still does; one that no longer does is searched again. |
+| Targets | `MarksmanPlan.ChooseTarget`: the squad's focus when it is a candidate; else one a friend is engaging; else, and among those, the slowest, the weakest, the lowest id. When no pair sees that one, the next it would choose, and so on; when none, a pair that only hides it from the nearest threat, with no target to peek at. |
+| Facts | `Peek` (`PeekState`): none · away · hidden · ready · exposed — the pair is the scan's; in the hide spot from 1.0 m, held to 1.6 m (`CoverBands`); ready after `MinHideTicks` (2 s) there; exposed from popping out until it has ducked. `PeekTarget` (a target the fire spot sees); `Standoff` (a threat inside 30 m); `Burned` (fired upon while exposed, or `PeeksPerPair` (2) peeks from one pair). Doctrine is the unit's trait, read by a condition, not a fact. |
+| Domain | `displace` [Burned ∨ Standoff] `Relocate`: to the pair the scan found — which, while burned, has its fire spot ≥ 8 m (`RelocateMeters`) from the last and ≥ 6 m (`RecentFireMeters`) from every one of the last 20 s (`RecentFireTicks`); Burned ends when it is hidden at such a pair, or after 20 s (`BurnedMaxTicks`). `engage` [Peek=ready ∧ PeekTarget] `PopOut` → `FireFromPeek` {≤ `PeekMaxTicks` (4.5 s) from popping out, ≤ `ShotsPerPeek` (2; the rifle fires every 2 s), the target named so it is acquired first} → `Duck`. `hide` `ToHide`, crouched in the spot behind a low wall. `ToHide`, `Duck` and `Relocate` hold fire beyond 30 m (`UnitIntent.HoldFire`, `HoldFireMeters`): the engine leaves such a target alone. No pair: fall through to the order's branches, as a rifleman. |
+| Bounds | A walk to a hide spot, under `ToHide` or `Relocate`, of more than 12 s (`PeekWalkMaxTicks`) gives peeking up for 10 s (`PeekRetryTicks`): no pair, the order's branches. Every operator holds only while micro-autonomy is on, it has a pair and its order is one it peeks under; `PopOut` and `FireFromPeek` also while it has a target. |
+| React to fire | Not for a marksman with a pair (`Peek=none` on the select and its executing conditions): its hide spot is concealed from where the fire came from already, which is one of the pair's threats. Found in T4's first runs: React stood it up to fire back, it saw its shooter, a target of its own ended React, `ToHide` crouched it, it lost the target, and React began again, every scan. Without a pair it reacts as a rifleman does. |
+| `unit_task` | Goals 21 to hide, 22 pop out, 23 fire from a peek, 24 duck, 25 relocate. Behind a low wall a duck begins and ends on one tick, so 24 is seen only from a block. |
+| In a drill | Overwatch: not an element. Its peeks are timed to the bound phases, so it fires while an element moves (T6). |
 
 ### 5.4 Grenades at known enemies behind cover — requirement 4
 
@@ -297,7 +309,7 @@ Needed for a sniper's low-wall peek (§5.3) and for reloading or returning fire 
 |---|---|
 | Body | `UnitBody` (`Scripts/Sim/UnitBody.cs`, engine-free): height, eye, hitbox, protect height and speed by posture. `UnitDefinition.CrouchHeightMeters` and `CrouchEyeHeightMeters`, 1.0 m and 0.85 m for the four units on foot, nothing for a vehicle or an aircraft, which stand. The plan's 1.1 m is the sandbag wall's own height: a standing player's line over the wall's back edge still clips the crown of a 1.1 m capsule 0.6 m behind it, at every range from 5 to 60 m, and 1.0 m is clear at all of them (`UnitBodyTests`). |
 | Crouched | `Unit.Posture`, set every tick from `UnitIntent.Crouch` (legacy plans nothing, and stands). The hitbox and the collider are the crouched capsule, the eye is 0.85 m, it walks at half speed, and it does not fire or throw: the weapon still steps, so a reload runs on. `VisibilityService` and every line of sight start at `EyePosition`, so a crouched unit sees nothing over a wall it is hidden behind. |
-| When | `ReturnFire`, whenever it is not firing back (more than 2 s since a round, or a shooter beyond its engage range) and has no target of its own. Under micro-autonomy, any unit in its spot behind cover — `HoldCover`, `HoldPointCover`, `ReturnFire` — while its weapon reloads (`UnitContext.SenseWeapon`, a field, not a fact: nothing is planned on it). The sniper's `Duck` comes with T4. |
+| When | `ReturnFire`, whenever it is not firing back (more than 2 s since a round, or a shooter beyond its engage range) and has no target of its own. Under micro-autonomy, any unit in its spot behind cover — `HoldCover`, `HoldPointCover`, `ReturnFire` — while its weapon reloads (`UnitContext.SenseWeapon`, a field, not a fact: nothing is planned on it). From T4, a marksman in its hide spot behind a low wall (`ToHide`, `Duck`, `Relocate`), standing to peek. |
 | Cover | `UnitCoverQuery` protects the body the unit has now — a crouched unit is behind cover behind a box that would leave it standing in the open — and fires from its standing eye, as it stands to shoot. |
 | Client | `Unit.TakePosture` on each record, the collider and the drawing reshaped from the feet; demo playback goes through the same call. The posture is applied when the record is decoded, a snapshot interval before the drawn transform reaches its tick, as the state already is. |
 
@@ -605,6 +617,70 @@ strategist or a scenario turns micro-autonomy on.
   Claims: `unit_task[goal=FireFromPeek]` ≥ 2; `events.kill.count` ≥ 1 (the sniper is the only
   strategist unit; a unit's kill reports weapon 0, `CombatManager.WeaponOnStream`, so the filter
   cannot name the rifle); the sniper alive at the end in ≥ half the seeds; each against off.
+- **Result — built. In the scenario's rounds the tactic, as planned, loses to micro-autonomy off.**
+  - `dotnet test`: 1958 passed, 0 failed (1901 before; 57 new: 38 in `MarksmanTests`, 19 in
+    `CoverTests`). `UnitHtnTests`' 0 B population has 24 situations and one context in four a
+    marksman, the last two a marksman away from its pair and in it; `AgentEventTests` pins goals
+    21–25. `dotnet build Gdpyr.csproj`: 0 warnings, 0 errors; the harness builds.
+  - **The tests test something.** One piece removed at a time, the count of tests that failed:
+    the micro-autonomy condition 2; the doctrine and order condition 5; the operators' executing
+    conditions 3; the target's 1; the hide clock 13; shots per peek 6; the peek's time cap 1; the
+    burn on a round while out 1; the burn after two peeks 1; a burn held until a pair 8 m on 2;
+    the walk give-up 1; holding fire on the way 3; React leaving a marksman with a pair alone 1,
+    and its executing condition 1; the hide spot's concealment 1; the standoff 1; relocating away
+    from the last fire spot 2; the fewest threats seen 1; the band 2. The fire spot's line to the
+    target first failed nothing; `AFireSpotThatCannotSeeTheTarget_IsNoFireSpot` fails without it.
+  - **Cost** (a temporary test, not committed; Release, `TieredCompilation` off, Intel Xeon @
+    2.80 GHz): `TryFindPeek` 12.9–15.1 µs a call over the map's 26 cover boxes and 76–91 µs over a
+    full board of 128; `KeepsPeek` 5.8 and 12.7 µs. A marksman asks on its scan only, every 10
+    ticks, with a threat within 90 m; a kept pair costs one `KeepsPeek` for each target tried.
+  - **Scenario** `tactics_sniper_overwatch`: a sniper defending at (−43, −60), between Block02
+    (−50, −55) and the low wall CoverLow16 (−35, −60), all three nodes 40–55 m off; three roster
+    ground bots from the spawns 80 m away, and H6's idle seat in the far corner. Its first runs
+    found two defects. (1) The React thrash §5.3 describes: `unit_task` alternated 21 and 19 on
+    every scan. (2) The target the rule chose — the slowest, a bot standing on node 1 — sat at
+    64–67 m, so the pair against it came and went with the band's edge and the sniper stood at its
+    post every other scan; the next target is now tried, then a pair that only hides it. Claims: 0
+    pilot fallbacks; `unit_task` 21 (to hide) and 23 (fire from a peek) ≥ 1 every seed, 23 ≥ 2 in
+    at least half; a kill by a unit (`kill[attacker<0]`, the sniper being the only one) in at least
+    half. Seeds 1–3, 3,600 ticks, on the T4 commit's build:
+
+    | | micro-autonomy on | off (`"unit_autonomy": "off"`, otherwise the same file) |
+    |---|---|---|
+    | Claims | 5 of 5 held | the three hide and peek claims fail, as they should; the kill claim holds |
+    | Peeks (`unit_task` 23) | 3, 2, 6 | none |
+    | Sniper's kills · hits | 3 · 7, 1 · 2, 5 · 11 | 12 · 25, 7 · 15, 7 · 15 |
+    | Sniper lost, ticks after the round starts | 2,002, 974, 2,540 | alive at the end, 2,105, 2,318 |
+
+    Over six seeds of 5,400 ticks the same: kills 2, 0, 5, 0, 0, 4 on against 18, 4, 7, 11, 7, 4
+    off; lost at 649–2,359 ticks on, every seed, against one seed alive and 1,350–3,342 off. Off
+    holds its post behind the wall and fires every 2 s, a hit every 2.5 s in its best seed. On, it
+    fires two shots a peek and holds its fire while it walks, and the walks are where it is hit:
+    of the twelve hits on it in the six seeds, six came while relocating, four while out on a peek
+    and two under `ToHide`, one of them on its first walk to a hide spot; seven were launcher
+    rounds, whose blast no low wall stops, and five a DMR's. Not the burn rule alone: with a pair never burned by its count (a temporary
+    `PeeksPerPair` of 99), on still made 18 kills in six seeds to off's 51 and lost the sniper in
+    every one. So the plan's survival claim is not in the file — it fails on and off alike, and off
+    does better. Whether a marksman should walk with its fire held, move on after two peeks or when
+    hit, or hold a pair it is concealed in and peek on, is for T8 to settle against these numbers;
+    the file's claims are the behaviour, not a benefit. The rounds are not reproducible to the
+    tick: the same build lost the sniper in seed 3 at 1,894 ticks in one run and 2,359 in another.
+    The harness runs whatever `dotnet build Gdpyr.csproj` last built, and does not build it.
+  - **Suite**: running on this commit's build; recorded in the commit after it.
+  - **Found in T1, fixed here.** The debug HUD's `unit plan` row counted goals into a span sized
+    for the goals before T1, so a unit taking cover from fire, firing back or throwing (18–20)
+    made it throw an `IndexOutOfRangeException`; it is sized by the goal enum. Found by reading.
+  - **Differences from the plan above.** `Doctrine` is the unit's trait, read by a condition, not a
+    fact. `Peek` has five values, the hide clock among them. Concealment is to the crown at the
+    posture it waits in. React to fire leaves a marksman with a pair alone. When no pair sees the
+    chosen target, the next is tried, then a pair against the nearest threat with nothing to peek
+    at. The standoff also keeps both spots 30 m from every threat, so a relocation away from one
+    goes somewhere it would not be inside it again. The leash holds under no order as under Defend,
+    as `InLeash` does. `Duck` and `Relocate` hold fire too. A walk to a hide spot is bounded (12 s,
+    then 10 s without peeking), as P4 asks and the plan gave no numbers for. Hide spots are claimed
+    as cover spots are. The tests are in `MarksmanTests`, not `UnitHtnTests`.
+  - **Not checked.** A display; `unit ms` at 64 units in the engine; a person, rather than bots,
+    against a marksman; overwatch in a drill (T6).
 
 ### T5 — Gunner suppression; bots perceive it (1.5 days)
 

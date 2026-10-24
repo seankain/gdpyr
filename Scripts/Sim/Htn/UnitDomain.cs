@@ -124,7 +124,50 @@ public enum UnitFact : byte
 	/// </summary>
 	Grenade,
 
+	/// <summary>
+	/// <see cref="PeekState"/>: a marksman's peek pair (docs/TACTICS.md §5.3) and where it
+	/// is in it — away from it, hidden in it and for how long, or out on a peek. The pair
+	/// is the scan's; the rest is every tick's.
+	/// </summary>
+	Peek,
+
+	/// <summary>
+	/// A contact to peek at: one the side remembers that the pair's fire spot sees, chosen
+	/// by <see cref="MarksmanPlan.ChooseTarget"/>. On the scan.
+	/// </summary>
+	PeekTarget,
+
+	/// <summary>A threat inside <see cref="MarksmanPlan.StandoffMeters"/> of it: too near to peek at, so it moves away. On the scan.</summary>
+	Standoff,
+
+	/// <summary>
+	/// Its pair is burned: it was fired upon while out on a peek, or has peeked from it
+	/// <see cref="UnitPlanTraits.PeeksPerPair"/> times. Held until it is hidden at a pair
+	/// whose fire spot is <see cref="UnitPlanTraits.RelocateMeters"/> from the last, or for
+	/// <see cref="UnitPlanTraits.BurnedMaxTicks"/>.
+	/// </summary>
+	Burned,
+
 	Count,
+}
+
+/// <summary>Where a marksman is in its peek pair (docs/TACTICS.md §5.3).</summary>
+public enum PeekState : byte
+{
+	/// <summary>No pair: it fights as a rifleman does.</summary>
+	None = 0,
+
+	/// <summary>A pair, and it is not in the hide spot.</summary>
+	Away = 1,
+
+	/// <summary>In the hide spot, for less than <see cref="UnitPlanTraits.MinHideTicks"/>.</summary>
+	Hidden = 2,
+
+	/// <summary>In the hide spot for <see cref="UnitPlanTraits.MinHideTicks"/> or more: ready to pop out.</summary>
+	Ready = 3,
+
+	/// <summary>Out on a peek: from popping out until it has ducked back.</summary>
+	Exposed = 4,
 }
 
 /// <summary>What this unit is in contact with.</summary>
@@ -187,6 +230,21 @@ public enum UnitGoal : byte
 
 	/// <summary>A grenade at a hidden enemy, standing for the throw (docs/TACTICS.md §5.4).</summary>
 	ThrowGrenade,
+
+	/// <summary>A marksman to its hide spot, holding its fire on the way; in it, down behind a low wall (docs/TACTICS.md §5.3).</summary>
+	ToHide,
+
+	/// <summary>Out of the hide spot to the fire spot beside it, or up from behind its low wall.</summary>
+	PopOut,
+
+	/// <summary>Standing in the fire spot, firing at its peek target: two shots, or 4.5 s, whichever comes first.</summary>
+	FireFromPeek,
+
+	/// <summary>Back into the hide spot, or down behind the low wall.</summary>
+	Duck,
+
+	/// <summary>To another pair, holding its fire on the way: its pair is burned, or a threat is too near.</summary>
+	Relocate,
 }
 
 /// <summary>How the unit manager picks where to walk for an intent.</summary>
@@ -249,6 +307,13 @@ public struct UnitIntent
 	/// in any spot behind cover while it reloads. It stands to shoot.
 	/// </summary>
 	public bool Crouch;
+
+	/// <summary>
+	/// Fire at nothing further off than <see cref="UnitPlanTraits.HoldFireMeters"/>: a
+	/// marksman on its way to hide, ducking back or relocating does not give itself away
+	/// (docs/TACTICS.md §5.3). What is nearer it still shoots.
+	/// </summary>
+	public bool HoldFire;
 }
 
 /// <summary>
@@ -344,13 +409,53 @@ public readonly struct UnitPlanTraits
 	/// <summary>How long after each round that reaches it a unit in cover keeps firing back at where it came from.</summary>
 	public readonly int ReturnFireTicks;
 
+	/// <summary>How long a marksman stays hidden in its spot before it pops out again (docs/TACTICS.md §5.3).</summary>
+	public readonly int MinHideTicks;
+
+	/// <summary>How long one peek may keep it out, from popping out to the end of its firing.</summary>
+	public readonly int PeekMaxTicks;
+
+	/// <summary>How many shots one peek fires before it ducks.</summary>
+	public readonly int ShotsPerPeek;
+
+	/// <summary>How many peeks one pair is good for before the marksman moves on.</summary>
+	public readonly int PeeksPerPair;
+
+	/// <summary>How near a target has to be for a marksman holding its fire to shoot it anyway.</summary>
+	public readonly float HoldFireMeters;
+
+	/// <summary>
+	/// How long a marksman may walk to a hide spot, under one operator, before it gives
+	/// peeking up (P4): a spot it cannot reach is not one to keep walking at…
+	/// </summary>
+	public readonly int PeekWalkMaxTicks;
+
+	/// <summary>…and how long it fights as a rifleman before it looks for a pair again.</summary>
+	public readonly int PeekRetryTicks;
+
+	/// <summary>How long a burned pair keeps it relocating when it finds no other: then it may peek from anywhere again.</summary>
+	public readonly int BurnedMaxTicks;
+
+	/// <summary>How far from the last fire spot a relocation's must be.</summary>
+	public readonly float RelocateMeters;
+
+	/// <summary>How far from every fire spot of the last <see cref="RecentFireTicks"/> a relocation's must be.</summary>
+	public readonly float RecentFireMeters;
+
+	/// <inheritdoc cref="RecentFireMeters"/>
+	public readonly int RecentFireTicks;
+
 	public UnitPlanTraits(float healthOkFraction, float healthCriticalFraction, float healthHysteresis,
 		float engagedFriendMeters, float paceAheadMeters, float paceResumeMeters, int paceMaxWaitTicks,
 		float postSpacingMeters, float postMinRadiusMeters, float postLeashShare, int underFireTicks,
 		float threatBearingMeters, float resupplyDoneFraction, float supplyRangeMeters,
 		float supplyRangeHysteresisMeters, float supplyMarginMeters, int resupplyMaxTicks, int resupplyRetryTicks,
 		float objectiveEnterMeters, int holdersPerPoint, float pointCoverSlackMeters, float pointPostMarginMeters,
-		int reactMaxTicks = SimConfig.TickRate * 8, int returnFireTicks = SimConfig.TickRate * 2)
+		int reactMaxTicks = SimConfig.TickRate * 8, int returnFireTicks = SimConfig.TickRate * 2,
+		int minHideTicks = SimConfig.TickRate * 2, int peekMaxTicks = SimConfig.TickRate * 9 / 2, int shotsPerPeek = 2,
+		int peeksPerPair = 2, float holdFireMeters = 30f, int peekWalkMaxTicks = SimConfig.TickRate * 12,
+		int peekRetryTicks = SimConfig.TickRate * 10, int burnedMaxTicks = SimConfig.TickRate * 20,
+		float relocateMeters = 8f, float recentFireMeters = 6f, int recentFireTicks = SimConfig.TickRate * 20)
 	{
 		HealthOkFraction = healthOkFraction;
 		HealthCriticalFraction = healthCriticalFraction;
@@ -376,6 +481,17 @@ public readonly struct UnitPlanTraits
 		PointPostMarginMeters = MathF.Max(pointPostMarginMeters, 0f);
 		ReactMaxTicks = Math.Max(reactMaxTicks, 1);
 		ReturnFireTicks = Math.Max(returnFireTicks, 0);
+		MinHideTicks = Math.Max(minHideTicks, 0);
+		PeekMaxTicks = Math.Max(peekMaxTicks, 1);
+		ShotsPerPeek = Math.Max(shotsPerPeek, 1);
+		PeeksPerPair = Math.Max(peeksPerPair, 1);
+		HoldFireMeters = MathF.Max(holdFireMeters, 0f);
+		PeekWalkMaxTicks = Math.Max(peekWalkMaxTicks, 1);
+		PeekRetryTicks = Math.Max(peekRetryTicks, 0);
+		BurnedMaxTicks = Math.Max(burnedMaxTicks, 1);
+		RelocateMeters = MathF.Max(relocateMeters, 0f);
+		RecentFireMeters = MathF.Max(recentFireMeters, 0f);
+		RecentFireTicks = Math.Max(recentFireTicks, 0);
 	}
 
 	/// <summary>
@@ -388,7 +504,11 @@ public readonly struct UnitPlanTraits
 	/// edge; two stand on it, and the rest may take cover up to 4 m outside it; posts
 	/// and a holder's cover are a metre further in than they have to be. A unit whose
 	/// order goes somewhere reacts to fire for 8 s at most under it; one in cover fires
-	/// back for 2 s after each round that reaches it (docs/TACTICS.md §5.1).
+	/// back for 2 s after each round that reaches it (docs/TACTICS.md §5.1). A marksman
+	/// hides 2 s between peeks, fires two shots or for 4.5 s a peek, and two peeks a pair;
+	/// on its way it fires at nothing beyond 30 m; a walk of 12 s to a hide spot gives
+	/// peeking up for 10 s; a burned pair moves it 8 m from the last fire spot and 6 m
+	/// from every one of the last 20 s, for 20 s at most (§5.3).
 	/// </summary>
 	public static UnitPlanTraits Default => new(
 		healthOkFraction: 0.6f,
@@ -494,6 +614,19 @@ public sealed class UnitContext : BaseContext
 	private bool _fireCoverHides;
 	private uint _reactTick = uint.MaxValue;
 	private uint _reactSpentTick;
+	private bool _peeking;
+	private uint _hiddenSince;
+	private uint _peekStartTick;
+	private uint _peekShots;
+	private uint _walkTick = uint.MaxValue;
+	private uint _burnedTick;
+	private uint _lastRoundTick;
+	private readonly Vector3[] _recentFire = new Vector3[RecentFireCapacity];
+	private readonly uint[] _recentFireTick = new uint[RecentFireCapacity];
+	private int _recentFireNext;
+
+	/// <summary>How many fire spots a marksman remembers for relocating away from: a peek every 4.5 s or so for 20 s, and some to spare.</summary>
+	public const int RecentFireCapacity = 8;
 
 	public UnitContext(IFactory factory, in UnitPlanTraits traits, in UnitTraits unitTraits)
 	{
@@ -592,6 +725,46 @@ public sealed class UnitContext : BaseContext
 	/// <summary>Its weapon is reloading, this tick (docs/TACTICS.md §5.8). Not a fact: nothing is planned on it.</summary>
 	public bool Reloading;
 
+	/// <summary>How many rounds its weapon has fired in all, this tick: what a peek counts its shots by (docs/TACTICS.md §5.3).</summary>
+	public uint Shots;
+
+	/// <summary>
+	/// A marksman's peek pair (docs/TACTICS.md §5.3), from its scan: the spot it hides in,
+	/// the spot it fires from, and whether they are one spot behind a low wall. Only with
+	/// <see cref="HasPeekPoint"/>.
+	/// </summary>
+	public bool HasPeekPoint;
+
+	/// <inheritdoc cref="HasPeekPoint"/>
+	public Vector3 HidePoint;
+
+	/// <inheritdoc cref="HasPeekPoint"/>
+	public Vector3 FirePoint;
+
+	/// <inheritdoc cref="HasPeekPoint"/>
+	public bool PeekLow;
+
+	/// <summary>Whom a peek shoots at: the contact <see cref="UnitFact.PeekTarget"/> is about.</summary>
+	public int PeekTargetOwnerId;
+
+	/// <summary>Peeks from the pair it has now, against <see cref="UnitPlanTraits.PeeksPerPair"/>.</summary>
+	public int PeeksFromPair;
+
+	/// <summary>The fire spot of its last peek. Only with <see cref="HasLastFireSpot"/>.</summary>
+	public bool HasLastFireSpot;
+
+	/// <inheritdoc cref="HasLastFireSpot"/>
+	public Vector3 LastFireSpot;
+
+	/// <summary>A walk to a hide spot was given up on: no pair until this tick.</summary>
+	public uint PeekRetryTick;
+
+	/// <summary>Walks to a hide spot given up on. For the tests.</summary>
+	public int FailedPeeks;
+
+	/// <summary>Ticks the running operator has spent walking to a hide spot, against <see cref="UnitPlanTraits.PeekWalkMaxTicks"/>.</summary>
+	public int WalkedTicks;
+
 	/// <summary>Ticks it has spent reacting to fire under its current order, against <see cref="UnitPlanTraits.ReactMaxTicks"/>.</summary>
 	public int ReactedTicks;
 
@@ -618,7 +791,15 @@ public sealed class UnitContext : BaseContext
 
 	/// <summary>The goals of docs/TACTICS.md §5: what the agent stream's <c>unit_task</c> reports a unit starting.</summary>
 	public static bool IsTactic(UnitGoal goal) =>
-		goal is UnitGoal.TakeCoverFromFire or UnitGoal.ReturnFire or UnitGoal.ThrowGrenade;
+		goal is UnitGoal.TakeCoverFromFire or UnitGoal.ReturnFire or UnitGoal.ThrowGrenade or UnitGoal.ToHide
+			or UnitGoal.PopOut or UnitGoal.FireFromPeek or UnitGoal.Duck or UnitGoal.Relocate;
+
+	/// <summary>
+	/// The orders a marksman peeks under (docs/TACTICS.md §5.3): an attack, a defend, none,
+	/// or a control point to take. A move, a patrol, a build or a ride is carried out as given.
+	/// </summary>
+	public static bool PeeksUnder(OrderKind order, bool objective) =>
+		order is OrderKind.Attack or OrderKind.Defend or OrderKind.None || objective;
 
 	/// <summary>
 	/// An order that goes somewhere: one that reacting to fire must not stop for good,
@@ -665,6 +846,14 @@ public sealed class UnitContext : BaseContext
 		{
 			ResetReact();
 		}
+
+		// A round that reaches a marksman out on a peek burns its pair (docs/TACTICS.md §5.3).
+		if (_peeking && kind != FireKind.None && lastTick > _lastRoundTick)
+		{
+			Burn();
+		}
+
+		_lastRoundTick = lastTick;
 	}
 
 	/// <summary>A new order, or a new life: reacting to fire starts over (docs/TACTICS.md §5.1).</summary>
@@ -689,8 +878,53 @@ public sealed class UnitContext : BaseContext
 	/// <summary>The unit has tried its throw, whether a grenade left its hand or not: nothing to throw at until the next scan.</summary>
 	public void Threw() => Sense(UnitFact.Grenade, false);
 
-	/// <summary>What its weapon is doing, every tick: reloading or not.</summary>
-	public void SenseWeapon(bool reloading) => Reloading = reloading;
+	/// <summary>What its weapon is doing, every tick: reloading or not, and how many rounds it has fired.</summary>
+	public void SenseWeapon(bool reloading, uint shots = 0)
+	{
+		Reloading = reloading;
+		Shots = shots;
+	}
+
+	/// <summary>
+	/// A marksman's pair and target, from its scan (docs/TACTICS.md §5.3), or none: the
+	/// engine has searched the cover board; the planner says when to hide and when to peek.
+	/// A pair whose hide spot is somewhere else is a new pair, with no peeks from it yet.
+	/// </summary>
+	public void SensePeek(bool hasPair, Vector3 hide, Vector3 fire, bool low, int targetOwnerId, bool standoff)
+	{
+		if (hasPair && (!HasPeekPoint || Flat(hide, HidePoint) > CoverBoard.ClaimMeters))
+		{
+			PeeksFromPair = 0;
+		}
+
+		HasPeekPoint = hasPair;
+		HidePoint = hide;
+		FirePoint = fire;
+		PeekLow = low;
+		PeekTargetOwnerId = hasPair ? targetOwnerId : OwnerId.None;
+		Sense(UnitFact.PeekTarget, hasPair && targetOwnerId != OwnerId.None);
+		Sense(UnitFact.Standoff, standoff);
+		SensePeekState();
+	}
+
+	/// <summary>
+	/// The fire spots of its peeks within <see cref="UnitPlanTraits.RecentFireTicks"/>, into
+	/// <paramref name="into"/>: what a relocation keeps away from. Returns how many.
+	/// </summary>
+	public int RecentFireSpots(Span<Vector3> into)
+	{
+		int count = 0;
+		for (int i = 0; i < RecentFireCapacity && count < into.Length; i++)
+		{
+			if (_recentFireTick[i] != 0 && Tick >= _recentFireTick[i]
+				&& Tick - _recentFireTick[i] <= (uint)Traits.RecentFireTicks)
+			{
+				into[count++] = _recentFire[i];
+			}
+		}
+
+		return count;
+	}
 
 	/// <summary>A context with no squad is moving, not gathering: 0 is <see cref="Htn.SquadPhase.Gathering"/>.</summary>
 	public override void Init()
@@ -749,6 +983,55 @@ public sealed class UnitContext : BaseContext
 		SenseCover();
 		SenseObjective();
 		SenseFireCover();
+		SensePeekState();
+	}
+
+	/// <summary>
+	/// Where a marksman is in its pair, every tick (docs/TACTICS.md §5.3): the pair is the
+	/// scan's; out on a peek from popping out to ducking back; in the hide spot from
+	/// <see cref="CoverBands.ArriveMeters"/> of it, held to <see cref="CoverBands.LeaveMeters"/>,
+	/// and ready once it has been there <see cref="UnitPlanTraits.MinHideTicks"/>. Hidden
+	/// at a pair whose fire spot is far enough from the last, a burned pair is behind it.
+	/// </summary>
+	private void SensePeekState()
+	{
+		var previous = (PeekState)Get(UnitFact.Peek);
+		PeekState state;
+		if (!HasPeekPoint)
+		{
+			state = PeekState.None;
+		}
+		else if (_peeking)
+		{
+			state = PeekState.Exposed;
+		}
+		else
+		{
+			bool wasIn = previous is PeekState.Hidden or PeekState.Ready;
+			if (Flat(Position, HidePoint) > (wasIn ? CoverBands.LeaveMeters : CoverBands.ArriveMeters))
+			{
+				state = PeekState.Away;
+			}
+			else
+			{
+				if (!wasIn)
+				{
+					_hiddenSince = Tick;
+				}
+
+				state = Tick - _hiddenSince >= (uint)Traits.MinHideTicks ? PeekState.Ready : PeekState.Hidden;
+			}
+		}
+
+		if (Is(UnitFact.Burned) && (Tick - _burnedTick >= (uint)Traits.BurnedMaxTicks
+			|| (state is PeekState.Hidden or PeekState.Ready
+				&& (!HasLastFireSpot || Flat(FirePoint, LastFireSpot) >= Traits.RelocateMeters))))
+		{
+			PeeksFromPair = 0;
+			Sense(UnitFact.Burned, false);
+		}
+
+		Sense(UnitFact.Peek, (byte)state);
 	}
 
 	/// <summary>
@@ -856,11 +1139,70 @@ public sealed class UnitContext : BaseContext
 		WaitedTicks = 0;
 		PaceGivenUp = false;
 		_paceTick = uint.MaxValue;
+		WalkedTicks = 0;
+		_walkTick = uint.MaxValue;
+
+		if (goal == UnitGoal.PopOut)
+		{
+			StartPeek();
+		}
+		else if (goal == UnitGoal.FireFromPeek)
+		{
+			_peekShots = Shots;
+		}
+
 		return Perform(goal);
 	}
 
-	/// <summary>Ends one, whether it was stopped, aborted or replaced: the unit goes back to its order.</summary>
-	public void End() => Intent = default;
+	/// <summary>
+	/// Ends one, whether it was stopped, aborted or replaced: the unit goes back to its
+	/// order, and a peek cut short is over — it is no longer out on one.
+	/// </summary>
+	public void End()
+	{
+		Intent = default;
+		if (_peeking)
+		{
+			_peeking = false;
+			SensePeekState();
+		}
+	}
+
+	/// <summary>
+	/// Out on a peek from this tick (docs/TACTICS.md §5.3): the exposure's clock starts, the
+	/// pair has one more peek on it, and its fire spot is the last and a recent one.
+	/// </summary>
+	private void StartPeek()
+	{
+		_peeking = true;
+		_peekStartTick = Tick;
+		PeeksFromPair++;
+		HasLastFireSpot = true;
+		LastFireSpot = FirePoint;
+		_recentFire[_recentFireNext] = FirePoint;
+		_recentFireTick[_recentFireNext] = Math.Max(Tick, 1u);
+		_recentFireNext = (_recentFireNext + 1) % RecentFireCapacity;
+		SensePeekState();
+	}
+
+	/// <summary>Back in the hide spot: the peek is over, and a pair peeked from often enough is burned.</summary>
+	private void EndPeek()
+	{
+		_peeking = false;
+		if (PeeksFromPair >= Traits.PeeksPerPair)
+		{
+			Burn();
+		}
+
+		SensePeekState();
+	}
+
+	/// <summary>Its pair is burned from this tick: it moves on (docs/TACTICS.md §5.3).</summary>
+	private void Burn()
+	{
+		_burnedTick = Tick;
+		Sense(UnitFact.Burned, true);
+	}
 
 	/// <summary>
 	/// One tick of an operator. Writes the intent and keeps running: every unit task
@@ -971,9 +1313,129 @@ public sealed class UnitContext : BaseContext
 				Intent.ThrowPoint = ThrowPoint;
 				return Hold();
 
+			case UnitGoal.ToHide:
+				// To the hide spot without giving itself away; in it, down behind a low wall
+				// and standing behind anything taller (docs/TACTICS.md §5.3).
+				if (Walked())
+				{
+					return GiveUpPeek();
+				}
+
+				Intent.HoldFire = true;
+				if (InHide)
+				{
+					Intent.Crouch = PeekLow;
+					return Hold();
+				}
+
+				return Go(HidePoint, stopToFight: false);
+
+			case UnitGoal.PopOut:
+				// Up, or out past the end of its box, until it stands in the fire spot.
+				if (PeekTimedOut())
+				{
+					return TaskStatus.Failure;
+				}
+
+				Intent.TargetOwnerId = PeekTargetOwnerId;
+				if (Flat(Position, FirePoint) <= CoverBands.ArriveMeters)
+				{
+					Hold();
+					return TaskStatus.Success;
+				}
+
+				return Go(FirePoint, stopToFight: false);
+
+			case UnitGoal.FireFromPeek:
+				// Standing in the fire spot, its peek target the one it acquires first, for
+				// so many shots or so long out, whichever comes first.
+				Intent.TargetOwnerId = PeekTargetOwnerId;
+				Hold();
+				return Shots - _peekShots >= (uint)Traits.ShotsPerPeek || PeekTimedOut()
+					? TaskStatus.Success
+					: TaskStatus.Continue;
+
+			case UnitGoal.Duck:
+				// Back into the hide spot, or down behind the wall, holding its fire.
+				Intent.HoldFire = true;
+				if (Flat(Position, HidePoint) <= CoverBands.ArriveMeters)
+				{
+					Hold();
+					Intent.Crouch = PeekLow;
+					EndPeek();
+					return TaskStatus.Success;
+				}
+
+				if (Tick - GoalStartTick > (uint)Traits.PeekMaxTicks)
+				{
+					return TaskStatus.Failure;
+				}
+
+				return Go(HidePoint, stopToFight: false);
+
+			case UnitGoal.Relocate:
+				// To the next pair, holding its fire on the way; in its hide spot it waits for
+				// the burned pair to be behind it, or the threat to be far enough off.
+				if (Walked())
+				{
+					return GiveUpPeek();
+				}
+
+				Intent.HoldFire = true;
+				if (InHide)
+				{
+					Intent.Crouch = PeekLow;
+					return Hold();
+				}
+
+				return Go(HidePoint, stopToFight: false);
+
 			default:
 				return TaskStatus.Failure;
 		}
+	}
+
+	/// <summary>In its hide spot, hidden or ready.</summary>
+	private bool InHide => Get(UnitFact.Peek) is (byte)PeekState.Hidden or (byte)PeekState.Ready;
+
+	/// <summary>Out on this peek for <see cref="UnitPlanTraits.PeekMaxTicks"/>.</summary>
+	private bool PeekTimedOut() => Tick - _peekStartTick >= (uint)Traits.PeekMaxTicks;
+
+	/// <summary>
+	/// Counts a tick of walking to a hide spot, once a tick however often the operator
+	/// runs; true once the running operator has walked for <see cref="UnitPlanTraits.PeekWalkMaxTicks"/>.
+	/// </summary>
+	private bool Walked()
+	{
+		if (Get(UnitFact.Peek) != (byte)PeekState.Away)
+		{
+			return false;
+		}
+
+		if (Tick != _walkTick)
+		{
+			_walkTick = Tick;
+			WalkedTicks++;
+		}
+
+		return WalkedTicks > Traits.PeekWalkMaxTicks;
+	}
+
+	/// <summary>
+	/// A walk to a hide spot that ran out of time: counted, and no pair for
+	/// <see cref="UnitPlanTraits.PeekRetryTicks"/>, so the next plan is the order's (§3.4,
+	/// P4). Set here rather than on the next scan so the replan this failure causes
+	/// already sees it.
+	/// </summary>
+	private TaskStatus GiveUpPeek()
+	{
+		FailedPeeks++;
+		PeekRetryTick = Tick + (uint)Traits.PeekRetryTicks;
+		HasPeekPoint = false;
+		PeekTargetOwnerId = OwnerId.None;
+		Sense(UnitFact.PeekTarget, false);
+		SensePeekState();
+		return TaskStatus.Failure;
 	}
 
 	/// <summary>
@@ -1222,10 +1684,12 @@ public sealed class UnitDomainBuilder : BaseDomainBuilder<UnitDomainBuilder, Uni
 	/// The executing conditions every reaction to fire holds by (docs/TACTICS.md §5.1):
 	/// the strategist still lets it, rounds are still coming, the spot still hides it,
 	/// the cap is not spent, its squad is not falling back, its order is not one it
-	/// never reacts under, and it has nothing of its own to fight from cover.
+	/// never reacts under, it has nothing of its own to fight from cover, and it is not
+	/// a marksman that has found a peek pair (§5.3).
 	/// </summary>
 	public UnitDomainBuilder WhileReacting() =>
-		While(UnitFact.MicroAutonomy, MicroAutonomy.On).WhileNot(UnitFact.FiredUpon, FireKind.None)
+		While(UnitFact.MicroAutonomy, MicroAutonomy.On).While(UnitFact.Peek, PeekState.None)
+			.WhileNot(UnitFact.FiredUpon, FireKind.None)
 			.WhileNot(UnitFact.FireCover, CoverState.None).While(UnitFact.ReactSpent, false)
 			.WhileNot(UnitFact.SquadPhase, SquadPhase.FallingBack)
 			.WhileNot(UnitFact.Order, OrderKind.Build).WhileNot(UnitFact.Order, OrderKind.Embark)
@@ -1241,6 +1705,33 @@ public sealed class UnitDomainBuilder : BaseDomainBuilder<UnitDomainBuilder, Uni
 			.WhileNot(UnitFact.Contact, UnitContact.Own).WhileNot(UnitFact.SquadPhase, SquadPhase.FallingBack)
 			.WhileNot(UnitFact.Order, OrderKind.Build).WhileNot(UnitFact.Order, OrderKind.Embark)
 			.WhileNot(UnitFact.Order, OrderKind.Unload);
+
+	/// <summary>A marksman under an order it peeks under (docs/TACTICS.md §5.3, <see cref="UnitContext.PeeksUnder"/>).</summary>
+	public UnitDomainBuilder IfMarksman() =>
+		Condition("Doctrine=Marksman and Order∈{Attack,Defend,None} or Objective", IsMarksman);
+
+	/// <summary>
+	/// The executing conditions every marksman operator holds by (docs/TACTICS.md §5.3): the
+	/// strategist still lets it, it still has a pair, and its order is still one it peeks under.
+	/// </summary>
+	public UnitDomainBuilder WhilePeeking() =>
+		_executingConditions
+			? While(UnitFact.MicroAutonomy, MicroAutonomy.On).WhileNot(UnitFact.Peek, PeekState.None)
+				.ExecutingCondition("while Doctrine=Marksman and Order∈{Attack,Defend,None} or Objective", IsMarksman)
+			: this;
+
+	/// <summary>Its pair is burned, or a threat is too near: it moves on.</summary>
+	public UnitDomainBuilder IfDisplaced() => Condition("Burned or Standoff", Displaced);
+
+	/// <summary>Executing condition: as <see cref="IfDisplaced"/>, every tick.</summary>
+	public UnitDomainBuilder WhileDisplaced() =>
+		_executingConditions ? ExecutingCondition("while Burned or Standoff", Displaced) : this;
+
+	private static bool IsMarksman(UnitContext c) =>
+		c.UnitTraits.Doctrine == UnitDoctrine.Marksman
+		&& UnitContext.PeeksUnder((OrderKind)c.Get(UnitFact.Order), c.Is(UnitFact.Objective));
+
+	private static bool Displaced(UnitContext c) => c.Is(UnitFact.Burned) || c.Is(UnitFact.Standoff);
 
 	/// <summary>
 	/// A primitive task whose operator asks the unit for <paramref name="goal"/>. Set
@@ -1320,10 +1811,13 @@ public static class UnitDomain
 				.End()
 			.End()
 			// Reacting to fire (docs/TACTICS.md §5.1): only with the strategist's leave
-			// (micro-autonomy), and below Retreat, which runs rather than hides.
+			// (micro-autonomy), and below Retreat, which runs rather than hides. Not a
+			// marksman with a peek pair: its hide spot is concealed from where the fire came
+			// from already, and it answers fire by moving on (§5.3).
 			.Select("react to fire")
 				.If(UnitFact.MicroAutonomy, MicroAutonomy.On)
 				.IfHasDoctrine()
+				.If(UnitFact.Peek, PeekState.None)
 				.IfNot(UnitFact.FiredUpon, FireKind.None)
 				.IfNot(UnitFact.FireCover, CoverState.None)
 				.If(UnitFact.ReactSpent, false)
@@ -1373,6 +1867,29 @@ public static class UnitDomain
 				.End()
 				.Sequence("work")
 					.Act(UnitGoal.Work).While(UnitFact.Order, OrderKind.Build).End()
+				.End()
+			.End()
+			// A marksman (docs/TACTICS.md §5.3): only with the strategist's leave, and only with
+			// a pair the scan found — without one it falls through to its order, as a rifleman.
+			// Moving on outranks peeking, and peeking outranks waiting in the hide spot, which
+			// it does until it has been hidden long enough and has somebody to shoot.
+			.Select("marksman")
+				.If(UnitFact.MicroAutonomy, MicroAutonomy.On)
+				.IfMarksman()
+				.IfNot(UnitFact.Peek, PeekState.None)
+				.Sequence("displace")
+					.IfDisplaced()
+					.Act(UnitGoal.Relocate).WhilePeeking().WhileDisplaced().End()
+				.End()
+				.Sequence("engage")
+					.If(UnitFact.Peek, PeekState.Ready)
+					.If(UnitFact.PeekTarget)
+					.Act(UnitGoal.PopOut).WhilePeeking().While(UnitFact.PeekTarget).End()
+					.Act(UnitGoal.FireFromPeek).WhilePeeking().While(UnitFact.PeekTarget).End()
+					.Act(UnitGoal.Duck).WhilePeeking().End()
+				.End()
+				.Sequence("hide")
+					.Act(UnitGoal.ToHide).WhilePeeking().End()
 				.End()
 			.End()
 			.Select("attack")

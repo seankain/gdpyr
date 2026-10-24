@@ -22,8 +22,8 @@ public partial class UnitManager
 	/// </summary>
 	public CoverBoard Cover { get; } = new();
 
-	/// <summary>Reused by every unit's cover search: the spots other units have taken.</summary>
-	private readonly Vector3[] _coverClaims = new Vector3[SimConfig.MaxUnits];
+	/// <summary>Reused by every unit's cover search: the spots other units have taken, behind cover and to hide in.</summary>
+	private readonly Vector3[] _coverClaims = new Vector3[SimConfig.MaxUnits * 2];
 
 	/// <summary>
 	/// Reads the map's cover boxes onto the board. Only boxes: a <c>CSGBox3D</c>'s
@@ -103,16 +103,29 @@ public partial class UnitManager
 		};
 	}
 
-	/// <summary>Where the units of <paramref name="team"/> other than <paramref name="self"/> have taken cover.</summary>
+	/// <summary>
+	/// Where the units of <paramref name="team"/> other than <paramref name="self"/> have taken
+	/// cover, and where its marksmen hide (docs/TACTICS.md §5.3).
+	/// </summary>
 	private ReadOnlySpan<Vector3> CoverClaims(Unit self, Team team)
 	{
 		int count = 0;
-		for (int i = 0; i < _ordered.Count && count < _coverClaims.Length; i++)
+		for (int i = 0; i < _ordered.Count && count < _coverClaims.Length - 1; i++)
 		{
 			Unit unit = _ordered[i];
-			if (unit != self && unit.IsAlive && unit.Team == team && unit.HasCoverSpot)
+			if (unit == self || !unit.IsAlive || unit.Team != team)
+			{
+				continue;
+			}
+
+			if (unit.HasCoverSpot)
 			{
 				_coverClaims[count++] = unit.CoverSpot;
+			}
+
+			if (unit.HasPeek)
+			{
+				_coverClaims[count++] = unit.Peek.Hide;
 			}
 		}
 
