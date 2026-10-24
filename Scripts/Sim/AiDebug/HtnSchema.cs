@@ -68,7 +68,10 @@ public sealed class HtnSchema
 		typeof(CoverState), // Cover
 		typeof(bool), // Objective
 		typeof(bool), // OnObjective
-		typeof(MicroAutonomy)); // MicroAutonomy
+		typeof(MicroAutonomy), // MicroAutonomy
+		typeof(FireKind), // FiredUpon
+		typeof(CoverState), // FireCover
+		typeof(bool)); // ReactSpent
 
 	public static readonly HtnSchema Squad = new(HtnDomainKind.Squad, typeof(CommandFact), typeof(CommandGoal),
 		typeof(CommandTask), // Task

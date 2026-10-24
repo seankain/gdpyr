@@ -62,6 +62,25 @@ public class FireMemoryTests
 	}
 
 	[Fact]
+	public void TheLatestHit_IsKeptAcrossWindows_AndANearMissIsNotOne()
+	{
+		FireMemory memory = FiredAt(1000, FireKind.Hit);
+		Assert.Equal(1000u, memory.LastHitTick);
+
+		FiredUpon.Record(ref memory, FireKind.NearMiss, Muzzle, Shooter, 1010);
+		Assert.Equal(1000u, memory.LastHitTick);
+
+		// A new window, of near misses only: the hit before it is still the latest.
+		FiredUpon.Record(ref memory, FireKind.NearMiss, Muzzle, Shooter, 1010 + FiredUpon.WindowTicks + 1);
+		Assert.Equal(FireKind.NearMiss, memory.Kind);
+		Assert.Equal(1000u, memory.LastHitTick);
+
+		FiredUpon.Record(ref memory, FireKind.Hit, Muzzle, Shooter, 2000);
+		Assert.Equal(2000u, memory.LastHitTick);
+		Assert.Equal(0u, FiredAt(1000).LastHitTick);
+	}
+
+	[Fact]
 	public void TheLatestRound_SaysWhereAndWhose()
 	{
 		FireMemory memory = FiredAt(1000);

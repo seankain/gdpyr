@@ -62,6 +62,30 @@ public struct CoverQuery
 
 	/// <summary>A spot further from the threat than this is not taken. Zero for no limit.</summary>
 	public float MaxThreatMeters;
+
+	/// <summary>
+	/// For a seeker on its way somewhere (docs/TACTICS.md §5.1): a spot must be on the way
+	/// to <see cref="Toward"/> — no further from it than <see cref="From"/> is plus
+	/// <see cref="MaxBackMeters"/>, and within <see cref="MaxOffLineMeters"/> of the line
+	/// from <see cref="From"/> to it, measured flat. Off unless set.
+	/// </summary>
+	public bool HasToward;
+
+	/// <inheritdoc cref="HasToward"/>
+	public Vector3 Toward;
+
+	/// <inheritdoc cref="HasToward"/>
+	public float MaxBackMeters;
+
+	/// <inheritdoc cref="HasToward"/>
+	public float MaxOffLineMeters;
+
+	/// <summary>
+	/// Only spots on the seeker's own side of their box: never one behind a box the seeker
+	/// stands in front of, towards the threat, which it would reach only by walking round
+	/// the box's end — along the line the fire is coming down (docs/TACTICS.md §5.1).
+	/// </summary>
+	public bool StaySameSide;
 }
 
 /// <summary>A place to stand behind one cover box.</summary>
@@ -343,6 +367,7 @@ public sealed class CoverBoard
 
 			var pose = new StructurePose(_base[i], _yaw[i]);
 			Vector3 threat = pose.ToLocal(query.Threat);
+			Vector3 seeker = pose.ToLocal(query.From);
 			bool low = _size[i].Y <= query.EyeMeters - FireClearanceMeters;
 			if (query.MustFire && !low)
 			{
@@ -363,6 +388,12 @@ public sealed class CoverBoard
 
 				float halfAcross = alongX ? _size[i].Z * 0.5f : _size[i].X * 0.5f;
 				float halfAlong = alongX ? _size[i].X * 0.5f : _size[i].Z * 0.5f;
+
+				// The seeker past the box's other face, on the threat's side of it.
+				if (query.StaySameSide && ((alongX ? seeker.Z : seeker.X) * sign) < -halfAcross)
+				{
+					continue;
+				}
 				float usable = MathF.Max((2f * halfAlong) - (2f * body), 0f);
 				int slots = Math.Clamp((int)(usable / SlotSpacingMeters) + 1, 1, MaxSlotsPerFace);
 				float out_ = halfAcross + body + GapMeters;
@@ -376,7 +407,7 @@ public sealed class CoverBoard
 					Vector3 at = pose.ToWorld(local);
 
 					float walk = Flat(at, query.From);
-					if (walk > search)
+					if (walk > search || !OnTheWay(at, query))
 					{
 						continue;
 					}
@@ -405,6 +436,35 @@ public sealed class CoverBoard
 		}
 
 		return best.Object >= 0;
+	}
+
+	/// <summary>
+	/// Whether a spot at <paramref name="at"/> is on the seeker's way (<see cref="CoverQuery.HasToward"/>):
+	/// always, for a query that is not going anywhere.
+	/// </summary>
+	public static bool OnTheWay(Vector3 at, in CoverQuery query)
+	{
+		if (!query.HasToward)
+		{
+			return true;
+		}
+
+		if (Flat(at, query.Toward) > Flat(query.From, query.Toward) + MathF.Max(query.MaxBackMeters, 0f))
+		{
+			return false;
+		}
+
+		// Distance from the flat segment From → Toward.
+		float dx = query.Toward.X - query.From.X;
+		float dz = query.Toward.Z - query.From.Z;
+		float length = (dx * dx) + (dz * dz);
+		float t = length > 1e-6f
+			? Math.Clamp((((at.X - query.From.X) * dx) + ((at.Z - query.From.Z) * dz)) / length, 0f, 1f)
+			: 0f;
+		float ox = at.X - (query.From.X + (dx * t));
+		float oz = at.Z - (query.From.Z + (dz * t));
+		float off = MathF.Max(query.MaxOffLineMeters, 0f);
+		return (ox * ox) + (oz * oz) <= off * off;
 	}
 
 	/// <summary>Box <paramref name="index"/> hides the body at <paramref name="at"/> from the threat's eye.</summary>

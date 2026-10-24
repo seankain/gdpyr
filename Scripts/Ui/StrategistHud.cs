@@ -38,6 +38,12 @@ public partial class StrategistHud : CanvasLayer
 		public int Seats;
 		public bool CannotLand;
 
+		/// <summary>Units in the selection whose micro-autonomy means anything: those with a doctrine (docs/TACTICS.md §5.9).</summary>
+		public int Tactical;
+
+		/// <summary>Of those, the ones with it on.</summary>
+		public int Autonomous;
+
 		/// <summary>The one vehicle's kind when <see cref="Vehicles"/> is 1, as a person reads it.</summary>
 		public string VehicleName;
 
@@ -53,10 +59,11 @@ public partial class StrategistHud : CanvasLayer
 		+ "units out of a fight for 3 s heal inside the barracks ring and a supply truck's ring: move them there\n"
 		+ "with units selected, RMB a technical and they get in, up to 4 · select it and RMB to drive · U lets them out\n"
 		+ "T queue a dropship: 8 seats, flies, lands where it has nowhere to go · RMB it with units selected to board\n"
+		+ "H tactics auto/direct for the selection: auto units take cover from fire and fire back on their own\n"
 		+ "F1 ground force · F2 strategist";
 
-	/// <summary>Pixels the key list is tall, a line each; the card sits on top of it.</summary>
-	private const float KeysHeight = 216f;
+	/// <summary>Pixels the key list is tall, 26 a line; the card sits on top of it.</summary>
+	private const float KeysHeight = 260f;
 
 	/// <summary>
 	/// Every unit a card can offer, in the order the keys are: the three tiers, the
@@ -89,7 +96,9 @@ public partial class StrategistHud : CanvasLayer
 	private readonly Button[] _cardButtons = new Button[CardUnits.Length];
 	private Button _cardCancel;
 	private Button _cardUnload;
+	private Button _cardTactics;
 	private Label _cardHint;
+	private Button _defaultTactics;
 
 	public SelectionOverlay Overlay { get; private set; }
 
@@ -101,6 +110,12 @@ public partial class StrategistHud : CanvasLayer
 
 	/// <summary>The card's unload button was pressed, with vehicles selected.</summary>
 	public event Action UnloadPressed;
+
+	/// <summary>The card's tactics button was pressed: switch the selection's micro-autonomy (docs/TACTICS.md §5.9).</summary>
+	public event Action TacticsPressed;
+
+	/// <summary>The new-units button was pressed: switch what the side's new units start with.</summary>
+	public event Action TacticsDefaultPressed;
 
 	public override void _Ready()
 	{
@@ -125,6 +140,14 @@ public partial class StrategistHud : CanvasLayer
 		_builders = NewLabel(root, new Vector2(24f, 144f), new Vector2(760f, 32f));
 		_keys = NewLabel(root, new Vector2(24f, -(KeysHeight + 12f)), new Vector2(1100f, KeysHeight), anchorTop: 1f);
 		_keys.Text = Keys;
+
+		// What the side's new units start with (docs/TACTICS.md §5.9), beside the points:
+		// a setting, so a button rather than a key.
+		_defaultTactics = NewCardButton(root, new Vector2(0f, 28f));
+		_defaultTactics.Position = new Vector2(460f, 14f);
+		_defaultTactics.TooltipText = "what the units your side makes from now on start with;"
+			+ " auto units take cover from fire and fire back on their own";
+		_defaultTactics.Pressed += () => TacticsDefaultPressed?.Invoke();
 
 		BuildCard(root);
 	}
@@ -161,20 +184,50 @@ public partial class StrategistHud : CanvasLayer
 					? $"selected {selection.Count}   {selection.Notice}"
 					: $"selected {selection.Count}   next order: {Describe(pendingOrder)}";
 		_economy.Text = Economy(economy);
+		_defaultTactics.Text = $"new units: {(units?.AutonomyDefault == MicroAutonomy.On ? "Auto" : "Direct")}";
 
 		if (structure != null)
 		{
 			RefreshCard(match, shown: true, NameOf(structure), structure.TrainingQueued, structure.TrainsUnit,
 				structure.TrainingProgress(tick), only: structure.TrainsUnit);
 		}
-		else if (barracksSelected || selection.Vehicles == 0)
+		else if (barracksSelected || (selection.Vehicles == 0 && selection.Tactical == 0))
 		{
 			RefreshCard(match, barracksSelected, "barracks", status.Queued, status.Head, status.Progress, only: -1);
 		}
-		else
+		else if (selection.Vehicles > 0)
 		{
 			RefreshVehicleCard(selection);
 		}
+		else
+		{
+			RefreshUnitCard(selection);
+		}
+	}
+
+	/// <summary>
+	/// The card's fourth mode (docs/TACTICS.md §5.9): units on foot selected, and how they
+	/// fight — auto, direct, or mixed — with the switch.
+	/// </summary>
+	private void RefreshUnitCard(in SelectionSummary selection)
+	{
+		_card.Visible = true;
+		ShowTrainingControls(false);
+		_cardUnload.Visible = false;
+		RefreshTactics(selection);
+
+		_cardStatus.Text = $"{selection.Count} selected · tactics {MicroAutonomyNames.Describe(selection.Tactical, selection.Autonomous).ToLowerInvariant()}"
+			+ (selection.Tactical is > 0 && selection.Autonomous > 0 && selection.Autonomous < selection.Tactical
+				? $" ({selection.Autonomous} of {selection.Tactical} auto)"
+				: string.Empty);
+		_cardHint.Text = "auto: they take cover from fire and fire back · direct: they do what they are told";
+	}
+
+	/// <summary>The tactics button, for whatever on foot the selection holds: shown only when there is something to set.</summary>
+	private void RefreshTactics(in SelectionSummary selection)
+	{
+		_cardTactics.Visible = selection.Tactical > 0;
+		_cardTactics.Text = $"Tactics: {MicroAutonomyNames.Describe(selection.Tactical, selection.Autonomous)} (H)";
 	}
 
 	/// <summary>
@@ -197,6 +250,7 @@ public partial class StrategistHud : CanvasLayer
 
 		_cardUnload.Disabled = selection.Aboard == 0;
 		_cardHint.Text = "right-click with units selected to board · right-click the ground to drive";
+		RefreshTactics(selection);
 	}
 
 	/// <summary>The parts of the card that are about training, shown for a barracks or a structure and hidden for vehicles.</summary>
@@ -205,6 +259,7 @@ public partial class StrategistHud : CanvasLayer
 		_cardProgress.Visible = training;
 		_cardCancel.Visible = training;
 		_cardUnload.Visible = !training;
+		_cardTactics.Visible = false;
 		for (int i = 0; i < _cardButtons.Length && !training; i++)
 		{
 			_cardButtons[i].Visible = false;
@@ -401,6 +456,12 @@ public partial class StrategistHud : CanvasLayer
 		_cardUnload.TooltipText = "everybody aboard gets out round the vehicle, where it stands";
 		_cardUnload.Visible = false;
 		_cardUnload.Pressed += () => UnloadPressed?.Invoke();
+
+		_cardTactics = NewCardButton(footer, new Vector2(0f, 32f));
+		_cardTactics.TooltipText = "auto: they take cover from where they are fired on and fire back, on their own;"
+			+ " direct: they do exactly what they are told";
+		_cardTactics.Visible = false;
+		_cardTactics.Pressed += () => TacticsPressed?.Invoke();
 
 		// Set per mode: what a right-click means depends on what the card is up for.
 		_cardHint = new Label

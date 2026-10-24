@@ -52,4 +52,19 @@ public static class MicroAutonomyNames
 	public static bool IsValid(byte raw) => raw <= (byte)MicroAutonomy.On;
 
 	public static string Name(MicroAutonomy mode) => mode == MicroAutonomy.On ? On : Off;
+
+	/// <summary>
+	/// What the selection card calls a selection's tactics (docs/TACTICS.md §5.9): of
+	/// <paramref name="units"/> that have any, <paramref name="autonomous"/> are on.
+	/// "Auto" when all are, "Direct" when none is, "Mixed" between; empty with none to set.
+	/// </summary>
+	public static string Describe(int units, int autonomous) =>
+		units <= 0 ? string.Empty : autonomous >= units ? "Auto" : autonomous <= 0 ? "Direct" : "Mixed";
+
+	/// <summary>
+	/// What one press of the switch sets a selection to: direct when every unit in it is
+	/// on, else on — so a mixed selection is made auto, and a second press makes it direct.
+	/// </summary>
+	public static MicroAutonomy Toggle(int units, int autonomous) =>
+		units > 0 && autonomous >= units ? MicroAutonomy.Off : MicroAutonomy.On;
 }

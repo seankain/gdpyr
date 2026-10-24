@@ -51,6 +51,13 @@ public enum AgentEventKind : byte
 	/// (docs/TACTICS.md §5.4). Either bot AI.
 	/// </summary>
 	GrenadeThrown = 18,
+
+	/// <summary>
+	/// A unit started one of the tactics of docs/TACTICS.md §5 — taking cover from fire,
+	/// firing back from it — by its <c>UnitGoal</c> number. Only a unit whose
+	/// micro-autonomy is on, under <c>--bot-ai htn</c>.
+	/// </summary>
+	UnitTask = 19,
 }
 
 /// <summary>
@@ -128,6 +135,9 @@ public static class AgentEventSchema
 		// at something hidden from it, 0 when it could see it, -1 for a player, whose aim
 		// is its own; and where the thrower stood.
 		new[] { "thrower", "tier", "hidden", "x", "z" },                                       // GrenadeThrown
+		// The unit, its catalog id, the goal by its UnitGoal number — 18 take cover from
+		// fire, 19 return fire — and where it was when it started it.
+		new[] { "unit", "tier", "goal", "x", "z" },                                            // UnitTask
 	};
 
 	private static readonly string[] Kinds =
@@ -135,7 +145,7 @@ public static class AgentEventSchema
 		"round_start", "round_end", "kill", "damage", "unit_built", "unit_lost", "node_captured",
 		"seat_attached", "seat_released", "structure_placed", "structure_built", "structure_lost",
 		"squad_task", "contact_spotted", "node_contested", "unit_embarked", "unit_disembarked", "dropship_landed",
-		"grenade_thrown",
+		"grenade_thrown", "unit_task",
 	};
 
 	/// <summary>The highest kind there is. Everything from 0 to this has a name and a slate of fields.</summary>

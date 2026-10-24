@@ -169,6 +169,8 @@ public partial class StrategistController : Node3D
 		_hud.BuildPressed += CardBuild;
 		_hud.CancelPressed += CancelUnit;
 		_hud.UnloadPressed += UnloadSelected;
+		_hud.TacticsPressed += ToggleTactics;
+		_hud.TacticsDefaultPressed += ToggleTacticsDefault;
 
 		// A strategist needs a pointer. The first-person rig takes the mouse back when
 		// this node goes away (fps_controller.EnterFirstPerson).
@@ -246,6 +248,7 @@ public partial class StrategistController : Node3D
 		else if (@event.IsActionPressed("rts_place_tower")) { ArmPlacement(StructureKinds.SniperTower); }
 		else if (@event.IsActionPressed("rts_cancel_build")) { CancelUnit(); }
 		else if (@event.IsActionPressed("rts_unload")) { UnloadSelected(); }
+		else if (@event.IsActionPressed("rts_toggle_tactics")) { ToggleTactics(); }
 		else
 		{
 			return;
@@ -1111,6 +1114,48 @@ public partial class StrategistController : Node3D
 	}
 
 	/// <summary>U and the card's button: every selected vehicle with anybody aboard lets them out where it is (V-D5).</summary>
+	/// <summary>
+	/// Switches the selection's micro-autonomy (docs/TACTICS.md §5.9): to direct when every
+	/// unit in it that has tactics is on, else on. Only those units: a builder, a vehicle
+	/// or a truck has nothing to switch.
+	/// </summary>
+	private void ToggleTactics()
+	{
+		PruneSelection();
+		StrategistHud.SelectionSummary summary = Summarize();
+		if (summary.Tactical == 0 || UnitManager.Instance is not { } units)
+		{
+			return;
+		}
+
+		var ids = new int[summary.Tactical];
+		int at = 0;
+		for (int i = 0; i < _selected.Count && at < ids.Length; i++)
+		{
+			if (HasTactics(_selected[i]))
+			{
+				ids[at++] = _selected[i].UnitId;
+			}
+		}
+
+		MicroAutonomy mode = MicroAutonomyNames.Toggle(summary.Tactical, summary.Autonomous);
+		units.RequestAutonomy(ids, mode);
+		ShowNotice($"tactics {(mode == MicroAutonomy.On ? "auto" : "direct")} for {ids.Length}");
+	}
+
+	/// <summary>Switches what the side's new units start with.</summary>
+	private void ToggleTacticsDefault()
+	{
+		if (UnitManager.Instance is { } units)
+		{
+			units.RequestAutonomyDefault(units.AutonomyDefault == MicroAutonomy.On ? MicroAutonomy.Off : MicroAutonomy.On);
+		}
+	}
+
+	/// <summary>A unit whose micro-autonomy means anything: one with a doctrine.</summary>
+	private static bool HasTactics(Unit unit) =>
+		unit?.Definition is { } definition && definition.Doctrine != UnitDoctrine.None;
+
 	private void UnloadSelected()
 	{
 		PruneSelection();
@@ -1206,6 +1251,12 @@ public partial class StrategistController : Node3D
 
 		for (int i = 0; i < _selected.Count; i++)
 		{
+			if (HasTactics(_selected[i]))
+			{
+				summary.Tactical++;
+				summary.Autonomous += _selected[i].Autonomy == MicroAutonomy.On ? 1 : 0;
+			}
+
 			if (_selected[i] is not { HasSeats: true } vehicle)
 			{
 				continue;

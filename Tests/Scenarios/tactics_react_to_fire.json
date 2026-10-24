@@ -1,0 +1,34 @@
+{
+  "name": "riflemen moving past fire from out of sight take cover from it on the way, and still get there",
+  "bot_ai": "htn",
+  "unit_autonomy": "on",
+  "seeds": [1, 2, 3],
+  "duration_ticks": 2700,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 1 },
+
+  "seats": [
+    { "id": "shooter", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_and_fire.json" },
+    { "id": "chair", "team": "strategist", "policy": "strategist", "step_mul": 6,
+      "script": { "repeat": false, "steps": [
+        { "ticks": 2640, "commands": [
+          { "cmd": "order", "kind": "move", "units": ["r1", "r2", "r3", "r4"], "target": [-30, -15] }
+        ] }
+      ] } }
+  ],
+
+  "spawns": [
+    { "structure": "sandbag_wall", "team": "strategist", "at": [-57, 0.5, -8], "yaw": 0 },
+    { "peer": "shooter", "at": [-60, 1, 35], "look": [0, 0] },
+    { "unit": "infantry", "id": "r1", "team": "strategist", "at": [-88, 0.5, -16], "order": "none" },
+    { "unit": "infantry", "id": "r2", "team": "strategist", "at": [-88, 0.5, -14], "order": "none" },
+    { "unit": "infantry", "id": "r3", "team": "strategist", "at": [-91, 0.5, -16], "order": "none" },
+    { "unit": "infantry", "id": "r4", "team": "strategist", "at": [-91, 0.5, -14], "order": "none" }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.unit_task[goal=18].count", "op": "over_seeds", "cmp": ">=", "value": 1, "fraction": 1.0 },
+    { "metric": "events.node_captured[node=0,owner=2].count", "op": "over_seeds", "cmp": ">=", "value": 1, "fraction": 1.0 }
+  ]
+}

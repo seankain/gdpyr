@@ -232,10 +232,24 @@ public class AgentEventTests
 	{
 		// docs/TACTICS.md §5.4: after dropship_landed, so every recorded trace keeps its numbers.
 		Assert.Equal(18, (int)AgentEventKind.GrenadeThrown);
-		Assert.Equal(AgentEventKind.GrenadeThrown, AgentEventSchema.Last);
 		Assert.Equal("grenade_thrown", AgentEventSchema.NameOf(AgentEventKind.GrenadeThrown));
 		Assert.Equal(new[] { "thrower", "tier", "hidden", "x", "z" },
 			AgentEventSchema.FieldsOf(AgentEventKind.GrenadeThrown).ToArray());
+	}
+
+	[Fact]
+	public void UnitTask_IsAppendedAfterGrenadeThrown_AndItsGoalsAreProtocolNumbers()
+	{
+		// docs/TACTICS.md §5.1: the goal is the UnitGoal's number, and a scenario names it.
+		Assert.Equal(19, (int)AgentEventKind.UnitTask);
+		Assert.Equal(AgentEventKind.UnitTask, AgentEventSchema.Last);
+		Assert.Equal("unit_task", AgentEventSchema.NameOf(AgentEventKind.UnitTask));
+		Assert.Equal(new[] { "unit", "tier", "goal", "x", "z" }, AgentEventSchema.FieldsOf(AgentEventKind.UnitTask).ToArray());
+		Assert.Equal(18, (int)UnitGoal.TakeCoverFromFire);
+		Assert.Equal(19, (int)UnitGoal.ReturnFire);
+		Assert.True(UnitContext.IsTactic(UnitGoal.TakeCoverFromFire));
+		Assert.True(UnitContext.IsTactic(UnitGoal.ReturnFire));
+		Assert.False(UnitContext.IsTactic(UnitGoal.HoldCover));
 	}
 
 	[Fact]

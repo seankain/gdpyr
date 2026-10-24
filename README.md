@@ -186,6 +186,7 @@ map:
 | `T` | queue a dropship at the barracks |
 | right-click a technical or a dropship, with units selected | they walk to it and get in, nearest first, up to its seats (four, or eight); the vehicle becomes the selection and waits for them — a dropship in the air comes down to be boarded |
 | `U` | every selected vehicle with anybody aboard lets them out round it, where it is; a dropship lands first |
+| `H`, or the card's **Tactics** button | the selection's tactics: **auto** units take cover from where they are fired on and fire back on their own, **direct** ones do what they are told ([`docs/TACTICS.md`](docs/TACTICS.md) §5.9); the **new units** button beside the points sets what the side's next units start with |
 
 Right-clicking an enemy player orders an attack on that player rather than on the ground under
 them. Units are server-simulated and never predicted; the order marker appears immediately and the

@@ -108,8 +108,8 @@ HTN_BOTS.md §4.2 holds. Added:
 | Near misses | The same call: the chord from `From` to where the round stopped — the contact point, else the chord's end — against every unit of the other side on foot whose capsule axis it passes within `NearMiss.Meters` (1.5 m) of, the victim excluded (T-D2). Broad phase: one box per chord, grown by 1.5 m (or a blast's reach plus the widest unit's 2 m radius), against each unit's feet, before any capsule is built. A grenade that comes to rest (`ResolveFused`) is a near miss on every unit within its blast's reach (7 m). |
 | Melee | `ResolveMelee`: the swing from the attacker's eye to what it reached, by the same rules. |
 | Perceived origin | The true origin moved along the line from the unit's eye by up to `FiredUpon.ErrorFraction` (0.1) of the range, in or out — the direction exact, the range to 10 % (T-D3) — seeded by `Spread.Seed(unit owner, definition, round id)`. |
-| Window | `FiredUpon.WindowTicks` (3 s) after the latest round; rounds inside it keep it open, the worst kind in it is kept, and one after it starts a new window. From T1, `UnitFact.FiredUpon` = none · near miss · hit, read from it; Build's `UnderFire` becomes `FiredUpon = hit`, its meaning unchanged. |
-| Shooter | `AcquireTarget` (`:765`) tries the shooter after a named target and before the squad focus, by the focus's rule: one ray, replacing the search's when clear. Returning fire needs a line to the shooter. |
+| Window | `FiredUpon.WindowTicks` (3 s) after the latest round; rounds inside it keep it open, the worst kind in it is kept, and one after it starts a new window. `UnitFact.FiredUpon` = none · near miss · hit, read from it every tick (T1). Build's `UnderFire` (hit within 2 s, from `LastDamagedTick`) is left as it is rather than folded into `FiredUpon = hit`: every builder reads it, micro-autonomy on or off, and a 3 s window would change what an off builder does. |
+| Shooter | `AcquireTarget` tries the shooter after a named target and before the squad focus, by the focus's rule — under micro-autonomy, while the window is open: one ray, replacing the search's when clear; when it is blocked, neither the focus nor the search pays for it again. Returning fire at the shooter needs a line to them; without one, §5.1 fires at the place. |
 
 Recording runs whatever a unit's micro-autonomy, under `--bot-ai htn` only (legacy plans nothing,
 so the pass would be cost with no reader); only planning reads it.
@@ -190,15 +190,21 @@ whose micro-autonomy is on, so an off unit on a Move obeys as it does today.
 
 ### 5.1 React to fire — requirement 3
 
+As built in T1 (`UnitDomain.cs`'s "react to fire" select, below Retreat and above Resupply;
+`UnitManager.SenseFireCover`):
+
 | | |
 |---|---|
-| Who | Every unit on foot with a weapon. Not vehicles, aircraft, supply trucks or riders. |
-| Facts | `FiredUpon` (§4.1); `FireCover`: `CoverState` against the fired-from point, banded every tick as `Cover` is. |
-| Spot | A low wall it can fire over within 10 m, else anything that hides it (a block) within 6 m. Under a Move or an objective: no further from the destination than the unit is now plus 3 m, and within 6 m of the line to it — cover on the way, not behind. A unit that must stand on a point (`ControlPoint.Holds`) searches inside the point's bound only, as `HoldPointCover` does. |
-| Operators | `TakeCoverFromFire`: to the spot, firing on the move. `ReturnFire`: in the spot, fire at the fired-from point for `ReturnFireTicks` (2 s) after each round that reaches it, then hold, crouched (§5.8). A gunner's fire is §5.2's. |
-| Ends | The window (3 s after the last round); a target of its own (engage-from-cover takes over, against the target); the spot no longer hiding it; a new order; micro-autonomy off. |
-| Cap | Under a Move that is not an objective, `ReactMaxTicks` (8 s) in total since the order; then the branch is off for that order until the next hit, so the Move still arrives. |
-| Not | A unit in a drill's moving element (a bound is already a move to cover, §5.5). A squad falling back (§5.6). |
+| Who | A unit with a doctrine (`UnitTraits.Doctrine` not `None`: not a builder, a vehicle, a supply truck or the dropship), its micro-autonomy on. Riders and aircraft plan nothing. |
+| Facts | `FiredUpon` (§4.1, every tick); `FireCover`: `CoverState` against the fired-from point, the spot found on the scan and banded every tick as `Cover` is; `ReactSpent`, the cap below. |
+| When | Fired upon, with a spot, the cap not spent, its board squad not falling back (§5.6), its order not a build, a walk to a vehicle or an unload — and nothing of its own to fight from cover: no target, or an order that shoots on the walk (a move or a patrol). A unit under an attack or a defend order that can see its target fights it from cover against it, as before (COVER.md §6). |
+| Spot | A low wall it can fire over within 10 m (`ReactCoverSearchMeters`), at any range from the shooter, else anything that hides it within 6 m (`ReactHideSearchMeters`). Under an order that goes somewhere — a move, a patrol, an attack — it must be on the way (`CoverQuery.HasToward`): no further from where the order goes than the unit is plus 3 m, and within 6 m of the line to it. Only behind a box the unit is not already in front of (`CoverQuery.StaySameSide`): a unit between a wall and the shooter would reach the wall's far face only by walking round its end, down the line the fire comes along. One spot a unit: while it reacts, the fire spot is its claimed spot, and the fight's is not looked for. A unit that must stand on a point (`ControlPoint.Holds`) does not leave it for one; T6 revisits that. |
+| Operators | `TakeCoverFromFire`: to the spot without stopping. `ReturnFire`: in it, holding. Both fire at the fired-from point for `ReturnFireTicks` (2 s) after each round that reaches it (`UnitIntent.FireAt`), when it is inside the unit's engage range — a shooter beyond 40 m is hidden from, not answered — and never throw a grenade at that point: it is a place, not a player, and nobody's focus. Crouching waits for T3. |
+| Shooter | `AcquireTarget` tries whoever last fired at it before the squad focus (§4.1): a unit that can see its shooter shoots them, and then fights them as its target. |
+| Ends | The window (3 s after the last round); a target of its own under an order with a fight of its own; the spot no longer hiding it; its squad falling back; a build order; micro-autonomy off — each an executing condition, each a test. |
+| Cap | Under an order that goes somewhere, `ReactMaxTicks` (8 s) in all since the order, the windows' tails included; then `ReactSpent` until the next hit (`FireMemory.LastHitTick`) or a new order, so the order still arrives. Under a defend order or none there is no cap: holding in cover while fire keeps coming is what holding is. The plan had the cap on a move only; an attack with no drill yet (T6) would otherwise be pinned for ever by one shooter it cannot see. |
+| Builder | Under micro-autonomy, "hide behind cover" hides from the fired-from point when there is one, else from the nearest contact, as before. |
+| Not | A squad falling back. A drill's moving element waits for T6, which adds it. |
 
 ### 5.2 Heavy gunner: base of fire — requirement 1
 
@@ -361,8 +367,8 @@ strategist or a scenario turns micro-autonomy on.
     followed within the tick; a spawn's `"autonomy": "on"` started that unit on. A second round,
     a rifleman 15 m from a crouched player, recorded `grenade_thrown` with `tier` 0 and `hidden` 0.
   - **Scenarios**: `./scripts/playtest.sh Tests/Scenarios/*.json` on this build, headless, default
-    `htn` and micro-autonomy off: in progress when this was committed — the first 6 run had passed,
-    none had failed; the whole run is recorded in the next commit.
+    `htn` and micro-autonomy off: 23 of 23 passed, 0 failed, in 36 min 11 s (recorded after the
+    T0 commit, on that commit's build).
   - **Differences from the plan above.** Hits are recorded where the round is resolved
     (`NoteRound` naming its victim), not inside `Damage`, so a blast and a swing are recorded by the
     same call; §4.1 says so. `unit_task` and `squad_drill` are not added yet: nothing emits them
@@ -388,6 +394,46 @@ strategist or a scenario turns micro-autonomy on.
   `--unit-autonomy off`, over the seeds.
 - **Done when:** a display check shows the card's toggle, `Mixed` on a mixed selection, and a
   second strategist's client showing the first's change.
+- **Result — built.**
+  - `dotnet test`: 1823 passed, 0 failed (1772 before; 51 new: 34 in `ReactToFireTests`, 11 in
+    `CoverTests`, 4 in `MicroAutonomyTests`, 1 in `FireMemoryTests`, 1 in `AgentEventTests`).
+    `UnitHtnTests`' 0 B population (64 units × 7,200 ticks) has two more situations, a defender
+    fired upon running to cover and in it; `CommanderHtnTests` checks both Refill moves are
+    falling back. `dotnet build Gdpyr.csproj`: 0 warnings, 0 errors; the harness builds.
+  - **The tests test something.** One piece removed at a time, each made tests fail, and each
+    restored passed: the micro-autonomy executing condition (3 failed), the cap (2), the
+    not-falling-back condition (3), the doctrine condition (1), a hit lifting the cap (1), the
+    Refill moves marked falling back (1).
+  - **Scenario** `tactics_react_to_fire` (headless, through the harness). Its claims: 0 pilot
+    fallbacks, and on every seed at least one `unit_task` with goal 18 (take cover from fire) and
+    node 0 captured by the strategist side. Its first runs found a defect the unit tests had not:
+    riflemen between the wall and the shooter walked round the wall's end, down the line of fire,
+    to the spot behind it, and died. `CoverQuery.StaySameSide` is the fix, and the scenario's wall
+    stands at z = −8. The runs on this build with micro-autonomy on and off, and the whole suite,
+    were in progress when this was committed; they are recorded in the next commit.
+  - **Display check** (Godot 4.6 .NET under Xvfb, `opengl3`, 1600 × 900: a host with
+    `--listen --no-bots` and a client on it; a temporary probe, not committed, pressed keys, placed
+    units, took screenshots and printed every unit's mode). Four riflemen and a builder selected:
+    the card read "5 selected · tactics direct" and "Tactics: Direct (H)". After `H`: "5 selected ·
+    tactics auto", the HUD line "tactics auto for 4", and on the host the four riflemen on, the
+    builder off. A fifth rifleman placed and all selected: "6 selected · tactics mixed (4 of 5
+    auto)", "Tactics: Mixed (H)". The HUD button read "new units: Direct", then "new units: Auto"
+    after the default was switched, with no existing unit changed. The client, on the ground force,
+    asked for all six units off: the host's rejected-order count went from 0 to 1 and no unit
+    changed. The client then joined the strategists: the state it received was the host's —
+    default on, the four riflemen on, the builder and the fifth rifleman off — and its card read
+    "6 selected · tactics mixed (4 of 5 auto)". The check also showed the key list, a line longer,
+    running off the bottom of the screen (26 px a line, not 24); `KeysHeight` is 260 now, and a
+    second screenshot has its last line at y ≈ 874 of 900.
+  - **Differences from the plan above.** The tests are in `ReactToFireTests`, not `UnitHtnTests`.
+    The cap is on every order that goes somewhere (a move, a patrol, an attack), not a move only,
+    and a hit lifts it (§5.1 says why). A unit that holds a point does not leave it for fire cover.
+    Fire back reaches only as far as the unit's engage range and never throws a grenade at the
+    fired-from point. Build's `UnderFire` is not folded into `FiredUpon` (§4.1 says why). The drill's
+    moving element, which the plan excluded, does not exist until T6.
+  - **Not checked.** The debug HUD's `fire` row on a display; `unit ms` at 64 units in the engine;
+    `ApplyAutonomy` refusing a strategist's request for a unit of another side — only a ground
+    peer's request was refused in the round above.
 
 ### T2 — Grenades behind cover (1 day)
 

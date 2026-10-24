@@ -415,7 +415,10 @@ public sealed class CommandContext : BaseContext
 					// Healing will bring it back (D2): to the nearest supply source, where it
 					// stays until it is no longer depleted — which ends this task — or its
 					// time is up.
-					return Order(OrderKind.Move, SupplyPoint, OwnerId.None, SquadMission.Resupply, SquadPhase.Moving);
+					// Falling back on the board, so its units do not stop to take cover from
+					// fire on the way (docs/TACTICS.md §5.6): it is a move so as not to stop.
+					return Order(OrderKind.Move, SupplyPoint, OwnerId.None, SquadMission.Resupply,
+						SquadPhase.FallingBack);
 				}
 
 				if (AtHome)
@@ -426,7 +429,7 @@ public sealed class CommandContext : BaseContext
 					return TaskStatus.Success;
 				}
 
-				return Order(OrderKind.Move, HomePoint, OwnerId.None, SquadMission.Resupply, SquadPhase.Moving);
+				return Order(OrderKind.Move, HomePoint, OwnerId.None, SquadMission.Resupply, SquadPhase.FallingBack);
 
 			case CommandGoal.Hold:
 				return Order(OrderKind.Defend, ReservePoint, OwnerId.None, SquadMission.DefendZone, SquadPhase.Moving);

@@ -95,7 +95,11 @@ public class AiDebugTextTests
 		Assert.Equal("Defend Zone", AiGoals.Describe(AiTaskFamily.DefendZone));
 		Assert.Equal("idle", AiGoals.Name(HtnDomainKind.Unit, 0));
 		Assert.Equal("HoldPost", AiGoals.Name(HtnDomainKind.Unit, (byte)UnitGoal.HoldPost));
-		Assert.Equal(7, Enum.GetValues<AiTaskFamily>().Skip(1).Select(AiGoals.Color).Distinct().Count());
+		// Every family a colour of its own, React's included (docs/TACTICS.md §5.1).
+		Assert.Equal(Enum.GetValues<AiTaskFamily>().Length - 1,
+			Enum.GetValues<AiTaskFamily>().Skip(1).Select(AiGoals.Color).Distinct().Count());
+		Assert.Equal(AiTaskFamily.React, AiGoals.Family(HtnDomainKind.Unit, (byte)UnitGoal.TakeCoverFromFire));
+		Assert.Equal(AiTaskFamily.React, AiGoals.Family(HtnDomainKind.Unit, (byte)UnitGoal.ReturnFire));
 	}
 
 	// ---- the commander ------------------------------------------------------

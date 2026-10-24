@@ -64,6 +64,13 @@ public struct FireMemory
 	/// <summary>The tick of the latest round.</summary>
 	public uint LastTick;
 
+	/// <summary>
+	/// The tick of the latest round that hit, in any window; 0 for none this life. What
+	/// tells a unit whose cap on reacting is spent that it has been hit since
+	/// (docs/TACTICS.md §5.1), which a near miss in a window that already holds a hit does not.
+	/// </summary>
+	public uint LastHitTick;
+
 	/// <summary>Rounds this window, counting to <see cref="ushort.MaxValue"/> and no further.</summary>
 	public ushort Rounds;
 
@@ -106,7 +113,14 @@ public static class FiredUpon
 
 		if (!IsRecent(memory, tick, windowTicks))
 		{
+			uint lastHit = memory.LastHitTick;
 			memory = default;
+			memory.LastHitTick = lastHit;
+		}
+
+		if (kind == FireKind.Hit)
+		{
+			memory.LastHitTick = tick;
 		}
 
 		memory.Kind = kind > memory.Kind ? kind : memory.Kind;

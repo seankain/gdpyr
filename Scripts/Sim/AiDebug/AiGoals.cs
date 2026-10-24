@@ -21,8 +21,11 @@ public enum AiTaskFamily : byte
 	/// <summary>A unit's build order: working, or taking cover from it.</summary>
 	Build = 6,
 
-	/// <summary>A unit's move order, never second-guessed (§5.2).</summary>
+	/// <summary>A unit's move order, carried out as given (§5.2).</summary>
 	Obey = 7,
+
+	/// <summary>A unit taking cover from where it was fired upon, and firing back (docs/TACTICS.md §5.1).</summary>
+	React = 8,
 }
 
 /// <summary>Goal bytes as names and families, per domain.</summary>
@@ -55,6 +58,7 @@ public static class AiGoals
 			UnitGoal.EngageInLeash or UnitGoal.AnswerCall or UnitGoal.HoldPost => AiTaskFamily.DefendZone,
 			UnitGoal.Patrol => AiTaskFamily.Recon,
 			UnitGoal.Obey => AiTaskFamily.Obey,
+			UnitGoal.TakeCoverFromFire or UnitGoal.ReturnFire => AiTaskFamily.React,
 			_ => AiTaskFamily.None,
 		},
 		HtnDomainKind.Squad => (CommandGoal)goal switch
@@ -87,6 +91,7 @@ public static class AiGoals
 		AiTaskFamily.Recon => "c7a6ff",
 		AiTaskFamily.Build => "ffe066",
 		AiTaskFamily.Obey => "f0f0f0",
+		AiTaskFamily.React => "ff6ec7",
 		_ => "9aa0a6",
 	};
 

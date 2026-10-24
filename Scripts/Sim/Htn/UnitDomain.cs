@@ -95,6 +95,27 @@ public enum UnitFact : byte
 	/// </summary>
 	MicroAutonomy,
 
+	/// <summary>
+	/// <see cref="FireKind"/>: the worst round that has come near it in the last
+	/// <see cref="Sim.FiredUpon.WindowTicks"/> (docs/TACTICS.md §4.1), every tick, from
+	/// the unit's fire memory.
+	/// </summary>
+	FiredUpon,
+
+	/// <summary>
+	/// <see cref="CoverState"/> against where it was last fired upon from: a spot behind
+	/// cover from there, on its way when its order goes somewhere, and whether it is
+	/// standing in it (docs/TACTICS.md §5.1).
+	/// </summary>
+	FireCover,
+
+	/// <summary>
+	/// It has reacted to fire for <see cref="UnitPlanTraits.ReactMaxTicks"/> under an
+	/// order that goes somewhere, and does not again until it is next hit, or given a
+	/// new order: the order still arrives (docs/TACTICS.md §5.1).
+	/// </summary>
+	ReactSpent,
+
 	Count,
 }
 
@@ -149,6 +170,12 @@ public enum UnitGoal : byte
 
 	/// <summary>To its spot behind cover on or beside the point, firing on the way; in it, it stands and fights.</summary>
 	HoldPointCover,
+
+	/// <summary>To a spot behind cover from where it was fired upon, firing back on the way (docs/TACTICS.md §5.1).</summary>
+	TakeCoverFromFire,
+
+	/// <summary>In that spot: firing back at where the fire came from while it keeps coming, then holding.</summary>
+	ReturnFire,
 }
 
 /// <summary>How the unit manager picks where to walk for an intent.</summary>
@@ -186,6 +213,15 @@ public struct UnitIntent
 
 	/// <summary>Acquire this one when the sensor can see it; 0 for the nearest.</summary>
 	public int TargetOwnerId;
+
+	/// <summary>
+	/// With no target of its own, fire at <see cref="FirePoint"/>: a place, not a player —
+	/// where the fire came from (docs/TACTICS.md §5.1).
+	/// </summary>
+	public bool FireAt;
+
+	/// <inheritdoc cref="FireAt"/>
+	public Vector3 FirePoint;
 }
 
 /// <summary>
@@ -271,12 +307,23 @@ public readonly struct UnitPlanTraits
 	/// <summary>How much further in than it has to be a post or a holder's cover on the point is: what a shove does not undo.</summary>
 	public readonly float PointPostMarginMeters;
 
+	/// <summary>
+	/// How long a unit whose order goes somewhere may spend reacting to fire under that
+	/// order, in all, before it goes on regardless until it is next hit (docs/TACTICS.md
+	/// §5.1): a squad pinned for ever is the failure to guard against (§9).
+	/// </summary>
+	public readonly int ReactMaxTicks;
+
+	/// <summary>How long after each round that reaches it a unit in cover keeps firing back at where it came from.</summary>
+	public readonly int ReturnFireTicks;
+
 	public UnitPlanTraits(float healthOkFraction, float healthCriticalFraction, float healthHysteresis,
 		float engagedFriendMeters, float paceAheadMeters, float paceResumeMeters, int paceMaxWaitTicks,
 		float postSpacingMeters, float postMinRadiusMeters, float postLeashShare, int underFireTicks,
 		float threatBearingMeters, float resupplyDoneFraction, float supplyRangeMeters,
 		float supplyRangeHysteresisMeters, float supplyMarginMeters, int resupplyMaxTicks, int resupplyRetryTicks,
-		float objectiveEnterMeters, int holdersPerPoint, float pointCoverSlackMeters, float pointPostMarginMeters)
+		float objectiveEnterMeters, int holdersPerPoint, float pointCoverSlackMeters, float pointPostMarginMeters,
+		int reactMaxTicks = SimConfig.TickRate * 8, int returnFireTicks = SimConfig.TickRate * 2)
 	{
 		HealthOkFraction = healthOkFraction;
 		HealthCriticalFraction = healthCriticalFraction;
@@ -300,6 +347,8 @@ public readonly struct UnitPlanTraits
 		HoldersPerPoint = Math.Max(holdersPerPoint, 1);
 		PointCoverSlackMeters = MathF.Max(pointCoverSlackMeters, 0f);
 		PointPostMarginMeters = MathF.Max(pointPostMarginMeters, 0f);
+		ReactMaxTicks = Math.Max(reactMaxTicks, 1);
+		ReturnFireTicks = Math.Max(returnFireTicks, 0);
 	}
 
 	/// <summary>
@@ -310,7 +359,9 @@ public readonly struct UnitPlanTraits
 	/// 3 m inside it and comes back at 95 %; a resupply that has not finished in 60 s
 	/// is dropped for 30 s. A unit taking a point counts as on it 1 m inside its
 	/// edge; two stand on it, and the rest may take cover up to 4 m outside it; posts
-	/// and a holder's cover are a metre further in than they have to be.
+	/// and a holder's cover are a metre further in than they have to be. A unit whose
+	/// order goes somewhere reacts to fire for 8 s at most under it; one in cover fires
+	/// back for 2 s after each round that reaches it (docs/TACTICS.md §5.1).
 	/// </summary>
 	public static UnitPlanTraits Default => new(
 		healthOkFraction: 0.6f,
@@ -383,6 +434,12 @@ public struct UnitSense
 	/// which the scan has filled in with the point's radius and the unit's post on it.
 	/// </summary>
 	public bool Objective;
+
+	/// <summary>A spot behind cover from where it was last fired upon (docs/TACTICS.md §5.1).</summary>
+	public bool HasFireCover;
+
+	/// <summary>The box beside that spot hid it from there when the scan looked.</summary>
+	public bool FireCoverHides;
 }
 
 /// <summary>
@@ -406,6 +463,10 @@ public sealed class UnitContext : BaseContext
 	private Vector3 _targetPoint;
 	private bool _objective;
 	private uint _paceTick = uint.MaxValue;
+	private bool _hasFireCover;
+	private bool _fireCoverHides;
+	private uint _reactTick = uint.MaxValue;
+	private uint _reactSpentTick;
 
 	public UnitContext(IFactory factory, in UnitPlanTraits traits, in UnitTraits unitTraits)
 	{
@@ -488,6 +549,19 @@ public sealed class UnitContext : BaseContext
 	/// <summary>Its post on that point, inside the radius by what keeps it counting there.</summary>
 	public Vector3 ObjectivePost;
 
+	/// <summary>Where it reckons it was last fired upon from (docs/TACTICS.md §4.1). Meaningful while <see cref="UnitFact.FiredUpon"/> is not none.</summary>
+	public Vector3 FiredFromPoint;
+
+	/// <summary>The tick the latest round that came near it came on.</summary>
+	public uint LastFiredUponTick;
+
+	/// <summary>Its spot behind cover from <see cref="FiredFromPoint"/>. Only with <see cref="HasFireCoverPoint"/>.</summary>
+	public bool HasFireCoverPoint;
+	public Vector3 FireCoverPoint;
+
+	/// <summary>Ticks it has spent reacting to fire under its current order, against <see cref="UnitPlanTraits.ReactMaxTicks"/>.</summary>
+	public int ReactedTicks;
+
 	/// <summary>A resupply was given up on: <see cref="UnitFact.Supply"/> stays off until this tick.</summary>
 	public uint SupplyRetryTick;
 
@@ -509,6 +583,24 @@ public sealed class UnitContext : BaseContext
 	/// <summary>The goals that keep pace with the squad, and whose <see cref="Waiting"/> means it is waiting for it.</summary>
 	public static bool Paces(UnitGoal goal) => goal is UnitGoal.Advance or UnitGoal.TakePoint;
 
+	/// <summary>The goals of docs/TACTICS.md §5: what the agent stream's <c>unit_task</c> reports a unit starting.</summary>
+	public static bool IsTactic(UnitGoal goal) => goal is UnitGoal.TakeCoverFromFire or UnitGoal.ReturnFire;
+
+	/// <summary>
+	/// An order that goes somewhere: one that reacting to fire must not stop for good,
+	/// so a unit under it reacts for <see cref="UnitPlanTraits.ReactMaxTicks"/> at most
+	/// (docs/TACTICS.md §5.1).
+	/// </summary>
+	public static bool GoesSomewhere(OrderKind order) => order is OrderKind.Move or OrderKind.Patrol or OrderKind.Attack;
+
+	/// <summary>
+	/// An order with no fight of its own to take cover in: a move or a patrol, which shoot
+	/// on the walk. A unit under one reacts to fire even at a target it can see; under any
+	/// other it reacts only to fire from one it cannot, and fights one it can from
+	/// cover against it (docs/COVER.md §6).
+	/// </summary>
+	public static bool FightsOnTheWay(OrderKind order) => order is OrderKind.Move or OrderKind.Patrol;
+
 	/// <summary>What its planner has done lately, for the spectator's debugger (docs/AI_DEBUG.md §3.3). Null for a context made outside <see cref="UnitPlanning"/>.</summary>
 	public HtnHistory History { get; internal set; }
 
@@ -523,6 +615,32 @@ public sealed class UnitContext : BaseContext
 
 	/// <summary>What the strategist lets it do on its own (docs/TACTICS.md §5.9), every tick, from the unit.</summary>
 	public void SenseAutonomy(Sim.MicroAutonomy mode) => Sense(UnitFact.MicroAutonomy, (byte)mode);
+
+	/// <summary>
+	/// Being fired upon (docs/TACTICS.md §4.1), every tick, from the unit's fire memory:
+	/// the worst round in the window, where the latest came from and when, and when it
+	/// was last hit — which, after the cap on reacting was spent, lifts the cap.
+	/// </summary>
+	public void SenseFire(FireKind kind, Vector3 firedFrom, uint lastTick, uint lastHitTick)
+	{
+		FiredFromPoint = firedFrom;
+		LastFiredUponTick = lastTick;
+		Sense(UnitFact.FiredUpon, (byte)kind);
+
+		if (Is(UnitFact.ReactSpent) && lastHitTick > _reactSpentTick)
+		{
+			ResetReact();
+		}
+	}
+
+	/// <summary>A new order, or a new life: reacting to fire starts over (docs/TACTICS.md §5.1).</summary>
+	public void ResetReact()
+	{
+		ReactedTicks = 0;
+		_reactTick = uint.MaxValue;
+		_reactSpentTick = 0;
+		Sense(UnitFact.ReactSpent, false);
+	}
 
 	/// <summary>A context with no squad is moving, not gathering: 0 is <see cref="Htn.SquadPhase.Gathering"/>.</summary>
 	public override void Init()
@@ -552,11 +670,14 @@ public sealed class UnitContext : BaseContext
 		_hasCover = sense.HasCover && HasCoverPoint;
 		_coverHides = sense.CoverHides;
 		_objective = sense.Objective;
+		_hasFireCover = sense.HasFireCover && HasFireCoverPoint;
+		_fireCoverHides = sense.FireCoverHides;
 
 		SenseContact();
 		SenseLeash();
 		SenseCover();
 		SenseObjective();
+		SenseFireCover();
 	}
 
 	/// <summary>
@@ -577,6 +698,7 @@ public sealed class UnitContext : BaseContext
 		SenseLeash();
 		SenseCover();
 		SenseObjective();
+		SenseFireCover();
 	}
 
 	/// <summary>
@@ -602,6 +724,11 @@ public sealed class UnitContext : BaseContext
 	private void SenseCover() =>
 		Sense(UnitFact.Cover, (byte)CoverBands.Band(_hasCover, Flat(Position, CoverPoint), _coverHides,
 			(CoverState)Get(UnitFact.Cover)));
+
+	/// <summary>Cover from the fire, every tick, as <see cref="SenseCover"/> is from the fight.</summary>
+	private void SenseFireCover() =>
+		Sense(UnitFact.FireCover, (byte)CoverBands.Band(_hasFireCover, Flat(Position, FireCoverPoint), _fireCoverHides,
+			(CoverState)Get(UnitFact.FireCover)));
 
 	/// <summary>
 	/// Resupply's three facts (D2), each with its hysteresis: wounded from the moment
@@ -739,6 +866,25 @@ public sealed class UnitContext : BaseContext
 			case UnitGoal.HoldPointCover:
 				return Get(UnitFact.Cover) == (byte)CoverState.In ? Hold() : Go(CoverPoint, stopToFight: false);
 
+			case UnitGoal.TakeCoverFromFire:
+				// To the spot without stopping, firing back on the way (docs/TACTICS.md §5.1).
+				if (Reacted())
+				{
+					return TaskStatus.Failure;
+				}
+
+				FireBack();
+				return Go(FireCoverPoint, stopToFight: false);
+
+			case UnitGoal.ReturnFire:
+				if (Reacted())
+				{
+					return TaskStatus.Failure;
+				}
+
+				FireBack();
+				return Hold();
+
 			default:
 				return TaskStatus.Failure;
 		}
@@ -785,6 +931,49 @@ public sealed class UnitContext : BaseContext
 		}
 
 		return Waiting;
+	}
+
+	/// <summary>
+	/// Counts a tick of reacting to fire, once a tick however often the operator runs,
+	/// under an order that goes somewhere; true, with the cap spent, once that has lasted
+	/// <see cref="UnitPlanTraits.ReactMaxTicks"/>. Set here rather than on the next scan
+	/// so the replan this failure causes already sees it, as a given-up resupply is.
+	/// </summary>
+	private bool Reacted()
+	{
+		if (!GoesSomewhere(Order.Kind))
+		{
+			return false;
+		}
+
+		if (Tick != _reactTick)
+		{
+			_reactTick = Tick;
+			ReactedTicks++;
+		}
+
+		if (ReactedTicks < Traits.ReactMaxTicks)
+		{
+			return false;
+		}
+
+		_reactSpentTick = Tick;
+		Sense(UnitFact.ReactSpent, true);
+		return true;
+	}
+
+	/// <summary>
+	/// Fire at where the fire came from, for <see cref="UnitPlanTraits.ReturnFireTicks"/>
+	/// after each round that reaches it: a place, with no player named, so it is
+	/// nobody's focus. A target of its own it fires at anyway.
+	/// </summary>
+	private void FireBack()
+	{
+		if (Tick >= LastFiredUponTick && Tick - LastFiredUponTick <= (uint)Traits.ReturnFireTicks)
+		{
+			Intent.FireAt = true;
+			Intent.FirePoint = FiredFromPoint;
+		}
 	}
 
 	/// <summary>
@@ -919,6 +1108,39 @@ public sealed class UnitDomainBuilder : BaseDomainBuilder<UnitDomainBuilder, Uni
 		return ExecutingCondition($"while {fact}={value}", c => c.Get(fact) == wanted);
 	}
 
+	/// <summary>A condition on how the unit fights (docs/TACTICS.md §3): a builder, a vehicle or a truck has no tactics of its own.</summary>
+	public UnitDomainBuilder IfHasDoctrine() =>
+		Condition("Doctrine!=None", c => c.UnitTraits.Doctrine != UnitDoctrine.None);
+
+	/// <summary>
+	/// It has nothing of its own to fight from cover: no target, or an order that shoots
+	/// on the walk (<see cref="UnitContext.FightsOnTheWay"/>).
+	/// </summary>
+	public UnitDomainBuilder IfNothingToFightFromCover() =>
+		Condition("Contact!=Own or travelling", NothingToFightFromCover);
+
+	/// <summary>Executing condition: as <see cref="IfNothingToFightFromCover"/>, every tick.</summary>
+	public UnitDomainBuilder WhileNothingToFightFromCover() =>
+		_executingConditions
+			? ExecutingCondition("while Contact!=Own or travelling", NothingToFightFromCover)
+			: this;
+
+	private static bool NothingToFightFromCover(UnitContext c) =>
+		c.Get(UnitFact.Contact) != (byte)UnitContact.Own || UnitContext.FightsOnTheWay(c.Order.Kind);
+
+	/// <summary>
+	/// The executing conditions every reaction to fire holds by (docs/TACTICS.md §5.1):
+	/// the strategist still lets it, rounds are still coming, the spot still hides it,
+	/// the cap is not spent, its squad is not falling back, its order is not one it
+	/// never reacts under, and it has nothing of its own to fight from cover.
+	/// </summary>
+	public UnitDomainBuilder WhileReacting() =>
+		While(UnitFact.MicroAutonomy, MicroAutonomy.On).WhileNot(UnitFact.FiredUpon, FireKind.None)
+			.WhileNot(UnitFact.FireCover, CoverState.None).While(UnitFact.ReactSpent, false)
+			.WhileNot(UnitFact.SquadPhase, SquadPhase.FallingBack)
+			.WhileNot(UnitFact.Order, OrderKind.Build).WhileNot(UnitFact.Order, OrderKind.Embark)
+			.WhileNot(UnitFact.Order, OrderKind.Unload).WhileNothingToFightFromCover();
+
 	/// <summary>
 	/// A primitive task whose operator asks the unit for <paramref name="goal"/>. Set
 	/// directly rather than through <c>Do</c>, which takes no abort callback: an
@@ -978,6 +1200,27 @@ public static class UnitDomain
 						.While(UnitFact.Stance, UnitStance.Autonomous)
 						.WhileNot(UnitFact.Order, OrderKind.Move).WhileNot(UnitFact.Order, OrderKind.Build)
 						.WhileNot(UnitFact.Order, OrderKind.Embark).WhileNot(UnitFact.Order, OrderKind.Unload).End()
+				.End()
+			.End()
+			// Reacting to fire (docs/TACTICS.md §5.1): only with the strategist's leave
+			// (micro-autonomy), and below Retreat, which runs rather than hides.
+			.Select("react to fire")
+				.If(UnitFact.MicroAutonomy, MicroAutonomy.On)
+				.IfHasDoctrine()
+				.IfNot(UnitFact.FiredUpon, FireKind.None)
+				.IfNot(UnitFact.FireCover, CoverState.None)
+				.If(UnitFact.ReactSpent, false)
+				.IfNot(UnitFact.SquadPhase, SquadPhase.FallingBack)
+				.IfNot(UnitFact.Order, OrderKind.Build)
+				.IfNot(UnitFact.Order, OrderKind.Embark)
+				.IfNot(UnitFact.Order, OrderKind.Unload)
+				.IfNothingToFightFromCover()
+				.Sequence("return fire from cover")
+					.If(UnitFact.FireCover, CoverState.In)
+					.Act(UnitGoal.ReturnFire).WhileReacting().While(UnitFact.FireCover, CoverState.In).End()
+				.End()
+				.Sequence("get to cover")
+					.Act(UnitGoal.TakeCoverFromFire).WhileReacting().End()
 				.End()
 			.End()
 			.Select("resupply")
@@ -1156,6 +1399,7 @@ public sealed class UnitPlanning
 	public void Reset(UnitContext context)
 	{
 		Planner.Reset(context);
+		context.ResetReact();
 		context.History?.RecordReset();
 	}
 }

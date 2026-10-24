@@ -692,6 +692,7 @@ from position deltas and gets it slightly wrong.
 | `node_contested` | node, owner, contested, ticks — a node's contest (both sides inside its radius) started (`contested` 1) or ended (0, with `ticks` it lasted). Either bot AI (H6) |
 | `unit_embarked` / `unit_disembarked` | unit, vehicle, tier (the passenger's), x, z — a unit got into a vehicle (at the vehicle) or out of one (where it got out): an unload, or thrown out alive from a wreck ([`VEHICLES.md`](VEHICLES.md) §10) |
 | `dropship_landed` | unit, aboard, x, z — a dropship touched down, with how many were aboard ([`VEHICLES.md`](VEHICLES.md) §8.2) |
+| `unit_task` | unit, tier, goal, x, z — a unit started one of the tactics of [`TACTICS.md`](TACTICS.md) §5, by its `UnitGoal` number, a protocol constant from here on: 18 take cover from fire, 19 return fire; where it was when it started. Only a unit whose micro-autonomy is on, under `--bot-ai htn` |
 | `grenade_thrown` | thrower (owner id), tier (its catalog id; −1 for a player), hidden (1 when a unit threw at something hidden from it — behind a wall with only its head showing, or out of sight where a gunner is still firing — 0 when it could see it, −1 for a player, whose aim is its own), x, z (where the thrower stood) — a hand grenade left somebody's hand ([`NETCODE.md`](NETCODE.md) §10.9, [`TACTICS.md`](TACTICS.md) §5.4). Either bot AI |
 
 **A vehicle destroyed with passengers aboard** is several `unit_lost` records on one tick, all
@@ -978,7 +979,7 @@ The same rule the rest of the codebase follows: the interesting part is engine-f
 | Event filters: only matching events count, nothing matching reads zero, a field, kind or operator nothing answers to fails; a scenario's `bot_ai` | `Tests/ScenarioTests.cs` | H6 |
 | Every checked-in scenario parses, and every `events.*` metric in it names a kind, field and aggregate that exist | `Tests/ScenarioTests.cs` | H6 |
 | The harness knows every event kind and every field of each that the game's schema publishes; `squad_task`'s goal numbers | `Tests/AgentEventTests.cs` | H6 |
-| `autonomy` and `autonomy_default` keep their numbers after the vehicle commands; `grenade_thrown` after the vehicle events; a scenario's and a spawn's `autonomy`, the script commands, and each malformed one as a sentence | `Tests/AgentEventTests.cs`, `Tests/ScenarioTests.cs` | TACTICS T0 |
+| `autonomy` and `autonomy_default` keep their numbers after the vehicle commands; `grenade_thrown` and `unit_task` after the vehicle events, and `unit_task`'s goal numbers; a scenario's and a spawn's `autonomy`, the script commands, and each malformed one as a sentence | `Tests/AgentEventTests.cs`, `Tests/ScenarioTests.cs` | TACTICS T0, T1 |
 
 One test is not engine-free and is worth the exception: the **divergence probe** of §3 — two seeded
 600-tick episodes against one headless server, comparing `state_hash` per tick and reporting the

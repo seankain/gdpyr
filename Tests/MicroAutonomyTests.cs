@@ -182,6 +182,18 @@ public class MicroAutonomyTests
 		Assert.True((int)UnitFact.Count <= HtnTrace.MaxFacts);
 	}
 
+	[Theory]
+	[InlineData(0, 0, "", MicroAutonomy.On)]
+	[InlineData(3, 0, "Direct", MicroAutonomy.On)]
+	[InlineData(3, 1, "Mixed", MicroAutonomy.On)]
+	[InlineData(3, 3, "Auto", MicroAutonomy.Off)]
+	public void TheSwitch_SaysWhatASelectionIs_AndMakesAMixedOneAuto(int units, int on, string reads,
+		MicroAutonomy next)
+	{
+		Assert.Equal(reads, MicroAutonomyNames.Describe(units, on));
+		Assert.Equal(next, MicroAutonomyNames.Toggle(units, on));
+	}
+
 	[Fact]
 	public void UnitTraits_CarryTheDoctrine_AndANewOneHasNone()
 	{

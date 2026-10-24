@@ -42,6 +42,81 @@ public class CoverTests
 		return board;
 	}
 
+	// ---- on the way (docs/TACTICS.md §5.1) -----------------------------------
+
+	/// <summary>A unit at the origin walking to +X, as a move order would send it.</summary>
+	private static CoverQuery OnItsWay(CoverQuery query, Vector3 toward, float back = 3f, float offLine = 6f)
+	{
+		query.HasToward = true;
+		query.Toward = toward;
+		query.MaxBackMeters = back;
+		query.MaxOffLineMeters = offLine;
+		return query;
+	}
+
+	[Fact]
+	public void AQueryGoingNowhere_TakesASpotAnywhere()
+	{
+		CoverQuery query = Rifleman(Vector3.Zero, new Vector3(0f, 0f, 30f));
+		Assert.True(CoverBoard.OnTheWay(new Vector3(-50f, 0f, -50f), query));
+	}
+
+	[Theory]
+	[InlineData(10f, 0f, true)]   // ahead on the line
+	[InlineData(-2.9f, 0f, true)] // a little behind: within the 3 m back
+	[InlineData(-3.5f, 0f, false)] // further behind than that
+	[InlineData(10f, 5.9f, true)]  // off the line by less than 6 m
+	[InlineData(10f, 6.5f, false)] // by more
+	[InlineData(48f, 0f, true)]    // short of the end
+	[InlineData(52.5f, 0f, true)]  // past the end, but no further from it than the walker
+	[InlineData(60f, 0f, false)]   // past the end by more than the line reaches
+	public void ASpotOnTheWay_IsNoFurtherFromTheDestination_AndNearTheLine(float x, float z, bool onTheWay)
+	{
+		CoverQuery query = OnItsWay(Rifleman(Vector3.Zero, new Vector3(25f, 0f, 40f)), new Vector3(50f, 0f, 0f));
+		Assert.Equal(onTheWay, CoverBoard.OnTheWay(new Vector3(x, 0f, z), query));
+	}
+
+	[Fact]
+	public void TheSearch_LeavesASpotThatIsNotOnTheWay()
+	{
+		// A wall at the origin, a threat 20 m to +Z: the spot behind it is on the -Z face.
+		CoverBoard board = WallAtOrigin(LowWall);
+		CoverQuery query = Rifleman(new Vector3(0f, 0f, -4f), new Vector3(0f, 0f, 20f));
+		Assert.True(board.TryFindSpot(query, ReadOnlySpan<Vector3>.Empty, out CoverSpot free));
+
+		// Walking towards the wall's spot and beyond: it is on the way.
+		Assert.True(board.TryFindSpot(OnItsWay(query, new Vector3(0f, 0f, -40f)), ReadOnlySpan<Vector3>.Empty,
+			out CoverSpot ahead));
+		Assert.Equal(free.Position, ahead.Position);
+
+		// Walking 40 m to +X from 10 m out: the wall is off the line, and refused.
+		CoverQuery away = Rifleman(new Vector3(-10f, 0f, -12f), new Vector3(0f, 0f, 20f));
+		away.SearchMeters = 15f;
+		Assert.True(board.TryFindSpot(away, ReadOnlySpan<Vector3>.Empty, out _));
+		Assert.False(board.TryFindSpot(OnItsWay(away, new Vector3(30f, 0f, -12f), offLine: 6f),
+			ReadOnlySpan<Vector3>.Empty, out _));
+	}
+
+	[Fact]
+	public void StayingOnItsSide_ItTakesNoSpotBehindABoxItStandsInFrontOf()
+	{
+		// docs/TACTICS.md §5.1: in front of the wall, towards the threat, the spot behind it
+		// is a walk round its end, down the line the fire is coming along.
+		CoverBoard board = WallAtOrigin(LowWall);
+		CoverQuery inFront = Rifleman(new Vector3(0f, 0f, 2f), new Vector3(0f, 0f, 20f));
+		Assert.True(board.TryFindSpot(inFront, ReadOnlySpan<Vector3>.Empty, out _));
+		inFront.StaySameSide = true;
+		Assert.False(board.TryFindSpot(inFront, ReadOnlySpan<Vector3>.Empty, out _));
+
+		// Behind it, or beside its end, the spot is its own side's.
+		CoverQuery behind = Rifleman(new Vector3(0f, 0f, -3f), new Vector3(0f, 0f, 20f));
+		behind.StaySameSide = true;
+		Assert.True(board.TryFindSpot(behind, ReadOnlySpan<Vector3>.Empty, out _));
+		CoverQuery beside = Rifleman(new Vector3(3f, 0f, 0f), new Vector3(0f, 0f, 20f));
+		beside.StaySameSide = true;
+		Assert.True(board.TryFindSpot(beside, ReadOnlySpan<Vector3>.Empty, out _));
+	}
+
 	// ---- the board ------------------------------------------------------------
 
 	[Fact]

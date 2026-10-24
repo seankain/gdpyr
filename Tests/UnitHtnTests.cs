@@ -20,8 +20,8 @@ namespace Gdpyr.Tests;
 /// </summary>
 public class UnitHtnTests
 {
-	/// <summary>infantry.tres: sensor 45 m, engage 40 m, arrival 1.5 m, leash 20 m.</summary>
-	private static readonly UnitTraits Rifleman = new(45f, 40f, 1.5f, 20f);
+	/// <summary>infantry.tres: sensor 45 m, engage 40 m, arrival 1.5 m, leash 20 m, a rifleman's doctrine.</summary>
+	private static readonly UnitTraits Rifleman = new(45f, 40f, 1.5f, 20f, UnitDoctrine.Rifleman);
 
 	private static readonly Vector3 Anchor = new(10f, 0.5f, 10f);
 	private static readonly Vector3 Objective = new(10f, 0.5f, 110f);
@@ -1526,35 +1526,44 @@ public class UnitHtnTests
 	// ---- sharing and allocation --------------------------------------------
 
 	/// <summary>How many situations <see cref="Situation"/> has.</summary>
-	private const int Situations = 19;
+	private const int Situations = 21;
 
 	/// <summary>
-	/// Nineteen situations, one per operator of §5.2 and two for Advance, as an order and
+	/// Twenty-one situations, one per operator of §5.2 and two for Advance, as an order and
 	/// facts. Fourteen to sixteen are an attack on a control point: on its way, on the
 	/// point, and with cover there; a unit on the point has the point where it stands. The
-	/// last two are a walk to a vehicle and an unload (docs/VEHICLES.md §9.2), the second
-	/// on a computer strategist's word and losing, which does not make it retreat.
+	/// next two are a walk to a vehicle and an unload (docs/VEHICLES.md §9.2), the second
+	/// on a computer strategist's word and losing, which does not make it retreat. The last
+	/// two are a defender fired upon with micro-autonomy on (docs/TACTICS.md §5.1): on its
+	/// way to a spot behind cover from the fire, and in it.
 	/// </summary>
 	private static void Situation(UnitContext c, int phase, out OrderKind order, out bool hasTarget)
 	{
 		bool point = phase is >= 14 and <= 16;
+		bool fired = phase is 19 or 20;
 		c.ObjectivePoint = phase == 15 ? c.Position : Objective;
 		c.HasCoverPoint = phase == 16;
 		c.CoverPoint = Objective + new Vector3(0f, 0f, -6f);
+		c.HasFireCoverPoint = fired;
+		c.FireCoverPoint = phase == 20 ? c.Position : Anchor + new Vector3(8f, 0f, 8f);
 		c.Encode(new UnitSense
 		{
 			HealthFraction = 1f,
 			HasCover = phase == 16,
 			CoverHides = phase == 16,
 			Objective = point,
+			HasFireCover = fired,
+			FireCoverHides = fired,
 		});
+		c.SenseAutonomy(fired ? MicroAutonomy.On : MicroAutonomy.Off);
+		c.SenseFire(fired ? FireKind.NearMiss : FireKind.None, Anchor + new Vector3(50f, 1.5f, 0f), c.Tick, 0);
 
 		order = phase switch
 		{
 			0 or 4 or 5 or 6 or 7 or 13 or 14 or 15 or 16 => OrderKind.Attack,
 			1 or 2 => OrderKind.Build,
 			3 => OrderKind.Attack,
-			8 or 9 or 10 => OrderKind.Defend,
+			8 or 9 or 10 or 19 or 20 => OrderKind.Defend,
 			11 => OrderKind.Patrol,
 			17 => OrderKind.Embark,
 			18 => OrderKind.Unload,
@@ -1657,7 +1666,8 @@ public class UnitHtnTests
 			UnitGoal.Retreat, UnitGoal.TakeCover, UnitGoal.Work, UnitGoal.Advance, UnitGoal.WaitForSquad,
 			UnitGoal.EngageFocus, UnitGoal.Support, UnitGoal.Advance, UnitGoal.EngageInLeash, UnitGoal.AnswerCall,
 			UnitGoal.HoldPost, UnitGoal.Patrol, UnitGoal.Obey, UnitGoal.Resupply, UnitGoal.TakePoint,
-			UnitGoal.HoldPoint, UnitGoal.HoldPointCover, UnitGoal.Obey, UnitGoal.Obey,
+			UnitGoal.HoldPoint, UnitGoal.HoldPointCover, UnitGoal.Obey, UnitGoal.Obey, UnitGoal.TakeCoverFromFire,
+			UnitGoal.ReturnFire,
 		};
 		Assert.Equal(Situations, expected.Length);
 
