@@ -218,7 +218,6 @@ public class AgentEventTests
 		Assert.Equal(15, (int)AgentEventKind.UnitEmbarked);
 		Assert.Equal(16, (int)AgentEventKind.UnitDisembarked);
 		Assert.Equal(17, (int)AgentEventKind.DropshipLanded);
-		Assert.Equal(AgentEventKind.DropshipLanded, AgentEventSchema.Last);
 
 		Assert.Equal("unit_embarked", AgentEventSchema.NameOf(AgentEventKind.UnitEmbarked));
 		Assert.Equal("unit_disembarked", AgentEventSchema.NameOf(AgentEventKind.UnitDisembarked));
@@ -229,6 +228,17 @@ public class AgentEventTests
 	}
 
 	[Fact]
+	public void GrenadeThrown_IsAppendedAfterTheVehicleEvents()
+	{
+		// docs/TACTICS.md §5.4: after dropship_landed, so every recorded trace keeps its numbers.
+		Assert.Equal(18, (int)AgentEventKind.GrenadeThrown);
+		Assert.Equal(AgentEventKind.GrenadeThrown, AgentEventSchema.Last);
+		Assert.Equal("grenade_thrown", AgentEventSchema.NameOf(AgentEventKind.GrenadeThrown));
+		Assert.Equal(new[] { "thrower", "tier", "hidden", "x", "z" },
+			AgentEventSchema.FieldsOf(AgentEventKind.GrenadeThrown).ToArray());
+	}
+
+	[Fact]
 	public void TheSchemaNamesTheVehicleCommands_AppendedAfterTheOldOnes()
 	{
 		Assert.Equal(6, (int)AgentCommandKind.Embark);
@@ -236,6 +246,33 @@ public class AgentEventTests
 		Assert.Equal(new[] { "order", "build", "cancel", "rally", "noop", "construct" }, AgentJson.CommandNames[..6]);
 		Assert.Contains("embark", AgentJson.CommandNames);
 		Assert.Contains("unload", AgentJson.CommandNames);
+	}
+
+	[Fact]
+	public void TheSchemaNamesTheAutonomyCommands_AppendedAfterTheVehicleOnes()
+	{
+		// docs/TACTICS.md §5.9: appended, so every older command keeps its number.
+		Assert.Equal(8, (int)AgentCommandKind.Autonomy);
+		Assert.Equal(9, (int)AgentCommandKind.AutonomyDefault);
+		Assert.Equal(new[] { "order", "build", "cancel", "rally", "noop", "construct", "embark", "unload" },
+			AgentJson.CommandNames[..8]);
+		Assert.Equal(new[] { "autonomy", "autonomy_default" }, AgentJson.CommandNames[8..]);
+		Assert.Equal(new[] { "off", "on" }, AgentJson.AutonomyNames);
+	}
+
+	[Fact]
+	public void AnAutonomyCommandKeepsItsModeAndItsUnits()
+	{
+		var list = new AgentCommandList();
+		Assert.True(list.AddWithUnits(new AgentCommand { Kind = AgentCommandKind.Autonomy, Autonomy = MicroAutonomy.On },
+			new[] { 3, 4 }));
+		Assert.True(list.Add(new AgentCommand { Kind = AgentCommandKind.AutonomyDefault, Autonomy = MicroAutonomy.Off }));
+
+		AgentCommand set = list.Commands[0];
+		Assert.Equal(MicroAutonomy.On, set.Autonomy);
+		Assert.Equal(new[] { 3, 4 }, list.UnitsOf(set).ToArray());
+		Assert.Equal(MicroAutonomy.Off, list.Commands[1].Autonomy);
+		Assert.True(list.UnitsOf(list.Commands[1]).IsEmpty);
 	}
 
 	[Fact]

@@ -95,6 +95,13 @@ public struct Projectile
 	public Vector3 Position;
 	public Vector3 Velocity;
 
+	/// <summary>
+	/// Where it left the muzzle or the hand. Server-side bookkeeping, already on the
+	/// wire in the spawn message: what a unit it passes perceives as where the shot
+	/// came from (docs/TACTICS.md §4.1).
+	/// </summary>
+	public Vector3 Origin;
+
 	/// <summary>Seconds of flight so far.</summary>
 	public float Age;
 
@@ -137,8 +144,11 @@ public readonly struct ProjectileSegment
 	/// <summary>The chord of a round lying where it landed: no length, and nothing to hit.</summary>
 	public readonly bool Resting;
 
+	/// <summary>Where the round was fired from (<see cref="Projectile.Origin"/>).</summary>
+	public readonly Vector3 Origin;
+
 	public ProjectileSegment(uint id, int ownerPeerId, byte definitionId, Vector3 from, Vector3 to, float sweepRadius,
-		bool detonates = false, bool resting = false)
+		bool detonates = false, bool resting = false, Vector3 origin = default)
 	{
 		Id = id;
 		OwnerPeerId = ownerPeerId;
@@ -148,6 +158,7 @@ public readonly struct ProjectileSegment
 		SweepRadius = sweepRadius;
 		Detonates = detonates;
 		Resting = resting;
+		Origin = origin;
 	}
 
 	public Vector3 Delta => To - From;
@@ -250,6 +261,7 @@ public sealed class ProjectileSim
 			DefinitionId = definitionId,
 			Position = origin,
 			Velocity = direction.Normalized() * stats.MuzzleVelocity,
+			Origin = origin,
 			Age = 0f,
 			PendingCatchUpTicks = Math.Clamp(catchUpTicks, 0, SimConfig.MaxProjectileCatchUpTicks),
 			Alive = true,
@@ -304,7 +316,7 @@ public sealed class ProjectileSim
 			if (!p.Resting || detonates)
 			{
 				_segments[_segmentCount++] = new ProjectileSegment(p.Id, p.OwnerPeerId, p.DefinitionId, start,
-					p.Position, stats.SweepRadiusMeters, detonates, p.Resting);
+					p.Position, stats.SweepRadiusMeters, detonates, p.Resting, p.Origin);
 			}
 
 			if (expired || p.Position.Y < SimConfig.ProjectileKillPlaneY)

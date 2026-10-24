@@ -422,6 +422,19 @@ There are three more, all with the same shape and the same strategist check: `Cl
 `barracks` group sorted by name — an order every peer derives from the same scene, like spawn
 points.
 
+**Micro-autonomy** ([`TACTICS.md`](TACTICS.md) §5.9) is two more requests and one state message.
+`ClientSetAutonomy(int[] unitIds, byte mode)` sets whether the units use tactics on their own, by
+`ClientIssueOrder`'s rules: a mode other than off (0) or on (1), a sender who is not a strategist, a
+malformed id and a unit of the other side count in `RejectedOrders`; a dead id is skipped, and a rider
+is set like any other unit. `ClientAutonomyDefault(byte mode)` sets what the side's new units start
+with. The server answers neither. Instead, `ServerAutonomyState` carries the side's whole state —
+the default, then every living unit whose mode is not it (`AutonomyStateCodec`: 3 B, plus 3 B a
+unit) — reliably, **to strategist peers only**, on the barracks report's 5 Hz tick whenever it has
+changed since that peer was last sent it, and whole to a peer that has just taken the chair. It is
+not in the unit snapshot, which every ground client gets unfogged: a setting is an order, and orders
+are not on the wire to the other side. A new round goes back to the default the server started with
+(`--unit-autonomy`, else the game mode's `UnitAutonomy`).
+
 Not checked: whether the target point is on the navmesh. A unit told to walk into a wall paths as
 close as it can and stops, which is the same thing that happens when a wall is built across its
 route, so there is no second behaviour to write.
@@ -439,6 +452,8 @@ route, so there is no second behaviour to write.
 | `ProjectileSpawn` | S→C | Reliable | per shot | 23 B |
 | `ProjectileHit` | S→C | Reliable | per hit | 15 B |
 | `ClientIssueOrder` | C→S | Reliable | per click | ~16 B + 4 B/unit |
+| `ClientSetAutonomy` / `ClientAutonomyDefault` | C→S | Reliable | per click | ~5 B + 4 B/unit / ~5 B |
+| `ServerAutonomyState` (strategist peers only) | S→C | Reliable | ≤ 5 Hz, on change | 3 B + 3 B/unit not at the default |
 | `ClientEmbark` / `ClientUnload` | C→S | Reliable | per click | ~8 B + 4 B/unit / ~4 B + 4 B/vehicle |
 | `ServerBarracksState` | S→C | Reliable | 5 Hz per barracks | ~8 B |
 | `MatchState` (tickets, points) | S→C | Reliable | on change | ~22 B |

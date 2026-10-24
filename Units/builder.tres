@@ -20,4 +20,5 @@ ArrivalRadiusMeters = 1.0
 WeaponId = 1
 AccuracyConeDegrees = 4.0
 CanConstruct = true
+Doctrine = 0
 Color = Color(0.95, 0.8, 0.25, 1)

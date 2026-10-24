@@ -1,7 +1,7 @@
 # Unit tactics — implementation plan
 
-Status: **plan; nothing built. Decisions T-D1 to T-D7 taken (§8).** Read from the code at
-`6213d05`. Extends the unit HTN of [`HTN_BOTS.md`](HTN_BOTS.md) §5.2 and the cover of
+Status: **T0 built (§6); T1–T8 are plan. Decisions T-D1 to T-D7 taken (§8).** Planned from the
+code at `6213d05`. Extends the unit HTN of [`HTN_BOTS.md`](HTN_BOTS.md) §5.2 and the cover of
 [`COVER.md`](COVER.md).
 
 Scope: strategist units that fight well without micro. Five requirements:
@@ -82,8 +82,8 @@ HTN_BOTS.md §4.2 holds. Added:
 | Piece | Where | What |
 |---|---|---|
 | Projectile origin | `ProjectileSim.cs` (`Projectile`, `ProjectileSegment`) | `Origin`: where the round left the muzzle. Server-side; the spawn message already carries it (`ProjectileCodec`). |
-| `FireMemory` | `Scripts/Sim/FireMemory.cs` (new) | Per unit: last perceived fired-from point, tick, kind (near miss · hit · blast), shooter owner id, rounds in the window. Pure functions, as `Suppression`. |
-| `NearMiss` | `Scripts/Sim/NearMiss.cs` (new), called from `CombatManager.ResolveSegment` (`CombatManager.cs:623`) | A round's chord, up to what it hit, against every enemy body near it. Feeds `FireMemory` (units) and the ground sensor (bots). |
+| `FireMemory` | `Scripts/Sim/FireMemory.cs` (T0) | Per unit (`Unit.Fire`): the worst round this window (near miss · hit), the perceived origin and the shooter of the latest, its tick, rounds in the window. Pure functions in `FiredUpon`, as `Suppression` is for its memory. |
+| `NearMiss` | `Scripts/Sim/NearMiss.cs` (T0), called through `UnitManager.NoteRound` / `NoteBlast` (`UnitManager.Fire.cs`) from `CombatManager.ResolveSegment`, `ResolveFused`, `Detonate` and `ResolveMelee` | A round's chord, up to what it hit, against every enemy body near it, behind a per-chord box (`NearMiss.Chord`). Feeds `FireMemory` (units, T0) and the ground sensor (bots, T5). |
 | `Doctrine` | `UnitDefinition` export, mirrored in `UnitTraits` | `Rifleman`, `Gunner`, `Marksman`, `None` (builders, vehicles, trucks). Explicit in each `.tres`, not inferred from `SuppressSeconds` or range. |
 | `CoverBoard` additions | `Scripts/Sim/Cover.cs` | `Concealed` (no remembered threat's eye sees a point); `TryFindPeek` (a hide spot and a fire spot beside it); `CoverQuery.Toward` and `MinProgressMeters` (spots that gain ground). |
 | Posture | `Unit.cs`; unit snapshot v2 (§5.8); `UnitDefinition.CrouchHeightMeters` | Units on foot crouch: lower hitbox and eye, slower, no fire. Replicated as a field of its own. |
@@ -94,7 +94,7 @@ HTN_BOTS.md §4.2 holds. Added:
 | Engine half | `Scripts/Rts/UnitManager.cs` | Encodes the new facts; carries out the new intent fields. |
 | Ground domain | `GroundDomain.cs`, `BotPilot.cs` | `GroundFact.Suppressed` (§5.7). |
 | Debugger | `Scripts/Sim/AiDebug/` | The drill as a domain kind; new facts and goals in `HtnSchema` / `AiGoals`; world lines for threat points, fire lines and bound spots. |
-| Agent events | `Scripts/Sim/Agent/AgentEvents.cs` | `unit_task` (a unit started one of §5's goals), `squad_drill` (a drill phase change), `grenade_thrown` (thrower's catalog id, whether the target was hidden). For scenarios; additive. |
+| Agent events | `Scripts/Sim/Agent/AgentEvents.cs` | `grenade_thrown` (T0: thrower, its catalog id, whether the target was hidden); `unit_task` (a unit started one of §5's goals, from T1) and `squad_drill` (a drill phase change, from T6), each added with the first thing that emits it. For scenarios; additive. |
 
 ---
 
@@ -104,14 +104,15 @@ HTN_BOTS.md §4.2 holds. Added:
 
 | | |
 |---|---|
-| Hits | `CombatManager.DamageUnit` (`:1004`) passes the round's origin to `UnitManager.Damage`, which records it beside `LastDamagedTick`. |
-| Near misses | In `ResolveSegment`, for a ground-force round, after `FirstContact`: the chord from `From` to the contact point against every strategist unit on foot whose capsule axis it passes within `NearMissMeters` (1.5 m) of, the victim excluded (T-D2). Broad phase: the chord's bounding box grown by 1.5 m. A fused round counts once, on landing, for units within its blast's reach (7 m). |
-| Melee | The attacker's position. |
-| Perceived origin | The true origin moved sideways by `FiredFromErrorFraction` × range (0.1: 6 m at 60 m), seeded by `Spread.Seed(unit owner, round id)` (T-D3). |
-| Window | `FiredUponTicks` (3 s) after the last round. `UnitFact.FiredUpon` = none · near miss · hit, held for the window. Build's `UnderFire` becomes `FiredUpon = hit`; its meaning is unchanged. |
+| Hits | In `ResolveSegment`, every chord goes to `UnitManager.NoteRound` with the round's `FireSource` (origin, owner, definition, id) and the unit it hit, if any: that unit records a hit. A round that went off where it stopped (the launcher's) is a hit on every unit its blast reached. A grenade's blast (`Detonate`) is a hit on every unit within its reach. Damage itself is unchanged: `Damage` still sets `LastDamagedTick`. |
+| Near misses | The same call: the chord from `From` to where the round stopped — the contact point, else the chord's end — against every unit of the other side on foot whose capsule axis it passes within `NearMiss.Meters` (1.5 m) of, the victim excluded (T-D2). Broad phase: one box per chord, grown by 1.5 m (or a blast's reach plus the widest unit's 2 m radius), against each unit's feet, before any capsule is built. A grenade that comes to rest (`ResolveFused`) is a near miss on every unit within its blast's reach (7 m). |
+| Melee | `ResolveMelee`: the swing from the attacker's eye to what it reached, by the same rules. |
+| Perceived origin | The true origin moved along the line from the unit's eye by up to `FiredUpon.ErrorFraction` (0.1) of the range, in or out — the direction exact, the range to 10 % (T-D3) — seeded by `Spread.Seed(unit owner, definition, round id)`. |
+| Window | `FiredUpon.WindowTicks` (3 s) after the latest round; rounds inside it keep it open, the worst kind in it is kept, and one after it starts a new window. From T1, `UnitFact.FiredUpon` = none · near miss · hit, read from it; Build's `UnderFire` becomes `FiredUpon = hit`, its meaning unchanged. |
 | Shooter | `AcquireTarget` (`:765`) tries the shooter after a named target and before the squad focus, by the focus's rule: one ray, replacing the search's when clear. Returning fire needs a line to the shooter. |
 
-Recording runs whatever a unit's micro-autonomy; only planning reads it.
+Recording runs whatever a unit's micro-autonomy, under `--bot-ai htn` only (legacy plans nothing,
+so the pass would be cost with no reader); only planning reads it.
 
 ### 4.2 Where enemies are and were
 
@@ -305,11 +306,11 @@ than misreading it. No translation layer, as `DemoFormat.cs` already says of bum
 | State | `Unit.Autonomy`: `MicroAutonomy.Off` · `On`, server-side, per unit. Kept under legacy too, where nothing reads it. |
 | In the planner | `UnitFact.MicroAutonomy`, written every tick from the unit, as `Order` is. Every method of §5 requires `On`; every operator of §5 holds while `On` (rule 2). It is a fact rather than a flag outside the planner so the debugger shows it, the domain tests cover it, and switching it is a replan like any other change. |
 | What Off is | The unit domain as it is at `6213d05`: the order carried out as given, with H3–H6's and COVER.md's methods — keeping pace, focus fire, posts, fighting from cover on an attack or defend, taking a point on an attack. Not an element of a drill, never an objective under a Move, no React, no peeks, no deliberate suppression, no grenade at a remembered contact. Retreat and Resupply still follow `UnitStance` (D1), which is about who gave the order, not about this. |
-| New units | Start with the team's default: the game mode's `UnitAutonomy` (on), overridden by `--unit-autonomy on\|off`, and set in game by either strategist (two share the army; the last to set it wins, and both are shown it). |
+| New units | Start with the team's default: the game mode's `UnitAutonomy` (off until T8), overridden by `--unit-autonomy on\|off`, and set in game by either strategist (two share the army; the last to set it wins, and both are shown it). A new round goes back to the default the server started with, whatever the last round set: one round's settings must not leak into the next's, which is what made scenario seeds depend on each other in HTN_BOTS.md §5.3. |
 | In game | The selection card shows **Tactics: Auto / Direct** for the selection (**Mixed** when it differs) and toggles it; `H` (unbound in `project.godot`) toggles the selection; the HUD has the team default for new units beside the points. |
-| Wire | `ClientSetAutonomy(int[] unitIds, byte mode)` and `ClientAutonomyDefault(byte mode)`, C→S, reliable, per click; the server checks the sender is a strategist and the units are its side's, as `ApplyOrder` does. `ServerAutonomyState`, S→C, reliable, on change, **to strategist peers only**: the team default and the changed units' modes, replayed whole to a peer that takes the chair. Not in the unit snapshot, which every ground client receives unfogged: a setting is an order, and orders are not on the wire to anyone (NETCODE.md §6.3). |
-| Agent API | Strategist commands `autonomy {units, mode}` and `autonomy_default {mode}`. The unit block of the strategist observation gains the mode in T8, which changes the published layout: `gdpyr-agent-obs-2` → `-3` (AGENT_API.md §4). |
-| Scenarios | A spawn's `"autonomy": "on" \| "off"`; a strategist script's `autonomy` command; the harness passes `--unit-autonomy` to the server it starts, as it does `--bot-ai`. That is the A/B for every claim of §6: the same build, tactics on and off. |
+| Wire | `ClientSetAutonomy(int[] unitIds, byte mode)` and `ClientAutonomyDefault(byte mode)`, C→S, reliable, per click; the server checks the sender is a strategist and the units are its side's, as `ApplyOrder` does, counting what an honest client cannot send in `RejectedOrders`. `ServerAutonomyState`, S→C, reliable, **to strategist peers only**, whole — the default, then every living unit whose mode is not it (`AutonomyStateCodec`, 3 B + 3 B a unit) — on the barracks report's 5 Hz tick to every strategist peer not yet sent the current revision, so a peer that takes the chair gets it within 0.2 s. Not in the unit snapshot, which every ground client receives unfogged: a setting is an order, and orders are not on the wire to anyone (NETCODE.md §6.3). |
+| Agent API | Strategist commands `autonomy {units, mode}` and `autonomy_default {mode}`; `welcome` says `unit_autonomy`, the server's default. The unit block of the strategist observation gains the mode in T8, which changes the published layout: `gdpyr-agent-obs-2` → `-3` (AGENT_API.md §4). |
+| Scenarios | A spawn's `"autonomy": "on" \| "off"`; a strategist script's `autonomy` and `autonomy_default` commands; a scenario's `"unit_autonomy"`, which the harness passes to the server it starts as `--unit-autonomy`, as it does `bot_ai` — and its own `--unit-autonomy` overrides, as `--bot-ai` does. That is the A/B for every claim of §6: the same build, tactics on and off. |
 | Commander | Sets nothing: its units take the team default, and it never changes a unit's setting, so a person sharing the army with it keeps the modes they chose. |
 
 ---
@@ -335,6 +336,43 @@ strategist or a scenario turns micro-autonomy on.
 - **Done when:** the debug HUD counts units fired upon and near misses in a `--listen` round;
   `unit ms` at 64 units moves by less than run-to-run noise; a scratch program puts the near-miss
   pass under 20 µs a tick with 64 units and 30 rounds in flight.
+- **Result — built.**
+  - `dotnet test`: 1772 passed, 0 failed (1704 before; 68 new: 17 in `NearMissTests`, 13 in
+    `FireMemoryTests`, 9 in `MicroAutonomyTests`, 9 in `LaunchOptionsTests`, 9 in
+    `TrainedUnitResourceTests`, 7 in `ScenarioTests`, 3 in `AgentEventTests`, 1 in
+    `ProjectileSimTests`). `dotnet build Gdpyr.csproj`: 0 warnings, 0 errors; the playtest harness
+    and the agent client build.
+  - **Cost.** A scratch program, not committed, doing what `NoteRound` does without the engine — 30
+    chords a tick, each against 64 units spread over 120 m × 60 m, recording what each near one
+    perceives — for 3,600 ticks after 1,000 of warm-up, `TieredCompilation` off: 7.86, 8.06 and
+    10.64 µs a tick over three runs, 9.02 notes a tick, **0 B**; Intel Xeon @ 2.80 GHz, .NET SDK
+    8.0.132. Without the per-chord box (`NearMiss.Chord`), building every unit's capsule first,
+    it was 35.0–38.4 µs, with the same 9.02 notes a tick: the box is why the pass is under budget,
+    and `NearMissTests` checks it never turns away a body the exact test keeps.
+  - **In a round** (Godot 4.6 .NET, headless, through the harness; a temporary probe, not
+    committed, printed each unit's fire memory and mode every second). A scripted ground seat
+    firing a rifle down a line 50 m long, past three riflemen outside their own 45 m sensor: the one
+    in the line recorded 5 hits, as many as the round's 5 `damage` records, and died; the one 1.2 m
+    beside the line recorded 47 near misses by tick 300 and 139 by tick 840, its perceived origin at
+    z = 47.5 to 51.2 against a muzzle at z ≈ 50 — on the line, within the ±5 m that 10 % of 50 m
+    allows; the one 20 m off it recorded nothing. In the same round a scripted strategist seat's
+    `autonomy_default on` left the three existing units as they were and changed the default; its
+    `autonomy` on one unit and then another changed each, and each unit's `MicroAutonomy` fact
+    followed within the tick; a spawn's `"autonomy": "on"` started that unit on. A second round,
+    a rifleman 15 m from a crouched player, recorded `grenade_thrown` with `tier` 0 and `hidden` 0.
+  - **Scenarios**: `./scripts/playtest.sh Tests/Scenarios/*.json` on this build, headless, default
+    `htn` and micro-autonomy off: in progress when this was committed — the first 6 run had passed,
+    none had failed; the whole run is recorded in the next commit.
+  - **Differences from the plan above.** Hits are recorded where the round is resolved
+    (`NoteRound` naming its victim), not inside `Damage`, so a blast and a swing are recorded by the
+    same call; §4.1 says so. `unit_task` and `squad_drill` are not added yet: nothing emits them
+    before T1 and T6, and a kind nothing emits is one a scenario can name and never see.
+  - **Not checked.** The debug HUD's `fire` row on a display — its text is `DescribeFire`, which
+    the probe printed; `unit ms` at 64 units in the engine; `ServerAutonomyState` reaching a
+    networked strategist client, and the request validation (`ApplyAutonomy`, engine-side as
+    `ApplyOrder` is, so not in `dotnet test`) refusing a ground peer or another side's unit — the
+    round above exercised only a strategist seat's accepted commands. All four are for T1's
+    display check, which has the selection card to look at.
 
 ### T1 — React to fire, the shooter, the in-game switch (1.5 days)
 

@@ -216,6 +216,14 @@ public partial class UnitDefinition : Resource
 	/// <summary>True for a unit other units come to for resupply.</summary>
 	public bool IsSupply => SupplyRadiusMeters > 0f;
 
+	/// <summary>
+	/// How it fights when it has the say (docs/TACTICS.md §3): a rifleman, which is
+	/// what a file that says nothing gets; the squad's gunner; a marksman; or none, for
+	/// a builder, a vehicle or a truck, which keeps the behaviour it has.
+	/// </summary>
+	[Export]
+	public UnitDoctrine Doctrine = UnitDoctrine.Rifleman;
+
 	[ExportCategory("Presentation")]
 
 	[Export]
@@ -223,12 +231,13 @@ public partial class UnitDefinition : Resource
 
 	public byte WeaponDefinitionId => (byte)Mathf.Clamp(WeaponId, 0, SimConfig.MaxWeaponDefinitions - 1);
 
-	/// <summary>The brain's view of this unit: four radii and nothing else.</summary>
+	/// <summary>The brain's view of this unit: four radii and how it fights.</summary>
 	public UnitTraits ToTraits() => new(
 		SensorRadiusMeters,
 		Mathf.Min(EngageRangeMeters, SensorRadiusMeters),
 		ArrivalRadiusMeters,
-		LeashRadiusMeters);
+		LeashRadiusMeters,
+		Doctrine);
 
 	/// <summary>The phase machine's view of how it flies (<see cref="Flight"/>); a cruise altitude of zero for a unit that does not.</summary>
 	public FlightTraits ToFlightTraits() => new(

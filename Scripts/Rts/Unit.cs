@@ -109,6 +109,21 @@ public partial class Unit : CharacterBody3D
 	/// </summary>
 	public SuppressionMemory LastSeen;
 
+	/// <summary>
+	/// Server-side, under <c>--bot-ai htn</c>: what it knows of being shot at — the
+	/// worst round this window, where it reckons the latest came from, and whose it was
+	/// (docs/TACTICS.md §4.1). Written by <c>UnitManager.NoteRound</c>. Never replicated.
+	/// </summary>
+	public FireMemory Fire;
+
+	/// <summary>
+	/// Whether it uses the tactics of docs/TACTICS.md §5 on its own (§5.9): the side's
+	/// default for new units when it is made, and the strategist's to change. Its
+	/// planner reads it every tick. On a client, what the strategist's state message
+	/// said, for the selection card; never in the unit snapshot.
+	/// </summary>
+	public MicroAutonomy Autonomy { get; set; }
+
 	/// <summary>The next tick it re-scans for a target on, so scans can be staggered.</summary>
 	public uint NextScanTick { get; set; }
 

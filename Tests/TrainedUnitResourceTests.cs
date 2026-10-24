@@ -69,6 +69,31 @@ public class TrainedUnitResourceTests
 		Assert.True(Int(lmg, "MagazineSize") / Float(lmg, "RoundsPerMinute") * 60f >= 15f);
 	}
 
+	[Theory]
+	[InlineData("infantry", Gdpyr.Sim.UnitDoctrine.Rifleman)]
+	[InlineData("heavy_gunner", Gdpyr.Sim.UnitDoctrine.Gunner)]
+	[InlineData("sniper", Gdpyr.Sim.UnitDoctrine.Marksman)]
+	[InlineData("builder", Gdpyr.Sim.UnitDoctrine.None)]
+	[InlineData("technical", Gdpyr.Sim.UnitDoctrine.None)]
+	[InlineData("tank", Gdpyr.Sim.UnitDoctrine.None)]
+	[InlineData("supply_truck", Gdpyr.Sim.UnitDoctrine.None)]
+	[InlineData("dropship", Gdpyr.Sim.UnitDoctrine.None)]
+	public void EveryUnit_SaysHowItFights(string unit, Gdpyr.Sim.UnitDoctrine doctrine)
+	{
+		// docs/TACTICS.md §3: named in every file, not left to the export's default.
+		Assert.Equal((int)doctrine, Int(Resource($"Units/{unit}.tres"), "Doctrine"));
+	}
+
+	[Fact]
+	public void EveryUnitInTheCatalog_NamesItsDoctrine()
+	{
+		// A unit added to the catalog without one would play as a rifleman by default.
+		foreach (string path in CatalogPaths("Scripts/Core/UnitCatalog.cs"))
+		{
+			Assert.True(Resource(path["res://".Length..]).ContainsKey("Doctrine"), $"{path} names no Doctrine");
+		}
+	}
+
 	[Fact]
 	public void NoOtherUnitSuppresses()
 	{

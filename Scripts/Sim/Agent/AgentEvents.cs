@@ -44,6 +44,13 @@ public enum AgentEventKind : byte
 
 	/// <summary>A dropship touched down, with how many were aboard (V6).</summary>
 	DropshipLanded = 17,
+
+	/// <summary>
+	/// A hand grenade left somebody's hand (docs/NETCODE.md §10.9): a player's or a
+	/// unit's, and for a unit whether what it threw at was hidden from it
+	/// (docs/TACTICS.md §5.4). Either bot AI.
+	/// </summary>
+	GrenadeThrown = 18,
 }
 
 /// <summary>
@@ -117,6 +124,10 @@ public static class AgentEventSchema
 		new[] { "unit", "vehicle", "tier", "x", "z" },                                         // UnitEmbarked
 		new[] { "unit", "vehicle", "tier", "x", "z" },                                         // UnitDisembarked
 		new[] { "unit", "aboard", "", "x", "z" },                                              // DropshipLanded
+		// Who threw it as an owner id; its catalog id, -1 for a player; 1 when a unit threw
+		// at something hidden from it, 0 when it could see it, -1 for a player, whose aim
+		// is its own; and where the thrower stood.
+		new[] { "thrower", "tier", "hidden", "x", "z" },                                       // GrenadeThrown
 	};
 
 	private static readonly string[] Kinds =
@@ -124,6 +135,7 @@ public static class AgentEventSchema
 		"round_start", "round_end", "kill", "damage", "unit_built", "unit_lost", "node_captured",
 		"seat_attached", "seat_released", "structure_placed", "structure_built", "structure_lost",
 		"squad_task", "contact_spotted", "node_contested", "unit_embarked", "unit_disembarked", "dropship_landed",
+		"grenade_thrown",
 	};
 
 	/// <summary>The highest kind there is. Everything from 0 to this has a name and a slate of fields.</summary>

@@ -271,6 +271,7 @@ public partial class UnitManager : Node
 	public void ServerTick(uint tick)
 	{
 		EnsureStarted(server: true);
+		EnsureAutonomy();
 
 		ServerBuild(tick);
 		ResolveAi();
@@ -312,6 +313,7 @@ public partial class UnitManager : Node
 		if (tick % BarracksReportIntervalTicks == 0)
 		{
 			BroadcastBarracksState(tick);
+			SendAutonomyState();
 		}
 	}
 
@@ -755,6 +757,8 @@ public partial class UnitManager : Node
 		Vector3 direction = Spread.Apply(aim, unit.Definition?.AccuracyConeRadians ?? 0f,
 			Spread.Seed(owner, WeaponCatalog.HandGrenade, unit.Grenades.Thrown));
 		combat.SpawnProjectile(tick, owner, WeaponCatalog.HandGrenade, eye, direction, catchUpTicks: 0);
+		AgentEventBus.Emit(AgentEventKind.GrenadeThrown, tick, owner, unit.DefinitionId,
+			situation.TargetInCover ? 1 : 0, unit.GlobalPosition.X, unit.GlobalPosition.Z);
 	}
 
 	/// <summary>
@@ -1339,6 +1343,7 @@ public partial class UnitManager : Node
 		out bool hasDestination, out bool holdsWhileEngaging, out bool followsOrder)
 	{
 		plan.Tick = tick;
+		plan.SenseAutonomy(unit.Autonomy);
 		plan.Track(unit.GlobalPosition, unit.Order, hasTarget, targetPoint);
 		_planning.Tick(plan);
 
@@ -2318,6 +2323,18 @@ public partial class UnitManager : Node
 			Position = position,
 		};
 
+		// What the side's new units start with (docs/TACTICS.md §5.9): on the authority
+		// the state, on a client the last the strategist's state message said.
+		if (team == Team.Strategist)
+		{
+			if (simulated)
+			{
+				EnsureAutonomy();
+			}
+
+			unit.Autonomy = AutonomyDefault;
+		}
+
 		_unitsRoot.AddChild(unit);
 		_units[id] = unit;
 		_ordered.Add(unit);
@@ -2423,6 +2440,8 @@ public partial class UnitManager : Node
 		HealthResupplied = 0f;
 		UnitsResupplied = 0;
 		_supplyCount = 0;
+		ResetFire();
+		ResetAutonomy();
 	}
 
 	/// <summary>

@@ -41,7 +41,7 @@ public sealed class LaunchOptions
 	public const string Usage =
 		"usage: gdpyr [--server [port]] | [--client <host[:port]>] | [--listen [port]]\n" +
 		"             [--bots <ground>[:<strategists>]] | [--no-bots]\n" +
-		"             [--bot-ai legacy|htn]\n" +
+		"             [--bot-ai legacy|htn] [--unit-autonomy on|off]\n" +
 		"             [--name <text>] [--no-advertise]\n" +
 		"             [--agent-api [host:]port] [--agent-token <token>]\n" +
 		"             [--agent-unbounded] [--agent-omniscient]\n" +
@@ -53,6 +53,7 @@ public sealed class LaunchOptions
 		"  --bots <n>[:<m>]        fill each side to n ground and m strategists with bots\n" +
 		"  --no-bots               no computer players, whatever the game mode says\n" +
 		"  --bot-ai legacy|htn     what computer players decide with; htn by default (docs/HTN_BOTS.md)\n" +
+		"  --unit-autonomy on|off  whether new units use tactics on their own; off by default (docs/TACTICS.md)\n" +
 		"  --name <text>           what this server calls itself in the browser (default: the hostname)\n" +
 		"  --no-advertise          do not answer LAN discovery; the address still works\n" +
 		"  --agent-api [host:]port listen for external policies (docs/AGENT_API.md); loopback by default\n" +
@@ -94,6 +95,13 @@ public sealed class LaunchOptions
 	/// means "whatever the game mode says", as with <see cref="GroundBots"/>.
 	/// </summary>
 	public Gdpyr.Sim.BotAi? BotAi { get; private init; }
+
+	/// <summary>
+	/// Whether the strategist side's new units start with micro-autonomy on
+	/// (docs/TACTICS.md §5.9). Null means "whatever the game mode says", as with
+	/// <see cref="BotAi"/>. A strategist changes it in game, per unit and for new units.
+	/// </summary>
+	public Gdpyr.Sim.MicroAutonomy? UnitAutonomy { get; private init; }
 
 	/// <summary>
 	/// What this server calls itself in another machine's server browser
@@ -191,6 +199,11 @@ public sealed class LaunchOptions
 			mode += $" | bot ai {Gdpyr.Sim.BotAiNames.Name(ai)}";
 		}
 
+		if (UnitAutonomy is { } autonomy)
+		{
+			mode += $" | unit autonomy {Gdpyr.Sim.MicroAutonomyNames.Name(autonomy)}";
+		}
+
 		if (ServerName != null)
 		{
 			mode += $" | name '{ServerName}'";
@@ -255,6 +268,7 @@ public sealed class LaunchOptions
 		int? strategistBots = null;
 		bool botsRefused = false;
 		Gdpyr.Sim.BotAi? botAi = null;
+		Gdpyr.Sim.MicroAutonomy? unitAutonomy = null;
 		string serverName = null;
 		bool advertise = true;
 		int? agentPort = null;
@@ -358,6 +372,27 @@ public sealed class LaunchOptions
 					}
 
 					botAi = parsed;
+					break;
+				}
+
+				case "--unit-autonomy":
+				{
+					if (unitAutonomy.HasValue)
+					{
+						return Failure("--unit-autonomy given twice");
+					}
+
+					if (!TryTakeValue(args, ref i, out string value))
+					{
+						return Failure("--unit-autonomy needs on or off, e.g. --unit-autonomy on");
+					}
+
+					if (!Gdpyr.Sim.MicroAutonomyNames.TryParse(value, out Gdpyr.Sim.MicroAutonomy parsed))
+					{
+						return Failure($"--unit-autonomy: '{value}' is not on or off");
+					}
+
+					unitAutonomy = parsed;
 					break;
 				}
 
@@ -562,6 +597,7 @@ public sealed class LaunchOptions
 			GroundBots = groundBots,
 			StrategistBots = strategistBots,
 			BotAi = botAi,
+			UnitAutonomy = unitAutonomy,
 			ServerName = serverName,
 			Advertise = advertise,
 			AgentPort = agentPort,

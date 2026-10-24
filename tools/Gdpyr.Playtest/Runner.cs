@@ -25,6 +25,9 @@ public sealed class ScenarioResult
 	/// <summary>What the server's bots decided with, as its <c>welcome</c> said.</summary>
 	public string BotAi;
 
+	/// <summary>What the strategist side's new units started with, as its <c>welcome</c> said (docs/TACTICS.md §5.9).</summary>
+	public string UnitAutonomy;
+
 	public int Ticks;
 
 	public bool Passed
@@ -84,7 +87,12 @@ public sealed class Runner
 
 	public async Task<ScenarioResult> RunAsync(Scenario scenario, CancellationToken cancel = default)
 	{
-		var result = new ScenarioResult { Scenario = scenario, BotAi = _connection.BotAi };
+		var result = new ScenarioResult
+		{
+			Scenario = scenario,
+			BotAi = _connection.BotAi,
+			UnitAutonomy = _connection.UnitAutonomy,
+		};
 		long started = DateTime.UtcNow.Ticks;
 
 		// A result obtained by cheating is not a result about this game
@@ -178,6 +186,7 @@ public sealed class Runner
 			// And what the bots decided with, so a trace says which opponent it is
 			// about (docs/HTN_BOTS.md §8, D5).
 			writer.WriteString("bot_ai", _connection.BotAi);
+			writer.WriteString("unit_autonomy", _connection.UnitAutonomy);
 		});
 
 		await _connection.ResetAsync(seed, cancel).ConfigureAwait(false);
@@ -330,6 +339,8 @@ public sealed class Runner
 			{
 				"embark" => GdpyrCommand.Embark(Ids(command.Units), Id(command.Vehicle)),
 				"unload" => GdpyrCommand.Unload(Ids(command.Units)),
+				"autonomy" => GdpyrCommand.Autonomy(Ids(command.Units), command.Mode),
+				"autonomy_default" => GdpyrCommand.AutonomyDefault(command.Mode),
 				_ => GdpyrCommand.Order(command.Kind, Ids(command.Units),
 					command.Target.Length > 0 ? command.Target[0] : 0f,
 					command.Target.Length > 1 ? command.Target[1] : 0f),
@@ -502,10 +513,10 @@ public sealed class Runner
 				int vehicle = spawn.Aboard != null ? Id(spawn.Aboard) : 0;
 				int loader = spawn.Aboard != null ? Scenario.LoaderOf(scenario, spawn)?.PeerId ?? 0 : 0;
 				int unit = spawn.Aboard != null
-					? await _connection.SpawnAboardAsync(spawn.Unit, spawn.Team, vehicle, loader, cancel)
+					? await _connection.SpawnAboardAsync(spawn.Unit, spawn.Team, vehicle, loader, cancel, spawn.Autonomy)
 						.ConfigureAwait(false)
-					: await _connection.SpawnUnitAsync(spawn.Unit, spawn.Team, spawn.At, spawn.Order, cancel)
-						.ConfigureAwait(false);
+					: await _connection.SpawnUnitAsync(spawn.Unit, spawn.Team, spawn.At, spawn.Order, cancel,
+						spawn.Autonomy).ConfigureAwait(false);
 
 				if (spawn.Id != null)
 				{

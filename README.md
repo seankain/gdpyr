@@ -106,7 +106,7 @@ matchmaking and none is planned. Two flags change what a host looks like in it:
 Hosting for other people on the same network — addresses, the one firewall rule, seats and bots,
 and what a LAN hides — is [`docs/LAN.md`](docs/LAN.md); no export needed.
 
-Three more flags change the computer players the authority keeps around:
+Four more flags change the computer players the authority keeps around, and how the units fight:
 
 | Flag | Effect |
 |---|---|
@@ -114,9 +114,11 @@ Three more flags change the computer players the authority keeps around:
 | `--bots <n>:<m>` | ...and the strategists to `m` |
 | `--no-bots` | no computer players at all |
 | `--bot-ai legacy\|htn` | what they decide with: the HTN planners of [`docs/HTN_BOTS.md`](docs/HTN_BOTS.md), the default, or the code from before them |
+| `--unit-autonomy on\|off` | whether the strategist side's new units use tactics on their own ([`docs/TACTICS.md`](docs/TACTICS.md) §5.9); off by default until the tactics are measured, and a strategist changes it in game |
 
 None is needed to get bots: the numbers default to `BotGroundForce` and `BotStrategists` in
-`Match/default_gamemode.tres` (6 and 1), and the AI to its `BotAi` (htn since H6). `--bots 4`
+`Match/default_gamemode.tres` (6 and 1), the AI to its `BotAi` (htn since H6), and the units'
+micro-autonomy to its `UnitAutonomy` (off). `--bots 4`
 overrides only the ground force and leaves the strategists to the game mode. The training and
 evaluation scripts start their servers with `--bot-ai legacy` whatever the default is: the legacy
 bots are the baseline a policy is measured against ([`docs/TRAINING.md`](docs/TRAINING.md) §3,

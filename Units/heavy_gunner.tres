@@ -21,4 +21,5 @@ ArrivalRadiusMeters = 1.5
 WeaponId = 11
 AccuracyConeDegrees = 3.0
 SuppressSeconds = 4.0
+Doctrine = 2
 Color = Color(0.55, 0.2, 0.5, 1)

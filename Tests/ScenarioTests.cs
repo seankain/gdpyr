@@ -79,6 +79,66 @@ public class ScenarioTests
 	}
 
 	[Fact]
+	public void AScenarioMayNameWhatItsUnitsStartWith()
+	{
+		// docs/TACTICS.md §5.9: a claim about the tactics names them, and the harness
+		// starts its server with them unless --unit-autonomy says otherwise.
+		Scenario on = Scenario.Parse("""
+			{ "unit_autonomy": "on", "assert": [ { "metric": "events.kill.count", "op": ">=", "value": 1 } ] }
+			""");
+		Assert.Equal("on", on.UnitAutonomy);
+		Assert.Null(Scenario.Parse(Minimal).UnitAutonomy);
+
+		ScenarioException error = Assert.Throws<ScenarioException>(() => Scenario.Parse("""
+			{ "unit_autonomy": "yes", "assert": [ { "metric": "events.kill.count", "op": ">=", "value": 1 } ] }
+			"""));
+		Assert.Contains("unit_autonomy", error.Message);
+	}
+
+	[Fact]
+	public void AUnitSpawnMayNameItsOwnMicroAutonomy()
+	{
+		Scenario scenario = Scenario.Parse(WithTruck("""{ "unit": "infantry", "id": "r1", "at": [3, 1, 0], "autonomy": "on" }"""));
+		Assert.Equal("on", scenario.Spawns[1].Autonomy);
+		Assert.Null(scenario.Spawns[0].Autonomy);
+
+		ScenarioException bad = Assert.Throws<ScenarioException>(() => Scenario.Parse(
+			WithTruck("""{ "unit": "infantry", "at": [3, 1, 0], "autonomy": "maybe" }""")));
+		Assert.Contains("'autonomy' is", bad.Message);
+		Assert.Throws<ScenarioException>(() => Scenario.Parse(
+			WithTruck("""{ "structure": "sandbag_wall", "at": [9, 1, 0], "autonomy": "on" }""")));
+	}
+
+	[Fact]
+	public void AStrategistScript_MaySetMicroAutonomy_ForUnitsAndForNewOnes()
+	{
+		Scenario scenario = Scenario.Parse(Scripted("""
+			{ "ticks": 1, "commands": [ { "cmd": "autonomy", "units": ["r1", "r2"], "mode": "on" },
+			                            { "cmd": "autonomy_default", "mode": "off" } ] }
+			"""));
+
+		Assert.True(scenario.Seats[0].Script.TryEnter(0, out ScriptStep step));
+		Assert.Equal("autonomy", step.Commands[0].Cmd);
+		Assert.Equal(new[] { "r1", "r2" }, step.Commands[0].Units);
+		Assert.Equal("on", step.Commands[0].Mode);
+		Assert.Equal("autonomy_default", step.Commands[1].Cmd);
+		Assert.Empty(step.Commands[1].Units);
+		Assert.Equal("off", step.Commands[1].Mode);
+	}
+
+	[Theory]
+	[InlineData("""{ "ticks": 1, "commands": [ { "cmd": "autonomy", "units": ["r1"] } ] }""", "'mode' is")]
+	[InlineData("""{ "ticks": 1, "commands": [ { "cmd": "autonomy", "units": ["r1"], "mode": "auto" } ] }""", "'mode' is")]
+	[InlineData("""{ "ticks": 1, "commands": [ { "cmd": "autonomy", "units": [], "mode": "on" } ] }""",
+		"names its units by spawn label")]
+	[InlineData("""{ "ticks": 1, "commands": [ { "cmd": "autonomy_default" } ] }""", "'mode' is")]
+	public void AnAutonomyCommandThatCannotBeSent_IsASentence(string steps, string expected)
+	{
+		ScenarioException error = Assert.Throws<ScenarioException>(() => Scenario.Parse(Scripted(steps)));
+		Assert.Contains(expected, error.Message);
+	}
+
+	[Fact]
 	public void EveryCheckedInScenarioParsesAndNamesOnlyEventMetricsThatExist()
 	{
 		// A typo in a checked-in scenario's filter would otherwise surface as a failed

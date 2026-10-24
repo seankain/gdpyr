@@ -124,6 +124,7 @@ public sealed class EpisodeMetrics
 		"node_contested" => "ticks",
 		"unit_embarked" or "unit_disembarked" => "tier",
 		"dropship_landed" => "aboard",
+		"grenade_thrown" => "hidden",
 		_ => null,
 	};
 
@@ -293,6 +294,7 @@ public sealed class EpisodeMetrics
 		"round_start", "round_end", "kill", "damage", "unit_built", "unit_lost", "node_captured",
 		"seat_attached", "seat_released", "structure_placed", "structure_built", "structure_lost",
 		"squad_task", "contact_spotted", "node_contested", "unit_embarked", "unit_disembarked", "dropship_landed",
+		"grenade_thrown",
 	};
 
 	/// <summary>
@@ -320,6 +322,7 @@ public sealed class EpisodeMetrics
 		["unit_embarked"] = new[] { "unit", "vehicle", "tier", "x", "z" },
 		["unit_disembarked"] = new[] { "unit", "vehicle", "tier", "x", "z" },
 		["dropship_landed"] = new[] { "unit", "aboard", "x", "z" },
+		["grenade_thrown"] = new[] { "thrower", "tier", "hidden", "x", "z" },
 	};
 
 	/// <summary>

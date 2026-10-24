@@ -439,6 +439,15 @@ public sealed partial class AgentServer : IDisposable
 					units.ServerUnload(seat.PeerId, list.UnitsOf(command));
 					break;
 
+				// The checks a person's selection card gets (docs/TACTICS.md §5.9).
+				case AgentCommandKind.Autonomy:
+					units.ServerSetAutonomy(seat.PeerId, list.UnitsOf(command), command.Autonomy);
+					break;
+
+				case AgentCommandKind.AutonomyDefault:
+					units.ServerAutonomyDefault(seat.PeerId, command.Autonomy);
+					break;
+
 				case AgentCommandKind.Noop:
 				default:
 					break;

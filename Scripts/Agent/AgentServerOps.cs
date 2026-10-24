@@ -144,6 +144,13 @@ public sealed partial class AgentServer
 				writer.WriteString("bot_ai", BotAiNames.Name(bots.Ai));
 			}
 
+			// What the strategist side's new units start with (docs/TACTICS.md §5.9), so a
+			// scenario's claim about the tactics is checked against the server it ran on.
+			if (UnitManager.Instance is { } units)
+			{
+				writer.WriteString("unit_autonomy", MicroAutonomyNames.Name(units.AutonomyDefault));
+			}
+
 			AgentJson.WriteSchema(writer);
 		});
 
@@ -654,6 +661,21 @@ public sealed partial class AgentServer
 				list.AddWithUnits(command, UnitIds(element));
 				break;
 
+			// Micro-autonomy (docs/TACTICS.md §5.9). A mode the server does not know is
+			// skipped, as an unknown command is, rather than read as one it does.
+			case "autonomy" when MicroAutonomyNames.TryParse(Text(element, "mode", null), out MicroAutonomy mode):
+				command.Kind = AgentCommandKind.Autonomy;
+				command.Autonomy = mode;
+				list.AddWithUnits(command, UnitIds(element));
+				break;
+
+			case "autonomy_default" when MicroAutonomyNames.TryParse(Text(element, "mode", null),
+				out MicroAutonomy mode):
+				command.Kind = AgentCommandKind.AutonomyDefault;
+				command.Autonomy = mode;
+				list.Add(command);
+				break;
+
 			case "noop":
 				command.Kind = AgentCommandKind.Noop;
 				list.Add(command);
@@ -1004,6 +1026,16 @@ public sealed partial class AgentServer
 			string ordered = Text(root, "order", "none");
 			OrderKind order = ordered == "none" ? OrderKind.None : OrderFromName(ordered);
 
+			// The unit's micro-autonomy, when the spawn names one; else the side's default
+			// for new units (docs/TACTICS.md §5.9).
+			string autonomyName = Text(root, "autonomy", null);
+			MicroAutonomy autonomy = MicroAutonomy.Off;
+			if (autonomyName != null && !MicroAutonomyNames.TryParse(autonomyName, out autonomy))
+			{
+				session.SendError(correlation, "bad_request", $"'autonomy' is on or off, not '{autonomyName}'");
+				return;
+			}
+
 			// A unit that starts aboard a vehicle (docs/VEHICLES.md §11) is placed where the
 			// vehicle is and seated by the server, loaded by the seat the scenario names.
 			int aboard = Int(root, "aboard", 0);
@@ -1026,6 +1058,11 @@ public sealed partial class AgentServer
 			{
 				session.SendError(correlation, "not_boarded", refused);
 				return;
+			}
+
+			if (autonomyName != null)
+			{
+				units.ServerSetPlacedAutonomy(unitId, autonomy);
 			}
 
 			session.SendJson(AgentFrameKind.Response, correlation, writer =>

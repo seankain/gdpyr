@@ -87,6 +87,14 @@ public enum UnitFact : byte
 	/// </summary>
 	OnObjective,
 
+	/// <summary>
+	/// <see cref="Sim.MicroAutonomy"/>: whether the strategist lets this unit use the
+	/// tactics of docs/TACTICS.md on its own. Written every tick from the unit, as the
+	/// order is, so switching it is a replan on that tick; every method docs/TACTICS.md
+	/// §5 adds requires it on, and every operator it adds holds only while it is.
+	/// </summary>
+	MicroAutonomy,
+
 	Count,
 }
 
@@ -512,6 +520,9 @@ public sealed class UnitContext : BaseContext
 	public void Sense(UnitFact fact, byte value) => SetState((int)fact, value, true, EffectType.Permanent);
 
 	public void Sense(UnitFact fact, bool value) => Sense(fact, value ? (byte)1 : (byte)0);
+
+	/// <summary>What the strategist lets it do on its own (docs/TACTICS.md §5.9), every tick, from the unit.</summary>
+	public void SenseAutonomy(Sim.MicroAutonomy mode) => Sense(UnitFact.MicroAutonomy, (byte)mode);
 
 	/// <summary>A context with no squad is moving, not gathering: 0 is <see cref="Htn.SquadPhase.Gathering"/>.</summary>
 	public override void Init()
