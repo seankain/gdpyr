@@ -537,7 +537,7 @@ public partial class UnitManager : Node
 
 		// What its weapon is doing, for a plan that crouches to reload in cover
 		// (docs/TACTICS.md §5.8).
-		plan?.SenseWeapon(unit.Weapon.IsReloading);
+		plan?.SenseWeapon(unit.Weapon.IsReloading, unit.Weapon.ShotIndex);
 
 		// Resolved before the plan looks at the order: a finished site stands the
 		// builder down this tick.
@@ -615,8 +615,11 @@ public partial class UnitManager : Node
 		}
 		unit.FaceTowards(hasTarget ? targetPoint : working ? site.Pose.Base : destination, SimConfig.TickDelta);
 
-		ServerFire(unit, tick, hasTarget, targetPoint, targetVelocity);
-		ServerThrow(unit, tick, hasTarget && !firingAtPlace, targetPoint, targetVelocity);
+		// A marksman holding its fire leaves a target beyond its hold-fire range alone
+		// (docs/TACTICS.md §5.3): it still sees it, and stands to it, but does not shoot.
+		bool holdFire = HoldsFire(plan, hasTarget, targetDistance);
+		ServerFire(unit, tick, hasTarget && !holdFire, targetPoint, targetVelocity);
+		ServerThrow(unit, tick, hasTarget && !firingAtPlace && !holdFire, targetPoint, targetVelocity);
 		if (plan is { Intent.ThrowAt: true })
 		{
 			ThrowAtHidden(unit, plan, tick);
@@ -1264,6 +1267,9 @@ public partial class UnitManager : Node
 		SenseGrenade(unit, plan, order, tick, memory, UnitContext.GoesSomewhere(order.Kind),
 			OrderToward(plan, order, objective, node));
 
+		// A marksman's peek pair and whom to peek at (docs/TACTICS.md §5.3).
+		SenseMarksman(unit, plan, order, tick, memory, objective);
+
 		plan.FallbackPoint = plan.HasStaging ? plan.StagingPoint
 			: TryNearestRally(unit.Team, at, out Vector3 rally) ? rally
 			: order.Anchor;
@@ -1520,6 +1526,9 @@ public partial class UnitManager : Node
 		_unitTimeSamples = 0;
 	}
 
+	/// <summary>How many unit goals there are, none included: they are numbered from 0 without a gap.</summary>
+	private static readonly int GoalCount = Enum.GetValues<UnitGoal>().Length;
+
 	/// <summary>
 	/// What the planning units are doing, for the debug HUD: how many run each task,
 	/// and how many are waiting for their squad. Empty under legacy.
@@ -1531,7 +1540,7 @@ public partial class UnitManager : Node
 			return string.Empty;
 		}
 
-		Span<int> goals = stackalloc int[(int)UnitGoal.HoldPointCover + 1];
+		Span<int> goals = stackalloc int[GoalCount];
 		int waiting = 0;
 		for (int i = 0; i < _ordered.Count; i++)
 		{

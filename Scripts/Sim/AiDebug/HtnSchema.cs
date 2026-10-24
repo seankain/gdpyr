@@ -72,7 +72,11 @@ public sealed class HtnSchema
 		typeof(FireKind), // FiredUpon
 		typeof(CoverState), // FireCover
 		typeof(bool), // ReactSpent
-		typeof(bool)); // Grenade
+		typeof(bool), // Grenade
+		typeof(PeekState), // Peek
+		typeof(bool), // PeekTarget
+		typeof(bool), // Standoff
+		typeof(bool)); // Burned
 
 	public static readonly HtnSchema Squad = new(HtnDomainKind.Squad, typeof(CommandFact), typeof(CommandGoal),
 		typeof(CommandTask), // Task
