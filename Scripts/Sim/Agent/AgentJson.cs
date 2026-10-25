@@ -165,7 +165,7 @@ public static class AgentJson
 	{
 		"alive", "tier_infantry", "tier_technical", "tier_tank", "x", "z", "health",
 		"order_none", "order_move", "order_attack", "order_patrol", "order_defend",
-		"has_target", "target_distance",
+		"has_target", "target_distance", "autonomy",
 	};
 
 	public static readonly string[] BarracksFields =

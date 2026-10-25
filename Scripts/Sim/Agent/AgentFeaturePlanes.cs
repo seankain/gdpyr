@@ -7,7 +7,7 @@ namespace Gdpyr.Sim.Agent;
 /// default and requested per session (docs/AGENT_API.md §6.3).
 ///
 /// This is SC2's feature-layer idea, and it is what makes a convolutional
-/// strategist policy possible at all: a flat 1,092-float vector has no spatial
+/// strategist policy possible at all: a flat 1,156-float vector has no spatial
 /// structure for a convolution to exploit, and a policy that has to learn "these
 /// two units are next to each other" from two pairs of coordinates is learning
 /// the map's metric before it learns the game.

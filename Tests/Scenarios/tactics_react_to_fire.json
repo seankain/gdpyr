@@ -30,12 +30,12 @@
     { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
     { "metric": "events.unit_task[goal=18].count", "op": "over_seeds", "cmp": ">=", "value": 1, "fraction": 1.0 },
     { "metric": "observation.chair.units.last", "op": "==", "value": 1 },
-    { "metric": "observation.chair.units.14.last", "op": "==", "value": 1 },
-    { "metric": "observation.chair.units.28.last", "op": "==", "value": 1 },
-    { "metric": "observation.chair.units.42.last", "op": "==", "value": 1 },
+    { "metric": "observation.chair.units.15.last", "op": "==", "value": 1 },
+    { "metric": "observation.chair.units.30.last", "op": "==", "value": 1 },
+    { "metric": "observation.chair.units.45.last", "op": "==", "value": 1 },
     { "metric": "observation.chair.units.13.last", "op": "<=", "value": 0.031 },
-    { "metric": "observation.chair.units.27.last", "op": "<=", "value": 0.031 },
-    { "metric": "observation.chair.units.41.last", "op": "<=", "value": 0.031 },
-    { "metric": "observation.chair.units.55.last", "op": "<=", "value": 0.031 }
+    { "metric": "observation.chair.units.28.last", "op": "<=", "value": 0.031 },
+    { "metric": "observation.chair.units.43.last", "op": "<=", "value": 0.031 },
+    { "metric": "observation.chair.units.58.last", "op": "<=", "value": 0.031 }
   ]
 }

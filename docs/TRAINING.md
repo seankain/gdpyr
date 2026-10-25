@@ -289,10 +289,12 @@ Same three files, different chair:
 ./scripts/train.sh --policy strategist --steps 100000 --save runs/strategist
 ```
 
-### Observation — 1,092 floats
+### Observation — 1,156 floats
 
-Exactly what a human strategist's client is sent: round state, 64 own units, 4
-barracks, 8 resource nodes and 16 ground-force contacts, behind the same
+Exactly what a human strategist's client is sent: round state, 64 own units (each
+with its micro-autonomy since `gdpyr-agent-obs-3`, TACTICS.md T8: a client built
+before it refuses today's server, and a strategist checkpoint trained on the 1,092
+floats of `-2` does not fit the 1,156 inputs), 4 barracks, 8 resource nodes and 16 ground-force contacts, behind the same
 `VisibilityService` a person is behind — live records where a sensor has one now,
 ghosts with an age where one was seen and lost (`AGENT_API.md` §6.2). The optional
 `32 × 32 × 4` feature planes (§6.3) ride in the same frame when a session asks for

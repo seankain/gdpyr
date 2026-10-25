@@ -64,7 +64,7 @@ public sealed class ServerProcess : IDisposable
 			start.ArgumentList.Add(botAi);
 		}
 
-		// Likewise what new units start with: the game mode's (off until docs/TACTICS.md T8)
+		// Likewise what new units start with: the game mode's (on since docs/TACTICS.md T8)
 		// unless the scenario or the command line says.
 		if (!string.IsNullOrEmpty(unitAutonomy))
 		{

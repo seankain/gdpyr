@@ -204,7 +204,7 @@ public partial class UnitManager
 
 	/// <summary>
 	/// Resolves the default once, on the authority: <c>--unit-autonomy</c>, else the game
-	/// mode's, else off. Not latched before the round's game mode is there to read, so a
+	/// mode's, else on. Not latched before the round's game mode is there to read, so a
 	/// unit placed that early cannot fix the default without it.
 	/// </summary>
 	private void EnsureAutonomy()

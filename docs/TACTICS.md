@@ -1,7 +1,8 @@
 # Unit tactics — implementation plan
 
-Status: **T0–T7 built (§6); T8 is plan. Decisions T-D1 to T-D7 taken (§8).** Planned from the
-code at `6213d05`. Extends the unit HTN of [`HTN_BOTS.md`](HTN_BOTS.md) §5.2 and the cover of
+Status: **T0–T8 built (§6); micro-autonomy is on by default since T8, which measured it in
+bot-only rounds against off. Decisions T-D1 to T-D7 taken (§8).** Planned from the code at
+`6213d05`. Extends the unit HTN of [`HTN_BOTS.md`](HTN_BOTS.md) §5.2 and the cover of
 [`COVER.md`](COVER.md).
 
 Scope: strategist units that fight well without micro. Five requirements:
@@ -131,6 +132,12 @@ at and the drill moves against:
 
 That is T-D5: a gunner may fire at any place an enemy is seen or was last seen. A contact's trail
 of older positions is not kept: an older position is a worse guess than the last one.
+
+Since T8 a contact more than 5 m behind the squad (`SquadDrill.BehindMeters`) — measured from its
+centroid along the line to where its order goes, while that is more than 20 m away
+(`BehindFromMeters`) — is not on the squad's list unless one of its members was fired upon from
+within 5 m of it: a player the squad has walked past, and who is not shooting at it, is for its
+units' own sights, not a reason to turn its base round (T8, "found by the suite").
 
 The **threat point** is the entry within 60 m of the squad's centroid or of the line to its
 objective with the most members fired upon from within 5 m of it, then the nearest the objective
@@ -307,7 +314,7 @@ domain's "drill" select, §5.0.1):
 | Squads | Board squads with ≥ 2 elements under an Attack or an objective (an Attack naming no contact, or a Move, on a node). An element is a unit on the field and on foot with a doctrine whose micro-autonomy is on: not a builder, a tank, a technical, a truck, an aircraft, or a unit whose micro-autonomy is off, which keep today's behaviour. A person's squads as well as the commander's: the drill is how an order is carried out (D1). Not Defend (the ring, React and "answer a call" cover it), Patrol, a Move that is not an objective, or Build; not while the board says the squad is gathering or falling back. |
 | Cadence | Every 10 ticks per squad, staggered by board slot (`SquadDrill.IsDue`: tick mod 10 = slot mod 10), after `CountSquads` and before any unit moves. Eight squads: at most one decision a tick. Units read their part off the board on their own scans, up to 10 ticks later. |
 | Roles | `DrillRoles.Assign`, in unit id order. Gunners: base. Marksmen: overwatch. Riflemen, with a gunner: the assault, bounding in halves A and B when there are four or more, together (A) below that. Without a gunner: halves A and B, the first ⌈n/2⌉ in A; A is the base until a half has bounded, and from then the half not moving is — behind a bound, and when the squad sets its base again (`DrillContext.RiflesBase`), so a bound stopped for want of the holding half's fire sends that half to its fire positions, not the half on its way. A member that is not an element has no role. |
-| List | §4.2, on each decision (`SquadDrill.GatherEntries`): every contact the side remembers and has not seen die since, and the squad's fired-from points, kept on the board 8 s after the round (`DrillBoard.RememberFired`, 16 a squad), one within 3 m of a contact being that contact; only those within 60 m of the squad's centroid or of the line from it to where its order goes. The threat point: the entry with the most elements fired upon from within 5 m of it, then nearest that line, then the lowest owner id (a contact before a fired-from point), then the earlier. It is held through a lull for as long as the drill is in contact. |
+| List | §4.2, on each decision (`SquadDrill.GatherEntries`): every contact the side remembers and has not seen die since, and the squad's fired-from points, kept on the board 8 s after the round (`DrillBoard.RememberFired`, 16 a squad), one within 3 m of a contact being that contact; only those within 60 m of the squad's centroid or of the line from it to where its order goes; and, since T8, a contact more than 5 m behind the squad, over 20 m from where its order goes, only when a member was fired upon from within 5 m of it. The threat point: the entry with the most elements fired upon from within 5 m of it, then nearest that line, then the lowest owner id (a contact before a fired-from point), then the earlier. It is held through a lull for as long as the drill is in contact. |
 | Facts | `Contact` none · known · fired upon (an element in its window), held 5 s after the last threat point (`QuietTicks`). `Base` none · moving · firing: none until the drill sends its base (on going to ground or setting it), firing while a member at a fire position — or, in a bound, a member holding — fired a round in the last 2 s since it was sent (`Unit.LastShotTick`); out of contact it stands down. `BaseLate`: sent 6 s ago. `Range` from the leading element (the nearest assault member) to the threat point: far (> 45 m) · bound · assault (< 20 m), each edge held 2 m past itself. `Arrived`: every member of the element bounding within 1.5 m of its spot. `Objective` none · approach · on (§5.0). `HasGunner`; `Grenade` (an assault member with a grenade ready 6–28 m from the threat point); `GivenUp`; `Moving` (the half bounding, the bound's own). |
 | Domain | In priority order: `hold the point` [Objective=on] `HoldPoint` {Objective=on}; `given up` [GivenUp] `Approach` {GivenUp}; `get into cover` [Contact=fired upon ∧ Base=none] `GoToGround` {≤ 4 s, Contact≠none}, then the base is set; `assault` [Range=assault ∧ base ready ∧ Grenade] `Grenades` → `Rush`, else [Range=assault ∧ base ready] `Rush`, each {Contact≠none, Range=assault}; `bound` [Contact≠none ∧ base ready] `Bound` {base ready: out of contact the base stands down, so this ends it too}; `establish base` [Contact≠none] `SetBase` {Contact≠none}; `approach`. "Base ready" is Base=firing ∨ BaseLate: the squad does not bound until the base fires, or 6 s after it was sent. `Grenades` ends 2 s after an assault member's throw, or after 5 s with none. |
 | Bound | `Bound` starts with the first half — A with a gunner, B without one, A was the base — and hands over to the other when every member of the moving one is in its spot, or after 8 s; with one half, that half again from where it got to. Each hand-over is a new bound, numbered (`DrillIntent.BoundSerial`), once a decision at most. |
@@ -389,10 +396,10 @@ than misreading it. No translation layer, as `DemoFormat.cs` already says of bum
 | State | `Unit.Autonomy`: `MicroAutonomy.Off` · `On`, server-side, per unit. Kept under legacy too, where nothing reads it. |
 | In the planner | `UnitFact.MicroAutonomy`, written every tick from the unit, as `Order` is. Every method of §5 requires `On`; every operator of §5 holds while `On` (rule 2). It is a fact rather than a flag outside the planner so the debugger shows it, the domain tests cover it, and switching it is a replan like any other change. |
 | What Off is | The unit domain as it is at `6213d05`: the order carried out as given, with H3–H6's and COVER.md's methods — keeping pace, focus fire, posts, fighting from cover on an attack or defend, taking a point on an attack. Not an element of a drill, never an objective under a Move, no React, no peeks, no deliberate suppression, no grenade at a remembered contact. Retreat and Resupply still follow `UnitStance` (D1), which is about who gave the order, not about this. |
-| New units | Start with the team's default: the game mode's `UnitAutonomy` (off until T8), overridden by `--unit-autonomy on\|off`, and set in game by either strategist (two share the army; the last to set it wins, and both are shown it). A new round goes back to the default the server started with, whatever the last round set: one round's settings must not leak into the next's, which is what made scenario seeds depend on each other in HTN_BOTS.md §5.3. |
+| New units | Start with the team's default: the game mode's `UnitAutonomy` (on since T8; off before it), overridden by `--unit-autonomy on\|off`, and set in game by either strategist (two share the army; the last to set it wins, and both are shown it). A new round goes back to the default the server started with, whatever the last round set: one round's settings must not leak into the next's, which is what made scenario seeds depend on each other in HTN_BOTS.md §5.3. |
 | In game | The selection card shows **Tactics: Auto / Direct** for the selection (**Mixed** when it differs) and toggles it; `H` (unbound in `project.godot`) toggles the selection; the HUD has the team default for new units beside the points. |
 | Wire | `ClientSetAutonomy(int[] unitIds, byte mode)` and `ClientAutonomyDefault(byte mode)`, C→S, reliable, per click; the server checks the sender is a strategist and the units are its side's, as `ApplyOrder` does, counting what an honest client cannot send in `RejectedOrders`. `ServerAutonomyState`, S→C, reliable, **to strategist peers only**, whole — the default, then every living unit whose mode is not it (`AutonomyStateCodec`, 3 B + 3 B a unit) — on the barracks report's 5 Hz tick to every strategist peer not yet sent the current revision, so a peer that takes the chair gets it within 0.2 s. Not in the unit snapshot, which every ground client receives unfogged: a setting is an order, and orders are not on the wire to anyone (NETCODE.md §6.3). |
-| Agent API | Strategist commands `autonomy {units, mode}` and `autonomy_default {mode}`; `welcome` says `unit_autonomy`, the server's default. The unit block of the strategist observation gains the mode in T8, which changes the published layout: `gdpyr-agent-obs-2` → `-3` (AGENT_API.md §4). |
+| Agent API | Strategist commands `autonomy {units, mode}` and `autonomy_default {mode}`; `welcome` says `unit_autonomy`, the server's default. Since T8 the unit block of the strategist observation carries the mode, the 15th float of each unit's record (`autonomy`), which changed the published layout: `gdpyr-agent-obs-2` → `-3` (AGENT_API.md §4, §6.2). |
 | Scenarios | A spawn's `"autonomy": "on" \| "off"`; a strategist script's `autonomy` and `autonomy_default` commands; a scenario's `"unit_autonomy"`, which the harness passes to the server it starts as `--unit-autonomy`, as it does `bot_ai` — and its own `--unit-autonomy` overrides, as `--bot-ai` does. That is the A/B for every claim of §6: the same build, tactics on and off. |
 | Commander | Sets nothing: its units take the team default, and it never changes a unit's setting, so a person sharing the army with it keeps the modes they chose. |
 
@@ -401,8 +408,8 @@ than misreading it. No translation layer, as `DemoFormat.cs` already says of bum
 ## 6. Phases
 
 Estimates in solo-dev days, as HTN_BOTS.md §6. Every phase is under `--bot-ai htn`. The team
-default (`UnitAutonomy`) is off until T8, so each phase leaves a round played as today unless a
-strategist or a scenario turns micro-autonomy on.
+default (`UnitAutonomy`) was off until T8, so each phase before it left a round played as before
+unless a strategist or a scenario turned micro-autonomy on; T8 turned it on.
 
 ### T0 — Sensing and the switch (1.5 days)
 
@@ -1110,6 +1117,132 @@ strategist or a scenario turns micro-autonomy on.
   Update HTN_BOTS.md §5.2 (the Move rule), COVER.md §6 and §10 (peeks), NETCODE.md (the requests,
   the state message), AGENT_API.md (the commands, the three events, obs-3), README (the toggle,
   the key, the behaviour).
+- **Result — built; micro-autonomy is on by default.**
+  - `dotnet test`: 2138 passed, 0 failed (2134 before; 4 new: 3 in `SquadDrillTests`, 1 in
+    `AgentObservationTests`; `LaunchOptionsTests`' default test now asks for on). `dotnet build
+    Gdpyr.csproj`: 0 warnings, 0 errors; the harness and the probe build.
+  - **The tests test something.** One piece changed at a time, each failed exactly one test: the
+    default back to off; the observation's `autonomy` float left unwritten; and, in the drill's
+    list, the contact behind the squad kept, kept though no round came from it, dropped near the
+    point as well, and dropped at once behind the centroid rather than 5 m behind it.
+  - **The default.** `MicroAutonomyNames.Default` and `default_gamemode.tres`'s `UnitAutonomy` are
+    on; `--unit-autonomy off`, a scenario's `"unit_autonomy": "off"`, the card and `H` still turn
+    it off. The harness reports what a server's `welcome` says: every scenario that names no mode
+    ran "unit autonomy on" in the suite below.
+  - **`gdpyr-agent-obs-3`.** Each unit of the strategist vector has a fifteenth float, `autonomy`,
+    1 when its micro-autonomy is on, after `target_distance`: 1,156 floats, every offset after the
+    unit block 64 further on (AGENT_API.md §6.2). The server, the .NET client and the Python
+    client name the new version; a client built before it refuses the server. The one checked-in
+    file that indexes the block, `tactics_react_to_fire`, reads alive at 0, 15, 30, 45 and the
+    distance to the target at 13, 28, 43, 58, and passed so against a running server.
+  - **Bot-only rounds** (Godot 4.6 .NET, headless, through the harness, as COVER.md §9): five HTN
+    ground bots and the idle seat in the far corner against one HTN computer strategist, 6 min,
+    seeds 1–9, `--unit-autonomy on` and `off`, otherwise the same file (not committed), read off
+    each round's event stream. The rounds are not reproducible seed for seed, so each column is
+    nine samples, not nine measurements of a seed; a round ends early when the ground force runs
+    out of tickets. "On, before the fix" is the same nine on the build before the drill fix below;
+    off does not drill, and the fix does not touch it.
+
+    | Per round, mean (range) | on | off | on, before the fix |
+    |---|---|---|---|
+    | Strategist wins inside 6 min (ground force out of tickets) | 6 of 9, at 250–300 s | 4 of 9, at 158–348 s | 4 of 9, at 190–343 s |
+    | Ground players killed | 44.9 (20–50) | 38.2 (14–50) | 31.9 (13–50) |
+    | Strategist units lost | 22.9 (18–32) | 24.7 (9–41) | 14.3 (9–27) |
+    | … infantry · builders · technicals · trucks · tanks · gunners | 19.4 · 1.8 · 0.8 · 0.4 · 0.3 · 0.1 | 21.9 · 1.4 · 0.9 · 0.1 · 0.3 · 0 | 11.9 · 1.4 · 0.4 · 0 · 0.6 · 0 |
+    | Ground players killed per unit lost | 1.98 | 1.72 | 2.18 |
+    | Infantry trained | 28.2 (18–36) | 29.1 (10–51) | 18.7 (9–31) |
+    | Share of node-time the strategist held | 37.5 % (12.8–53.7) | 31.2 % (5.2–60.3) | 19.5 % (3.3–39.1) |
+    | Nodes it captured | 3.1 (2–6) | 2.8 (2–4) | 1.9 (1–3) |
+    | First strike (`squad_task` goal 4) on a node it did not hold, to its capture | median 33 s (19–119); 24 captured, 5 never | median 22 s (19–125); 21 captured, 6 never | median 32 s (26–104); 14 captured, 4 never |
+    | Grenades thrown by its units at a hidden · a seen enemy, all rounds | 23 · 9 | 15 · 20 | 19 · 15 |
+    | Heavy gunners · snipers trained, all rounds | 5 · 0 | 1 · 0 | 0 · 0 |
+
+    Over the nine rounds on, `unit_task`: take cover from fire 140, return fire 80, a grenade at a
+    hidden enemy 6, suppress 9; in a drill, to ground 49, to a fire position 84, bound 345, hold
+    384, rush 7. `squad_drill`: to ground 28, set the base 33, bound 42, grenades 3, the rush 2,
+    holding the point 15. 0 pilot fallbacks in all 27 rounds.
+
+    **What that says.** Against off, a permutation test over the nine rounds a side finds no
+    difference in any per-round count above the rounds' own spread — units lost p = 0.69, ground
+    players killed 0.29, node-time 0.40, captures 0.70. What does differ is time: from the first
+    strike on a node to its capture the median is 33 s on against 22 s off (p ≈ 0.04 for the
+    medians, strikes pooled across rounds) — the drill's bounds take longer than walking in, the
+    risk §9 names. That is the trade the default takes: a squad that drills onto a node arrives
+    later and, in these rounds, kills as much, loses as much and holds as much as one that walks.
+    Grenades shift from enemies the units can see to ones they cannot (15 → 23 hidden, 20 → 9
+    seen; at most 6 of the hidden ones are §5.4's — `unit_task` 20 is the attempt — and the rest
+    `ServerThrow`'s, which reports a head over a wall as hidden under either mode). The commander
+    trained five gunners in nine rounds on and one off; a gunner needs a finished pillbox, the
+    first structure `Fortify` builds at a node the commander holds, and six gunners are too few to
+    say why. **No sniper was trained in any of the 27 rounds**: a tower is the third structure
+    `Fortify` builds at a held node, after a pillbox and a wall, and no round got that far. Sniper
+    lifetime is the scenario's instead (below).
+
+    **On before the fix lost fewer units for the wrong reason.** Against itself after the fix it
+    captured fewer nodes (1.9 against 3.1, p ≈ 0.02), held less node-time (19.5 % against 37.5 %,
+    p ≈ 0.02), so earned and trained less (18.7 infantry against 28.2) and had less to lose
+    (14.3 against 22.9, p ≈ 0.006): squads stalled on their way, as below, and fought less.
+  - **Found by the suite, fixed here.** `htn_strategist_defends_node` failed under the new default
+    (seed 2: two nodes taken in the minute, not three). The four riflemen the commander sends on
+    from the middle node to the far one (−25, −100) had the raider 45–60 m behind them — within
+    60 m of the squad's centroid, so on its list (§4.2) — and the drill set a rifle base facing
+    back towards it and bounded the other half on in 5–12 m steps; the far node was not reached
+    in the minute (seed 1 took it at 45.8 s, after its drill went back to approaching at 43 s).
+    Off, the same squad walks there. A contact more than 5 m behind the squad, measured along the line to
+    where its order goes while that is more than 20 m off, is no longer on the squad's list unless
+    a member was fired upon from within 5 m of it (`SquadDrill.BehindMeters`, `BehindFromMeters`,
+    `Behind`; §4.2, §5.5). Three tests: a contact behind, off the list until it fires; one abreast,
+    on it; one behind within 20 m of the point, on it. After it the scenario took the far node at
+    2,418–2,438 ticks in all three seeds, approaching without a drill.
+  - **Cost** (a temporary print, not committed, of `UnitMilliseconds` every second; the build
+    before the drill fix, which adds one dot product per contact per drill decision): 56 units
+    placed — 46 riflemen, 6 heavy gunners, 4 snipers — and the commander's own, against five HTN
+    ground bots, 2 × 90 s each way. The unit pass at 50–57 live units averaged 2.09 ms a tick on
+    (1.02–3.35 over 67 one-second windows) and 2.65 ms off (0.82–3.88 over 55): on is not the dearer,
+    within a spread that two other servers on the same four cores widen. `unit ms` on a display
+    stays unread.
+  - **Suites**: `./scripts/playtest.sh Tests/Scenarios/*.json` on the final build, headless, the two
+    runs side by side from two copies of the tree, beside the bot-only rounds' server for most of
+    their length. The default, now on: **29 of 29 passed**, in
+    49 min 48 s. `--unit-autonomy off`: **24 of 29** — every scenario but the five `tactics_*`,
+    which fail on the claims that separate on from off and on no other: the hidden grenade and the
+    kill (`tactics_grenade_behind_wall`), suppressing and filling the belt
+    (`tactics_gunner_suppression`), the bound and the kills (`tactics_move_to_node`, whose capture
+    holds off, as in T6), taking cover from fire (`tactics_react_to_fire`, whose riflemen all
+    arrive off too), hiding and peeking (`tactics_sniper_overwatch`). 0 pilot fallbacks in both.
+    The build before the drill fix, under the default, passed 28 of 29: `htn_strategist_defends_node`
+    was the one (above). The `tactics_*` files on against off, seeds 1–3, from the same runs:
+
+    | | on | off |
+    |---|---|---|
+    | `tactics_move_to_node`: node 0 captured, ticks from the round's start | 2,201–2,637 | 1,205 every seed |
+    | … kills by its units · its units lost | 12, 6, 7 · 7 of 7 each seed | 4, 3, 4 · 7 of 7 each seed |
+    | `tactics_sniper_overwatch`: the sniper lost at, of 3,600 ticks | 795, 991, 2,564 | alive at the end, 2,118, 1,469 |
+    | … its kills | 0, 0, 4 | 12, 6, 4 |
+    | `tactics_react_to_fire`: hits on the riflemen · lost | 4 a seed · none | 2 a seed · none |
+    | `tactics_grenade_behind_wall`: hidden throws · the hider killed | 1 a seed · every seed | none · never |
+    | `tactics_gunner_suppression`: `unit_task` 26 · 27 | 2 · 1 a seed | none |
+
+  - **The marksman question T4 left for T8 is still open.** T4 found its sniper killing less and
+    dying sooner with micro-autonomy on than off, and left whether it should walk with its fire
+    held, move on after two peeks or when hit, or hold a concealed pair and peek on "for T8 to
+    settle against these numbers". The scenario says the same again (lost at a median of 991
+    ticks on against 2,118 off, 4 kills in three seeds against 22), and the bot-only rounds cannot
+    settle it: they trained no sniper. The default is one per side (F4), so a sniper starts on
+    with the rest; a strategist who wants it to hold its post and fire sets it to Direct.
+  - **Differences from the plan above.** The drill's list leaves out an unfired contact behind the
+    squad (above). Sniper lifetime is the scenario's: the rounds trained no sniper. "Time from an
+    order on a node to its capture" is measured from the commander's first strike on a node it
+    does not hold, as the commander's orders are what bot-only rounds have. The plan put the
+    observation's mode in with the flip and so it is; the vehicles' "trailing transport block"
+    that AGENT_API.md called `obs-3` is a version of its own now.
+  - **Not checked.** A round with people, on either side, against units with micro-autonomy on —
+    whether a person reads the drill as their order carried out (§9, "orders feel ignored"); a
+    strategist client's card and HUD showing the new default over the network (T1's display check
+    showed the default's button, set by hand); `unit ms` on the final build; a sniper in a
+    bot-only round; a commander's assault squad drilling round its gunner in a round — five
+    gunners were trained in the nine rounds on, and the event stream does not say which squads
+    they drilled with.
 
 Total: about 13–14 days.
 

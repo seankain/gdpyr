@@ -54,7 +54,7 @@ PROTOCOL_VERSION = 1
 #: The observation layout this client knows how to decode. A ``welcome`` carrying
 #: anything else is refused rather than misread — the whole point of fetching the
 #: schema instead of compiling it (docs/AGENT_API.md §4).
-SCHEMA_VERSION = "gdpyr-agent-obs-2"
+SCHEMA_VERSION = "gdpyr-agent-obs-3"
 
 _KIND_REQUEST = 1
 _KIND_RESPONSE = 2

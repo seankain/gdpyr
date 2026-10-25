@@ -215,6 +215,29 @@ stand to fight once in it. On `Scenes/Test.tscn` no spot behind a map box lies i
 capture radius (the nearest are 2.4–5 m outside), so a unit that must stand on a point there has cover
 only behind a sandbag wall on it; the others fight from the walls just off it. A move order and a patrol are never second-guessed for cover. Supply trucks take no part.
 
+**With micro-autonomy on** ([`TACTICS.md`](TACTICS.md) §5.9; the default since T8) a unit with a
+doctrine uses cover for more than its order's own fight, each by the same board, with no new rays
+(TACTICS.md §5):
+
+- **From the shooter** (§5.1): fired upon — a hit or a round within 1.5 m — it takes cover from where
+  the round came from, a low wall it can fire over within 10 m or anything that hides it within
+  6 m, on the way its order goes and never round a box towards the fire, and fires back from it,
+  crouched between rounds. A move or a patrol gains this too, capped at 8 s since the order.
+- **Crouching** (§5.8): units on foot crouch to 1.0 m — the hitbox, the eye, half speed, no fire —
+  so one behind a 1.2 m wall waiting, reloading or between rounds shows nothing over it.
+- **A marksman's peek pair** (§5.3): a hide spot concealed from every remembered threat and a fire
+  spot beside it with a line to its target — behind a low wall the same spot stood up in, behind a
+  block one slot past its end — then pop out, two shots, duck, and move on after two peeks or a
+  round while out.
+- **A gunner's fire position** (§5.2): a low wall it can fire over at the place it suppresses.
+- **A squad's drill onto a point** (§5.5): spots to go to ground in, fire positions 20–40 m from the
+  threat, and bound spots at least 5 m nearer the point, each claimed against the rest of the
+  squad and every other unit's spot.
+- **Grenades over it** (§5.4): an arc flown against the board's boxes, thrown only where it comes to
+  rest within killing reach of an enemy the side knows is behind the wall.
+
+With it off, a unit uses cover as this section's table says, and no more.
+
 ---
 
 ## 7. The computer strategist digs in
@@ -329,7 +352,10 @@ game already makes.
 - **The mortar ignores cover**, by design: it needs no line of sight
   ([`NETCODE.md`](NETCODE.md) §10.4). Cover does not open the barracks' ring, and the ground bots
   still wait outside it (`OutsideDefences`).
-- **No peeking round a block.** A block is somewhere to hide, not to fight from.
+- **No peeking round a block, but for marksmen.** A block is somewhere to hide, not to fight from —
+  except for a sniper with micro-autonomy on, which since [`TACTICS.md`](TACTICS.md) T4 waits behind
+  one and steps one slot past its end to fire (§5.3). Riflemen, gunners and the ground bots do not
+  peek.
 - **The fog still tests the chest** (§3).
 - **A structure on the edge of the barracks' ring can still trap a bot's path** (§4). That is a
   weakness of `OutsideDefences`, not of cover, and `Fortify`'s structures at the middle node,

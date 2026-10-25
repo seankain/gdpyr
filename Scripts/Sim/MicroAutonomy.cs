@@ -23,10 +23,11 @@ public static class MicroAutonomyNames
 
 	/// <summary>
 	/// What new units start with when neither <c>--unit-autonomy</c> nor the game mode
-	/// says: off until docs/TACTICS.md T8 has measured the tactics, so a round plays as
-	/// it did unless a strategist or a scenario turns them on.
+	/// says: on, since docs/TACTICS.md T8 measured the tactics. A strategist who wants a
+	/// unit to do exactly what it is told switches it off; a scenario that wants the
+	/// rounds before the tactics says <c>"unit_autonomy": "off"</c>.
 	/// </summary>
-	public const MicroAutonomy Default = MicroAutonomy.Off;
+	public const MicroAutonomy Default = MicroAutonomy.On;
 
 	/// <summary><c>--unit-autonomy</c>, else the game mode's, else <see cref="Default"/>.</summary>
 	public static MicroAutonomy Resolve(MicroAutonomy? option, MicroAutonomy? gameMode) =>

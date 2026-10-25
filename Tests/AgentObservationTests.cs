@@ -395,13 +395,13 @@ public class AgentObservationTests
 	[Fact]
 	public void TheStrategistVectorIsTheBlocksTheDesignNames()
 	{
-		// 8 round + 64x14 units + 4x7 barracks + 8x8 nodes + 16x6 contacts.
-		Assert.Equal(896, AgentStrategistObservation.MaxUnits * AgentStrategistObservation.UnitFloats);
+		// 8 round + 64x15 units + 4x7 barracks + 8x8 nodes + 16x6 contacts.
+		Assert.Equal(960, AgentStrategistObservation.MaxUnits * AgentStrategistObservation.UnitFloats);
 		Assert.Equal(28, AgentStrategistObservation.MaxBarracks * AgentStrategistObservation.BarracksFloats);
 		Assert.Equal(64, AgentStrategistObservation.MaxNodes * AgentStrategistObservation.NodeFloats);
 		Assert.Equal(96, AgentStrategistObservation.MaxContacts * AgentStrategistObservation.ContactFloats);
-		Assert.Equal(1092, AgentStrategistObservation.Floats);
-		Assert.Equal(1092 * 4, AgentStrategistObservation.Bytes);
+		Assert.Equal(1156, AgentStrategistObservation.Floats);
+		Assert.Equal(1156 * 4, AgentStrategistObservation.Bytes);
 
 		// The unit block is the whole field cap and the contact block the whole
 		// roster, so the tensor shape never changes mid-episode.
@@ -508,6 +508,27 @@ public class AgentObservationTests
 		Assert.Equal(1f, values[at + 9]);
 		Assert.Equal(1f, values[at + 12]);
 		Assert.Equal(0.5f, values[at + 13], 4);
+		Assert.Equal(0f, values[at + 14]);
+	}
+
+	[Fact]
+	public void AUnitCarriesItsMicroAutonomy_InTheLastFloatOfItsRecord()
+	{
+		// docs/TACTICS.md §5.9, obs-3: what the selection card shows, per unit.
+		var units = new[]
+		{
+			new AgentUnitView { Alive = true, Autonomous = true },
+			new AgentUnitView { Alive = true, Autonomous = false },
+		};
+
+		float[] values = EncodeStrategist(units: units);
+		int at = AgentStrategistObservation.OffsetOf("units");
+		int field = Array.IndexOf(AgentJson.UnitFields, "autonomy");
+
+		Assert.Equal(AgentStrategistObservation.UnitFloats - 1, field);
+		Assert.Equal(1f, values[at + field]);
+		Assert.Equal(0f, values[at + AgentStrategistObservation.UnitFloats + field]);
+		Assert.Equal(1f, values[at + AgentStrategistObservation.UnitFloats]);
 	}
 
 	[Fact]
@@ -530,8 +551,8 @@ public class AgentObservationTests
 	[InlineData(OrderKind.Unload)]
 	public void TheVehicleOrders_FallOutsideTheOrderOneHot_AsBuildDoes(OrderKind order)
 	{
-		// docs/VEHICLES.md §10: obs-2 is unchanged; a policy that wants transport state
-		// reads list_units.
+		// docs/VEHICLES.md §10: the vehicles added no float; a policy that wants transport
+		// state reads list_units.
 		var units = new[] { new AgentUnitView { Alive = true, Order = (byte)order } };
 		float[] values = EncodeStrategist(units: units);
 		int at = AgentStrategistObservation.OffsetOf("units");

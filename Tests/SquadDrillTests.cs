@@ -790,6 +790,58 @@ public class SquadDrillTests
 	}
 
 	[Fact]
+	public void AnEnemyBehindTheSquad_IsNotOnItsList_UntilItFiresOnIt()
+	{
+		// T8's suite: the riflemen sent on from the middle node to the far one set a base facing
+		// the raider 50 m behind them, and bounded, and the far node was not taken in a minute.
+		var field = new Field(Squad(4, gunner: true, Point + new Vector3(0f, 0f, -40f)));
+		Vector3 behind = Centroid(field.Members) + new Vector3(0f, 0f, -40f);
+		field.See(3, behind);
+		Assert.Equal(DrillPhase.Approach, field.Decide());
+		Assert.Empty(field.Drill.Board.EntriesOf(0).ToArray());
+
+		// Fired upon from it, it is the squad's to answer.
+		field.Fire(1, behind + new Vector3(0f, 0f, 2f));
+		Assert.Equal(DrillPhase.GoToGround, field.Decide());
+		Assert.Equal(behind, Assert.Single(field.Drill.Board.EntriesOf(0).ToArray()).Feet);
+		Assert.True(field.Drill.Board.TryThreat(0, out Vector3 threat));
+		Assert.Equal(behind, threat);
+	}
+
+	[Fact]
+	public void AnEnemyAbreastOfTheSquad_IsOnItsList()
+	{
+		// Behind is more than BehindMeters back along the line to the point; just short of it
+		// and 40 m out to the side is beside the squad, not behind it.
+		var field = new Field(Squad(4, gunner: true, Point + new Vector3(0f, 0f, -40f)));
+		Vector3 abreast = Centroid(field.Members) + new Vector3(40f, 0f, 0.5f - SquadDrill.BehindMeters);
+		field.See(3, abreast);
+		Assert.NotEqual(DrillPhase.Approach, field.Decide());
+		Assert.Equal(abreast, Assert.Single(field.Drill.Board.EntriesOf(0).ToArray()).Feet);
+	}
+
+	private static Vector3 Centroid(DrillMember[] members)
+	{
+		Vector3 sum = Vector3.Zero;
+		foreach (DrillMember member in members)
+		{
+			sum += member.Position;
+		}
+
+		return sum / members.Length;
+	}
+
+	[Fact]
+	public void NearThePoint_AnEnemyBehindTheSquad_IsStillOnItsList()
+	{
+		// Within 20 m of where its order goes the squad's fight is on every side of it.
+		var field = new Field(Squad(4, gunner: true, Point + new Vector3(0f, 0f, -15f)));
+		field.See(3, Point + new Vector3(0f, 0f, -45f));
+		field.Decide();
+		Assert.Single(field.Drill.Board.EntriesOf(0).ToArray());
+	}
+
+	[Fact]
 	public void TheBase_TakesALowWallInTheBand_OffTheAssaultsAxis()
 	{
 		Field field = Approaching();

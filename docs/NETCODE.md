@@ -440,7 +440,7 @@ unit) — reliably, **to strategist peers only**, on the barracks report's 5 Hz 
 changed since that peer was last sent it, and whole to a peer that has just taken the chair. It is
 not in the unit snapshot, which every ground client gets unfogged: a setting is an order, and orders
 are not on the wire to the other side. A new round goes back to the default the server started with
-(`--unit-autonomy`, else the game mode's `UnitAutonomy`).
+(`--unit-autonomy`, else the game mode's `UnitAutonomy`: on since TACTICS T8).
 
 Not checked: whether the target point is on the navmesh. A unit told to walk into a wall paths as
 close as it can and stops, which is the same thing that happens when a wall is built across its

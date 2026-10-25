@@ -356,11 +356,12 @@ public class LaunchOptionsTests
 	}
 
 	[Fact]
-	public void TheDefaultUnitAutonomyIsOff_AndTheFlagThenTheGameModeOverrideIt()
+	public void TheDefaultUnitAutonomyIsOn_AndTheFlagThenTheGameModeOverrideIt()
 	{
-		// Off until docs/TACTICS.md T8 has measured the tactics: a round plays as it did.
-		Assert.Equal(MicroAutonomy.Off, MicroAutonomyNames.Default);
-		Assert.Equal(MicroAutonomy.Off, MicroAutonomyNames.Resolve(null, null));
+		// On since docs/TACTICS.md T8 measured the tactics; off is a round as it was before.
+		Assert.Equal(MicroAutonomy.On, MicroAutonomyNames.Default);
+		Assert.Equal(MicroAutonomy.On, MicroAutonomyNames.Resolve(null, null));
+		Assert.Equal(MicroAutonomy.Off, MicroAutonomyNames.Resolve(null, MicroAutonomy.Off));
 		Assert.Equal(MicroAutonomy.On, MicroAutonomyNames.Resolve(null, MicroAutonomy.On));
 		Assert.Equal(MicroAutonomy.Off, MicroAutonomyNames.Resolve(MicroAutonomy.Off, MicroAutonomy.On));
 		Assert.Equal(MicroAutonomy.On, MicroAutonomyNames.Resolve(MicroAutonomy.On, MicroAutonomy.Off));

@@ -71,8 +71,8 @@ public partial class GameModeDefinition : Resource
 	/// <summary>
 	/// Whether the strategist side's new units start with micro-autonomy on
 	/// (docs/TACTICS.md §5.9); <c>--unit-autonomy</c> overrides it, and a strategist
-	/// changes it in game. Off until the tactics are measured (T8), so a round plays as
-	/// it did unless somebody turns them on.
+	/// changes it in game. On since the tactics were measured (T8); off is how a round
+	/// played before them.
 	/// </summary>
 	[Export]
 	public MicroAutonomy UnitAutonomy = MicroAutonomyNames.Default;

@@ -138,7 +138,7 @@ recurrence turns out to be the thing that matters, that is a reason to move the
 learner to Python rather than a reason to fight the C# trainer.
 
 Stacking multiplies the input width by N — 145 floats becomes 580 at `--history 4`
-on the ground, and 1,092 becomes 4,368 for a strategist, which is a good reason to
+on the ground, and 1,156 becomes 4,624 for a strategist, which is a good reason to
 leave the strategist at 1 or 2 and let the ghost ages in its vector carry the
 history instead. They already do: `ticks_since_seen` **is** a memory the server
 maintains.

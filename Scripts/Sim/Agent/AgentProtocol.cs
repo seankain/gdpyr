@@ -45,8 +45,13 @@ public static class AgentProtocol
 	/// only ever reads it would have been fine — but the version names the whole
 	/// published schema, and a client that could not tell whether the server it is
 	/// talking to has a strategist seat would have to find out by being refused.
+	///
+	/// Bumped to <c>-3</c> by docs/TACTICS.md T8, when new units began with their
+	/// micro-autonomy on: each unit of the strategist vector gained a float saying
+	/// whether it is (§5.9), so the unit block's records are 15 floats, not 14, and
+	/// every offset after the block moved. The ground layout is unchanged again.
 	/// </summary>
-	public const string SchemaVersion = "gdpyr-agent-obs-2";
+	public const string SchemaVersion = "gdpyr-agent-obs-3";
 
 	/// <summary>The u32 length prefix itself.</summary>
 	public const int LengthBytes = 4;
