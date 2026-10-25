@@ -82,7 +82,8 @@ public sealed class HtnSchema
 		typeof(bool), // BeltLow
 		typeof(DrillPhase), // DrillPhase
 		typeof(DrillTask), // DrillTask
-		typeof(CoverState)); // DrillSpot
+		typeof(CoverState), // DrillSpot
+		typeof(CoverState)); // Guard
 
 	public static readonly HtnSchema Squad = new(HtnDomainKind.Squad, typeof(CommandFact), typeof(CommandGoal),
 		typeof(CommandTask), // Task

@@ -1664,7 +1664,7 @@ public class UnitHtnTests
 	// ---- sharing and allocation --------------------------------------------
 
 	/// <summary>How many situations <see cref="Situation"/> has.</summary>
-	private const int Situations = 28;
+	private const int Situations = 30;
 
 	private static readonly UnitTraits Sniper = new(70f, 70f, 1.5f, 20f, UnitDoctrine.Marksman);
 
@@ -1686,7 +1686,8 @@ public class UnitHtnTests
 	/// at — which a rifleman, offered the same, does not take. The next two are a
 	/// defending heavy gunner (§5.2) with a place to suppress, and into its reserve. The
 	/// last two are a unit in its squad's drill (§5.5): moved onto the point and bounding,
-	/// and holding under an attack elsewhere.
+	/// and holding under an attack elsewhere. The last two are a defender escorting an exposed
+	/// builder (§5.10): on its way to its spot by the builder, and in it, covering it with fire.
 	/// </summary>
 	private static void Situation(UnitContext c, int phase, out OrderKind order, out bool hasTarget)
 	{
@@ -1695,6 +1696,7 @@ public class UnitHtnTests
 		bool peek = phase is 22 or 23;
 		bool gunner = phase is 24 or 25;
 		bool drill = phase is 26 or 27;
+		bool escort = phase is 28 or 29;
 		c.ObjectivePoint = phase == 15 ? c.Position : Objective;
 		c.HasCoverPoint = phase == 16;
 		c.CoverPoint = Objective + new Vector3(0f, 0f, -6f);
@@ -1709,7 +1711,7 @@ public class UnitHtnTests
 			HasFireCover = fired,
 			FireCoverHides = fired,
 		});
-		c.SenseAutonomy(fired || phase == 21 || peek || gunner || drill ? MicroAutonomy.On : MicroAutonomy.Off);
+		c.SenseAutonomy(fired || phase == 21 || peek || gunner || drill || escort ? MicroAutonomy.On : MicroAutonomy.Off);
 		c.SenseDrill(drill ? DrillPhase.Bound : DrillPhase.None,
 			phase == 26 ? DrillTask.Bound : phase == 27 ? DrillTask.Hold : DrillTask.None, drill,
 			Anchor + new Vector3(0f, 0f, 6f), true, phase == 27, Objective + new Vector3(0f, 1.3f, 0f), Objective);
@@ -1719,13 +1721,15 @@ public class UnitHtnTests
 		c.SensePeek(peek, hide, hide, true, peek ? OwnerId.ForPeer(7) : OwnerId.None, standoff: false);
 		c.SenseSuppress(phase == 24 ? GunnerPlaces : ReadOnlySpan<Vector3>.Empty);
 		c.SenseWeapon(false, 0, phase == 25 ? 10 : 150);
+		c.SenseGuard(escort, phase == 29 ? c.Position : Anchor + new Vector3(6f, 0f, 6f), true, phase == 29,
+			Anchor + new Vector3(30f, 1.5f, 6f), c.Tick);
 
 		order = phase switch
 		{
 			0 or 4 or 5 or 6 or 7 or 13 or 14 or 15 or 16 => OrderKind.Attack,
 			1 or 2 => OrderKind.Build,
 			3 => OrderKind.Attack,
-			8 or 9 or 10 or 19 or 20 or 21 or 22 or 23 or 24 or 25 => OrderKind.Defend,
+			8 or 9 or 10 or 19 or 20 or 21 or 22 or 23 or 24 or 25 or 28 or 29 => OrderKind.Defend,
 			11 => OrderKind.Patrol,
 			17 => OrderKind.Embark,
 			18 => OrderKind.Unload,
@@ -1832,7 +1836,7 @@ public class UnitHtnTests
 			UnitGoal.HoldPost, UnitGoal.Patrol, UnitGoal.Obey, UnitGoal.Resupply, UnitGoal.TakePoint,
 			UnitGoal.HoldPoint, UnitGoal.HoldPointCover, UnitGoal.Obey, UnitGoal.Obey, UnitGoal.TakeCoverFromFire,
 			UnitGoal.ReturnFire, UnitGoal.ThrowGrenade, UnitGoal.HoldPost, UnitGoal.HoldPost, UnitGoal.HoldPost,
-			UnitGoal.HoldPost, UnitGoal.DrillBound, UnitGoal.DrillHold,
+			UnitGoal.HoldPost, UnitGoal.DrillBound, UnitGoal.DrillHold, UnitGoal.GuardBuilder, UnitGoal.GuardBuilder,
 		};
 		Assert.Equal(Situations, expected.Length);
 

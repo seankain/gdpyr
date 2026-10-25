@@ -1,0 +1,32 @@
+{
+  "name": "riflemen holding ground beyond their sensor go to cover a builder fired upon at its site, and shoot back",
+  "bot_ai": "htn",
+  "unit_autonomy": "on",
+  "seeds": [1, 2, 3],
+  "duration_ticks": 1200,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 1 },
+
+  "seats": [
+    { "id": "shooter", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_and_fire.json" },
+    { "id": "chair", "team": "strategist", "policy": "strategist", "step_mul": 6,
+      "script": { "repeat": false, "steps": [
+        { "ticks": 1140, "commands": [
+          { "cmd": "construct", "units": ["b1"], "structure": "sandbag_wall", "target": [-11.2, 13], "yaw": 0 }
+        ] }
+      ] } }
+  ],
+
+  "spawns": [
+    { "peer": "shooter", "at": [-10, 1, 50], "look": [0, 0] },
+    { "unit": "builder", "id": "b1", "team": "strategist", "at": [-11.2, 0.5, 19], "order": "none" },
+    { "unit": "infantry", "id": "r1", "team": "strategist", "at": [-14, 0.5, -3], "order": "defend" },
+    { "unit": "infantry", "id": "r2", "team": "strategist", "at": [-16, 0.5, -3], "order": "defend" }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.unit_task[goal=33].count", "op": "over_seeds", "cmp": ">=", "value": 1, "fraction": 1.0 },
+    { "metric": "observation.shooter.self.health.min", "op": "over_seeds", "cmp": "<", "value": 1, "fraction": 1.0 }
+  ]
+}

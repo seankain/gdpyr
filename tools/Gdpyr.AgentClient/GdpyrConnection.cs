@@ -68,6 +68,12 @@ public sealed class GdpyrCommand
 	/// <summary>For <c>autonomy</c> and <c>autonomy_default</c>: <c>on</c> or <c>off</c> (docs/TACTICS.md §5.9).</summary>
 	public string Mode;
 
+	/// <summary>For a construct: the structure, by the name <c>welcome</c> publishes (docs/AGENT_API.md §7.4).</summary>
+	public string Structure;
+
+	/// <summary>For a construct: the way the structure's front faces, in radians.</summary>
+	public float Yaw;
+
 	public static GdpyrCommand Build(int barracks, int tier) =>
 		new() { Cmd = "build", Barracks = barracks, Tier = tier };
 
@@ -90,6 +96,10 @@ public sealed class GdpyrCommand
 
 	/// <summary>What the side's new units start with.</summary>
 	public static GdpyrCommand AutonomyDefault(string mode) => new() { Cmd = "autonomy_default", Mode = mode };
+
+	/// <summary><paramref name="builders"/> go and put <paramref name="structure"/> up at <c>[x, z]</c>, its front facing <paramref name="yaw"/> (docs/NETCODE.md §10.5).</summary>
+	public static GdpyrCommand Construct(int[] builders, string structure, float x, float z, float yaw) =>
+		new() { Cmd = "construct", Units = builders, Structure = structure, Target = new[] { x, z }, Yaw = yaw };
 }
 
 /// <summary>
@@ -603,6 +613,12 @@ public sealed class GdpyrConnection : IDisposable
 		if (command.Mode != null)
 		{
 			writer.WriteString("mode", command.Mode);
+		}
+
+		if (command.Structure != null)
+		{
+			writer.WriteString("structure", command.Structure);
+			writer.WriteNumber("yaw", command.Yaw);
 		}
 
 		writer.WriteNumber("barracks", command.Barracks);

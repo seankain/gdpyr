@@ -57,7 +57,8 @@ public static class AiGoals
 				or UnitGoal.ThrowGrenade or UnitGoal.ToHide or UnitGoal.PopOut or UnitGoal.FireFromPeek or UnitGoal.Duck
 				or UnitGoal.Relocate or UnitGoal.SuppressPoint or UnitGoal.DrillGround or UnitGoal.DrillFirePosition
 				or UnitGoal.DrillBound or UnitGoal.DrillHold or UnitGoal.DrillRush => AiTaskFamily.Attack,
-			UnitGoal.EngageInLeash or UnitGoal.AnswerCall or UnitGoal.HoldPost => AiTaskFamily.DefendZone,
+			UnitGoal.EngageInLeash or UnitGoal.AnswerCall or UnitGoal.HoldPost
+				or UnitGoal.GuardBuilder => AiTaskFamily.DefendZone,
 			UnitGoal.Patrol => AiTaskFamily.Recon,
 			UnitGoal.Obey => AiTaskFamily.Obey,
 			UnitGoal.TakeCoverFromFire or UnitGoal.ReturnFire => AiTaskFamily.React,

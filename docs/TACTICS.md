@@ -1,11 +1,12 @@
 # Unit tactics — implementation plan
 
-Status: **T0–T8 built (§6); micro-autonomy is on by default since T8, which measured it in
-bot-only rounds against off. Decisions T-D1 to T-D7 taken (§8).** Planned from the code at
+Status: **T0–T9 built (§6); micro-autonomy is on by default since T8, which measured it in
+bot-only rounds against off; T9 adds escorts for exposed builders. Decisions T-D1 to T-D7 taken
+(§8).** Planned from the code at
 `6213d05`. Extends the unit HTN of [`HTN_BOTS.md`](HTN_BOTS.md) §5.2 and the cover of
 [`COVER.md`](COVER.md).
 
-Scope: strategist units that fight well without micro. Five requirements:
+Scope: strategist units that fight well without micro. Six requirements:
 
 1. Heavy gunners suppress where enemies are or were, and anchor an assault by riflemen.
 2. Snipers engage from range out of concealment: hide, pop out, fire, duck, relocate.
@@ -13,6 +14,9 @@ Scope: strategist units that fight well without micro. Five requirements:
 4. Every unit with grenades throws them at known enemies behind cover.
 5. A Move to a control point is a goal — take the point — whose subgoals are 1–4 and moving as a
    team, not a march into fire.
+6. Units holding ground cover and defend an exposed builder in their area while it builds: they
+   go to it, stand between it and the threat or behind a wall beside it, and fire back at where
+   its fire came from (T9, §5.10).
 
 And one control: **micro-autonomy**, a per-unit setting the strategist switches in game, observed
 by the unit's planner as a fact. On, a unit does all of the above; off, it carries out orders as it
@@ -99,6 +103,7 @@ HTN_BOTS.md §4.2 holds. Added:
 | Ground domain | `GroundDomain.cs`, `BotPilot.cs`, `BotBrain.cs` | `GroundFact.Suppressed`, `GroundIntent.Duck`, `BotSituation.Duck` (§5.7). |
 | Debugger | `Scripts/Sim/AiDebug/` | The drill as a domain kind; new facts and goals in `HtnSchema` / `AiGoals`; world lines for threat points, fire lines and bound spots. |
 | Commander | `StrategistBrain.TrainedWanted` and `ShouldTrain`, `StrategistTraits.RiflemenPerGunner` and `Snipers`; `Commander.Route` (`Spearhead`, `Holding`), `CommandUnit.Gunner` and `Marksman`; `BotStrategist.Train` (T7) | Gunners trained at its pillboxes and snipers at its towers; one gunner to an assault squad, attached as a tank is; snipers to the squads holding ground. Composition only: the drill is the units'. |
+| Escort | `Scripts/Sim/Escort.cs` (`EscortPlan`, `EscortCharge`, `EscortCandidate`), `Scripts/Rts/UnitManager.Escort.cs` (T9) | Which builders are exposed, who escorts whom, and where an escort with no wall stands, as pure functions; the engine half assigns escorts once a tick and finds each one's spot and line on its scan (§5.10). |
 | Agent events | `Scripts/Sim/Agent/AgentEvents.cs` | `grenade_thrown` (T0: thrower, its catalog id, whether the target was hidden); `unit_task` (a unit started one of §5's goals, from T1) and `squad_drill` (a drill phase change, from T6), each added with the first thing that emits it. For scenarios; additive. |
 
 ---
@@ -194,6 +199,8 @@ unit
 │   └─ get to cover             TakeCoverFromFire {FiredUpon≠none, FireCover≠none}
 ├─ Resupply                     unchanged
 ├─ Build                        "hide behind cover" hides from the fired-from point when there is one
+├─ **Guard a builder**          [MicroAutonomy=on ∧ Doctrine∈{rifleman,gunner} ∧ Order∈{Defend,None}
+│                                ∧ SquadPhase≠falling back ∧ Guard≠none]  GuardBuilder {the same}    §5.10
 ├─ **Marksman**                 [Doctrine=marksman ∧ (Order∈{Attack,Defend,None} ∨ Objective) ∧ Peek≠none]  §5.3
 │   ├─ displace                 [Burned ∨ Standoff]  Relocate
 │   ├─ engage                   [Peek=ready ∧ PeekTarget ∧ (DrillTask≠overwatch ∨ DrillPhase∈{bound,
@@ -402,6 +409,26 @@ than misreading it. No translation layer, as `DemoFormat.cs` already says of bum
 | Agent API | Strategist commands `autonomy {units, mode}` and `autonomy_default {mode}`; `welcome` says `unit_autonomy`, the server's default. Since T8 the unit block of the strategist observation carries the mode, the 15th float of each unit's record (`autonomy`), which changed the published layout: `gdpyr-agent-obs-2` → `-3` (AGENT_API.md §4, §6.2). |
 | Scenarios | A spawn's `"autonomy": "on" \| "off"`; a strategist script's `autonomy` and `autonomy_default` commands; a scenario's `"unit_autonomy"`, which the harness passes to the server it starts as `--unit-autonomy`, as it does `bot_ai` — and its own `--unit-autonomy` overrides, as `--bot-ai` does. That is the A/B for every claim of §6: the same build, tactics on and off. |
 | Commander | Sets nothing: its units take the team default, and it never changes a unit's setting, so a person sharing the army with it keeps the modes they chose. |
+
+### 5.10 Escorting an exposed builder — requirement 6
+
+As built in T9 (`Escort.cs`'s `EscortPlan`; `UnitManager.Escort.cs`; the unit domain's "guard a
+builder" select, below Build and above the marksman):
+
+| | |
+|---|---|
+| Who escorts | A rifleman or a heavy gunner (`UnitContext.Escorts`), its micro-autonomy on, holding ground — a defend order or none (`UnitContext.EscortsUnder`) — on the field and on foot, its squad not falling back. A marksman's part stays overwatch from its own concealment (§5.3). A move, an attack, a patrol, a build or a ride is carried out as given (HTN_BOTS.md §5.2). |
+| Whom | A builder with a build order at its site — within 20 m of the structure's base point (`EscortPlan.SiteMeters`): working, or behind the cover it took from there — that is exposed: fired upon in its window (§4.1), or with a contact the side remembers, live or a ghost and not dead since, within 30 m of it (`ThreatMeters`). Its threat is where its fire came from, else the nearest such contact. |
+| Who escorts whom | Once a tick, after the census and the drills and before any unit moves (`UnitManager.AssignEscorts`, `EscortPlan.Assign`): for each exposed builder — those fired upon first — the two (`PerBuilder`) nearest units that may escort and have it inside their leash, measured from the order's anchor; each escorts one builder. One that escorted it on the last pass counts 3 m nearer (`KeepMeters`), so two walking past each other do not swap; ties go to the lower id. Written on the unit as `Unit.Escorting`. |
+| Spot | On the escort's scan (`SenseEscort`): a low wall within 8 m of the builder (`SpotMeters`) it can fire over at the threat, 6 m to its engage range from it, inside its leash — the board's search from the builder, with the side's claims; else a screen between the builder and the threat, 4 m out from it (`ScreenMeters`), less where that would put it within 6 m of the threat, two escorts 3 m apart across the line in slot order (`ScreenPoint`), brought inside its leash (`IntoLeash`). In the open, its body is between the builder and the fire. One spot a unit: one reacting to fire keeps its fire-cover spot, and its guard spot is the screen until that ends; while it escorts, the fight's cover is not looked for. |
+| Fact | `UnitFact.Guard`, a `CoverState`: none (escorting nobody) · near · in. The duty and the spot are the scan's, the band every tick's, as `DrillSpot`'s are. |
+| Operator | `GuardBuilder` (goal 33): to the spot without stopping, firing on the way; in it, holding, standing to fight — standing watch, not down behind the wall, except to reload behind a box (§5.8). A target of its own it fights from there. Covering fire: at where the builder's latest round came from, for 2 s after each (`ReturnFireTicks`), when the scan found that inside its engage range with a line over the cover board — a place, nobody's focus, no grenade by it, as `ReturnFire`'s. |
+| Shooter | `AcquireTarget` tries whoever last fired at the builder it escorts after its own shooter and before the squad focus, by the same rule: one ray, replacing the search's when it is clear; when it is blocked, neither the focus nor the search pays for it again (§4.1). |
+| Bounds | Distance: the leash — the builder must be inside it, and the spot is brought inside it. Time: the duty lasts while the builder is exposed and at its site, and no longer; there is no cap under a defend order or none, as React and a gunner have none there (§5.1, §5.2). A walk to the spot of more than 12 s under one operator (`GuardWalkMaxTicks`) covers the builder from where it stands (P4). |
+| Domain | `guard a builder` [MicroAutonomy=on ∧ Doctrine∈{rifleman,gunner} ∧ Order∈{Defend,None} ∧ SquadPhase≠falling back ∧ Guard≠none] `GuardBuilder`, holding by one executing condition, the same every tick (AI_DEBUG.md §3.1). Below Retreat, Grenade, React to fire — which looks after the unit itself — Resupply and Build; above the marksman, the gunner and Defend Zone, so a garrison's posts give way to the builder putting up its walls. |
+| Knowledge | The builder's fired-from point and its shooter's id are shared with its escorts, as a squad's are among its members (§4.2, rule 4); none of it enters `ContactMemory`, and an escort shoots the builder's shooter only once it has a line to them. |
+| Not changed | What a builder does: it hides when hit, as before (§5.1, "Builder"). The commander: nothing; its garrisons hold ground under Defend, so a builder digging in for them (COVER.md §7) is escorted by them. Legacy plans nothing. |
+| Debugger | `Guard` among the unit facts; `GuardBuilder` a Defend Zone task; the intent's point is the spot and `FireAt` the covering fire. The debug HUD's `fire` row counts builders escorted. The unit domain is 99 tasks and 217 conditions (96 and 212 before). |
 
 ---
 
@@ -1244,7 +1271,68 @@ unless a strategist or a scenario turned micro-autonomy on; T8 turned it on.
     gunners were trained in the nine rounds on, and the event stream does not say which squads
     they drilled with.
 
-Total: about 13–14 days.
+### T9 — Escorting an exposed builder (1 day)
+
+- §5.10: the escort pass, the spot and the screen, the unit domain's "guard a builder", the
+  builder's shooter in target acquisition; a `construct` command for scenario scripts, so a file
+  can put a builder to work (AGENT_API.md §9.1).
+- **Result — built.**
+  - `dotnet test`: 2175 passed, 0 failed (2138 before; 37 new: 33 in `EscortTests`, 4 in
+    `ScenarioTests`). `UnitHtnTests`' 0 B population and its determinism trace have 30 situations,
+    the last two a defender escorting a builder, on its way to its spot and in it covering it;
+    `AgentEventTests` pins goal 33. `dotnet build Gdpyr.csproj`: 0 warnings, 0 errors. Domains:
+    unit 99 tasks and 217 conditions (96 and 212 before), of the debugger's 255; unit facts 31, of
+    the trace's 32 (`HtnTrace.MaxFacts`) — the next unit fact needs that limit raised.
+  - **The tests test something.** One piece removed at a time, the count of tests that failed:
+    the select's micro-autonomy condition 1; its doctrine and order condition 4; its falling-back
+    condition 1; the executing condition 5; covering fire's two seconds 1; covering fire only with
+    a line 1; the walk give-up 1; crouching to reload behind a box 1, and only behind one 1; the
+    branch below React to fire (moved above it) 1; builders fired upon first 1; keeping the duty
+    against a unit less than 3 m nearer 1; ties to the lower id 1; the builder inside the leash 1;
+    one builder an escort 3; two escorts a builder (three) 4; the screen's standoff 1; its spacing
+    2; brought inside the leash 1; the threat within 30 m 1; no dead threat 1, no forgotten one 1;
+    the fired-from point before a contact 1; the goal a tactic on the stream 2. The falling-back
+    condition first failed nothing: the executing condition ended the plan on its first tick, and
+    the test asked only that the unit was not escorting; it now asks that no plan names
+    `GuardBuilder`.
+  - **Scenario** `tactics_escort_builder`: a scripted ground seat at (−10, 50) firing down x = −10
+    (`hold_and_fire`); a builder sent by a scripted strategist seat's `construct` to put a sandbag
+    wall up at (−11.2, 13), standing 1.2 m beside that line on the wall's far side, so the rounds
+    reach it as near misses and the site takes the rest; two riflemen defending at (−14, −3) and
+    (−16, −3), 18 m from the builder and 53 m from the shooter — beyond their 45 m sensor. Claims: 0
+    pilot fallbacks; `unit_task` 33 ≥ 1 and the shooter's health below full, every seed. Seeds
+    1–3, 1,200 ticks, on this phase's build, ticks counted from the spawns:
+
+    | | micro-autonomy on | off (`--unit-autonomy off`, otherwise the same file) |
+    |---|---|---|
+    | Claims | 3 of 3 held | goal 33 and the shooter hit fail on every seed, as they should; the fallbacks hold |
+    | Escorts (`unit_task` 33) | both riflemen every seed, at 67–76 ticks — 7–16 after the first round at 60 | none |
+    | The shooter first hit · killed | 253–262 · 297–325 | never · never |
+    | The wall built | 342 every seed | 342 every seed |
+    | Hits on the builder · on its escorts | 0 · 0 | 0 · — |
+
+    Off, the riflemen hold their anchors and never see the shooter; the builder, whose 20 m engage
+    range does not reach it, works on. The first draft stood one rifleman at (−10, −3), on the line
+    of fire: off, the shooter killed it at 53 m, five hits in 24 ticks. The wall goes up at the same tick either
+    way: the site stops what the near misses do not, and a near miss does not stop a builder, which
+    hides only when hit (§5.1). So the file claims the behaviour — the escort, and the shooter
+    answered — not a builder saved; a round in which the builder is hit is not in it.
+  - **Suite**: `./scripts/playtest.sh Tests/Scenarios/*.json` on this phase's build, headless, the
+    default (micro-autonomy on) except where a scenario sets it: **30 of 30 passed**, 0 failed, in
+    50 min 59 s of rounds; 0 pilot fallbacks. Among them `tactics_escort_builder` (goal 33 in 3 of
+    3 seeds, the shooter hit in 3 of 3), the five other `tactics_*`, `builder_fortifies` and
+    `htn_strategist_digs_in`. The suite with `--unit-autonomy off` was not run for this phase.
+  - **Differences from the first idea.** Escorts are riflemen and heavy gunners only, under a
+    defend order or none; a marksman keeps its overwatch, and a move is not second-guessed. Two a
+    builder, not every unit in reach, so a garrison keeps its ring. Covering fire answers rounds at
+    the builder, as `ReturnFire` answers rounds at the unit, rather than firing at a contact that
+    has not fired. In a spot it stands watch rather than crouching between rounds — it is there to
+    see — and crouches only to reload behind a box.
+  - **Not checked.** A round with the commander's builder digging in for a garrison under fire;
+    bot-only rounds on and off; a builder actually hit, and whether escorts save it; a gunner as an
+    escort in a round; the debug HUD's `fire` row and the debugger's panel on a display; `unit ms`.
+
+Total: about 14–15 days.
 
 ---
 

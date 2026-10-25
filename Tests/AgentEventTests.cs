@@ -259,6 +259,7 @@ public class AgentEventTests
 		Assert.Equal(30, (int)UnitGoal.DrillBound);
 		Assert.Equal(31, (int)UnitGoal.DrillHold);
 		Assert.Equal(32, (int)UnitGoal.DrillRush);
+		Assert.Equal(33, (int)UnitGoal.GuardBuilder);
 		Assert.True(UnitContext.IsTactic(UnitGoal.TakeCoverFromFire));
 		Assert.True(UnitContext.IsTactic(UnitGoal.ReturnFire));
 		Assert.True(UnitContext.IsTactic(UnitGoal.ThrowGrenade));
@@ -266,6 +267,7 @@ public class AgentEventTests
 		Assert.True(UnitContext.IsTactic(UnitGoal.SuppressPoint));
 		Assert.True(UnitContext.IsTactic(UnitGoal.Reload));
 		Assert.True(UnitContext.IsTactic(UnitGoal.DrillBound));
+		Assert.True(UnitContext.IsTactic(UnitGoal.GuardBuilder));
 		Assert.False(UnitContext.IsTactic(UnitGoal.HoldCover));
 	}
 

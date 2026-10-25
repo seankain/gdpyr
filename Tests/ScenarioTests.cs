@@ -139,6 +139,32 @@ public class ScenarioTests
 	}
 
 	[Fact]
+	public void AStrategistScript_MaySendBuildersToPutAStructureUp()
+	{
+		Scenario scenario = Scenario.Parse(Scripted("""
+			{ "ticks": 1, "commands": [ { "cmd": "construct", "units": ["r1"], "structure": "sandbag_wall",
+			                              "target": [-11, 12], "yaw": 3.14159 } ] }
+			"""));
+
+		Assert.True(scenario.Seats[0].Script.TryEnter(0, out ScriptStep step));
+		Assert.Equal("construct", step.Commands[0].Cmd);
+		Assert.Equal(new[] { "r1" }, step.Commands[0].Units);
+		Assert.Equal("sandbag_wall", step.Commands[0].Structure);
+		Assert.Equal(new[] { -11f, 12f }, step.Commands[0].Target);
+		Assert.Equal(3.14159f, step.Commands[0].Yaw, 4);
+	}
+
+	[Theory]
+	[InlineData("""{ "ticks": 1, "commands": [ { "cmd": "construct", "units": ["r1"], "target": [1, 2] } ] }""")]
+	[InlineData("""{ "ticks": 1, "commands": [ { "cmd": "construct", "units": ["r1"], "structure": "barracks", "target": [1, 2] } ] }""")]
+	[InlineData("""{ "ticks": 1, "commands": [ { "cmd": "construct", "units": ["r1"], "structure": "pillbox" } ] }""")]
+	public void AConstructCommandThatCannotBeSent_IsASentence(string steps)
+	{
+		ScenarioException error = Assert.Throws<ScenarioException>(() => Scenario.Parse(Scripted(steps)));
+		Assert.Contains("a 'construct' command names its 'structure'", error.Message);
+	}
+
+	[Fact]
 	public void EveryCheckedInScenarioParsesAndNamesOnlyEventMetricsThatExist()
 	{
 		// A typo in a checked-in scenario's filter would otherwise surface as a failed

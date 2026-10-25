@@ -567,7 +567,9 @@ the way, but takes cover from fire it cannot see for at most 8 s in all since th
 Resupply still never pre-empt one. A unit whose micro-autonomy is off — the strategist's way to say
 "just go" — obeys a `Move` as this section describes, and so does every unit under `--bot-ai legacy`.
 The commander's own moves are retreats and refills, whose squads are marked falling back and do
-not react.
+not react. Since TACTICS.md T9 a rifleman or heavy gunner under a defend order or none, with
+micro-autonomy on, also leaves its post — within its leash — to escort a builder fired upon at its
+site, or with an enemy near it (TACTICS.md §5.10); a `Move` is still never second-guessed for it.
 
 **As built in H3** (`Scripts/Sim/Htn/UnitDomain.cs`, `SquadCensus.cs`; the engine half in
 `UnitManager`). The tree above is the domain, with these differences, each found by a test or in
