@@ -111,7 +111,7 @@ public partial class UnitManager
 	/// (docs/TACTICS.md §5.4), and the gunners firing at places they cannot see (§5.2).
 	/// </summary>
 	public string DescribeFire(uint tick) =>
-		$"{UnitsFiredUpon(tick)} under fire  {NearMissesNoted} near misses  {HitsNoted} hits  {HiddenThrows} grenades over cover this round  {GunnersSuppressing()} gunners suppressing";
+		$"{UnitsFiredUpon(tick)} under fire  {NearMissesNoted} near misses  {HitsNoted} hits  {HiddenThrows} grenades over cover this round  {GunnersSuppressing()} gunners suppressing  {BuildersEscorted()} builders escorted";
 
 	/// <summary>What one unit makes of one round: where it reckons it came from, and how close it was.</summary>
 	private void Note(Unit unit, in FireSource source, FireKind kind, uint tick)

@@ -182,6 +182,14 @@ public enum UnitFact : byte
 	/// </summary>
 	DrillSpot,
 
+	/// <summary>
+	/// <see cref="CoverState"/> of the spot it guards an exposed builder from (docs/TACTICS.md
+	/// §5.10) — a low wall by the builder it can fire over at the threat, else a screen
+	/// between the two — and whether it stands in it; none for a unit escorting nobody. The
+	/// duty and the spot are the scan's; the band every tick's.
+	/// </summary>
+	Guard,
+
 	Count,
 }
 
@@ -303,6 +311,12 @@ public enum UnitGoal : byte
 
 	/// <summary>The drill's assault: onto the point, or the threat point, without stopping or waiting for the squad.</summary>
 	DrillRush,
+
+	/// <summary>
+	/// An escort: to its spot by an exposed builder, firing on the way; in it, standing to
+	/// fight, and firing back at where the builder's fire came from (docs/TACTICS.md §5.10).
+	/// </summary>
+	GuardBuilder,
 }
 
 /// <summary>How the unit manager picks where to walk for an intent.</summary>
@@ -527,6 +541,13 @@ public readonly struct UnitPlanTraits
 	/// <summary>…and how long it carries the order out before it suppresses again.</summary>
 	public readonly int SuppressRetryTicks;
 
+	/// <summary>
+	/// How long an escort may walk to its spot by a builder, under one operator, before it
+	/// covers the builder from where it stands instead (docs/TACTICS.md §5.10, P4): a spot it
+	/// cannot reach is not one to keep walking at.
+	/// </summary>
+	public readonly int GuardWalkMaxTicks;
+
 	public UnitPlanTraits(float healthOkFraction, float healthCriticalFraction, float healthHysteresis,
 		float engagedFriendMeters, float paceAheadMeters, float paceResumeMeters, int paceMaxWaitTicks,
 		float postSpacingMeters, float postMinRadiusMeters, float postLeashShare, int underFireTicks,
@@ -540,7 +561,7 @@ public readonly struct UnitPlanTraits
 		float relocateMeters = 8f, float recentFireMeters = 6f, int recentFireTicks = SimConfig.TickRate * 20,
 		int suppressBurstTicks = SimConfig.TickRate, int suppressCycleTicks = SimConfig.TickRate * 2,
 		int beltReserveRounds = 30, int suppressMaxTicks = SimConfig.TickRate * 8,
-		int suppressRetryTicks = SimConfig.TickRate * 8)
+		int suppressRetryTicks = SimConfig.TickRate * 8, int guardWalkMaxTicks = SimConfig.TickRate * 12)
 	{
 		HealthOkFraction = healthOkFraction;
 		HealthCriticalFraction = healthCriticalFraction;
@@ -582,6 +603,7 @@ public readonly struct UnitPlanTraits
 		BeltReserveRounds = Math.Max(beltReserveRounds, 0);
 		SuppressMaxTicks = Math.Max(suppressMaxTicks, 1);
 		SuppressRetryTicks = Math.Max(suppressRetryTicks, 0);
+		GuardWalkMaxTicks = Math.Max(guardWalkMaxTicks, 1);
 	}
 
 	/// <summary>
@@ -601,7 +623,8 @@ public readonly struct UnitPlanTraits
 	/// from every one of the last 20 s, for 20 s at most (§5.3). A heavy gunner fires a
 	/// one-second burst every two seconds at a place it suppresses, keeps the last 30
 	/// rounds of its belt for what it sees, and under an order that goes somewhere
-	/// suppresses for 8 s and then carries the order out for 8 s (§5.2).
+	/// suppresses for 8 s and then carries the order out for 8 s (§5.2). An escort walks to
+	/// its spot by a builder for 12 s at most before it covers it from where it stands (§5.10).
 	/// </summary>
 	public static UnitPlanTraits Default => new(
 		healthOkFraction: 0.6f,
@@ -864,7 +887,11 @@ public sealed class UnitContext : BaseContext
 	/// <summary>Walks to a hide spot given up on. For the tests.</summary>
 	public int FailedPeeks;
 
-	/// <summary>Ticks the running operator has spent walking to a hide spot, against <see cref="UnitPlanTraits.PeekWalkMaxTicks"/>.</summary>
+	/// <summary>
+	/// Ticks the running operator has spent walking to a hide spot, against
+	/// <see cref="UnitPlanTraits.PeekWalkMaxTicks"/>, or to a guard spot, against
+	/// <see cref="UnitPlanTraits.GuardWalkMaxTicks"/>.
+	/// </summary>
 	public int WalkedTicks;
 
 	/// <summary>Ticks it has spent reacting to fire under its current order, against <see cref="UnitPlanTraits.ReactMaxTicks"/>.</summary>
@@ -894,6 +921,32 @@ public sealed class UnitContext : BaseContext
 
 	/// <summary>Where a rush goes when its order is not a point to take: the squad's threat point.</summary>
 	public Vector3 DrillRushPoint;
+
+	/// <summary>
+	/// Where it guards the builder it escorts from (docs/TACTICS.md §5.10), from its scan: a
+	/// low wall by the builder it can fire over at the threat, else a screen between the two,
+	/// inside its leash. Only with <see cref="HasGuardPoint"/>, which is the duty itself.
+	/// </summary>
+	public bool HasGuardPoint;
+
+	/// <inheritdoc cref="HasGuardPoint"/>
+	public Vector3 GuardPoint;
+
+	/// <summary>A box beside <see cref="GuardPoint"/> hides it from the builder's threat: down behind it while it reloads.</summary>
+	public bool GuardCovered;
+
+	/// <summary>
+	/// Where its covering fire goes: where the latest round at the builder came from, when
+	/// the scan found that in its engage range with a line over the cover board
+	/// (<see cref="GuardFires"/>), and the tick that round came on.
+	/// </summary>
+	public Vector3 GuardFirePoint;
+
+	/// <inheritdoc cref="GuardFirePoint"/>
+	public bool GuardFires;
+
+	/// <inheritdoc cref="GuardFirePoint"/>
+	public uint GuardFiredTick;
 
 	/// <summary>
 	/// Ticks a heavy gunner has suppressed under an order that goes somewhere since it last
@@ -933,7 +986,21 @@ public sealed class UnitContext : BaseContext
 		goal is UnitGoal.TakeCoverFromFire or UnitGoal.ReturnFire or UnitGoal.ThrowGrenade or UnitGoal.ToHide
 			or UnitGoal.PopOut or UnitGoal.FireFromPeek or UnitGoal.Duck or UnitGoal.Relocate or UnitGoal.SuppressPoint
 			or UnitGoal.Reload or UnitGoal.DrillGround or UnitGoal.DrillFirePosition or UnitGoal.DrillBound
-			or UnitGoal.DrillHold or UnitGoal.DrillRush;
+			or UnitGoal.DrillHold or UnitGoal.DrillRush or UnitGoal.GuardBuilder;
+
+	/// <summary>
+	/// The orders a unit escorts a builder under (docs/TACTICS.md §5.10): those that hold
+	/// ground — a defend, or none — with a leash to keep it in. An order that goes somewhere
+	/// is carried out; a build, a ride or an unload is its own.
+	/// </summary>
+	public static bool EscortsUnder(OrderKind order) => order is OrderKind.Defend or OrderKind.None;
+
+	/// <summary>
+	/// The doctrines that escort (docs/TACTICS.md §5.10): a rifleman and a heavy gunner. A
+	/// marksman's part is overwatch, from its own concealment; a builder, a vehicle or a
+	/// truck has no tactics of its own.
+	/// </summary>
+	public static bool Escorts(UnitDoctrine doctrine) => doctrine is UnitDoctrine.Rifleman or UnitDoctrine.Gunner;
 
 	/// <summary>
 	/// Whether an order onto a control point is a point to take (docs/TACTICS.md §5.6): an
@@ -1098,6 +1165,23 @@ public sealed class UnitContext : BaseContext
 		SenseDrillSpot();
 	}
 
+	/// <summary>
+	/// The builder it escorts, from its scan (docs/TACTICS.md §5.10): whether it escorts one,
+	/// the spot it guards it from and whether a box there hides it from the builder's threat,
+	/// and where its covering fire goes, whether it may, and the tick of the round it answers.
+	/// None of it for a unit escorting nobody.
+	/// </summary>
+	public void SenseGuard(bool escorting, Vector3 spot, bool covered, bool fires, Vector3 firePoint, uint firedTick)
+	{
+		HasGuardPoint = escorting;
+		GuardPoint = spot;
+		GuardCovered = escorting && covered;
+		GuardFires = escorting && fires;
+		GuardFirePoint = firePoint;
+		GuardFiredTick = firedTick;
+		SenseGuardSpot();
+	}
+
 	/// <summary>A new order, or a new life: suppressing starts over, its cap and any give-up with it.</summary>
 	public void ResetSuppress()
 	{
@@ -1206,12 +1290,18 @@ public sealed class UnitContext : BaseContext
 		SenseFireCover();
 		SensePeekState();
 		SenseDrillSpot();
+		SenseGuardSpot();
 	}
 
 	/// <summary>Its drill spot, every tick, as <see cref="SenseCover"/> is: the spot is the scan's, whether it stands in it now's.</summary>
 	private void SenseDrillSpot() =>
 		Sense(UnitFact.DrillSpot, (byte)CoverBands.Band(HasDrillPoint, Flat(Position, DrillPoint), true,
 			(CoverState)Get(UnitFact.DrillSpot)));
+
+	/// <summary>Its guard spot, every tick, as its drill spot is: the duty and the spot are the scan's, whether it stands in it now's.</summary>
+	private void SenseGuardSpot() =>
+		Sense(UnitFact.Guard, (byte)CoverBands.Band(HasGuardPoint, Flat(Position, GuardPoint), true,
+			(CoverState)Get(UnitFact.Guard)));
 
 	/// <summary>
 	/// Where a marksman is in its pair, every tick (docs/TACTICS.md §5.3): the pair is the
@@ -1355,6 +1445,7 @@ public sealed class UnitContext : BaseContext
 			UnitGoal.ReturnFire => Get(UnitFact.FireCover) == (byte)CoverState.In,
 			UnitGoal.DrillGround or UnitGoal.DrillFirePosition or UnitGoal.DrillHold =>
 				Get(UnitFact.DrillSpot) == (byte)CoverState.In && DrillCovered,
+			UnitGoal.GuardBuilder => Get(UnitFact.Guard) == (byte)CoverState.In && GuardCovered,
 			_ => false,
 		};
 
@@ -1674,9 +1765,50 @@ public sealed class UnitContext : BaseContext
 				// Onto the point, or the threat point, not waiting for the squad: the assault.
 				return Go(Is(UnitFact.Objective) ? ObjectivePost : DrillRushPoint, stopToFight: false);
 
+			case UnitGoal.GuardBuilder:
+				// To its spot by the builder without stopping, covering it on the way; in it, it
+				// stands to fight — standing watch, not down behind the wall — and a walk that
+				// does not get there in time covers it from where it stands (docs/TACTICS.md §5.10).
+				CoverTheBuilder();
+				return Get(UnitFact.Guard) == (byte)CoverState.In || GuardWalked()
+					? Hold()
+					: Go(GuardPoint, stopToFight: false);
+
 			default:
 				return TaskStatus.Failure;
 		}
+	}
+
+	/// <summary>
+	/// Fire at where the builder it escorts was fired upon from, for
+	/// <see cref="UnitPlanTraits.ReturnFireTicks"/> after each round that reaches the builder,
+	/// when its scan found that in its engage range with a line over the cover board: a place,
+	/// as <see cref="FireBack"/>'s is, so it is nobody's focus and no grenade goes there by it.
+	/// A target of its own it fires at instead (docs/TACTICS.md §5.10).
+	/// </summary>
+	private void CoverTheBuilder()
+	{
+		if (GuardFires && Tick >= GuardFiredTick && Tick - GuardFiredTick <= (uint)Traits.ReturnFireTicks)
+		{
+			Intent.FireAt = true;
+			Intent.FirePoint = GuardFirePoint;
+		}
+	}
+
+	/// <summary>
+	/// Counts a tick of walking to a guard spot, once a tick however often the operator runs;
+	/// true once the running operator has walked for <see cref="UnitPlanTraits.GuardWalkMaxTicks"/>
+	/// without getting there.
+	/// </summary>
+	private bool GuardWalked()
+	{
+		if (Tick != _walkTick)
+		{
+			_walkTick = Tick;
+			WalkedTicks++;
+		}
+
+		return WalkedTicks > Traits.GuardWalkMaxTicks;
 	}
 
 	/// <summary>To its drill spot without stopping, firing on the way; in it, or with none, where it stands.</summary>
@@ -2198,6 +2330,29 @@ public sealed class UnitDomainBuilder : BaseDomainBuilder<UnitDomainBuilder, Uni
 		&& UnitContext.SuppressesUnder((OrderKind)c.Get(UnitFact.Order), c.Is(UnitFact.Objective));
 
 	/// <summary>
+	/// A unit that escorts builders, under an order it escorts under (docs/TACTICS.md §5.10,
+	/// <see cref="UnitContext.Escorts"/>, <see cref="UnitContext.EscortsUnder"/>).
+	/// </summary>
+	public UnitDomainBuilder IfEscort() => Condition("Doctrine∈{Rifleman,Gunner} and Order∈{Defend,None}", IsEscort);
+
+	/// <summary>
+	/// The executing condition an escort holds by (docs/TACTICS.md §5.10), as one: the
+	/// strategist still lets it, its order is still one it escorts under, its squad is not
+	/// falling back, and it still escorts a builder. One rather than four, for the debugger's
+	/// byte of conditions (docs/AI_DEBUG.md §3.1).
+	/// </summary>
+	public UnitDomainBuilder WhileGuarding() =>
+		_executingConditions
+			? ExecutingCondition("while guarding a builder", c =>
+				c.Get(UnitFact.MicroAutonomy) == (byte)MicroAutonomy.On && IsEscort(c)
+				&& c.Get(UnitFact.SquadPhase) != (byte)SquadPhase.FallingBack
+				&& c.Get(UnitFact.Guard) != (byte)CoverState.None)
+			: this;
+
+	private static bool IsEscort(UnitContext c) =>
+		UnitContext.Escorts(c.UnitTraits.Doctrine) && UnitContext.EscortsUnder((OrderKind)c.Get(UnitFact.Order));
+
+	/// <summary>
 	/// A primitive task whose operator asks the unit for <paramref name="goal"/>. Set
 	/// directly rather than through <c>Do</c>, which takes no abort callback: an
 	/// operator ended by a failed executing condition must clear its intent too (§3.7).
@@ -2333,6 +2488,22 @@ public static class UnitDomain
 				.End()
 				.Sequence("work")
 					.Act(UnitGoal.Work).While(UnitFact.Order, OrderKind.Build).End()
+				.End()
+			.End()
+			// Escorting an exposed builder (docs/TACTICS.md §5.10): only with the strategist's
+			// leave, a rifleman or a heavy gunner holding ground — a defend order or none — with
+			// the builder inside its leash, chosen as one of the nearest two by the escort pass.
+			// To a wall by the builder it can fire over at the threat, else between the two, and
+			// covering fire at where the builder's fire came from. Below reacting to fire, which
+			// looks after the unit itself; above the marksman, the gunner and its own order, so a
+			// garrison's posts give way to the builder that is putting up its walls.
+			.Select("guard a builder")
+				.If(UnitFact.MicroAutonomy, MicroAutonomy.On)
+				.IfEscort()
+				.IfNot(UnitFact.SquadPhase, SquadPhase.FallingBack)
+				.IfNot(UnitFact.Guard, CoverState.None)
+				.Sequence("cover the builder")
+					.Act(UnitGoal.GuardBuilder).WhileGuarding().End()
 				.End()
 			.End()
 			// A marksman (docs/TACTICS.md §5.3): only with the strategist's leave, and only with

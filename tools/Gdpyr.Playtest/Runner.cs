@@ -341,6 +341,8 @@ public sealed class Runner
 				"unload" => GdpyrCommand.Unload(Ids(command.Units)),
 				"autonomy" => GdpyrCommand.Autonomy(Ids(command.Units), command.Mode),
 				"autonomy_default" => GdpyrCommand.AutonomyDefault(command.Mode),
+				"construct" => GdpyrCommand.Construct(Ids(command.Units), command.Structure, command.Target[0],
+					command.Target[1], command.Yaw),
 				_ => GdpyrCommand.Order(command.Kind, Ids(command.Units),
 					command.Target.Length > 0 ? command.Target[0] : 0f,
 					command.Target.Length > 1 ? command.Target[1] : 0f),
@@ -372,6 +374,11 @@ public sealed class Runner
 				if (command.Vehicle != 0)
 				{
 					writer.WriteNumber("vehicle", command.Vehicle);
+				}
+
+				if (command.Structure != null)
+				{
+					writer.WriteString("structure", command.Structure);
 				}
 
 				writer.WriteEndObject();

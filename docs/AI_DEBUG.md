@@ -106,7 +106,8 @@ and effects.
 *(Measured on this branch; `ai_tree` prints them. The wire allows 255 of each.)* After TACTICS T6
 they are ground 37 and 62, unit 96 and 212 — 71 and 188 before T6 — squad 24 and 16, and the
 drill ([`TACTICS.md`](TACTICS.md) §5.5) 25 and 23. The unit domain is the one near the limit: each
-of its drill's steps holds by one executing condition rather than four for that reason.
+of its drill's steps holds by one executing condition rather than four for that reason. After T9's
+escort (§5.10), which holds by one as well, it is 99 and 217.
 
 **A task travels as its index.** The server numbers the domains its bots plan with
 (`GroundPlanning.Map`, `UnitPlanning.Map`, `CommanderPlanning.Map`); a spectator builds the same

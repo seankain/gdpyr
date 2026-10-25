@@ -40,19 +40,23 @@ public struct ScriptStep
 
 /// <summary>
 /// One command a scripted strategist seat sends (docs/VEHICLES.md §11): an
-/// <c>embark</c>, an <c>unload</c> or an <c>order</c>, naming units by the labels
-/// their spawns gave them — a scenario cannot know the ids the server will hand out.
+/// <c>embark</c>, an <c>unload</c>, an <c>order</c>, an <c>autonomy</c> or a
+/// <c>construct</c>, naming units by the labels their spawns gave them — a scenario
+/// cannot know the ids the server will hand out.
 /// </summary>
 public sealed class ScriptCommand
 {
 	/// <summary>The names the step type knows.</summary>
-	public static readonly string[] Names = { "embark", "unload", "order", "autonomy", "autonomy_default" };
+	public static readonly string[] Names = { "embark", "unload", "order", "autonomy", "autonomy_default", "construct" };
 
 	/// <summary>The modes an <c>autonomy</c> or <c>autonomy_default</c> command names (docs/TACTICS.md §5.9).</summary>
 	public static readonly string[] Modes = { "on", "off" };
 
 	/// <summary>The order kinds an <c>order</c> may name, as the control plane spells them.</summary>
 	public static readonly string[] OrderKinds = { "move", "attack", "patrol", "defend", "stop" };
+
+	/// <summary>The structures a <c>construct</c> may name, as <c>welcome</c> publishes them (docs/AGENT_API.md §7.4).</summary>
+	public static readonly string[] Structures = { "pillbox", "sandbag_wall", "sniper_tower" };
 
 	public string Cmd = "order";
 
@@ -65,8 +69,14 @@ public sealed class ScriptCommand
 	/// <summary>For an embark: the spawn label of the vehicle to get into.</summary>
 	public string Vehicle;
 
-	/// <summary>For an order: where, as <c>[x, z]</c>.</summary>
+	/// <summary>For an order or a construct: where, as <c>[x, z]</c>.</summary>
 	public float[] Target = Array.Empty<float>();
+
+	/// <summary>For a construct: one of <see cref="Structures"/>.</summary>
+	public string Structure;
+
+	/// <summary>For a construct: the way the structure's front faces, in radians.</summary>
+	public float Yaw;
 
 	/// <summary>For <c>autonomy</c> and <c>autonomy_default</c>: one of <see cref="Modes"/>.</summary>
 	public string Mode;
@@ -609,6 +619,8 @@ public sealed class Scenario
 				Vehicle = Text(element, "vehicle", null),
 				Target = Numbers(element, "target", Array.Empty<float>()),
 				Mode = Text(element, "mode", null),
+				Structure = Text(element, "structure", null),
+				Yaw = (float)Number(element, "yaw", 0.0),
 			};
 
 			if (Array.IndexOf(ScriptCommand.Names, command.Cmd) < 0)
@@ -635,6 +647,14 @@ public sealed class Scenario
 			{
 				throw new ScenarioException(
 					$"'{scenario.Name}': an 'embark' command names the vehicle to get into, by spawn label, in 'vehicle'");
+			}
+
+			if (command.Cmd == "construct"
+				&& (Array.IndexOf(ScriptCommand.Structures, command.Structure) < 0 || command.Target.Length < 2))
+			{
+				throw new ScenarioException(
+					$"'{scenario.Name}': a 'construct' command names its 'structure', one of"
+					+ $" {string.Join(", ", ScriptCommand.Structures)}, and a 'target' of [x, z]");
 			}
 
 			if (command.Cmd == "order")

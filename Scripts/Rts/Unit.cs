@@ -148,6 +148,16 @@ public partial class Unit : CharacterBody3D
 	/// <inheritdoc cref="HasDrillSpot"/>
 	public Vector3 DrillSpot;
 
+	/// <summary>
+	/// Server-side, under micro-autonomy: the exposed builder it escorts (docs/TACTICS.md
+	/// §5.10), as a unit id, 0 for none, and its place among that builder's escorts. Written
+	/// by the escort pass every tick, before any unit moves. Never replicated.
+	/// </summary>
+	public ushort Escorting;
+
+	/// <inheritdoc cref="Escorting"/>
+	public int EscortSlot;
+
 	/// <summary>Server-side: the tick its weapon last fired a round; 0 for never. What a drill's base of fire is judged firing by.</summary>
 	public uint LastShotTick;
 

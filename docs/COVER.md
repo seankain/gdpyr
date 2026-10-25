@@ -235,6 +235,9 @@ doctrine uses cover for more than its order's own fight, each by the same board,
   squad and every other unit's spot.
 - **Grenades over it** (§5.4): an arc flown against the board's boxes, thrown only where it comes to
   rest within killing reach of an enemy the side knows is behind the wall.
+- **Escorting a builder** (§5.10): a rifleman or heavy gunner holding ground, one of the two nearest
+  an exposed builder inside its leash, takes a low wall within 8 m of the builder that it can fire
+  over at the threat, else stands between the two.
 
 With it off, a unit uses cover as this section's table says, and no more.
 

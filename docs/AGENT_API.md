@@ -697,7 +697,7 @@ from position deltas and gets it slightly wrong.
 | `node_contested` | node, owner, contested, ticks — a node's contest (both sides inside its radius) started (`contested` 1) or ended (0, with `ticks` it lasted). Either bot AI (H6) |
 | `unit_embarked` / `unit_disembarked` | unit, vehicle, tier (the passenger's), x, z — a unit got into a vehicle (at the vehicle) or out of one (where it got out): an unload, or thrown out alive from a wreck ([`VEHICLES.md`](VEHICLES.md) §10) |
 | `dropship_landed` | unit, aboard, x, z — a dropship touched down, with how many were aboard ([`VEHICLES.md`](VEHICLES.md) §8.2) |
-| `unit_task` | unit, tier, goal, x, z — a unit started one of the tactics of [`TACTICS.md`](TACTICS.md) §5, by its `UnitGoal` number, a protocol constant from here on: 18 take cover from fire, 19 return fire, 20 throw a grenade at an enemy hidden behind cover, a marksman's 21 to its hide spot, 22 pop out, 23 fire from a peek, 24 duck, 25 relocate (§5.3), a heavy gunner's 26 suppress a place and 27 fill its belt (§5.2), and its part in its squad's drill (§5.5): 28 to ground, 29 to a fire position, 30 bound, 31 hold and 32 rush; where it was when it started. Only a unit whose micro-autonomy is on, under `--bot-ai htn` |
+| `unit_task` | unit, tier, goal, x, z — a unit started one of the tactics of [`TACTICS.md`](TACTICS.md) §5, by its `UnitGoal` number, a protocol constant from here on: 18 take cover from fire, 19 return fire, 20 throw a grenade at an enemy hidden behind cover, a marksman's 21 to its hide spot, 22 pop out, 23 fire from a peek, 24 duck, 25 relocate (§5.3), a heavy gunner's 26 suppress a place and 27 fill its belt (§5.2), and its part in its squad's drill (§5.5): 28 to ground, 29 to a fire position, 30 bound, 31 hold and 32 rush; and 33 escort an exposed builder (§5.10); where it was when it started. Only a unit whose micro-autonomy is on, under `--bot-ai htn` |
 | `squad_drill` | squad (its board slot), phase, elements, x, z — a board squad's drill changed phase ([`TACTICS.md`](TACTICS.md) §5.5), by its `DrillPhase` number, a protocol constant: 1 approach, 2 hold the point, 3 go to ground, 4 set the base, 5 bound, 6 grenades, 7 rush, and 0 when the squad stops drilling; how many of its units take part; its threat point, else where its order goes. Only a squad of two units or more whose micro-autonomy is on, under an attack or a move onto a node, under `--bot-ai htn` |
 | `grenade_thrown` | thrower (owner id), tier (its catalog id; −1 for a player), hidden (1 when a unit threw at something hidden from it — behind a wall with only its head showing, out of sight where a gunner is still firing, or, under micro-autonomy, an enemy the side knows is crouched behind cover — 0 when it could see it, −1 for a player, whose aim is its own), x, z (where the thrower stood) — a hand grenade left somebody's hand ([`NETCODE.md`](NETCODE.md) §10.9, [`TACTICS.md`](TACTICS.md) §5.4). Either bot AI |
 
@@ -823,13 +823,15 @@ a seat or a structure, are refused when the file is read.
 
 `cmd` is `embark` (with a `vehicle` label), `unload`, `order` (with a `kind` of `move`, `attack`,
 `patrol`, `defend` or `stop`, and a `target` `[x, z]` unless it is `stop`), `autonomy` (units and a
-`mode` of `on` or `off`) or `autonomy_default` (a `mode`, and no units). A step's commands are
+`mode` of `on` or `off`), `autonomy_default` (a `mode`, and no units) or `construct` (builders, a
+`structure` of `pillbox`, `sandbag_wall` or `sniper_tower`, a `target` `[x, z]` and a `yaw` in
+radians, sent as §7.4's `construct`). A step's commands are
 sent once, through `act` (§7.4), on the step's first tick — each pass of a repeating script enters
 its steps again — and apply on the server's next tick; a step with no commands holds. In the warm-up
 the seat sends one empty command list, which takes it from its bot — a seat that has never acted
 is still the bot's (§2.1) — without ordering anything, so `counters.pilot_fallbacks` stays zero. A ground seat's script with `commands`, a
-strategist seat's with input, an unknown command, kind or label, and a command missing its units,
-vehicle or target are refused when the file is read. `technical_boards_squad.json`,
+strategist seat's with input, an unknown command, kind, structure or label, and a command missing
+its units, vehicle, structure or target are refused when the file is read. `technical_boards_squad.json`,
 `technical_carries_squad.json`, `technical_wreck_ejects.json` and `dropship_lands_to_unload.json` are
 the four that use both.
 
@@ -987,6 +989,7 @@ The same rule the rest of the codebase follows: the interesting part is engine-f
 | The harness knows every event kind and every field of each that the game's schema publishes; `squad_task`'s goal numbers | `Tests/AgentEventTests.cs` | H6 |
 | `autonomy` and `autonomy_default` keep their numbers after the vehicle commands; `grenade_thrown` and `unit_task` after the vehicle events, and `unit_task`'s goal numbers; a scenario's and a spawn's `autonomy`, the script commands, and each malformed one as a sentence | `Tests/AgentEventTests.cs`, `Tests/ScenarioTests.cs` | TACTICS T0–T2 |
 | `squad_drill` after `unit_task`, its fields and its phase numbers; `unit_task`'s drill goals 28–32 | `Tests/AgentEventTests.cs`, `Tests/SquadDrillTests.cs` | TACTICS T6 |
+| `unit_task`'s goal 33, escorting a builder; a script's `construct`, and each malformed one as a sentence | `Tests/AgentEventTests.cs`, `Tests/EscortTests.cs`, `Tests/ScenarioTests.cs` | TACTICS T9 |
 | The strategist vector's `autonomy`, the last of a unit's 15 floats, and 1,156 floats in all (`gdpyr-agent-obs-3`); the client and the server name one schema version | `Tests/AgentObservationTests.cs`, `Tests/AgentInteropTests.cs` | TACTICS T8 |
 
 One test is not engine-free and is worth the exception: the **divergence probe** of §3 — two seeded

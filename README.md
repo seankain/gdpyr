@@ -20,9 +20,9 @@ dedicated-server authoritative.
   computer strategist's builder laying sandbags in front of the squads it keeps holding ground
 - [`docs/TACTICS.md`](docs/TACTICS.md) — unit tactics without micro — taking cover from
   the shooter, gunners suppressing for a rifle assault, snipers firing from concealment, grenades
-  behind cover, a move to a control point that fights its way there, and a per-unit switch the
-  strategist turns it off with; T0–T8 are built, on by default since T8, with what bot-only rounds
-  measured on and off
+  behind cover, a move to a control point that fights its way there, units holding ground covering
+  an exposed builder while it builds, and a per-unit switch the strategist turns it off with; T0–T9
+  are built, on by default since T8, with what bot-only rounds measured on and off
 - [`docs/AI_DEBUG.md`](docs/AI_DEBUG.md) — spectating, and the AI debugger: every bot's, unit's
   and commander squad's HTN with the running, planned and paused tasks marked on it, as text, a
   graph and lines in the world
@@ -132,7 +132,8 @@ wounded squad, or a bot's wounded unit, to the nearest supply to heal; and, from
 riflemen past its garrison, one to each assault squad, and two snipers at its towers, which join
 the garrison or a squad holding a zone. Every unit on foot with a doctrine — a rifleman, a heavy
 gunner, a sniper — uses the tactics of [`docs/TACTICS.md`](docs/TACTICS.md) §5 while its
-micro-autonomy is on, the default since T8, whoever ordered it. The debug HUD's
+micro-autonomy is on, the default since T8, whoever ordered it; from T9 that includes a rifleman or
+heavy gunner holding ground going to cover a builder fired upon at its site nearby (§5.10). The debug HUD's
 `ground plan` row counts the ground bots on each task and the roles their coordinator handed out,
 `unit plan` the units on each task, `unit ms` what the unit pass costs a tick, `resupply` the units
 healing and the health given back this round (under either AI), and `commander` each computer

@@ -283,6 +283,7 @@ public partial class UnitManager : Node
 		{
 			CountSquads();
 			RunDrills(tick);
+			AssignEscorts(tick);
 		}
 
 		UnitsResupplied = 0;
@@ -841,13 +842,32 @@ public partial class UnitManager : Node
 			blockedShooter = shooter;
 		}
 
+		// An escort next tries whoever is shooting at the builder it guards (docs/TACTICS.md
+		// §5.10), by the same rule: one ray, which replaces the search's when it is clear.
+		int builderShooter = EscortShooter(unit);
+		int blockedBuilderShooter = 0;
+		if (builderShooter != 0 && builderShooter != blockedShooter
+			&& combat.Find(builderShooter) is { Character: not null, IsAlive: true } attacker
+			&& attacker.Team != unit.Team
+			&& UnitBrain.CanAcquire(eye.DistanceTo(attacker.Character.EyePosition), unit.Traits))
+		{
+			if (HasLineOfSight(eye, attacker.Character.EyePosition))
+			{
+				unit.TargetOwnerId = OwnerId.ForPeer(builderShooter);
+				unit.AimsHigh = AimsHigh(unit, eye, attacker);
+				return;
+			}
+
+			blockedBuilderShooter = builderShooter;
+		}
+
 		// Under --bot-ai htn, the squad's focus next (docs/HTN_BOTS.md §5.2): a target
 		// a squad-mate holds, taken when this unit's sensor has it with a clear line.
 		// Its one ray replaces the search's when it is clear; when it is not, the search
 		// skips that player rather than paying for the same ray twice.
 		int focused = PeerId(unit.Plan?.Intent.TargetOwnerId ?? OwnerId.None);
 		int blocked = 0;
-		if (focused != 0 && focused != blockedShooter
+		if (focused != 0 && focused != blockedShooter && focused != blockedBuilderShooter
 			&& combat.Find(focused) is { Character: not null, IsAlive: true } focus
 			&& focus.Team != unit.Team
 			&& UnitBrain.CanAcquire(eye.DistanceTo(focus.Character.EyePosition), unit.Traits))
@@ -869,7 +889,8 @@ public partial class UnitManager : Node
 		{
 			PlayerCombat player = combat.PlayerAt(i);
 			if (player?.Character == null || !player.IsAlive || player.Team == unit.Team
-				|| (blocked != 0 && player.PeerId == blocked) || (blockedShooter != 0 && player.PeerId == blockedShooter))
+				|| (blocked != 0 && player.PeerId == blocked) || (blockedShooter != 0 && player.PeerId == blockedShooter)
+				|| (blockedBuilderShooter != 0 && player.PeerId == blockedBuilderShooter))
 			{
 				continue;
 			}
@@ -1268,13 +1289,15 @@ public partial class UnitManager : Node
 		// is behind a wall it can fire over at the nearest.
 		SenseGunner(unit, plan, order, tick, memory, objective, squad);
 
-		// Cover from the fire when it is reacting to it (docs/TACTICS.md §5.1), else cover
-		// from the fight: one spot a unit, so one or the other.
+		// Cover from the fire when it is reacting to it (docs/TACTICS.md §5.1), else a spot by
+		// the builder it escorts (§5.10), else cover from the fight: one spot a unit, so one of
+		// the three.
 		bool hasFireCover = SenseFireCover(unit, plan, order, tick, objective, node, holds);
-		bool hasCover = !hasFireCover && SenseCover(unit, plan, order, tick, nearest, nearestPoint,
+		bool escorting = SenseEscort(unit, plan, order, mayTakeCover: !hasFireCover);
+		bool hasCover = !hasFireCover && !escorting && SenseCover(unit, plan, order, tick, nearest, nearestPoint,
 			threat ? threatPoint : PlayerManager.Instance?.SpawnCentroid ?? order.Anchor, ringMeters,
 			objective, node, nodeRadius, holds, pointThreat);
-		if (hasFireCover)
+		if (hasFireCover || escorting)
 		{
 			plan.HasCoverPoint = false;
 		}
