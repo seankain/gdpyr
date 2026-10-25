@@ -79,7 +79,10 @@ public sealed class HtnSchema
 		typeof(bool), // Standoff
 		typeof(bool), // Burned
 		typeof(bool), // Suppress
-		typeof(bool)); // BeltLow
+		typeof(bool), // BeltLow
+		typeof(DrillPhase), // DrillPhase
+		typeof(DrillTask), // DrillTask
+		typeof(CoverState)); // DrillSpot
 
 	public static readonly HtnSchema Squad = new(HtnDomainKind.Squad, typeof(CommandFact), typeof(CommandGoal),
 		typeof(CommandTask), // Task
@@ -87,12 +90,25 @@ public sealed class HtnSchema
 		typeof(bool), // Depleted
 		typeof(bool)); // Engaged
 
+	public static readonly HtnSchema Drill = new(HtnDomainKind.Drill, typeof(DrillFact), typeof(DrillPhase),
+		typeof(DrillContact), // Contact
+		typeof(DrillBase), // Base
+		typeof(bool), // BaseLate
+		typeof(DrillRange), // Range
+		typeof(bool), // Arrived
+		typeof(DrillObjective), // Objective
+		typeof(bool), // HasGunner
+		typeof(bool), // Grenade
+		typeof(bool), // GivenUp
+		typeof(DrillElement)); // Moving
+
 	/// <summary>The schema for a domain, or null for <see cref="HtnDomainKind.None"/>.</summary>
 	public static HtnSchema For(HtnDomainKind kind) => kind switch
 	{
 		HtnDomainKind.Ground => Ground,
 		HtnDomainKind.Unit => Unit,
 		HtnDomainKind.Squad => Squad,
+		HtnDomainKind.Drill => Drill,
 		_ => null,
 	};
 

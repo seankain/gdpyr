@@ -26,8 +26,9 @@ public partial class UnitManager
 	/// <summary>Grenades in the air at hidden enemies, per side, indexed by <see cref="Team"/>.</summary>
 	private readonly GrenadeClaims[] _grenadeClaims = { new(SimConfig.MaxUnits), new(SimConfig.MaxUnits) };
 
-	/// <summary>One scan's candidates: every ground-force player the side remembers, and where the unit was last fired upon from.</summary>
-	private readonly GrenadeCandidate[] _grenadeCandidates = new GrenadeCandidate[SnapshotCodec.MaxPlayers + 1];
+	/// <summary>One scan's candidates: every ground-force player the side remembers, where the unit was last fired upon from, and its squad-mates.</summary>
+	private readonly GrenadeCandidate[] _grenadeCandidates =
+		new GrenadeCandidate[SnapshotCodec.MaxPlayers + 1 + DrillBoard.FiredCapacity];
 
 	/// <summary>Grenades units threw at hidden enemies this round. Server-side, for the debug HUD's <c>fire</c> row.</summary>
 	public int HiddenThrows { get; private set; }
@@ -40,7 +41,7 @@ public partial class UnitManager
 	/// (<see cref="GrenadeSim.TrySolveOver"/>).
 	/// </summary>
 	private void SenseGrenade(Unit unit, UnitContext plan, in UnitOrder order, uint tick, ContactMemory memory,
-		bool hasLine, Vector3 lineTo)
+		bool hasLine, Vector3 lineTo, int squad)
 	{
 		bool may = unit.Autonomy == MicroAutonomy.On && unit.Traits.Doctrine != UnitDoctrine.None
 			&& unit.TargetOwnerId == OwnerId.None && GrenadeSim.AiReady(unit.Grenades, tick)
@@ -71,6 +72,16 @@ public partial class UnitManager
 		if (FiredUpon.IsRecent(unit.Fire, tick))
 		{
 			_grenadeCandidates[count++] = GrenadeCandidate.Fired(FiredFromFeet(unit), unit.Fire.LastTick);
+		}
+
+		// Where its squad-mates were fired upon from, off its squad's drill (docs/TACTICS.md §4.2).
+		ReadOnlySpan<DrillEntry> squadmates = _drill != null ? _drill.Board.EntriesOf(squad) : ReadOnlySpan<DrillEntry>.Empty;
+		for (int i = 0; i < squadmates.Length && count < _grenadeCandidates.Length; i++)
+		{
+			if (squadmates[i].FiredFrom)
+			{
+				_grenadeCandidates[count++] = GrenadeCandidate.Fired(squadmates[i].Feet, squadmates[i].Tick);
+			}
 		}
 
 		Vector3 eye = unit.EyePosition;

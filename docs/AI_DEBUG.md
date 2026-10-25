@@ -9,8 +9,8 @@ strategist's commander gets the same, squad by squad. The same text is on the co
 (`ai_plan`, `ai_tree`, `ai_squads`), which is what [`HTN_BOTS.md`](HTN_BOTS.md) §4.4 asked of
 `bot_plan <n>`.
 
-Scope: debugging the three HTN deciders — the ground bot (§5.1), the RTS unit (§5.2) and the
-commander squad (§5.3). Nothing a bot decides changes: the debugger reads the planners outside
+Scope: debugging the HTN deciders — the ground bot (§5.1), the RTS unit (§5.2), the commander
+squad (§5.3), and since TACTICS T6 the board squad's drill ([`TACTICS.md`](TACTICS.md) §5.5). Nothing a bot decides changes: the debugger reads the planners outside
 their tick and writes nothing back (§6). Legacy bots (`--bot-ai legacy`) have no plan, and the
 debugger says so.
 
@@ -103,7 +103,10 @@ and effects.
 | unit (§5.2) | 34 | 60 |
 | squad (§5.3) | 24 | 16 |
 
-*(Measured on this branch; `ai_tree` prints them. The wire allows 255 of each.)*
+*(Measured on this branch; `ai_tree` prints them. The wire allows 255 of each.)* After TACTICS T6
+they are ground 37 and 62, unit 96 and 212 — 71 and 188 before T6 — squad 24 and 16, and the
+drill ([`TACTICS.md`](TACTICS.md) §5.5) 25 and 23. The unit domain is the one near the limit: each
+of its drill's steps holds by one executing condition rather than four for that reason.
 
 **A task travels as its index.** The server numbers the domains its bots plan with
 (`GroundPlanning.Map`, `UnitPlanning.Map`, `CommanderPlanning.Map`); a spectator builds the same
@@ -221,8 +224,8 @@ truncation, with a trailing byte, and over 20,000 random payloads (`AiDebugCodec
 
 ### 5.1 References
 
-An `AiEntityRef` is a kind (player, unit, squad), an id (peer id, unit id, or the strategist's
-peer id) and, for a squad, its slot: 6 bytes.
+An `AiEntityRef` is a kind (player, unit, squad, drill), an id (peer id, unit id, the strategist's
+peer id, or a board squad's slot for a drill) and, for a squad, its slot: 6 bytes.
 
 ### 5.2 The watch request
 
@@ -233,14 +236,14 @@ server reads it only from a peer in its spectator set and only up to 64 bytes.
 ### 5.3 The frame
 
 Server → one spectator, unreliable, every 6 ticks (10 Hz), only while its watch asks for
-something. Tick, bot AI, the three signatures; labels (19 bytes each with a point); commanders
+something. Tick, bot AI, the four signatures (the drill's since version 2, TACTICS T6); labels (19 bytes each with a point); commanders
 with their squads (members, points, strengths, and each squad's trace); inspections (a trace,
 markers, values). A trace is its domain, running task, status, planned / paused / traversal
 indices, facts, a bit per condition and up to 16 history events.
 
 | Measured | Bytes | At 10 Hz |
 |---|---|---|
-| Nothing asked for (empty frame) | ≤ 24 | — (not sent) |
+| Nothing asked for (empty frame) | ≤ 24 (≤ 28 from version 2) | — (not sent) |
 | A real round: 10 labels, 1 commander, 2 inspected | 620–665 | 6–7 KB/s |
 | Worst case: 80 labels, 2 commanders × 8 squads × 8 members, 4 inspected | 5,892 | 59 KB/s |
 
@@ -278,8 +281,8 @@ host whether or not it is spectating.
 | Command | Does |
 |---|---|
 | `spectate`, `play` | what `F3` does |
-| `ai_tree <ground\|unit\|squad>` | the bare domain with every condition, its task and condition counts, and its signature |
-| `ai_plan [bot <n> \| peer <id> \| unit <id> \| squad <slot> [bot <n>]]` | one agent's header, plan, facts, folded tree and history; with nothing, what the panel's tab shows. On the authority it reads the planners directly; on a client, while spectating, from the newest frame, or the next one if it has to ask |
+| `ai_tree <ground\|unit\|squad\|drill>` | the bare domain with every condition, its task and condition counts, and its signature |
+| `ai_plan [bot <n> \| peer <id> \| unit <id> \| squad <slot> [bot <n>] \| drill <slot>]` | one agent's header, plan, facts, folded tree and history; with nothing, what the panel's tab shows. On the authority it reads the planners directly; on a client, while spectating, from the newest frame, or the next one if it has to ask |
 | `ai_squads` | each computer strategist's commander table |
 | `ai_select <target>` | inspect it in the panel |
 

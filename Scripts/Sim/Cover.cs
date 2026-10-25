@@ -81,6 +81,13 @@ public struct CoverQuery
 	public float MaxOffLineMeters;
 
 	/// <summary>
+	/// With <see cref="HasToward"/>, a spot must also be at least this much nearer
+	/// <see cref="Toward"/> than <see cref="From"/> is: a squad's bound gains ground
+	/// (docs/TACTICS.md §5.5). Zero for none.
+	/// </summary>
+	public float MinProgressMeters;
+
+	/// <summary>
 	/// Only spots on the seeker's own side of their box: never one behind a box the seeker
 	/// stands in front of, towards the threat, which it would reach only by walking round
 	/// the box's end — along the line the fire is coming down (docs/TACTICS.md §5.1).
@@ -627,7 +634,10 @@ public sealed class CoverBoard
 			return true;
 		}
 
-		if (Flat(at, query.Toward) > Flat(query.From, query.Toward) + MathF.Max(query.MaxBackMeters, 0f))
+		float fromToward = Flat(query.From, query.Toward);
+		float atToward = Flat(at, query.Toward);
+		if (atToward > fromToward + MathF.Max(query.MaxBackMeters, 0f)
+			|| (query.MinProgressMeters > 0f && atToward > fromToward - query.MinProgressMeters))
 		{
 			return false;
 		}

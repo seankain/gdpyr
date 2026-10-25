@@ -242,7 +242,6 @@ public class AgentEventTests
 	{
 		// docs/TACTICS.md §5.1: the goal is the UnitGoal's number, and a scenario names it.
 		Assert.Equal(19, (int)AgentEventKind.UnitTask);
-		Assert.Equal(AgentEventKind.UnitTask, AgentEventSchema.Last);
 		Assert.Equal("unit_task", AgentEventSchema.NameOf(AgentEventKind.UnitTask));
 		Assert.Equal(new[] { "unit", "tier", "goal", "x", "z" }, AgentEventSchema.FieldsOf(AgentEventKind.UnitTask).ToArray());
 		Assert.Equal(18, (int)UnitGoal.TakeCoverFromFire);
@@ -255,13 +254,32 @@ public class AgentEventTests
 		Assert.Equal(25, (int)UnitGoal.Relocate);
 		Assert.Equal(26, (int)UnitGoal.SuppressPoint);
 		Assert.Equal(27, (int)UnitGoal.Reload);
+		Assert.Equal(28, (int)UnitGoal.DrillGround);
+		Assert.Equal(29, (int)UnitGoal.DrillFirePosition);
+		Assert.Equal(30, (int)UnitGoal.DrillBound);
+		Assert.Equal(31, (int)UnitGoal.DrillHold);
+		Assert.Equal(32, (int)UnitGoal.DrillRush);
 		Assert.True(UnitContext.IsTactic(UnitGoal.TakeCoverFromFire));
 		Assert.True(UnitContext.IsTactic(UnitGoal.ReturnFire));
 		Assert.True(UnitContext.IsTactic(UnitGoal.ThrowGrenade));
 		Assert.True(UnitContext.IsTactic(UnitGoal.FireFromPeek));
 		Assert.True(UnitContext.IsTactic(UnitGoal.SuppressPoint));
 		Assert.True(UnitContext.IsTactic(UnitGoal.Reload));
+		Assert.True(UnitContext.IsTactic(UnitGoal.DrillBound));
 		Assert.False(UnitContext.IsTactic(UnitGoal.HoldCover));
+	}
+
+	[Fact]
+	public void SquadDrill_IsAppendedAfterUnitTask_AndItsPhasesAreProtocolNumbers()
+	{
+		// docs/TACTICS.md §5.5: the phase is the DrillPhase's number, and a scenario names it.
+		Assert.Equal(20, (int)AgentEventKind.SquadDrill);
+		Assert.Equal(AgentEventKind.SquadDrill, AgentEventSchema.Last);
+		Assert.Equal("squad_drill", AgentEventSchema.NameOf(AgentEventKind.SquadDrill));
+		Assert.Equal(new[] { "squad", "phase", "elements", "x", "z" },
+			AgentEventSchema.FieldsOf(AgentEventKind.SquadDrill).ToArray());
+		Assert.Equal(5, (int)DrillPhase.Bound);
+		Assert.Equal(7, (int)DrillPhase.Rush);
 	}
 
 	[Fact]

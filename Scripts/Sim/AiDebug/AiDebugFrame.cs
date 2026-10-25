@@ -17,6 +17,9 @@ public enum AiEntityKind : byte
 
 	/// <summary>One of a computer strategist's commander squads: the strategist's peer id, and the slot.</summary>
 	Squad = 3,
+
+	/// <summary>A board squad's drill (docs/TACTICS.md §5.5), by its board slot.</summary>
+	Drill = 4,
 }
 
 /// <summary>One thing a spectator can inspect.</summary>
@@ -45,6 +48,8 @@ public readonly struct AiEntityRef : IEquatable<AiEntityRef>
 	public static AiEntityRef Squad(int strategistPeerId, int slot) =>
 		new(AiEntityKind.Squad, strategistPeerId, (byte)Math.Clamp(slot, 0, byte.MaxValue));
 
+	public static AiEntityRef Drill(int boardSlot) => new(AiEntityKind.Drill, boardSlot);
+
 	public bool Equals(AiEntityRef other) => Kind == other.Kind && Id == other.Id && Slot == other.Slot;
 
 	public override bool Equals(object obj) => obj is AiEntityRef other && Equals(other);
@@ -60,6 +65,7 @@ public readonly struct AiEntityRef : IEquatable<AiEntityRef>
 		AiEntityKind.Player => BotRoster.NameOf(Id),
 		AiEntityKind.Unit => $"unit {Id}",
 		AiEntityKind.Squad => $"squad {Slot} of {BotRoster.NameOf(Id)}",
+		AiEntityKind.Drill => $"drill {Id}",
 		_ => "nothing",
 	};
 }
@@ -163,6 +169,18 @@ public enum AiMarkerKey : byte
 
 	/// <summary>Unit: the vehicle it is walking to, to get in (docs/VEHICLES.md §10).</summary>
 	Vehicle = 19,
+
+	/// <summary>Unit, drill: its squad's threat point (docs/TACTICS.md §4.2).</summary>
+	Threat = 20,
+
+	/// <summary>Unit: where its drill task takes it. Drill: one per member that has one.</summary>
+	DrillSpot = 21,
+
+	/// <summary>Unit: the place it is firing at, with nobody named (docs/TACTICS.md §5.1, §5.5).</summary>
+	FireAt = 22,
+
+	/// <summary>Drill: where its assault rushes.</summary>
+	Rush = 23,
 }
 
 /// <summary>Numbers an inspected agent knows about.</summary>
@@ -229,6 +247,27 @@ public enum AiValueKey : byte
 
 	/// <summary>Unit, an aircraft: its height above the ground, in centimetres (V6).</summary>
 	Altitude = 20,
+
+	/// <summary>Unit, drill: <c>DrillPhase</c> (docs/TACTICS.md §5.5).</summary>
+	DrillPhase = 21,
+
+	/// <summary>Unit: <c>DrillTask</c>.</summary>
+	DrillTask = 22,
+
+	/// <summary>Unit: the board squad whose drill it is in; absent in none.</summary>
+	DrillSquad = 23,
+
+	/// <summary>Drill: the units taking part.</summary>
+	Elements = 24,
+
+	/// <summary>Drill: <c>DrillElement</c> bounding.</summary>
+	Moving = 25,
+
+	/// <summary>Drill: bounds begun, and times it gave up.</summary>
+	Bounds = 26,
+
+	/// <inheritdoc cref="Bounds"/>
+	GiveUps = 27,
 }
 
 public struct AiMarker
@@ -411,6 +450,8 @@ public sealed class AiDebugFrame
 
 	public uint SquadSignature;
 
+	public uint DrillSignature;
+
 	public readonly List<AiLabel> Labels = new();
 
 	public readonly List<AiCommander> Commanders = new();
@@ -422,6 +463,7 @@ public sealed class AiDebugFrame
 		HtnDomainKind.Ground => GroundSignature,
 		HtnDomainKind.Unit => UnitSignature,
 		HtnDomainKind.Squad => SquadSignature,
+		HtnDomainKind.Drill => DrillSignature,
 		_ => 0u,
 	};
 

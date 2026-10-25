@@ -17,8 +17,8 @@ namespace Gdpyr.Rts;
 /// </summary>
 public partial class UnitManager
 {
-	/// <summary>One scan's threats' feet: every ground-force player the side remembers in reach, and where the unit was last fired upon from.</summary>
-	private readonly Vector3[] _peekThreats = new Vector3[SnapshotCodec.MaxPlayers + 1];
+	/// <summary>One scan's threats' feet: every ground-force player the side remembers in reach, where the unit was last fired upon from, and its squad-mates.</summary>
+	private readonly Vector3[] _peekThreats = new Vector3[SnapshotCodec.MaxPlayers + 1 + DrillBoard.FiredCapacity];
 
 	/// <summary>One scan's contacts it could shoot.</summary>
 	private readonly MarksmanCandidate[] _peekCandidates = new MarksmanCandidate[SnapshotCodec.MaxPlayers];
@@ -35,7 +35,7 @@ public partial class UnitManager
 	/// the next is found away from where it last fired.
 	/// </summary>
 	private void SenseMarksman(Unit unit, UnitContext plan, in UnitOrder order, uint tick, ContactMemory memory,
-		bool objective)
+		bool objective, int squad)
 	{
 		bool may = unit.Autonomy == MicroAutonomy.On && unit.Traits.Doctrine == UnitDoctrine.Marksman
 			&& unit.Team == Team.Strategist && Cover.Count > 0 && UnitContext.PeeksUnder(order.Kind, objective)
@@ -94,6 +94,24 @@ public partial class UnitManager
 			}
 
 			_peekThreats[threats++] = from;
+		}
+
+		// Where its squad-mates were fired upon from, off its squad's drill (docs/TACTICS.md §4.2).
+		ReadOnlySpan<DrillEntry> squadmates = _drill != null ? _drill.Board.EntriesOf(squad) : ReadOnlySpan<DrillEntry>.Empty;
+		for (int i = 0; i < squadmates.Length && threats < _peekThreats.Length; i++)
+		{
+			float meters = Flat(at, squadmates[i].Feet);
+			if (squadmates[i].FiredFrom && meters <= MarksmanPlan.ThreatMeters)
+			{
+				standoff |= meters < MarksmanPlan.StandoffMeters;
+				if (meters < nearestMeters)
+				{
+					nearest = threats;
+					nearestMeters = meters;
+				}
+
+				_peekThreats[threats++] = squadmates[i].Feet;
+			}
 		}
 
 		UnitBody body = unit.Body;

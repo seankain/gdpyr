@@ -1,6 +1,6 @@
 # Unit tactics — implementation plan
 
-Status: **T0–T5 built (§6); T6–T8 are plan. Decisions T-D1 to T-D7 taken (§8).** Planned from the
+Status: **T0–T6 built (§6); T7–T8 are plan. Decisions T-D1 to T-D7 taken (§8).** Planned from the
 code at `6213d05`. Extends the unit HTN of [`HTN_BOTS.md`](HTN_BOTS.md) §5.2 and the cover of
 [`COVER.md`](COVER.md).
 
@@ -90,7 +90,7 @@ HTN_BOTS.md §4.2 holds. Added:
 | Gunner | `Scripts/Sim/Gunner.cs` (`GunnerPlan`), `Scripts/Rts/UnitManager.Gunner.cs` (T5) | The places a gunner may suppress and which the next burst goes to, as pure functions; the engine half gathers them on the scan (§5.2). |
 | Bots fired upon | `Scripts/Match/CombatManager.FiredUpon.cs`, `PlayerCombat.PerceivesFire` and `LastFiredUponTick` (T5) | The near-miss pass for the strategist's rounds against the ground bots that plan; the pilot reads it into `GroundFact.Suppressed` (§5.7). |
 | Posture | `Unit.cs`; unit snapshot v2 (§5.8); `UnitDefinition.CrouchHeightMeters` | Units on foot crouch: lower hitbox and eye, slower, no fire. Replicated as a field of its own. |
-| Squad drill | `Scripts/Sim/Htn/DrillDomain.cs`, `SquadDrill.cs` (new) | A FluidHTN domain per board squad: the squad's half of "take the point" and of an attack. Roles are a plain function (`DrillRoles.Assign`), as the ground coordinator's are. Writes a `DrillDirective` per squad. |
+| Squad drill | `Scripts/Sim/Htn/DrillDomain.cs`, `SquadDrill.cs`; `Scripts/Rts/UnitManager.Drill.cs` (T6) | A FluidHTN domain per board squad: the squad's half of "take the point" and of an attack. Roles are a plain function (`DrillRoles.Assign`), as the ground coordinator's are. `SquadDrill` writes a `DrillDirective` per member onto the `DrillBoard`; the engine half hands it each squad's members and reads the board back into each unit's scan (§5.5). |
 | `GrenadePlan` | `Scripts/Sim/Grenades.cs` | Choosing a remembered contact behind cover; `TrySolveOver`: the low arc, else the high one, checked against `CoverBoard` boxes. |
 | Micro-autonomy | `Unit.cs` (`Autonomy`), `UnitFact.MicroAutonomy`, `UnitManager` requests, `StrategistController`, `StrategistHud`, `AgentCommand.cs`, `tools/Gdpyr.Playtest/Scenario.cs`, `LaunchOptions`, `GameModeDefinition` | §5.9. |
 | Unit domain | `Scripts/Sim/Htn/UnitDomain.cs` | The facts and branches of §5. |
@@ -152,53 +152,72 @@ the subgoal for the squad, and each unit's domain carries out its part.
 
 | Subgoal (squad drill, §5.5) | When | What each unit does (unit domain) |
 |---|---|---|
-| Hold the point | on the point, or nothing in contact for 5 s | hold the point from cover · hold the point (existing) |
-| Get into cover | fired upon, nothing yet firing back | React to fire: to cover from the fired-from point, return fire (§5.1) |
-| Assault | the leading element within 20 m of the threat point, the base firing | grenades at the hidden contact (§5.4), then take the point |
-| Bound | in contact, the base firing | base: suppress (§5.2) · moving element: to the next cover towards the point · overwatch: peek and fire (§5.3) |
+| Hold the point | an element on the point, and nothing on the squad's list on it | hold the point from cover · hold the point (existing) |
+| Get into cover | fired upon, the base not yet sent | the base to its fire positions; the rest to cover from the threat point (`DrillGround`) |
+| Assault | the leading element within 20 m of the threat point, the base firing | grenades at the hidden contact (§5.4), holding in cover; then the rush onto the point |
+| Bound | in contact, the base firing | base: suppress (§5.2) · moving element: to the next cover towards the point · the other: hold and fire · overwatch: peek and fire (§5.3) |
 | Establish a base of fire | in contact | the gunner, or a rifle half, to fire positions (§5.2); the rest hold in cover |
-| Approach | no contact | take the point, keeping pace with the squad (existing) |
+| Approach | no contact for 5 s, or the drill given up for 20 s | take the point, keeping pace with the squad (existing) |
 
 A unit alone, or a squad with fewer than two units on foot whose micro-autonomy is on, has no
 drill: it reacts, throws, suppresses or peeks by its own doctrine, and takes the point.
 
+As built in T6, "on the point" is an element inside the capture radius by the economy's rule
+**and no entry of the squad's list on the point** (`SquadDrill.Contested`). The plan's row alone
+would hand the whole squad back to today's take-the-point — walking in — the moment one rifleman
+crossed the edge of a 10–12 m radius with an enemy still behind a wall at its middle; the rule is a
+choice made on reading the plan, not one a round forced.
+
 ### 5.0.1 The unit domain
 
-New branches in bold; `{…}` are executing conditions. Every new method also requires
-`MicroAutonomy=on` and every new operator holds only while it is on and while its order holds
-(HTN_BOTS.md §5.2, "Order").
+As built in T6. New branches in bold; `{…}` are executing conditions. Every new method also
+requires `MicroAutonomy=on` and every new operator holds only while it is on and while its order
+holds (HTN_BOTS.md §5.2, "Order").
 
 ```
 unit
 ├─ Retreat                      unchanged
 ├─ **Grenade**                  [Grenade ∧ Doctrine≠none ∧ Contact≠own ∧ SquadPhase≠falling back
 │                                ∧ Order∉{Build,Embark,Unload}]  ThrowGrenade {the same}            §5.4
-├─ **React to fire**            [FiredUpon≠none ∧ Contact≠own ∧ FireCover≠none ∧ ¬Bounding ∧ Peek=none
-│   │                            ∧ SquadPhase≠falling back ∧ Order∉{Build,Embark,Unload}]          §5.1
+├─ **React to fire**            [FiredUpon≠none ∧ Contact≠own ∧ FireCover≠none ∧ Peek=none
+│   │                            ∧ DrillTask∉{Ground,Bound,Rush} ∧ SquadPhase≠falling back
+│   │                            ∧ Order∉{Build,Embark,Unload}]                                      §5.1
 │   ├─ return fire from cover   [FireCover=in]  ReturnFire {FiredUpon≠none, FireCover=in}
 │   └─ get to cover             TakeCoverFromFire {FiredUpon≠none, FireCover≠none}
 ├─ Resupply                     unchanged
 ├─ Build                        "hide behind cover" hides from the fired-from point when there is one
 ├─ **Marksman**                 [Doctrine=marksman ∧ (Order∈{Attack,Defend,None} ∨ Objective) ∧ Peek≠none]  §5.3
 │   ├─ displace                 [Burned ∨ Standoff]  Relocate
-│   ├─ engage                   [Peek=ready ∧ PeekTarget]  PopOut → FireFromPeek → Duck
+│   ├─ engage                   [Peek=ready ∧ PeekTarget ∧ (DrillTask≠overwatch ∨ DrillPhase∈{bound,
+│   │                            grenades,rush})]  PopOut → FireFromPeek → Duck
 │   └─ hide                     ToHide
 ├─ **Gunner**                   [Doctrine=gunner ∧ (Order∈{Attack,Defend,None} ∨ Objective) ∧ Contact≠own
 │   │                            ∧ SquadPhase≠falling back]                                          §5.2
 │   ├─ reload                   [BeltLow]  Reload {BeltLow}
 │   └─ suppress                 [Suppress]  SuppressPoint {Suppress}; into the reserve, reload pre-empts it
-├─ **Take the point**           [Objective]                                                          §5.0, §5.6
-│   ├─ wait for squad
-│   ├─ **drill**                [DrillRole≠none ∧ DrillPhase≠approach]                              §5.5
+├─ **Take the point**           [Objective: an attack naming no contact, or under micro-autonomy a move,
+│   │                            on a node]                                                          §5.0, §5.6
+│   ├─ wait for squad           [SquadPhase=gathering]  WaitForSquad
+│   ├─ **drill**                [MicroAutonomy=on ∧ Doctrine≠none ∧ SquadPhase≠falling back]         §5.5
+│   │   ├─ to ground            [DrillTask=ground]  DrillGround {drilling ground onto the point}
+│   │   ├─ fire position        [DrillTask=fire position]  DrillFirePosition {…}
+│   │   ├─ bound                [DrillTask=bound]  DrillBound {…}
+│   │   ├─ hold                 [DrillTask=hold]  DrillHold {…}
+│   │   └─ rush                 [DrillTask=rush]  DrillRush {…}
 │   └─ hold the point from cover · hold the point · take the point     moved here from Attack
-├─ Attack                       today's, for an attack not on a point; **drill** above engage from cover
+├─ Attack                       today's, for an attack not on a point; **drill** (as above, holding
+│                                while the order is an attack) above engage from cover
 ├─ Defend Zone                  unchanged; React to fire covers a ring shot at from beyond its sensor
 └─ Recon · Obey · Carry         unchanged
 ```
 
 With micro-autonomy off, every bold branch fails its condition and the tree is today's, except that
-an objective under a Move is not formed either: `Encode` marks a Move objective only for a unit
-whose micro-autonomy is on, so an off unit on a Move obeys as it does today.
+an objective under a Move is not formed either: `UnitContext.TakesPointUnder` makes a Move onto a
+node an objective only for a unit whose micro-autonomy is on, so an off unit on a Move obeys as it
+does today. A drill task of overwatch or none has no sequence in the drill and falls through to
+the order's own methods. Each drill step holds by one executing condition rather than four — the
+drill appears twice, and the unit domain's conditions are numbered into a byte on the debugger's
+wire (212 of 255 after T6; AI_DEBUG.md §3.1).
 
 ### 5.1 React to fire — requirement 3
 
@@ -210,13 +229,13 @@ As built in T1 (`UnitDomain.cs`'s "react to fire" select, below Retreat and abov
 | Who | A unit with a doctrine (`UnitTraits.Doctrine` not `None`: not a builder, a vehicle, a supply truck or the dropship), its micro-autonomy on. Riders and aircraft plan nothing. |
 | Facts | `FiredUpon` (§4.1, every tick); `FireCover`: `CoverState` against the fired-from point, the spot found on the scan and banded every tick as `Cover` is; `ReactSpent`, the cap below. |
 | When | Fired upon, with a spot, the cap not spent, its board squad not falling back (§5.6), its order not a build, a walk to a vehicle or an unload — and nothing of its own to fight from cover: no target, or an order that shoots on the walk (a move or a patrol). A unit under an attack or a defend order that can see its target fights it from cover against it, as before (COVER.md §6). |
-| Spot | A low wall it can fire over within 10 m (`ReactCoverSearchMeters`), at any range from the shooter, else anything that hides it within 6 m (`ReactHideSearchMeters`). Under an order that goes somewhere — a move, a patrol, an attack — it must be on the way (`CoverQuery.HasToward`): no further from where the order goes than the unit is plus 3 m, and within 6 m of the line to it. Only behind a box the unit is not already in front of (`CoverQuery.StaySameSide`): a unit between a wall and the shooter would reach the wall's far face only by walking round its end, down the line the fire comes along. One spot a unit: while it reacts, the fire spot is its claimed spot, and the fight's is not looked for. A unit that must stand on a point (`ControlPoint.Holds`) does not leave it for one; T6 revisits that. |
+| Spot | A low wall it can fire over within 10 m (`ReactCoverSearchMeters`), at any range from the shooter, else anything that hides it within 6 m (`ReactHideSearchMeters`). Under an order that goes somewhere — a move, a patrol, an attack — it must be on the way (`CoverQuery.HasToward`): no further from where the order goes than the unit is plus 3 m, and within 6 m of the line to it. Only behind a box the unit is not already in front of (`CoverQuery.StaySameSide`): a unit between a wall and the shooter would reach the wall's far face only by walking round its end, down the line the fire comes along. One spot a unit: while it reacts, the fire spot is its claimed spot, and the fight's is not looked for. A unit that must stand on a point (`ControlPoint.Holds`) does not leave it for one; T6 left that as it is: under a move onto a point it holds the point too. |
 | Operators | `TakeCoverFromFire`: to the spot without stopping. `ReturnFire`: in it, holding. Both fire at the fired-from point for `ReturnFireTicks` (2 s) after each round that reaches it (`UnitIntent.FireAt`), when it is inside the unit's engage range — a shooter beyond 40 m is hidden from, not answered, and since T3 the planner says so too (`FireBack` measures it), rather than leaving the engine to refuse — and never throw a grenade at that point: it is a place, not a player, and nobody's focus. From T3, `ReturnFire` crouches whenever it is not firing back and has no target of its own (§5.8). |
 | Shooter | `AcquireTarget` tries whoever last fired at it before the squad focus (§4.1): a unit that can see its shooter shoots them, and then fights them as its target. |
 | Ends | The window (3 s after the last round); a target of its own under an order with a fight of its own; the spot no longer hiding it; its squad falling back; a build order; micro-autonomy off — each an executing condition, each a test. |
 | Cap | Under an order that goes somewhere, `ReactMaxTicks` (8 s) in all since the order, the windows' tails included; then `ReactSpent` until the next hit (`FireMemory.LastHitTick`) or a new order, so the order still arrives. Under a defend order or none there is no cap: holding in cover while fire keeps coming is what holding is. The plan had the cap on a move only; an attack with no drill yet (T6) would otherwise be pinned for ever by one shooter it cannot see. |
 | Builder | Under micro-autonomy, "hide behind cover" hides from the fired-from point when there is one, else from the nearest contact, as before. |
-| Not | A squad falling back. A drill's moving element waits for T6, which adds it. |
+| Not | A squad falling back. From T6, a unit on its way in its squad's drill — going to ground, bounding, rushing (`UnitContext.MovesInDrill`): its move is to cover, or onto the point. The half holding and the base it pre-empts, as the plan has it (§5.5). |
 
 ### 5.2 Heavy gunner: base of fire — requirement 1
 
@@ -226,14 +245,14 @@ domain's "gunner" select, below "marksman" and above Attack):
 | | |
 |---|---|
 | Who | A unit whose doctrine is `Gunner` (the heavy gunner), its micro-autonomy on, with no target of its own, its squad not falling back, under an attack, a defend, no order or a point to take (`UnitContext.SuppressesUnder`: the orders a marksman peeks under). A move or a patrol shoots on the walk, as given. Retreat, Grenade and React to fire are above it. |
-| Places | On its scan (`UnitManager.SenseGunner`, `GunnerPlan.Gather`, `Entries`): every ground-force player the side remembers, at its live position while a friend sees it and where it was last seen as a ghost until the side forgets it (8 s), and not dead since; and where its own latest round came from, for 8 s after it (`FiredFromTicks`), unless that is within 3 m of a contact (`SameEnemyMeters`: the same enemy). One is kept when its aim point, 1.3 m above it (`SuppressAimMeters`), is inside the gun's 45 m and no cover-board box crosses the line to it from the gunner's standing eye (`CoverBoard.ClearLine`): rounds that would only strike a block are not suppression. Nearest first. Squad-mates' fired-from points wait for T6's `DrillBoard` (§4.2). A target it sees itself it engages as before. |
+| Places | On its scan (`UnitManager.SenseGunner`, `GunnerPlan.Gather`, `Entries`): every ground-force player the side remembers, at its live position while a friend sees it and where it was last seen as a ghost until the side forgets it (8 s), and not dead since; and where its own latest round came from, for 8 s after it (`FiredFromTicks`), unless that is within 3 m of a contact (`SameEnemyMeters`: the same enemy). One is kept when its aim point, 1.3 m above it (`SuppressAimMeters`), is inside the gun's 45 m and no cover-board box crosses the line to it from the gunner's standing eye (`CoverBoard.ClearLine`): rounds that would only strike a block are not suppression. Nearest first. As its squad drill's base it fires where the drill says instead — squad-mates' fired-from points among them (T6, below). A target it sees itself it engages as before. |
 | Bursts | `SuppressPoint`: `UnitIntent.FireAt` at the aim point for the first `SuppressBurstTicks` (1 s, 9 rounds at the LMG's 550 rpm) of every `SuppressCycleTicks` (2 s); each burst at the place after the last one's — the nearest, then the next, and round again (`GunnerPlan.Next`). A replan does not restart the rhythm; a lull of a whole cycle does, so the first burst after one is at once. A place gone from the list mid-burst is not fired at again. The engine fires at a place as `ReturnFire` does (`FireAtPlace`): inside its engage range, not led, nobody's focus, no grenade. Today's 4 s reflex stays, and runs first. `unit_task` goal 26. |
 | Where | From a low wall it can fire over at the nearest place, within 10 m and its leash (`SenseCover`, against the place as against a target), walking to it firing; with none, where it stands. |
-| Ammunition | The 150-round belt is 16 bursts and a half, 33 s of the cycle, 13 of them before the reserve. `BeltLow`, every tick from the weapon: under `BeltReserveRounds` (30) it suppresses nothing (a drill's bound and assault phases wait for T6). `Reload`, above `SuppressPoint`: it presses reload (`UnitIntent.Reload`) with nothing to fire at, from its spot when it has one, crouched while the reload runs (6 s, `CrouchToReload`), with a place to suppress or none — a belt into its reserve is filled between fights. `unit_task` goal 27. |
+| Ammunition | The 150-round belt is 16 bursts and a half, 33 s of the cycle, 13 of them before the reserve. `BeltLow`, every tick from the weapon: under `BeltReserveRounds` (30) it suppresses nothing — except as the base of a drill whose element is bounding or assaulting behind its fire (`UnitContext.CoversTheMove`, T6), when it spends the reserve and the weapon reloads on empty. `Reload`, above `SuppressPoint`: it presses reload (`UnitIntent.Reload`) with nothing to fire at, from its spot when it has one, crouched while the reload runs (6 s, `CrouchToReload`), with a place to suppress or none — a belt into its reserve is filled between fights. `unit_task` goal 27. |
 | Cap | Under an order that goes somewhere (an attack, a point to take), `SuppressMaxTicks` (8 s) of suppressing, then `SuppressRetryTicks` (8 s) of the order before it suppresses again; a new order lifts it. None under a defend order or none. The plan gave no bound for a gunner alone; rule 3 asks for one, and without it an attack whose gunner has a ghost in reach stops for as long as the side remembers anyone. |
 | Domain | `reload` [BeltLow] `Reload` {BeltLow}; `suppress` [Suppress] `SuppressPoint` {Suppress}; both {MicroAutonomy=on, a gunner under an order it suppresses under, Contact≠own, not falling back}. Into the reserve, `reload` pre-empts `suppress` on the tick (P2). |
-| In a drill | Always the base element, at the squad's threat point. `TakeFirePosition` is the squad's first move after contact: a low-wall spot 20–40 m from the threat point it can fire over at the suppression point, preferring a bearing ≥ 30° off the assault's axis. The drill does not bound until the base is firing, or 6 s have passed (§5.5). |
-| Lift and shift | Unit rounds pass through friendly units (`UnitManager.QuerySegment` skips the shooter's team), so lifting fire is about tempo, not safety: once the assault element is within 8 m of the point the gunner shifts to the next entry within 25 m beyond it, else bounds onto the objective. |
+| In a drill | As built in T6: always the base (`DrillRole.Base`), its task `FirePosition` in every phase in contact. Its fire position is the drill's (§5.5): a low-wall spot 20–40 m from the threat point it can fire over at the suppression point, the first of the best four 30° or more off the assault's axis, else the best; with none in reach and the threat beyond 40 m, an open point 3 m inside that; inside the band and with none, where it stands. Its places are the drill's: the threat point first, then the rest of the squad's list nearest it, those it reaches with a line over the cover board — else its own, as above. Its 8 s cap does not apply (the drill's 60 s does). The drill does not bound until the base is firing, or 6 s have passed. |
+| Lift and shift | Unit rounds pass through friendly units (`UnitManager.QuerySegment` skips the shooter's team), so lifting fire is about tempo, not safety: in the rush, once an assault member is within 8 m of the threat point, the base's places are only the entries within 25 m beyond it (further from the assault than it is) and none within 8 m of an assault member; with none, its task is `Rush` and it goes onto the point with the assault (T6). |
 | Leading the assault | The gunner sets the tempo: its position is the first move after contact, its fire is the trigger for the bounds, and the commander builds assault squads round gunners (T7). A drill whose gunner dies falls back to a rifle half as its base. |
 
 ### 5.3 Sniper: concealment, pop out, relocate — requirement 2
@@ -245,7 +264,7 @@ below Build and above Attack):
 | | |
 |---|---|
 | Who | A unit whose doctrine is `Marksman` (the sniper), its micro-autonomy on, under an attack, a defend, no order, or a point to take (`UnitContext.PeeksUnder`). A move, a patrol, a build or a ride is carried out as given. |
-| Threats | On its scan: every ground-force player the side remembers within 90 m (`MarksmanPlan.ThreatMeters`: the band's far edge plus the search), live or a ghost, and not dead since; and its own fired-from point while its window is open. Squad-mates' fired-from points wait for T6's `DrillBoard` (§4.2). |
+| Threats | On its scan: every ground-force player the side remembers within 90 m (`MarksmanPlan.ThreatMeters`: the band's far edge plus the search), live or a ghost, and not dead since; and its own fired-from point while its window is open; from T6, its squad drill's fired-from points within 90 m too (§4.2). |
 | Concealed | `CoverBoard.Concealed`: for every threat, a box crosses the line from its eye (1.5 m above where it was recorded) to the unit's crown at the posture it waits in — crouched (1.0 m) behind a low wall, standing (1.8 m) behind anything taller. The crown, not the eye: T3 found a standing player's line over a sandbag wall clears a 1.0 m crown and clips a 1.1 m one. Range alone is not concealment. |
 | Peek pair | `CoverBoard.TryFindPeek`: a hide spot on a face turned away from the target, concealed from the target and every threat, and a fire spot within 2.5 m of it (`PairMeters`) whose standing eye has a clear line, with `FireClearanceMeters` of air, to the target's eye. Behind a low wall the fire spot is the hide spot, stood up in; behind a taller box it is one slot past the face's end. Search: the hide spot within 25 m of the sniper (`SearchMeters`), the fire spot 35–65 m from the target (`MinRangeMeters`, `MaxRangeMeters`, and never beyond the rifle's 70 m), both inside its leash under Defend or no order, neither nearer any threat than 30 m (`StandoffMeters`), the hide spot not claimed by another unit's cover or hide spot. Best: the shortest walk in bands of the pair's 2.5 m, then the fewest threats that see the fire spot, then the widest angle off its squad's axis (a flank), then the shortest walk. A pair is kept while `KeepsPeek` says it still does; one that no longer does is searched again. |
 | Targets | `MarksmanPlan.ChooseTarget`: the squad's focus when it is a candidate; else one a friend is engaging; else, and among those, the slowest, the weakest, the lowest id. When no pair sees that one, the next it would choose, and so on; when none, a pair that only hides it from the nearest threat, with no target to peek at. |
@@ -254,7 +273,7 @@ below Build and above Attack):
 | Bounds | A walk to a hide spot, under `ToHide` or `Relocate`, of more than 12 s (`PeekWalkMaxTicks`) gives peeking up for 10 s (`PeekRetryTicks`): no pair, the order's branches. Every operator holds only while micro-autonomy is on, it has a pair and its order is one it peeks under; `PopOut` and `FireFromPeek` also while it has a target. |
 | React to fire | Not for a marksman with a pair (`Peek=none` on the select and its executing conditions): its hide spot is concealed from where the fire came from already, which is one of the pair's threats. Found in T4's first runs: React stood it up to fire back, it saw its shooter, a target of its own ended React, `ToHide` crouched it, it lost the target, and React began again, every scan. Without a pair it reacts as a rifleman does. |
 | `unit_task` | Goals 21 to hide, 22 pop out, 23 fire from a peek, 24 duck, 25 relocate. Behind a low wall a duck begins and ends on one tick, so 24 is seen only from a block. |
-| In a drill | Overwatch: not an element. Its peeks are timed to the bound phases, so it fires while an element moves (T6). |
+| In a drill | As built in T6: overwatch (`DrillRole.Overwatch`, task `Overwatch`), not an element and no spot of the drill's. Its "engage" needs the drill to be bounding, at its grenades or rushing (`IfPeekTimed`), so it pops out while an element moves; between, it waits hidden. With no pair it falls through to taking the point. |
 
 ### 5.4 Grenades at known enemies behind cover — requirement 4
 
@@ -267,33 +286,46 @@ fire):
 | | |
 |---|---|
 | Who | A unit with a doctrine and a grenade ready (`GrenadeSim.AiReady`: one left, 6 s since its last), its micro-autonomy on, no target of its own, its order not a build, a walk to a vehicle or an unload, its squad not falling back. The plan had any unit on foot; a builder's micro-autonomy means nothing on the card (§5.9), so it does not throw on its own either. |
-| Candidates | On the unit's scan: every ground-force player the side remembers (`ContactMemory`) seen ≤ 3 s ago (`GrenadePlan.FreshTicks`) and still alive — as a gunner stops firing at a dead target (`Suppress`) — and the unit's own fired-from point while its window is open; 6–28 m from its eye; behind a `CoverBoard` box — the line from its eye to 0.5 m above where the enemy was recorded crosses one (`HiddenAimMeters`: a crouched player's recorded position is its origin, 0.3 m off the ground, so the plan's chest is over a 1.1 m wall). A fired-from point within 3 m of a contact in the list is that contact. On the way first (within 6 m of the line to where its order goes), then the nearest. Squad-mates' fired-from points wait for T6's `DrillBoard` (§4.2). |
+| Candidates | On the unit's scan: every ground-force player the side remembers (`ContactMemory`) seen ≤ 3 s ago (`GrenadePlan.FreshTicks`) and still alive — as a gunner stops firing at a dead target (`Suppress`) — and the unit's own fired-from point while its window is open; 6–28 m from its eye; behind a `CoverBoard` box — the line from its eye to 0.5 m above where the enemy was recorded crosses one (`HiddenAimMeters`: a crouched player's recorded position is its origin, 0.3 m off the ground, so the plan's chest is over a 1.1 m wall). A fired-from point within 3 m of a contact in the list is that contact. On the way first (within 6 m of the line to where its order goes), then the nearest. From T6, its squad drill's fired-from points as well, each by the tick its round came (§4.2). |
 | Arc | `GrenadeSim.TrySolveOver`: today's low arc, flown tick by tick through the projectile integrator against `CoverBoard.FirstHit`; it comes to rest against the first box it strikes, else where it comes down, and the throw is made only if that is within `KillReach` of the enemy, measured flat: the blast's lethal distance from a full-health body (140 × (1 − d/7) ≥ 100 → 2 m) against a 0.5 m capsule ending at the feet, 2.45 m. A blast is not stopped by walls (`CombatManager.Explode`), so a grenade that stops against the near face of the wall an enemy crouches behind kills them, and one that stops against a 3 m block between them does not. **No high arc**: at 18 m/s the high root is still in the air when the 3 s fuse runs out at every range `GrenadeTests` tries, 6 to 28 m, so the plan's fallback never lands. Seen from above a flight is a straight line (drag acts along the velocity), so the boxes near it are gathered once (`CoverBoard.Near`) and each chord asks only those. A unit that finds no arc does not look again for a second (`Unit.NoArcUntilTick`). |
-| Claims | `GrenadeClaims`, one table per side: one claim per contact, per 3 m cell for a fired-from point, for 4 s (`GrenadePlan.ClaimTicks`) after the throw — one grenade per hidden enemy at a time. Checked on the scan and again at the throw. The plan put them on the squad's `DrillBoard`; that waits for T6, and a side-wide table is the stricter of the two. |
+| Claims | `GrenadeClaims`, one table per side: one claim per contact, per 3 m cell for a fired-from point, for 4 s (`GrenadePlan.ClaimTicks`) after the throw — one grenade per hidden enemy at a time. Checked on the scan and again at the throw. The plan put them on the squad's `DrillBoard`; T6 kept the side-wide table, the stricter of the two. |
 | Planner | `UnitFact.Grenade`, set on the scan; `ThrowGrenade` stands for one tick with `UnitIntent.ThrowAt` and `ThrowPoint`, and the engine throws that tick and clears the fact, thrown or not (`UnitContext.Threw`). Above React to fire: a unit running for cover throws on the way. `unit_task` goal 20. |
 | Engine half | `UnitManager.ThrowAtHidden`, a second path beside `ServerThrow`'s (unchanged): from where the unit stands that tick, `ShouldThrow` with `targetInCover: true`, `targetSpeed: 0`, the claim, then `TrySolveOver` again; `grenade_thrown` with `hidden` 1. `htn` only, as every plan is. |
-| In an assault | T6. |
+| In an assault | As built in T6: the drill's grenades phase (§5.5) holds the assault in its spots while a member with a grenade ready is 6–28 m from the threat point; the throw is this section's, at the squad's list among the candidates; the rush begins 2 s after an assault member's throw, or after 5 s without one. |
 
 ### 5.5 The squad drill: fire and manoeuvre — requirements 1 and 5
 
+As built in T6 (`DrillDomain.cs`: the facts, phases, traits, context and domain; `SquadDrill.cs`:
+`DrillRoles`, `DrillBoard`, `SquadDrill`; `UnitManager.Drill.cs`, the engine half; the unit
+domain's "drill" select, §5.0.1):
+
 | | |
 |---|---|
-| Squads | Board squads with ≥ 2 living units on foot whose micro-autonomy is on, under an Attack or an objective. A person's squads as well as the commander's: the drill is how an order is carried out (D1). Not Defend (the ring, React and "answer a call" cover it), Patrol, a Move that is not an objective, or Build. Units whose micro-autonomy is off, and tanks, technicals and trucks, are not elements and keep today's behaviour. |
-| Cadence | Every 10 ticks per squad, staggered by squad index, after `CountSquads` (`UnitManager.cs:967`). Eight squads: at most one decision a tick. |
-| Roles | `DrillRoles.Assign`, in unit id order. Gunners: base. Marksmen: overwatch. Riflemen, with a gunner: the assault, bounding in halves A and B when there are four or more, together below that. Without a gunner: half the riflemen are the base and the halves leapfrog, swapping base and bound each time. |
-| Facts | `Contact` none · known · fired upon (any member, §4.1). `Base` none · moving · firing. `Range` from the leading element to the threat point: far (> 45 m) · bound (20–45 m) · assault (< 20 m), held 2 m past each edge. `Moving` none · A · B; `Arrived`. `Objective` none · approach · on. `HasGunner`. |
-| Domain | `hold the point` [Objective=on ∨ no contact for 5 s]: posts on the point, or back to approaching. `get into cover` [Contact=fired upon ∧ Base=none] `GoToGround`: every member to cover from the threat point, the base to its fire positions {≤ 4 s}. `assault` [Range=assault ∧ Base=firing] `Grenades` → `Rush`. `bound` [Contact≠none ∧ Base=firing] `Bound`: one element to its spots while the other holds and fires; on arrival, or after 8 s, the other. `establish base` [Contact≠none] `SetBase` {≤ 6 s, then bound regardless}. `approach`: today's keep-pace advance. |
-| Bound spots | Per moving unit: `CoverBoard.FindSpots` from it, against the threat point, `Toward` the objective (else the threat point), `MinProgressMeters` 5 m, search 12 m, no nearer the threat than 12 m; claimed as cover spots already are (`Unit.CoverSpot`). No spot: an open point 8 m on along the axis, offset by rank. |
-| Directive | `DrillBoard[squad]`: phase, the §4.2 list and its threat point, the moving element, each member's role and bound spot, the assault's go, the grenade claims. Units encode `DrillRole` and `DrillPhase` from it on their scan; operators read their points from it. |
-| Give-ups | A drill on one threat point lasts ≤ 60 s; then the squad approaches without one for 20 s (P4). H6's stall — a squad 50–60 m short of a node for a minute, killing a raider each time it respawned (HTN_BOTS.md §5.3, "fresh rounds") — is this case. |
-| Pre-emption | Retreat pre-empts any role. React to fire does not pre-empt a moving element (its bound is to cover); it does pre-empt the holding one. A new order resets the drill. |
+| Squads | Board squads with ≥ 2 elements under an Attack or an objective (an Attack naming no contact, or a Move, on a node). An element is a unit on the field and on foot with a doctrine whose micro-autonomy is on: not a builder, a tank, a technical, a truck, an aircraft, or a unit whose micro-autonomy is off, which keep today's behaviour. A person's squads as well as the commander's: the drill is how an order is carried out (D1). Not Defend (the ring, React and "answer a call" cover it), Patrol, a Move that is not an objective, or Build; not while the board says the squad is gathering or falling back. |
+| Cadence | Every 10 ticks per squad, staggered by board slot (`SquadDrill.IsDue`: tick mod 10 = slot mod 10), after `CountSquads` and before any unit moves. Eight squads: at most one decision a tick. Units read their part off the board on their own scans, up to 10 ticks later. |
+| Roles | `DrillRoles.Assign`, in unit id order. Gunners: base. Marksmen: overwatch. Riflemen, with a gunner: the assault, bounding in halves A and B when there are four or more, together (A) below that. Without a gunner: halves A and B, the first ⌈n/2⌉ in A; A is the base until a half has bounded, and from then the half not moving is — behind a bound, and when the squad sets its base again (`DrillContext.RiflesBase`), so a bound stopped for want of the holding half's fire sends that half to its fire positions, not the half on its way. A member that is not an element has no role. |
+| List | §4.2, on each decision (`SquadDrill.GatherEntries`): every contact the side remembers and has not seen die since, and the squad's fired-from points, kept on the board 8 s after the round (`DrillBoard.RememberFired`, 16 a squad), one within 3 m of a contact being that contact; only those within 60 m of the squad's centroid or of the line from it to where its order goes. The threat point: the entry with the most elements fired upon from within 5 m of it, then nearest that line, then the lowest owner id (a contact before a fired-from point), then the earlier. It is held through a lull for as long as the drill is in contact. |
+| Facts | `Contact` none · known · fired upon (an element in its window), held 5 s after the last threat point (`QuietTicks`). `Base` none · moving · firing: none until the drill sends its base (on going to ground or setting it), firing while a member at a fire position — or, in a bound, a member holding — fired a round in the last 2 s since it was sent (`Unit.LastShotTick`); out of contact it stands down. `BaseLate`: sent 6 s ago. `Range` from the leading element (the nearest assault member) to the threat point: far (> 45 m) · bound · assault (< 20 m), each edge held 2 m past itself. `Arrived`: every member of the element bounding within 1.5 m of its spot. `Objective` none · approach · on (§5.0). `HasGunner`; `Grenade` (an assault member with a grenade ready 6–28 m from the threat point); `GivenUp`; `Moving` (the half bounding, the bound's own). |
+| Domain | In priority order: `hold the point` [Objective=on] `HoldPoint` {Objective=on}; `given up` [GivenUp] `Approach` {GivenUp}; `get into cover` [Contact=fired upon ∧ Base=none] `GoToGround` {≤ 4 s, Contact≠none}, then the base is set; `assault` [Range=assault ∧ base ready ∧ Grenade] `Grenades` → `Rush`, else [Range=assault ∧ base ready] `Rush`, each {Contact≠none, Range=assault}; `bound` [Contact≠none ∧ base ready] `Bound` {base ready: out of contact the base stands down, so this ends it too}; `establish base` [Contact≠none] `SetBase` {Contact≠none}; `approach`. "Base ready" is Base=firing ∨ BaseLate: the squad does not bound until the base fires, or 6 s after it was sent. `Grenades` ends 2 s after an assault member's throw, or after 5 s with none. |
+| Bound | `Bound` starts with the first half — A with a gunner, B without one, A was the base — and hands over to the other when every member of the moving one is in its spot, or after 8 s; with one half, that half again from where it got to. Each hand-over is a new bound, numbered (`DrillIntent.BoundSerial`), once a decision at most. |
+| Tasks | `DrillRoles.TaskFor`: in contact the base's is `FirePosition`; the assault's `Ground` while going to ground (the rifle base's `FirePosition`), `Hold` while the base is set and for the grenades, `Bound` for the half moving and `Hold` for the other, `Rush` in the rush; a marksman's `Overwatch`. Approaching or holding the point, none. |
+| Spots | All cover-board searches (rule 6), claimed against the rest of the squad and every other unit's cover, hide and drill spot (`Unit.DrillSpot`). Fire position: §5.2's, kept while it is still in the band behind a box low enough to fire over that still hides it. Ground: as React's (§5.1) against the threat point — a low wall within 10 m on the way to the point, else anything that hides it within 6 m, never round a box towards the threat — kept while it hides; none in reach, whatever spot it has while that hides, else where it stands. Bound: found once per bound from where the member stands then, and kept for it: a low wall it can fire over, else any box, within 12 m, at least 5 m nearer where the order goes than it is (`CoverQuery.MinProgressMeters`), no further than it from there, within 8 m of the line, never round a box towards the threat, and no nearer the threat point than 12 m; with none, an open point 8 m on along the axis (short of the point), the half's points 3 m apart across it in the order its members stand across it (so no two cross), and never inside the 12 m — halved twice, then where it stands. Hold: the spot it has. Rush and overwatch: none. |
+| Unit operators | `DrillGround` (goal 28): to its spot without stopping, firing on the way; in it, or with none, it holds. `DrillFirePosition` (29): the same, and firing at the threat point raised 1.3 m (`UnitIntent.FireAt`) when its scan finds that in its engage range with a line over the cover board — a place, nobody's focus, no grenade by it. `DrillBound` (30): to its spot, not stopping, firing on the way. `DrillHold` (31): in its spot, firing at the threat point while an element bounds, throws or rushes; between, down behind its box when the spot is behind one and it has no target of its own. `DrillRush` (32): onto its post on the point, or the threat point under a plain attack, without waiting for the squad. A gunner as the base runs §5.2's operators at the drill's fire position. |
+| Directive | `DrillBoard[squad]`: whether it drills, its phase, the half moving, the threat point, where the assault rushes, whether the base has lifted, the list (§4.2) and the base's places, and for each member its role, half, task and spot (`DrillDirective`). Units encode `DrillPhase`, `DrillTask` and `DrillSpot` (the spot's band, every tick) from it on their scan (`UnitManager.SenseDrill`); a gunner's places, a grenade's candidates and a marksman's threats take the squad's fired-from points from it. |
+| Give-ups | 4 s to go to ground; 6 s for the base; 8 s a bound; 5 s for a grenade; 60 s in contact in all (any threat point: the clock starts again only out of contact), then the squad approaches without a threat point for 20 s (P4). H6's stall — a squad 50–60 m short of a node for a minute, killing a raider each time it respawned (HTN_BOTS.md §5.3, "fresh rounds") — is this case. |
+| Pre-emption | Retreat pre-empts any role. React to fire does not pre-empt a unit on its way in the drill — going to ground, bounding or rushing (`UnitContext.MovesInDrill`) — and does pre-empt the half holding and the base. A new order resets the drill (a board squad formed or ordered again: `Squad.FormedTick`, `OrderedTick`). |
+| `squad_drill` | On each phase change, the squad's slot, the phase by its `DrillPhase` number (1 approach, 2 hold the point, 3 go to ground, 4 set the base, 5 bound, 6 grenades, 7 rush, 0 no drill), how many elements, and its threat point. |
+| Debugger | `HtnDomainKind.Drill` and `AiEntityKind.Drill` (a drill by board slot): its trace, threat point, rush point and every member's spot; a unit's inspection adds its drill task, its spot, its squad's threat point and the place it fires at (`ai_plan drill <slot>`, `ai_tree drill`; AI_DEBUG.md). The debug HUD's `drill` row lists each squad drilling and its phase. |
 
 ### 5.6 A Move to a control point — requirement 5
 
-- `Encode` (`UnitManager.cs:1012`) marks an objective for a Move whose target is on a node, by the
-  rule it uses for an Attack, for a unit whose micro-autonomy is on; `SenseObjective`
-  (`UnitDomain.cs:577`) accepts Move as well as Attack.
-- The point's three methods move from Attack into the "take the point" select that both kinds
+As built in T6:
+
+- `UnitManager.Encode` marks an objective for a Move whose target is on a node, by the rule it uses
+  for an Attack, for a unit with a doctrine whose micro-autonomy is on and whose board squad is not
+  falling back (`UnitContext.TakesPointUnder`); `SenseObjective` applies the same rule every tick,
+  so switching micro-autonomy off turns the take back into an obeyed Move on that tick.
+- The point's three methods moved from Attack into the "take the point" select that both kinds
   reach (§5.0.1). Attack's chasing methods (engage focus, support, advance) stay Attack-only, so a
   Move does not chase what it sees off the point: its subgoals are cover, suppression, grenades and
   the team's bounds, all towards the point.
@@ -302,7 +334,7 @@ fire):
   off (§5.9) is that, for a person; for the commander, whose retreats are moves so as not to stop
   (HTN_BOTS.md §5.3), units in a squad whose board phase is falling back do not react, and the
   commander's Refill move sets that phase as Retreat's does. Its supply trucks take no part in
-  React.
+  React, and since T6 none in taking a point either: a Move objective needs a doctrine.
 
 ### 5.7 Ground bots perceive fire — needed to measure requirement 1
 
@@ -827,6 +859,163 @@ strategist or a scenario turns micro-autonomy on.
   the middle node, held by ground bots behind its walls. Claims: the strategist captures the node
   in ≥ half the seeds; `squad_drill[phase=bound]` ≥ 1; units lost below off's over the seeds.
   Thresholds from drafts of more seeds than the file holds, as H6 set its.
+- **Result — built.**
+  - `dotnet test`: 2115 passed, 0 failed (2000 before; 115 new: 102 in `SquadDrillTests`, 6 in
+    `UnitHtnTests`, 5 in `AiDebugTextTests`, 1 each in `AiDebugCodecTests` and `AgentEventTests`;
+    `HtnDebugTests`' unit schema names 30 facts). `SquadDrillTests` covers the plan's list: roles
+    for a gunner and 3, a gunner and 6, 4 riflemen, 2, a marksman among them and a unit with
+    micro-autonomy off among them, and each role's task in each phase; every domain row, each phase
+    ending when its premise goes and no lower one replacing it; bound alternation, with and without
+    a gunner and with one half; without a gunner, the half not moving as the base, so a bound it
+    cannot cover sends it to fire and not the half on its way; base first; the 4 s, 6 s, 8 s, 5 s
+    and 60 s give-ups and the 20 s retry; holding the point, and not holding one an enemy is still
+    on; a new order; determinism; 0 B over 8 squads × 7,200 ticks, against a `DefaultFactory` run
+    that must allocate. Over a cover board: the list, the threat point, the fired-from memory, every
+    kind of spot, the claims, the lift and shift, and a squad walked in bound by bound to the
+    assault. And the unit's half: each drill task its operator, firing only with a line, holding
+    down between the bounds, the rush, micro-autonomy off and falling back ending it, React leaving
+    a bound alone, the marksman's overwatch and the gunner's reserve and cap. Every loop in them is
+    bounded (720 decisions). `UnitHtnTests`: a Move onto a node is the point to take with
+    micro-autonomy on, and obeyed with it off, with no doctrine, or with its squad falling back;
+    switching micro-autonomy off turns the take back into a Move on the tick; a Move elsewhere is
+    obeyed either way; a Move objective never plans engage focus, support or advance. Its 0 B
+    population has 28 situations, the last two a Move onto a point bounding in a drill and an
+    attack's half holding. `AgentEventTests` pins `squad_drill` and goals 28–32; `AiDebugCodecTests`
+    and `AiDebugTextTests` the drill's reference, inspection, signature and version 2. `dotnet build
+    Gdpyr.csproj`: 0 warnings, 0 errors. Domains (`ai_tree`): unit 96 tasks and 212 conditions (71
+    and 188 before), drill 25 and 23; the debugger's wire allows 255.
+  - **The tests test something.** One piece removed at a time, the count of tests that failed — the
+    drill's domain: base first 30; 4 s to ground 1; the base late at 6 s 2; the 8 s bound 1; the 60
+    s give-up 1; the 20 s retry 1; contact held 5 s 1; the hold-the-point row 3; set base's
+    executing condition 1; the bound's 2; the rush's on range 1; the grenade waited for 1; the
+    second half first without a gunner 1; the base's fire counted only after it was sent 1; the
+    range's hysteresis 2. The squad drill: the contested point 2; the squad's claims 1; a bound
+    gaining ground 1; a bound's spot kept for the bound 2; the base off the axis 1; its open fire
+    position 1; the lift 1; the base following the rush 1; fired-from points kept 8 s 1; one beside
+    a contact being it 2; the list within 60 m of the squad 1; the threat point by who was fired
+    upon 1; two elements 1; the open bound's standoff 1; its spacing 1; without a gunner, the half
+    not moving as the base 2, and with one half that half 1. Roles: halves from four with a gunner
+    2; unit id order 1; micro-autonomy off no role 1. The unit: drill tasks holding by
+    micro-autonomy 1; React's select leaving a bound alone 1, its executing condition 1; overwatch
+    timed to the bounds 1; the reserve spent covering a move 1; the gunner's cap off in a drill 1; a
+    Move objective needing micro-autonomy 7, a doctrine 1, a squad not falling back 1; holding fire
+    only while one moves 1; holding down between 1; down when gone to ground 1; fire only with a
+    line 1; the rush onto the post 1; the drill not while falling back 1. Four first failed nothing:
+    the bound's executing condition on contact, gone — out of contact the base stands down, so "base
+    ready" ends the bound as well; a bound's 5 m of progress, whose test had a wall that passed
+    either way (it has one 2.5 m ahead now); the open bound's standoff, which the default numbers
+    never reach (a test with a 16 m step now); and its spacing, whose test now asks for 3 m between
+    the open points and found defect (4) below. The base-first, standoff, spacing and rifle-base
+    rows were run on the final code, the rest on it before the fixes (4) and (6), which touch only
+    the open bound and a squad without a gunner.
+  - **Cost** (a temporary test, not committed; Release, `TieredCompilation` off, Intel Xeon @ 2.80
+    GHz, with scenario servers running beside it): `SquadDrill.Decide` for a gunner and six riflemen
+    against a contact on the point, a new order every 40 decisions, over 26 and 96 cover boxes —
+    1.71 and 2.50 µs a decision on average; 3.03–3.06 and 5.92–5.95 µs with every rifleman fired
+    upon on every decision. The first two decisions of an order, which search every spot again,
+    13.4–44.6 µs; the slowest 55–130 µs. The code before (4)'s fix measured within 0.05 µs of these
+    on average, but for one run with a 2.28 ms outlier, three servers beside it. Measured before
+    (6)'s fix, which adds one comparison a decision. Eight squads make at most one decision a tick.
+  - **Scenario** `tactics_move_to_node`: a scripted strategist seat moves a heavy gunner and six
+    riflemen onto node 0 at (−30, −15), 62 m away; three roster ground bots (H6's idle seat in the
+    far corner the fourth) go to the node; two sandbag walls by the node and three on the way.
+    Claims: 0 pilot fallbacks; `squad_drill[phase=5]` (bound) ≥ 1 every seed; the node captured by
+    the strategist in ≥ half the seeds; ≥ 5 kills by its units in ≥ half the seeds. Seeds 1–3 in the
+    file; six each way on the T6 commit's build:
+
+    | | micro-autonomy on | off (`--unit-autonomy off`, otherwise the same file) |
+    |---|---|---|
+    | Claims | 4 of 4 held (kills ≥ 5 in 6 of 6 seeds, the node captured in 4 of 6) | the bound and the kills fail (no bound, kills ≥ 5 in 2 of 6 seeds), as they should; the capture holds |
+    | `squad_drill` | approach; to ground at 212–242 ticks, the threat point 32–38 m from the node's centre; bound 240 ticks later; holding the point at 1,602–2,132 in four seeds, the other two down to one element first; grenades in seeds 5 and 6, then bounding again; no drill once one element is left | none |
+    | `unit_task` 28–32 a seed | ground 5–6; fire position 3–4; bound 20–28; hold 21–26; rush none | none |
+    | Captured (ticks from the round's start) | 2,070–2,606, in 4 seeds | 1,206, every seed |
+    | Node held, of 5,400 ticks | 0–2,794, mean 1,319; held at the end in 1 seed | 1,308–2,404, mean 1,679; in none |
+    | Kills by its units | 6, 10, 6, 7, 10, 13: 52 | 3, 3, 5, 5, 3, 3: 22 |
+    | Units lost | 42 of 42; the last at 1,789–5,336 | 42 of 42; the last at 1,504–2,516 |
+    | Grenades thrown by its units | 1, 1, 2, 1, 2, 0 | none |
+
+    The rounds are not repeatable. A run of the same six seeds on the build before (6)'s fix, whose
+    drill in these rounds is the same decision for decision — (6) changes only who fires while a
+    squad without a gunner goes to ground or sets its base, and no round here set its base without
+    one — captured the node in all six, held it 2,168 ticks on average and at the end in one, and
+    killed 42 (9, 9, 6, 5, 5, 8); off, 25 (4, 3, 5, 5, 4, 4). The build before (4)'s fix: 47 kills
+    (12, 6, 9, 5, 7, 8), 41 lost, captured in all six, held at the end in 2, 2,220 held on average.
+    Off, whose path none of these fixes touches, gave seeds 1–3 3, 3, 5 kills, 4, 3, 5 on two other
+    builds and 4, 3, 4 on a third. So the file's thresholds are what held over all of them: over 18
+    seeds on, at least 5 kills in every one, the node captured in 16; over 21 off, 5 kills in 5 and
+    never more, while seeds 1 and 2 never reached 5. Seeds 1–3 on gave 6, 10, 6, then 9, 9, 6, then
+    12, 6, 9 kills, and captured in seeds 1 and 2 every time. The file's first threshold, 6 kills,
+    is 5 now: 3 of the 18 seeds on fell below 6. The drill never reached the rush: the threat point
+    stayed 18–55 m from the node's centre — the bots coming in from their side, not sitting on it —
+    and the leading element came within 20 m of it with the base ready in 3 of the 18 seeds, each
+    time with a grenade: the grenades phase ran, and the squad went back to bounding.
+
+  - **Found by the scenario and the tests, fixed here.** (1) A base with no wall in reach held where
+    it stood, 58 m from the threat point, beyond its gun's 45 m: it never fired, and every bound
+    waited out the 6 s. With none in reach and the threat beyond 40 m it now closes to an open point
+    3 m inside that. (2) A half holding in the open, and a member gone to ground with no spot,
+    stood, and the bots shot them at 41–58 m; `DrillHold` and `DrillGround` crouch in the open as
+    behind a wall when not firing. Six seeds before the crouch: captured 4, held at the end 1, 49
+    kills. (3) The first draft — six bots, the middle node at (0, −35) — was a grinder: on and off,
+    all seven units died in every seed; captured 2 of 3 on and 1 of 3 off, 27 kills against 31. With
+    six bots respawning the squad lost every unit either way, and the round could not tell the drill
+    from walking in; the file has three and node 0. (4) The open bound offset each member by its
+    unit id's rank, so two could cross: the spacing test found two spots 1.3 m apart, (−2.78,
+    −57.09) and (−3.77, −58.0). The rank is now where each stands across the axis
+    (`SquadDrill.AcrossRank`). (5) Four executing conditions a drill step took the unit domain to
+    246 of the 255 conditions the debugger's wire allows; one a step, naming the task and the order,
+    brought it to 212. (6) The suite's `tactics_react_to_fire` — four riflemen ordered together onto
+    node 0, which from T6 is a squad taking the point — found the drill thrashing without a gunner.
+    After a hand-over the half now holding had no shot at the shooter, 54 m off, so the bound
+    stopped; setting the base again sent half A, the half on its way, to its fire positions; it
+    fired, and bounded again the next decision. Set base and bound alternated every 10 ticks, 13
+    times in seed 1, until the base was 6 s late. The rifle base is now the half not moving
+    (`DrillContext.RiflesBase`), as `TaskFor`'s summary already said; two tests. With a gunner the
+    base never changes hands; `tactics_move_to_node`, whose base is a gunner, never set its base
+    again after a bound. That file on the fixed build, seeds 1–3: set base 2 times a seed instead of
+    9–10, `unit_task` 29 (fire position) 4 times instead of 18–20, the node captured at 1,730–1,770
+    ticks instead of 1,793–1,877; 0 riflemen lost either way.
+  - **Suite**: `./scripts/playtest.sh Tests/Scenarios/*.json` on the T6 commit's build, default
+    `htn` and micro-autonomy off except where a scenario sets it: 28 of 28 passed, 0 failed, in 49
+    min 34 s. Among them `tactics_move_to_node` — kills 12, 8, 7, the node captured in all three
+    seeds at 2,065–2,097 ticks, every unit lost — and the other four `tactics_*`. The run before
+    (6)'s fix and the change to `tactics_react_to_fire` below failed that file alone: no `unit_task`
+    18 in any seed, its riflemen drilling onto the node instead.
+  - **Differences from the plan above.** The plan's last claim, units lost below off's, is not in
+    the file: the bots respawn and the squad does not, so on and off both lose all seven in every
+    seed of every run but one (41 of 42 on, on an earlier build). What differs is the bots it kills,
+    42–52 against 22–25 over six seeds in each of three runs, and kills are the claim. How long it
+    holds the node does not differ reliably: 1,319–2,220 ticks on average on, 1,603–1,679 off. The
+    capture claim holds on and off alike: off walks in and takes the node at 1,205–1,206 ticks every
+    seed, the drill's bounds take longer — the risk §9 names, "time from an order on a node to its
+    capture grows" — and it is a floor, not a difference. The scenario is node 0 with three bots,
+    not the middle node with six ((3) above). `tactics_react_to_fire`, T1's, moves its riflemen to
+    (−45, −15), 15 m off node 0's centre, where it moved them onto the node: from T6 a Move onto a
+    node is the point to take, and no unit on its way to one reacts — a squad drills, and React
+    leaves a unit on its way in the drill alone (§5.1), while a unit alone must stand on a point
+    nobody holds (`ControlPoint.Holds`), which T1 already kept from reacting under an attack on a
+    point. A Move anywhere else reacts as T1 built it (§5.6). "And still get there" is each rifleman
+    alive and within 4 m of its target at the end, from the strategist seat's observation (`units`:
+    alive at 0, distance to its order's target at 13, of each 14), in place of the capture. Seeds
+    1–3 on the final build: on, `unit_task` 18 four times and 19 twice a seed, 4 hits, nobody lost,
+    all four within 2.4 m; off, no reaction — the claim fails, as it should — 2 hits, nobody lost,
+    all within 1.5 m. A unit encodes its drill task (`DrillTask`), its phase and its spot's band,
+    not its role; React's ¬Bounding is `DrillTask∉{ground, bound, rush}`. On the point excludes a
+    contested one (§5.0). A Move is an objective only for a unit with a doctrine whose squad is not
+    falling back (§5.6). Each drill step holds by one executing condition ((5) above). The 60 s
+    clock counts contact with any threat point, so a squad cannot keep its drill by its threat point
+    changing. Grenade claims stay side-wide (§5.4). The base closes to an open fire position, and
+    the half holding crouches in the open ((1), (2)). The marksman's overwatch is its engage timed
+    to the bounds; the base gunner's own 8 s cap gives way to the drill's 60 s, and it spends its
+    reserve while an element moves (§5.2). The debugger's frame header carries the drill's
+    signature, so its codec is version 2 — not additive as the plan said: a version-1 peer and a
+    version-2 one refuse each other's messages (AI_DEBUG.md §5.3).
+  - **Not checked.** In a round: the rush, the lift and the shift (the grenades phase ran in 3 of 18
+    seeds, the rush in none; each is in `SquadDrillTests`); a squad with a marksman, or under an
+    attack rather than a Move; a squad without a gunner but in T1's file as it was, outside the
+    suite ((6) above). The debugger's panel and world lines on a display (the text was read through
+    `AiDebugText`, the wire by the codec's round trips); a spectating client over the network; `unit
+    ms` at 64 units; the commander's squads, which T7 builds round gunners.
 
 ### T7 — The commander uses them (1 day)
 

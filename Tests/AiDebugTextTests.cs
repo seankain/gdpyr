@@ -27,6 +27,8 @@ public class AiDebugTextTests
 	[InlineData("squad 2", AiEntityKind.Squad, AiTargets.FirstStrategist, 2)]
 	[InlineData("squad 2 bot 7", AiEntityKind.Squad, 0x4000_0006, 2)]
 	[InlineData("s2 b7", AiEntityKind.Squad, 0x4000_0006, 2)]
+	[InlineData("drill 3", AiEntityKind.Drill, 3, 0)]
+	[InlineData("d3", AiEntityKind.Drill, 3, 0)]
 	public void Targets_Parse(string line, AiEntityKind kind, int id, int slot)
 	{
 		Assert.True(AiTargets.TryParse(line.Split(' '), out AiEntityRef target, out string error), error);
@@ -47,6 +49,7 @@ public class AiDebugTextTests
 	[InlineData("unit -1")]
 	[InlineData("squad 2 unit 3")]
 	[InlineData("bot 3 bot 4")]
+	[InlineData("drill 300")]
 	public void Targets_RefuseWhatTheyCannotMean(string line)
 	{
 		Assert.False(AiTargets.TryParse(line.Split(' ', StringSplitOptions.RemoveEmptyEntries), out _, out string error));
@@ -135,6 +138,36 @@ public class AiDebugTextTests
 	}
 
 	// ---- an inspection --------------------------------------------------------
+
+	[Fact]
+	public void AnInspectedDrill_ReadsAsItsSquad_ThenItsPlan()
+	{
+		// docs/TACTICS.md §5.5: a board squad's drill, setting its base.
+		var planning = new DrillPlanning(DrillTraits.Default);
+		DrillContext c = planning.CreateContext();
+		c.Tick = 600;
+		c.Encode(new DrillSense { HasThreat = true, LeadMeters = 30f, HasGunner = true, HasElementB = true });
+		planning.Tick(c);
+		c.Tick = 660;
+
+		var inspect = new AiInspect { Ref = AiEntityRef.Drill(2), Planning = true, Goal = (byte)c.Intent.Phase };
+		HtnTracer.Capture(planning.Map, c, c.History, inspect.Trace);
+		inspect.Add(AiValueKey.Elements, 7);
+		inspect.Add(AiValueKey.Bounds, 0);
+		inspect.Add(AiValueKey.GiveUps, 0);
+		inspect.Add(AiValueKey.Moving, 0);
+
+		var frame = new AiDebugFrame { Tick = 660, BotAi = BotAi.Htn, DrillSignature = HtnDomains.Drill.Signature };
+		frame.Inspected.Add(inspect);
+
+		string text = AiDebugText.Describe(inspect, frame, HtnTextStyle.Plain);
+		string[] lines = text.Split('\n');
+		Assert.Equal("drill 2 · squad drill · 7 taking part · 0 bounds", lines[0]);
+		Assert.Equal("goal SetBase (Attack)", lines[1]);
+		Assert.Contains("running SetBase 1.0s", text);
+		Assert.Contains("Contact=Known", text);
+		Assert.Contains(">> SetBase", text);
+	}
 
 	[Fact]
 	public void AnInspectedBot_ReadsAsWhoItIs_ThenItsPlan()
@@ -249,13 +282,29 @@ public class AiDebugTextTests
 	[Fact]
 	public void TheVehicleKeys_AreAppended()
 	{
-		// Byte enums on the debug wire: appended, so AiDebugCodec.Version stays 1.
+		// Byte enums on the debug wire: appended, so a key never changes its meaning.
 		Assert.Equal(19, (int)AiMarkerKey.Vehicle);
 		Assert.Equal(17, (int)AiValueKey.RidingIn);
 		Assert.Equal(18, (int)AiValueKey.Aboard);
 		Assert.Equal(19, (int)AiValueKey.Seats);
 		Assert.Equal(20, (int)AiValueKey.Altitude);
-		Assert.Equal(1, AiDebugCodec.Version);
+	}
+
+	[Fact]
+	public void TheDrillsKeys_AreAppended_AndItsSignatureIsVersionTwo()
+	{
+		// docs/TACTICS.md §5.5. The keys are appended as the vehicles' were; the frame's
+		// header gained the drill domain's signature, which a version-1 reader would take
+		// for the label count, so the version moved.
+		Assert.Equal(20, (int)AiMarkerKey.Threat);
+		Assert.Equal(21, (int)AiMarkerKey.DrillSpot);
+		Assert.Equal(22, (int)AiMarkerKey.FireAt);
+		Assert.Equal(23, (int)AiMarkerKey.Rush);
+		Assert.Equal(21, (int)AiValueKey.DrillPhase);
+		Assert.Equal(27, (int)AiValueKey.GiveUps);
+		Assert.Equal(4, (int)AiEntityKind.Drill);
+		Assert.Equal(4, (int)HtnDomainKind.Drill);
+		Assert.Equal(2, AiDebugCodec.Version);
 	}
 
 	[Fact]

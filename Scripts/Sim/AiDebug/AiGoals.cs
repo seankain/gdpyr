@@ -55,7 +55,8 @@ public static class AiGoals
 			UnitGoal.WaitForSquad or UnitGoal.EngageFocus or UnitGoal.Support or UnitGoal.Advance
 				or UnitGoal.HoldCover or UnitGoal.TakePoint or UnitGoal.HoldPoint or UnitGoal.HoldPointCover
 				or UnitGoal.ThrowGrenade or UnitGoal.ToHide or UnitGoal.PopOut or UnitGoal.FireFromPeek or UnitGoal.Duck
-				or UnitGoal.Relocate or UnitGoal.SuppressPoint => AiTaskFamily.Attack,
+				or UnitGoal.Relocate or UnitGoal.SuppressPoint or UnitGoal.DrillGround or UnitGoal.DrillFirePosition
+				or UnitGoal.DrillBound or UnitGoal.DrillHold or UnitGoal.DrillRush => AiTaskFamily.Attack,
 			UnitGoal.EngageInLeash or UnitGoal.AnswerCall or UnitGoal.HoldPost => AiTaskFamily.DefendZone,
 			UnitGoal.Patrol => AiTaskFamily.Recon,
 			UnitGoal.Obey => AiTaskFamily.Obey,
@@ -71,6 +72,8 @@ public static class AiGoals
 			CommandGoal.Scout => AiTaskFamily.Recon,
 			_ => AiTaskFamily.None,
 		},
+		// A drill is how an attack, or a point to take, is carried out (docs/TACTICS.md §5.5).
+		HtnDomainKind.Drill => goal == 0 ? AiTaskFamily.None : AiTaskFamily.Attack,
 		_ => AiTaskFamily.None,
 	};
 
@@ -102,6 +105,7 @@ public static class AiGoals
 		AiEntityKind.Player => HtnDomainKind.Ground,
 		AiEntityKind.Unit => HtnDomainKind.Unit,
 		AiEntityKind.Squad => HtnDomainKind.Squad,
+		AiEntityKind.Drill => HtnDomainKind.Drill,
 		_ => HtnDomainKind.None,
 	};
 
@@ -125,7 +129,7 @@ public static class AiTargets
 	/// <summary>Stands for "the first computer strategist" in a squad reference nobody resolved yet.</summary>
 	public const int FirstStrategist = 0;
 
-	public const string Usage = "bot <n> | peer <id> | unit <id> | squad <slot> [bot <n>]";
+	public const string Usage = "bot <n> | peer <id> | unit <id> | squad <slot> [bot <n>] | drill <slot>";
 
 	public static bool TryParse(IReadOnlyList<string> args, out AiEntityRef target, out string error)
 	{
@@ -223,8 +227,19 @@ public static class AiTargets
 				target = AiEntityRef.Squad(FirstStrategist, number);
 				return true;
 
+			case "drill":
+			case "d":
+				if (number > byte.MaxValue)
+				{
+					error = "drills are numbered by their board slot, a small number";
+					return false;
+				}
+
+				target = AiEntityRef.Drill(number);
+				return true;
+
 			default:
-				error = $"'{kind}' is not bot, peer, unit or squad";
+				error = $"'{kind}' is not bot, peer, unit, squad or drill";
 				return false;
 		}
 	}

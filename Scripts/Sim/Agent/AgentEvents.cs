@@ -59,6 +59,14 @@ public enum AgentEventKind : byte
 	/// Only a unit whose micro-autonomy is on, under <c>--bot-ai htn</c>.
 	/// </summary>
 	UnitTask = 19,
+
+	/// <summary>
+	/// A board squad's drill changed phase (docs/TACTICS.md §5.5): to ground, setting its
+	/// base, bounding, grenades, the rush, and back to approaching or holding the point,
+	/// by its <c>DrillPhase</c> number; 0 when the squad stops drilling. Only a squad with
+	/// two units or more whose micro-autonomy is on, under <c>--bot-ai htn</c>.
+	/// </summary>
+	SquadDrill = 20,
 }
 
 /// <summary>
@@ -138,9 +146,14 @@ public static class AgentEventSchema
 		new[] { "thrower", "tier", "hidden", "x", "z" },                                       // GrenadeThrown
 		// The unit, its catalog id, the goal by its UnitGoal number — 18 take cover from
 		// fire, 19 return fire, 20 throw a grenade, 21 to hide, 22 pop out, 23 fire from a
-		// peek, 24 duck, 25 relocate, 26 suppress a place, 27 fill its belt — and where it
-		// was when it started it.
+		// peek, 24 duck, 25 relocate, 26 suppress a place, 27 fill its belt, and in its
+		// squad's drill 28 to ground, 29 to a fire position, 30 bound, 31 hold and 32 rush —
+		// and where it was when it started it.
 		new[] { "unit", "tier", "goal", "x", "z" },                                            // UnitTask
+		// The board squad's slot, the phase by its DrillPhase number — 1 approach, 2 hold the
+		// point, 3 go to ground, 4 set the base, 5 bound, 6 grenades, 7 rush, 0 no drill —
+		// how many of its units take part, and its threat point, else where its order goes.
+		new[] { "squad", "phase", "elements", "x", "z" },                                      // SquadDrill
 	};
 
 	private static readonly string[] Kinds =
@@ -148,7 +161,7 @@ public static class AgentEventSchema
 		"round_start", "round_end", "kill", "damage", "unit_built", "unit_lost", "node_captured",
 		"seat_attached", "seat_released", "structure_placed", "structure_built", "structure_lost",
 		"squad_task", "contact_spotted", "node_contested", "unit_embarked", "unit_disembarked", "dropship_landed",
-		"grenade_thrown", "unit_task",
+		"grenade_thrown", "unit_task", "squad_drill",
 	};
 
 	/// <summary>The highest kind there is. Everything from 0 to this has a name and a slate of fields.</summary>

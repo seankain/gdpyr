@@ -40,6 +40,7 @@ public sealed class AiDebugPublisher
 			GroundSignature = _bots.GroundPlanning?.Map.Signature ?? 0u,
 			UnitSignature = UnitManager.Instance?.Planning?.Map.Signature ?? 0u,
 			SquadSignature = _bots.CommanderPlanning?.Map.Signature ?? 0u,
+			DrillSignature = UnitManager.Instance?.Drill?.Planning.Map.Signature ?? 0u,
 		};
 
 		if (watch == null)
@@ -75,6 +76,7 @@ public sealed class AiDebugPublisher
 		AiEntityKind.Player => InspectPlayer(target.Id),
 		AiEntityKind.Unit => InspectUnit((ushort)Math.Clamp(target.Id, 0, ushort.MaxValue)),
 		AiEntityKind.Squad => InspectSquad(target.Id, target.Slot),
+		AiEntityKind.Drill => InspectDrill(target.Id),
 		_ => null,
 	};
 
@@ -447,12 +449,84 @@ public sealed class AiDebugPublisher
 			inspect.Add(AiMarkerKey.Supply, plan.SupplyPoint);
 		}
 
+		// Its part in its squad's drill (docs/TACTICS.md §5.5): the squad's threat point, the
+		// spot its task takes it to, and the place it fires at with nobody named.
+		var drillTask = (DrillTask)plan.Get(UnitFact.DrillTask);
+		int squad = UnitManager.Instance.Squads.SquadOf(unitId);
+		if (drillTask != DrillTask.None)
+		{
+			inspect.Add(AiValueKey.DrillSquad, squad);
+			inspect.Add(AiValueKey.DrillPhase, plan.Get(UnitFact.DrillPhase));
+			inspect.Add(AiValueKey.DrillTask, (int)drillTask);
+			if (UnitManager.Instance.Drill?.Board.TryThreat(squad, out Vector3 threat) == true)
+			{
+				inspect.Add(AiMarkerKey.Threat, threat);
+			}
+
+			if (plan.HasDrillPoint)
+			{
+				inspect.Add(AiMarkerKey.DrillSpot, plan.DrillPoint);
+			}
+		}
+
+		if (plan.Intent.FireAt)
+		{
+			inspect.Add(AiMarkerKey.FireAt, plan.Intent.FirePoint);
+		}
+
 		inspect.Add(AiValueKey.Move, (int)plan.Intent.Move);
 		inspect.Add(AiValueKey.Focus, plan.FocusOwnerId);
 		inspect.Add(AiValueKey.SquadAlive, plan.HasSquad ? plan.SquadAlive : 0);
 		inspect.Add(AiValueKey.Waiting, plan.Waiting ? 1 : 0);
 		inspect.Add(AiValueKey.StopToFight, plan.Intent.StopToFight ? 1 : 0);
 		inspect.Add(AiValueKey.FailedResupplies, plan.FailedResupplies);
+		return inspect;
+	}
+
+	/// <summary>
+	/// A board squad's drill (docs/TACTICS.md §5.5): its plan, its threat point and where its
+	/// assault rushes, every member's spot, its phase, how many take part, which half bounds,
+	/// and how often it has bounded and given up. Null for a slot that does not drill.
+	/// </summary>
+	private static AiInspect InspectDrill(int slot)
+	{
+		SquadDrill drill = UnitManager.Instance?.Drill;
+		if (drill == null || !drill.Board.IsActive(slot))
+		{
+			return null;
+		}
+
+		DrillContext context = drill.ContextOf(slot);
+		DrillBoard board = drill.Board;
+		var inspect = new AiInspect
+		{
+			Ref = AiEntityRef.Drill(slot),
+			Planning = true,
+			Goal = (byte)board.PhaseOf(slot),
+		};
+		HtnTracer.Capture(drill.Planning.Map, context, context.History, inspect.Trace);
+
+		if (board.TryThreat(slot, out Vector3 threat))
+		{
+			inspect.Add(AiMarkerKey.Threat, threat);
+			inspect.Add(AiMarkerKey.Rush, board.RushPointOf(slot));
+		}
+
+		int elements = 0;
+		foreach (DrillDirective d in board.DirectivesOf(slot))
+		{
+			elements += d.Role != DrillRole.None ? 1 : 0;
+			if (d.HasSpot && inspect.Markers.Count < AiDebugCodec.MaxMarkers)
+			{
+				inspect.Add(AiMarkerKey.DrillSpot, d.Spot);
+			}
+		}
+
+		inspect.Add(AiValueKey.DrillPhase, (int)board.PhaseOf(slot));
+		inspect.Add(AiValueKey.Elements, elements);
+		inspect.Add(AiValueKey.Moving, (int)board.MovingOf(slot));
+		inspect.Add(AiValueKey.Bounds, context.Bounds);
+		inspect.Add(AiValueKey.GiveUps, context.GiveUps);
 		return inspect;
 	}
 
