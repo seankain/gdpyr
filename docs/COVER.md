@@ -155,9 +155,9 @@ In the domain ([`HTN_BOTS.md`](HTN_BOTS.md) §5.1), Attack gains a method above 
 and "engage":
 
 ```
-attack                         [Contact≠none]
+attack                         [Contact≠none ∨ Suppressed]
 ├─ engage armour               …
-├─ fight from cover            [ThreatKind=infantry ∧ Contact=visible ∧ Cover≠none]
+├─ fight from cover            [ThreatKind=infantry ∧ (Contact=visible ∨ Suppressed) ∧ Cover≠none]
 │                                TakeCover (→ Cover=in) {Cover≠none, Contact≠none, infantry}
 │                                → HoldCover [Cover=in] {Cover=in, Contact≠none, infantry}
 ├─ press with allies           …
@@ -171,7 +171,9 @@ low and the fight is out of sight, it reloads there and crouches below the wall 
 (`BotSituation.InCover`, `BotBrain`). Crouched, the fight goes out of sight; the team still
 remembers it, and `HoldCover` holds through a ghost. A spot coming into reach pre-empts a fight in
 the open (P2). Retreat still pre-empts holding cover, and a ghost alone or armour is never
-something to take cover from.
+something to take cover from — unless the strategist's rounds are coming at the bot
+(`Suppressed`, [`TACTICS.md`](TACTICS.md) §5.7): then a spot it kept is where it goes, and in it
+it stays down for up to 3 s of that fire before it rises to fight regardless.
 
 ---
 

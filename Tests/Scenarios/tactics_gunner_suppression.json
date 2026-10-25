@@ -1,0 +1,26 @@
+{
+  "name": "a heavy gunner keeps firing bursts over a wall at a player crouched behind it, whom only the side's dropship can see",
+  "bot_ai": "htn",
+  "unit_autonomy": "on",
+  "seeds": [1, 2, 3],
+  "duration_ticks": 1800,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 0 },
+
+  "seats": [
+    { "id": "hider", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/crouch_still.json" }
+  ],
+
+  "spawns": [
+    { "structure": "sandbag_wall", "team": "strategist", "at": [-60, 0.5, 48.6], "yaw": 3.14159 },
+    { "peer": "hider", "at": [-60, 1, 50], "look": [0, 0] },
+    { "unit": "dropship", "id": "spotter", "team": "strategist", "at": [-48, 0.5, 50], "order": "none" },
+    { "unit": "heavy_gunner", "id": "g1", "team": "strategist", "at": [-60, 0.5, 14], "order": "defend" }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.unit_task[goal=26].count", "op": "over_seeds", "cmp": ">=", "value": 1, "fraction": 1.0 },
+    { "metric": "events.unit_task[goal=27].count", "op": "over_seeds", "cmp": ">=", "value": 1, "fraction": 1.0 }
+  ]
+}

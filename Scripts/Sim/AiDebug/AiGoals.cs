@@ -50,12 +50,12 @@ public static class AiGoals
 		HtnDomainKind.Unit => (UnitGoal)goal switch
 		{
 			UnitGoal.Retreat => AiTaskFamily.Retreat,
-			UnitGoal.Resupply => AiTaskFamily.Resupply,
+			UnitGoal.Resupply or UnitGoal.Reload => AiTaskFamily.Resupply,
 			UnitGoal.TakeCover or UnitGoal.Work => AiTaskFamily.Build,
 			UnitGoal.WaitForSquad or UnitGoal.EngageFocus or UnitGoal.Support or UnitGoal.Advance
 				or UnitGoal.HoldCover or UnitGoal.TakePoint or UnitGoal.HoldPoint or UnitGoal.HoldPointCover
 				or UnitGoal.ThrowGrenade or UnitGoal.ToHide or UnitGoal.PopOut or UnitGoal.FireFromPeek or UnitGoal.Duck
-				or UnitGoal.Relocate => AiTaskFamily.Attack,
+				or UnitGoal.Relocate or UnitGoal.SuppressPoint => AiTaskFamily.Attack,
 			UnitGoal.EngageInLeash or UnitGoal.AnswerCall or UnitGoal.HoldPost => AiTaskFamily.DefendZone,
 			UnitGoal.Patrol => AiTaskFamily.Recon,
 			UnitGoal.Obey => AiTaskFamily.Obey,

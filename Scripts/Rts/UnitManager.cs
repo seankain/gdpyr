@@ -537,7 +537,7 @@ public partial class UnitManager : Node
 
 		// What its weapon is doing, for a plan that crouches to reload in cover
 		// (docs/TACTICS.md §5.8).
-		plan?.SenseWeapon(unit.Weapon.IsReloading, unit.Weapon.ShotIndex);
+		plan?.SenseWeapon(unit.Weapon.IsReloading, unit.Weapon.ShotIndex, unit.Weapon.Ammo);
 
 		// Resolved before the plan looks at the order: a finished site stands the
 		// builder down this tick.
@@ -618,7 +618,7 @@ public partial class UnitManager : Node
 		// A marksman holding its fire leaves a target beyond its hold-fire range alone
 		// (docs/TACTICS.md §5.3): it still sees it, and stands to it, but does not shoot.
 		bool holdFire = HoldsFire(plan, hasTarget, targetDistance);
-		ServerFire(unit, tick, hasTarget && !holdFire, targetPoint, targetVelocity);
+		ServerFire(unit, tick, hasTarget && !holdFire, targetPoint, targetVelocity, plan is { Intent.Reload: true });
 		ServerThrow(unit, tick, hasTarget && !firingAtPlace && !holdFire, targetPoint, targetVelocity);
 		if (plan is { Intent.ThrowAt: true })
 		{
@@ -681,9 +681,11 @@ public partial class UnitManager : Node
 	/// trigger down and reports it as a fresh press every tick, which is right for
 	/// both fire modes: <see cref="FireMode.Auto"/> reads the hold and everything
 	/// else reads the edge, and <see cref="WeaponState.NextFireTick"/> is what
-	/// actually decides the cadence either way.
+	/// actually decides the cadence either way. With nothing to fire at, a plan that asks
+	/// for a reload presses that instead (docs/TACTICS.md §5.2).
 	/// </summary>
-	private void ServerFire(Unit unit, uint tick, bool hasTarget, Vector3 targetPoint, Vector3 targetVelocity)
+	private void ServerFire(Unit unit, uint tick, bool hasTarget, Vector3 targetPoint, Vector3 targetVelocity,
+		bool reload = false)
 	{
 		CombatManager combat = CombatManager.Instance;
 		if (combat == null)
@@ -694,7 +696,7 @@ public partial class UnitManager : Node
 		// A crouched unit does not fire — it stands to shoot (docs/TACTICS.md §5.8) — and
 		// its weapon still steps, so a reload runs on behind the wall.
 		bool pullingTrigger = hasTarget && unit.State == UnitStateId.Engaging && unit.Posture == UnitPosture.Standing;
-		InputButtons buttons = pullingTrigger ? InputButtons.Fire : InputButtons.None;
+		InputButtons buttons = pullingTrigger ? InputButtons.Fire : reload ? InputButtons.Reload : InputButtons.None;
 
 		var frame = InputFrame.Create(tick, 0f, 0f, unit.Yaw, 0f, buttons);
 		var context = new InputContext(frame, (ushort)InputButtons.None, SimConfig.TickDelta);
@@ -1251,6 +1253,10 @@ public partial class UnitManager : Node
 		plan.ObjectivePoint = node;
 		plan.ObjectiveRadius = nodeRadius;
 
+		// A heavy gunner's places to suppress (docs/TACTICS.md §5.2), before its cover, which
+		// is behind a wall it can fire over at the nearest.
+		SenseGunner(unit, plan, order, tick, memory, objective);
+
 		// Cover from the fire when it is reacting to it (docs/TACTICS.md §5.1), else cover
 		// from the fight: one spot a unit, so one or the other.
 		bool hasFireCover = SenseFireCover(unit, plan, order, tick, objective, node, holds);
@@ -1306,7 +1312,9 @@ public partial class UnitManager : Node
 	/// The unit's cover, on its scan (docs/COVER.md §6), from what it is doing: a
 	/// builder hides from the nearest contact the side remembers, behind anything; a
 	/// unit with a target takes a low wall it can fire over at it, inside its leash
-	/// when it has one; a unit on a defended ring with nothing to shoot moves its post
+	/// when it has one, and a heavy gunner suppressing without one does the same
+	/// against the nearest place it suppresses (docs/TACTICS.md §5.2); a unit on a
+	/// defended ring with nothing to shoot moves its post
 	/// to a spot beside it with a wall between it and the ring's threat; a unit taking
 	/// a control point takes a low wall on the point, or just off it when it need not
 	/// stand on it, against the threat to the point. Returns true for a spot to fight
@@ -1364,6 +1372,17 @@ public partial class UnitManager : Node
 		{
 			if (UpdateUnitCover(unit, UnitCoverQuery(unit, target, mustFire: true, UnitCoverSearchMeters), out spot)
 				&& InLeash(order, spot.Position, unit))
+			{
+				return Use(spot);
+			}
+		}
+		else if (order.Kind is OrderKind.Attack or OrderKind.Defend or OrderKind.None && plan.SuppressPlaces.Length > 0
+			&& (plan.Is(UnitFact.Suppress) || plan.Is(UnitFact.BeltLow)))
+		{
+			// A heavy gunner with nothing of its own to shoot, suppressing or filling its belt:
+			// a low wall it can fire over at the nearest place it suppresses (docs/TACTICS.md §5.2).
+			if (UpdateUnitCover(unit, UnitCoverQuery(unit, plan.SuppressPlaces[0], mustFire: true, UnitCoverSearchMeters),
+				out spot) && InLeash(order, spot.Position, unit))
 			{
 				return Use(spot);
 			}

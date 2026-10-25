@@ -647,6 +647,10 @@ public partial class CombatManager : Node
 			ownerTeam, segment.From, contact ? point : segment.To, contact ? unitVictim : null,
 			contact && stats.IsExplosive ? stats.ExplosionRadiusMeters : 0f, tick);
 
+		// And every strategist round the ground bots that plan see go by (docs/TACTICS.md §5.7).
+		NoteRoundAtBots(ownerTeam, segment.From, contact ? point : segment.To, contact ? victim : null,
+			contact && stats.IsExplosive ? stats.ExplosionRadiusMeters : 0f, tick);
+
 		if (!contact)
 		{
 			return;
@@ -846,6 +850,7 @@ public partial class CombatManager : Node
 			WeaponOnStream(attacker, segment.DefinitionId), null, null, null, tick);
 		UnitManager.Instance?.NoteBlast(new FireSource(segment.Origin, ownerId, segment.DefinitionId, segment.Id),
 			ownerTeam, point, stats.ExplosionRadiusMeters, FireKind.Hit, tick);
+		NoteBlastAtBots(ownerTeam, point, stats.ExplosionRadiusMeters, tick);
 
 		Broadcast(MethodName.ServerProjectileHit, ProjectileCodec.EncodeHit(new ProjectileHit
 		{

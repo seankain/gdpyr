@@ -1,6 +1,6 @@
 # Unit tactics — implementation plan
 
-Status: **T0–T4 built (§6); T5–T8 are plan. Decisions T-D1 to T-D7 taken (§8).** Planned from the
+Status: **T0–T5 built (§6); T6–T8 are plan. Decisions T-D1 to T-D7 taken (§8).** Planned from the
 code at `6213d05`. Extends the unit HTN of [`HTN_BOTS.md`](HTN_BOTS.md) §5.2 and the cover of
 [`COVER.md`](COVER.md).
 
@@ -87,13 +87,15 @@ HTN_BOTS.md §4.2 holds. Added:
 | `Doctrine` | `UnitDefinition` export, mirrored in `UnitTraits` | `Rifleman`, `Gunner`, `Marksman`, `None` (builders, vehicles, trucks). Explicit in each `.tres`, not inferred from `SuppressSeconds` or range. |
 | `CoverBoard` additions | `Scripts/Sim/Cover.cs` | `Concealed` (no remembered threat's eye sees a point); `ClearLine`; `TryFindPeek` and `KeepsPeek` over a `PeekQuery` (a hide spot and a fire spot beside it, T4); `CoverQuery.Toward` and `MinProgressMeters` (spots that gain ground). |
 | Marksman | `Scripts/Sim/Marksman.cs` (`MarksmanPlan`), `Scripts/Rts/UnitManager.Marksman.cs` (T4) | The scan's geometry and whom to peek at, as pure functions; the engine half gathers the threats, keeps or finds the pair, and holds a marksman's fire (§5.3). |
+| Gunner | `Scripts/Sim/Gunner.cs` (`GunnerPlan`), `Scripts/Rts/UnitManager.Gunner.cs` (T5) | The places a gunner may suppress and which the next burst goes to, as pure functions; the engine half gathers them on the scan (§5.2). |
+| Bots fired upon | `Scripts/Match/CombatManager.FiredUpon.cs`, `PlayerCombat.PerceivesFire` and `LastFiredUponTick` (T5) | The near-miss pass for the strategist's rounds against the ground bots that plan; the pilot reads it into `GroundFact.Suppressed` (§5.7). |
 | Posture | `Unit.cs`; unit snapshot v2 (§5.8); `UnitDefinition.CrouchHeightMeters` | Units on foot crouch: lower hitbox and eye, slower, no fire. Replicated as a field of its own. |
 | Squad drill | `Scripts/Sim/Htn/DrillDomain.cs`, `SquadDrill.cs` (new) | A FluidHTN domain per board squad: the squad's half of "take the point" and of an attack. Roles are a plain function (`DrillRoles.Assign`), as the ground coordinator's are. Writes a `DrillDirective` per squad. |
 | `GrenadePlan` | `Scripts/Sim/Grenades.cs` | Choosing a remembered contact behind cover; `TrySolveOver`: the low arc, else the high one, checked against `CoverBoard` boxes. |
 | Micro-autonomy | `Unit.cs` (`Autonomy`), `UnitFact.MicroAutonomy`, `UnitManager` requests, `StrategistController`, `StrategistHud`, `AgentCommand.cs`, `tools/Gdpyr.Playtest/Scenario.cs`, `LaunchOptions`, `GameModeDefinition` | §5.9. |
 | Unit domain | `Scripts/Sim/Htn/UnitDomain.cs` | The facts and branches of §5. |
 | Engine half | `Scripts/Rts/UnitManager.cs` | Encodes the new facts; carries out the new intent fields. |
-| Ground domain | `GroundDomain.cs`, `BotPilot.cs` | `GroundFact.Suppressed` (§5.7). |
+| Ground domain | `GroundDomain.cs`, `BotPilot.cs`, `BotBrain.cs` | `GroundFact.Suppressed`, `GroundIntent.Duck`, `BotSituation.Duck` (§5.7). |
 | Debugger | `Scripts/Sim/AiDebug/` | The drill as a domain kind; new facts and goals in `HtnSchema` / `AiGoals`; world lines for threat points, fire lines and bound spots. |
 | Agent events | `Scripts/Sim/Agent/AgentEvents.cs` | `grenade_thrown` (T0: thrower, its catalog id, whether the target was hidden); `unit_task` (a unit started one of §5's goals, from T1) and `squad_drill` (a drill phase change, from T6), each added with the first thing that emits it. For scenarios; additive. |
 
@@ -181,6 +183,10 @@ unit
 │   ├─ displace                 [Burned ∨ Standoff]  Relocate
 │   ├─ engage                   [Peek=ready ∧ PeekTarget]  PopOut → FireFromPeek → Duck
 │   └─ hide                     ToHide
+├─ **Gunner**                   [Doctrine=gunner ∧ (Order∈{Attack,Defend,None} ∨ Objective) ∧ Contact≠own
+│   │                            ∧ SquadPhase≠falling back]                                          §5.2
+│   ├─ reload                   [BeltLow]  Reload {BeltLow}
+│   └─ suppress                 [Suppress]  SuppressPoint {Suppress}; into the reserve, reload pre-empts it
 ├─ **Take the point**           [Objective]                                                          §5.0, §5.6
 │   ├─ wait for squad
 │   ├─ **drill**                [DrillRole≠none ∧ DrillPhase≠approach]                              §5.5
@@ -214,11 +220,18 @@ As built in T1 (`UnitDomain.cs`'s "react to fire" select, below Retreat and abov
 
 ### 5.2 Heavy gunner: base of fire — requirement 1
 
+As built in T5, without the drill (`Gunner.cs`'s `GunnerPlan`; `UnitManager.Gunner.cs`; the unit
+domain's "gunner" select, below "marksman" and above Attack):
+
 | | |
 |---|---|
-| Targets | Any entry of §4.2 within its 45 m engage range that it has a line to over cover — where an enemy is seen now, by any friendly, or was last seen, or fired from (T-D5). A target it sees itself it engages as today. |
-| Alone | `SuppressPoint` fires `SuppressBurstTicks` (1 s, ≈ 9 rounds at the LMG's 550 rpm) every `SuppressCycleTicks` (2 s) at the suppression point of the entry nearest it, then the next. Today's 4 s reflex stays. |
-| Ammunition | The 150-round belt is ≈ 33 s of that cycle. Below `BeltReserveRounds` (30) it fires only in a drill's bound and assault phases. It reloads (6 s) in cover, crouched. |
+| Who | A unit whose doctrine is `Gunner` (the heavy gunner), its micro-autonomy on, with no target of its own, its squad not falling back, under an attack, a defend, no order or a point to take (`UnitContext.SuppressesUnder`: the orders a marksman peeks under). A move or a patrol shoots on the walk, as given. Retreat, Grenade and React to fire are above it. |
+| Places | On its scan (`UnitManager.SenseGunner`, `GunnerPlan.Gather`, `Entries`): every ground-force player the side remembers, at its live position while a friend sees it and where it was last seen as a ghost until the side forgets it (8 s), and not dead since; and where its own latest round came from, for 8 s after it (`FiredFromTicks`), unless that is within 3 m of a contact (`SameEnemyMeters`: the same enemy). One is kept when its aim point, 1.3 m above it (`SuppressAimMeters`), is inside the gun's 45 m and no cover-board box crosses the line to it from the gunner's standing eye (`CoverBoard.ClearLine`): rounds that would only strike a block are not suppression. Nearest first. Squad-mates' fired-from points wait for T6's `DrillBoard` (§4.2). A target it sees itself it engages as before. |
+| Bursts | `SuppressPoint`: `UnitIntent.FireAt` at the aim point for the first `SuppressBurstTicks` (1 s, 9 rounds at the LMG's 550 rpm) of every `SuppressCycleTicks` (2 s); each burst at the place after the last one's — the nearest, then the next, and round again (`GunnerPlan.Next`). A replan does not restart the rhythm; a lull of a whole cycle does, so the first burst after one is at once. A place gone from the list mid-burst is not fired at again. The engine fires at a place as `ReturnFire` does (`FireAtPlace`): inside its engage range, not led, nobody's focus, no grenade. Today's 4 s reflex stays, and runs first. `unit_task` goal 26. |
+| Where | From a low wall it can fire over at the nearest place, within 10 m and its leash (`SenseCover`, against the place as against a target), walking to it firing; with none, where it stands. |
+| Ammunition | The 150-round belt is 16 bursts and a half, 33 s of the cycle, 13 of them before the reserve. `BeltLow`, every tick from the weapon: under `BeltReserveRounds` (30) it suppresses nothing (a drill's bound and assault phases wait for T6). `Reload`, above `SuppressPoint`: it presses reload (`UnitIntent.Reload`) with nothing to fire at, from its spot when it has one, crouched while the reload runs (6 s, `CrouchToReload`), with a place to suppress or none — a belt into its reserve is filled between fights. `unit_task` goal 27. |
+| Cap | Under an order that goes somewhere (an attack, a point to take), `SuppressMaxTicks` (8 s) of suppressing, then `SuppressRetryTicks` (8 s) of the order before it suppresses again; a new order lifts it. None under a defend order or none. The plan gave no bound for a gunner alone; rule 3 asks for one, and without it an attack whose gunner has a ghost in reach stops for as long as the side remembers anyone. |
+| Domain | `reload` [BeltLow] `Reload` {BeltLow}; `suppress` [Suppress] `SuppressPoint` {Suppress}; both {MicroAutonomy=on, a gunner under an order it suppresses under, Contact≠own, not falling back}. Into the reserve, `reload` pre-empts `suppress` on the tick (P2). |
 | In a drill | Always the base element, at the squad's threat point. `TakeFirePosition` is the squad's first move after contact: a low-wall spot 20–40 m from the threat point it can fire over at the suppression point, preferring a bearing ≥ 30° off the assault's axis. The drill does not bound until the base is firing, or 6 s have passed (§5.5). |
 | Lift and shift | Unit rounds pass through friendly units (`UnitManager.QuerySegment` skips the shooter's team), so lifting fire is about tempo, not safety: once the assault element is within 8 m of the point the gunner shifts to the next entry within 25 m beyond it, else bounds onto the objective. |
 | Leading the assault | The gunner sets the tempo: its position is the first move after contact, its fire is the trigger for the bounds, and the commander builds assault squads round gunners (T7). A drill whose gunner dies falls back to a rifle half as its base. |
@@ -293,12 +306,15 @@ fire):
 
 ### 5.7 Ground bots perceive fire — needed to measure requirement 1
 
-`GroundFact.Suppressed`: a unit's round passed within `NearMissMeters` of the bot, or hit it, in
-the last 1.5 s, from the same near-miss pass run for strategist rounds against ground characters.
-In "fight from cover", a suppressed bot in its spot crouches and holds fire
-(`BotSituation.InCover`'s crouch, which reloading uses) for at most `SuppressedMaxTicks` (3 s),
-then rises regardless. In the open, `Suppressed` lets "fight from cover" pre-empt "engage" when a
-spot exists. People and legacy bots: nothing (T-D6).
+As built in T5:
+
+| | |
+|---|---|
+| Sense | `CombatManager.NoteRoundAtBots` and `NoteBlastAtBots` (`CombatManager.FiredUpon.cs`), beside `UnitManager.NoteRound`: every chord of a round of the strategist's side — a unit's or a structure's — against every ground player whose `PlayerCombat.PerceivesFire` is set, which the bot director sets on a bot that plans. Passing within `NearMiss.Meters` (1.5 m) of its capsule, hitting it, or a blast reaching it writes `PlayerCombat.LastFiredUponTick`. A person's is never written, nor a legacy bot's (T-D6). |
+| Fact | `GroundFact.Suppressed`, every tick in the pilot: within `SuppressedTicks` (1.5 s) of that tick. The AI debugger names it. |
+| Down | `HoldCover`, which runs only in the spot, suppressed: `GroundIntent.Duck` → `BotSituation.Duck` — crouched as for a reload, neither firing nor throwing, reloading if it needs to — for `SuppressedMaxTicks` (3 s) from the tick it goes down in that suppression; then it stands regardless and fights while the fire goes on. A lull of 1.5 s ends the suppression, and the next round starts the clock again. The clock starts when it goes down, not when the fire began: a bot that ran to its spot under fire would otherwise arrive with its three seconds spent. |
+| Pre-emption | "fight from cover" needs `Contact=visible ∨ Suppressed`. The plan's case — Suppressed letting cover pre-empt "engage" — needed nothing: cover already pre-empts a fight in the open whenever a spot exists (COVER.md §5, P2). What `Suppressed` adds is the bot whose fight is out of sight, a ghost, with a spot it kept: it goes to the spot rather than investigating. |
+| Fire it cannot place | Attack's select and both cover operators hold on `Contact≠none ∨ Suppressed`, and the pilot keeps its spot while suppressed (`BotPilot.SenseCover`): a bot down behind its wall for long enough that the team forgets who is firing (8 s) is still being fired at, and stays. Found in the done-when round: it walked out to its node under the fire. With no spot, suppression gives it nothing to do and its plan is as before. |
 
 ### 5.8 Posture, and the unit snapshot v2
 
@@ -700,6 +716,102 @@ strategist or a scenario turns micro-autonomy on.
   `GroundHtnTests` for `Suppressed` (crouch, the cap, pre-emption); `BotBrainTests` unchanged.
 - **Done when:** in a bot round a gunner firing at a ground bot behind a wall keeps it crouched
   (the AI debugger shows `Suppressed` on the bot), and the bot rises after 3 s of continuous fire.
+- **Result — built.**
+  - `dotnet test`: 2000 passed, 0 failed (1958 before; 42 new: 29 in `GunnerTests`, 13 in
+    `GroundHtnTests`). `UnitHtnTests`' 0 B population has 26 situations and one context in four a
+    heavy gunner, the last two a gunner with a place to suppress and one into its reserve;
+    `GroundHtnTests`' has an eleventh, a bot pinned down in its spot; `AgentEventTests` pins goals
+    26 and 27; `BotBrainTests` is unchanged and passes. `dotnet build Gdpyr.csproj`: 0 warnings,
+    0 errors.
+  - **The tests test something.** One piece removed at a time, the count of tests that failed —
+    the gunner: the micro-autonomy condition 3; the doctrine and order condition 3; the no-target
+    condition 1; the falling-back condition 1; the executing conditions 2; the burst's length 2;
+    the next burst at the next place 1; a place gone mid-burst 1; the rhythm across a re-begun
+    operator 1; the cap 2; the give-up on the scan 1; a new order lifting it 1; the reserve 4; the
+    belt only a gunner's 1; the reload's crouch 1; firing from its spot 1; the line over cover 1;
+    the range 2; a round from where a contact stands 1; nearest first 1; a forgotten contact 1; a
+    dead one 1. The ground bot: the 1.5 s window 2; the 3 s cap 3; a lull resetting it 1; the clock
+    from going down, not from the fire 1; ducking at all 4; the pre-emption 2; Attack's select under
+    fire 1; holding cover under fire 1; the brain's crouch 2, held fire 1, held throw 1. Two guards
+    failed nothing and are gone: `SuppressPoint`'s {¬BeltLow}, which `reload` above it pre-empts on
+    the tick anyway, and a check that `HoldCover` ducks only in its spot, which is the only place it
+    runs. The falling-back condition and the rhythm first failed nothing too: the executing
+    conditions caught the one, and a replan to the same plan does not begin the operator again; the
+    tests now ask that no plan names `SuppressPoint`, and interrupt the bursts with a grenade.
+  - **Cost** (a temporary test, not committed; Release, `TieredCompilation` off, Intel Xeon @
+    2.80 GHz): `GunnerPlan.Entries` over 9 places, 2.65–3.11 µs a call over 26 cover boxes and
+    6.14–9.05 µs over 128 — once on each scan of a gunner with micro-autonomy on and no target. The
+    bots' near-miss pass, 30 chords a tick against 6 capsules, 2.56–2.66 µs a tick; the 40 B the
+    window counted is its own `Stopwatch`.
+  - **Scenario** `tactics_gunner_suppression`: a player seat crouched still behind a sandbag wall
+    at (−60, 48.6), a dropship 12 m off it so the side sees it (T2's arrangement), and a heavy
+    gunner defending 36 m away. Its first run found the roster's computer strategist giving the
+    gunner an order, which clears the 4 s reflex; the file has none. Claims: 0 pilot fallbacks;
+    `unit_task` 26 (suppress) and 27 (fill its belt) ≥ 1 every seed. Seeds 1–3, on a build with
+    this phase's unit code and its ground code before fix (4) below, which the hider, a scripted
+    seat, does not run:
+
+    | | micro-autonomy on | off (`"unit_autonomy": "off"`, otherwise the same file) |
+    |---|---|---|
+    | Claims | 3 of 3 held | 26 and 27 fail on every seed, as they should |
+    | `unit_task` | 26, 27, 26 every seed: suppressing 250 ticks after the side spotted the hider, into its reserve 1,103 ticks later, suppressing again after the 6 s reload | none |
+    | Hits on the hider (20 damage) | 1, 0, 1; never killed | 0, 0, 0 |
+
+    In the file's first version, the one with a computer strategist, a probe (a temporary print,
+    not committed) showed the bursts going to (−60, 2.1, 50) — the hider's recorded origin, 0.8 m,
+    plus 1.3 m — nine rounds every two seconds, the belt 146 to 29, and the reload stood, there
+    being no wall within 10 m of the gunner. Off, the gunner fires its 4 s reflex after the hider
+    goes down, and nothing more.
+  - **Done when** (a bot round; a temporary probe, not committed, printed each bot's facts,
+    intent, state and hitbox every 15 ticks, and every 2 s the AI debugger's text for a suppressed
+    bot — `AiDebugText.Describe` over the publisher's frame, what the console's `ai_plan bot` prints):
+    three roster ground seats, two of them bots and H6's idle seat in the far corner, against a heavy
+    gunner defending at (5, −38) with micro-autonomy on; 3 seeds × 3,600 ticks. The bots walked out
+    of the spawn into the gunner's fire and took cover behind CoverLow01, 31 m from it. In seed 1 a
+    bot reached its spot at tick 328, suppressed since tick 152 on the way; crouched (hitbox top
+    0.90 m above its feet) and stayed down while rounds kept coming (329, 364, 399, 448, 462); and
+    at tick 508, 180 ticks after it went down, stood (top 2.00 m) with `Suppressed` still true. The
+    debugger's text at tick 480 read `Suppressed=True`, `Cover=In`, `running HoldCover 2.6s`, and on
+    the tree `fight from cover [+ThreatKind=Infantry +Contact=Visible or Suppressed +Cover!=None]`.
+    Over the three seeds the two bots went down in a spot under fire 14 times: 9 ended on the cap,
+    180 ticks after going down, standing with the fire still coming; 4 when the fire stopped, after
+    97–171 ticks; 1 when a reload took over. None lasted longer.
+  - **Found by the done-when round, fixed here.** (1) Since M1 a player who let go of crouch while
+    standing still stayed crouched: `PlayerCrouchingState` played the crouch backwards and handed
+    over to `PlayerIdleState`, whose `Enter` pauses the animation player, and walking's animation
+    moves only the camera. A seat crouched 180 ticks and then stood still had a hitbox top of 0.90 m
+    and an eye of 0.75 m above its origin for the 300 ticks after, and still 0.90 m once it walked.
+    The stand-up now applies the standing pose on its tick (2.00 m and 1.50 m on the tick it let go),
+    as the code's own comment said it did. People are affected as much as bots: their hitbox stood
+    up with them from this build on. (2) A bot holding its spot with a target in sight counted as
+    wanting to move, so the stuck check made it jump every half second, which stands it up: 52 of
+    157 sampled `HoldCover` rows were jumps in the first round, 0 of 304 in the last. (3) The pilot
+    kept a spot through a remembered fight by the last scan's `Contact`, which is still `Visible`
+    on the scan a bot that has just crouched loses sight: it walked out to its node 18 ticks after
+    going down; it keeps it by this scan's memory now. (4) Down for 8 s, the team forgot the gunner
+    and a bot under its fire walked out to its node (19 sampled rows in one round, 0 after):
+    Attack's select and the cover operators hold on `Contact≠none ∨ Suppressed`. (5) The 3 s clock
+    ran from the start of the suppression, so a bot that ran to its spot under fire arrived with it
+    spent: it now runs from going down. (1)–(3) predate T5; (4) and (5) are T5's own.
+  - **Suite**: `./scripts/playtest.sh Tests/Scenarios/*.json` on the T5 commit's build, default
+    `htn` and micro-autonomy off except where a scenario sets it: 27 of 27 passed, 0 failed, in
+    44 min 43 s. Among them `tactics_gunner_suppression`; the other three `tactics_*`, with
+    `tactics_sniper_overwatch`'s hides 2–3 and peeks 1–3 a seed; and the two that crouch players
+    behind a sandbag wall, `sandbag_cover` and `sandbag_absorbs`, after the stand-up fix.
+  - **Differences from the plan above.** The tests are in `GunnerTests`, and the ground bot's in
+    `GroundHtnTests` with the brain's half there too, so `BotBrainTests` stays as it was. "The
+    nearest, then the next" is a round over the places, one burst each. A gunner into its reserve
+    reloads with nothing to fire at, a goal of its own (`Reload`, `UnitIntent.Reload`), rather
+    than only when the belt runs out. The cap and its give-up under an attack are this phase's
+    (§5.2 says why). The places are the cover board's to clear, not the world's (rule 6), and a
+    fired-from point is the gunner's own for 8 s; squad-mates' wait for T6. The ground bot hears
+    every round of the strategist's side, a structure's included, and a blast reaching it; the
+    plan said a unit's round. The 3 s are counted from going down. A bot keeps its spot under fire
+    after its team forgets the shooter. Three defects outside T5 are fixed, above.
+  - **Not checked.** A display of the debugger's panel (its text was read through the same
+    `AiDebugText` the console prints); a person, or a networked client, crouching and standing on
+    this build — the stand-up fix runs on every client as on the server, as prediction needs, and
+    only a server-side seat was measured; `unit ms` at 64 units; the drill's base of fire (T6).
 
 ### T6 — Take the control point: the drill, and a Move to a node (3 days)
 

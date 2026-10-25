@@ -138,7 +138,8 @@ public static class AgentEventSchema
 		new[] { "thrower", "tier", "hidden", "x", "z" },                                       // GrenadeThrown
 		// The unit, its catalog id, the goal by its UnitGoal number — 18 take cover from
 		// fire, 19 return fire, 20 throw a grenade, 21 to hide, 22 pop out, 23 fire from a
-		// peek, 24 duck, 25 relocate — and where it was when it started it.
+		// peek, 24 duck, 25 relocate, 26 suppress a place, 27 fill its belt — and where it
+		// was when it started it.
 		new[] { "unit", "tier", "goal", "x", "z" },                                            // UnitTask
 	};
 
