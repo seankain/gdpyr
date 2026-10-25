@@ -48,6 +48,12 @@ public struct AgentUnitView
 
 	/// <summary>Distance to the order's target [m]. Meaningless when the order is none.</summary>
 	public float TargetDistanceMeters;
+
+	/// <summary>
+	/// Its micro-autonomy is on: it uses the tactics of docs/TACTICS.md §5 on its own.
+	/// What the strategist's selection card shows, and what <c>autonomy</c> sets.
+	/// </summary>
+	public bool Autonomous;
 }
 
 /// <summary>One barracks the seat owns.</summary>
@@ -124,7 +130,11 @@ public static class AgentStrategistObservation
 	/// <summary>Units carried. The whole <see cref="SimConfig.MaxUnits"/> ceiling, zero-padded.</summary>
 	public const int MaxUnits = SimConfig.MaxUnits;
 
-	public const int UnitFloats = 14;
+	/// <summary>
+	/// Floats a unit: alive, tier (3), x, z, health, order (5), has-target, target
+	/// distance, and from <c>gdpyr-agent-obs-3</c> its micro-autonomy (docs/TACTICS.md §5.9).
+	/// </summary>
+	public const int UnitFloats = 15;
 
 	/// <summary>Barracks carried, which is the ceiling a map may have (<see cref="SimConfig.MaxBarracks"/>).</summary>
 	public const int MaxBarracks = SimConfig.MaxBarracks;
@@ -339,6 +349,7 @@ public static class AgentStrategistObservation
 
 			into[slot + 12] = unit.HasTarget ? 1f : 0f;
 			into[slot + 13] = Normalize(unit.TargetDistanceMeters, DistanceScaleMeters);
+			into[slot + 14] = unit.Autonomous ? 1f : 0f;
 		}
 		at += MaxUnits * UnitFloats;
 

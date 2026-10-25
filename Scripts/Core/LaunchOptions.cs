@@ -53,7 +53,7 @@ public sealed class LaunchOptions
 		"  --bots <n>[:<m>]        fill each side to n ground and m strategists with bots\n" +
 		"  --no-bots               no computer players, whatever the game mode says\n" +
 		"  --bot-ai legacy|htn     what computer players decide with; htn by default (docs/HTN_BOTS.md)\n" +
-		"  --unit-autonomy on|off  whether new units use tactics on their own; off by default (docs/TACTICS.md)\n" +
+		"  --unit-autonomy on|off  whether new units use tactics on their own; on by default (docs/TACTICS.md)\n" +
 		"  --name <text>           what this server calls itself in the browser (default: the hostname)\n" +
 		"  --no-advertise          do not answer LAN discovery; the address still works\n" +
 		"  --agent-api [host:]port listen for external policies (docs/AGENT_API.md); loopback by default\n" +

@@ -15,9 +15,10 @@ through · [`DEPLOYMENT.md`](DEPLOYMENT.md) — the box this must never be expos
 > planes (§6.3), the strategist action (§7.4), the playtest harness (§9) and the Python client
 > (§9.3) shipped in M7; `list_units` (§7.5) was added with the strategist learner in M7.5, because
 > a policy cannot name a unit it has only seen. Deviations are recorded inline below rather than smoothed over. The
-> observation schema is now `gdpyr-agent-obs-2`: M7 added a second observation, the planes and
-> the command vocabulary to what `welcome` publishes, and a client decodes by the published
-> schema rather than by this document (§4).
+> observation schema is now `gdpyr-agent-obs-3`: M7 added a second observation, the planes and
+> the command vocabulary to what `welcome` publishes (`-2`), and TACTICS T8 each unit's
+> micro-autonomy to the strategist vector (`-3`, §6.2); a client decodes by the published schema
+> rather than by this document (§4).
 
 ---
 
@@ -366,12 +367,16 @@ can see changes what the policy can see on the same commit.
 | Block | Floats | Contents |
 |---|---|---|
 | Round | 8 | phase, seconds remaining, points, income rate, ground tickets, live units, queued units, units lost |
-| Own units | 64 × 14 | alive, tier one-hot (3), x, z, health fraction, order one-hot (5) — none/move/attack/patrol/defend — has-target, target distance |
+| Own units | 64 × 15 | alive, tier one-hot (3), x, z, health fraction, order one-hot (5) — none/move/attack/patrol/defend — has-target, target distance, micro-autonomy (`autonomy`: 1 when on) |
 | Barracks | 4 × 7 | x, z, queue depth, head tier, head progress, rally x, rally z |
 | Nodes | 8 × 8 | x, z, owner one-hot (3), contested, capture progress, income paid |
 | Contacts | 16 × 6 | x, z, visible now, ticks since seen, is-player, team — the ghosts M4 already decays, at the same decay |
 
-**1,092 floats, 4.3 KB** — 8 + 896 + 28 + 64 + 96, and shipped at exactly that. Note what is *not*
+**1,156 floats, 4.5 KB** — 8 + 960 + 28 + 64 + 96, and shipped at exactly that. It was 1,092 under
+`gdpyr-agent-obs-2`, with 14 floats a unit: TACTICS T8 added the fifteenth, `autonomy`, at the end
+of each unit's record, whether the unit uses tactics on its own ([`TACTICS.md`](TACTICS.md) §5.9) —
+what a person's selection card shows — so the fields before it keep their places in the record, and
+every offset after the unit block moved by 64. Note what is *not*
 in the unit block: a unit id. Ordering a particular unit means joining this block to `list_units`
 (§7.5), which returns the same army in the same order. The unit block is
 the whole `SimConfig.MaxUnits` ceiling, zero-padded, so the tensor shape never changes mid-episode,
@@ -414,11 +419,11 @@ the first thing to add when somebody trains one that wants to — a structure bl
 version.
 
 **Vehicles that carry units change nothing in the vector either** ([`VEHICLES.md`](VEHICLES.md)
-§10), and the schema stays `gdpyr-agent-obs-2`. A passenger is a row of its own, alive, at its
+§10), and the schema stayed `gdpyr-agent-obs-2` through them. A passenger is a row of its own, alive, at its
 vehicle's position (the server pins it there every tick); its order byte is `Embark` (7), and a
 vehicle letting its riders out has `Unload` (8) — both past the order one-hot's five, as `Stop` and
 `Build` are, so neither sets a bit. Who is riding in what, and how many seats a vehicle has, is in
-`list_units` (§7.5). A trailing transport block would be `obs-3`.
+`list_units` (§7.5). A trailing transport block would be a schema version of its own.
 
 **Fog parity is one call, not a re-implementation.** The live records come from
 `VisibilityService.IsVisible`, the ghosts from `VisibilityService.TryContact` — the same two
@@ -601,8 +606,8 @@ gets — a strategist seat, the side's own units, a mode that exists — and a r
 A `mode` other than `on` or `off` skips the command, as an unknown `cmd` is skipped. The setting
 is a fact the unit's planner observes; it changes nothing under `--bot-ai legacy`, which plans
 nothing. A new round starts from the server's default again (`--unit-autonomy`, else the game
-mode's, off until TACTICS.md T8), whatever the last round set. The observation does not carry the
-mode yet: it joins the unit block, with a schema bump, in TACTICS.md T8.
+mode's — on since TACTICS.md T8), whatever the last round set. The strategist observation carries
+each unit's mode from `gdpyr-agent-obs-3`: the last float of its record, `autonomy` (§6.2).
 
 **Shipped**, with the two parity wrappers the sketch named — `ServerCancelBuild(peerId, index)` and
 `ServerSetRally(peerId, index, point)` — plus three things worth writing down:
@@ -982,6 +987,7 @@ The same rule the rest of the codebase follows: the interesting part is engine-f
 | The harness knows every event kind and every field of each that the game's schema publishes; `squad_task`'s goal numbers | `Tests/AgentEventTests.cs` | H6 |
 | `autonomy` and `autonomy_default` keep their numbers after the vehicle commands; `grenade_thrown` and `unit_task` after the vehicle events, and `unit_task`'s goal numbers; a scenario's and a spawn's `autonomy`, the script commands, and each malformed one as a sentence | `Tests/AgentEventTests.cs`, `Tests/ScenarioTests.cs` | TACTICS T0–T2 |
 | `squad_drill` after `unit_task`, its fields and its phase numbers; `unit_task`'s drill goals 28–32 | `Tests/AgentEventTests.cs`, `Tests/SquadDrillTests.cs` | TACTICS T6 |
+| The strategist vector's `autonomy`, the last of a unit's 15 floats, and 1,156 floats in all (`gdpyr-agent-obs-3`); the client and the server name one schema version | `Tests/AgentObservationTests.cs`, `Tests/AgentInteropTests.cs` | TACTICS T8 |
 
 One test is not engine-free and is worth the exception: the **divergence probe** of §3 — two seeded
 600-tick episodes against one headless server, comparing `state_hash` per tick and reporting the
@@ -1001,7 +1007,7 @@ touches the UDP budget in that section.
 | `act` (ground, binary) | A→S | 15 Hz per seat at `step_mul` 4 | 20 B (§7.2) |
 | `act` (strategist, JSON) | A→S | 2 Hz per seat | ~200 B |
 | Observation (ground, binary) | S→A | 15 Hz per seat | 592 B (§6.1) |
-| Observation (strategist, binary) | S→A | 2 Hz per seat | 4.3 KB |
+| Observation (strategist, binary) | S→A | 2 Hz per seat | 4.5 KB |
 | Feature planes (optional) | S→A | with the observation | 16 KB |
 | Event | S→A | per event | ~120 B |
 | Control (`attach`, `reset`, `step`, …) | both | per call | < 1 KB |

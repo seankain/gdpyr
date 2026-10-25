@@ -556,6 +556,19 @@ unit
 A `Move` order is never second-guessed: `UnitOrder` documents it as "go there … does not chase",
 and a strategist flanking with it has already decided the risk.
 
+**Since [`TACTICS.md`](TACTICS.md) T8 that rule is the one for a unit whose micro-autonomy is off.**
+Micro-autonomy (TACTICS.md §5.9) is a per-unit setting, on by default from T8, that the strategist
+switches on the selection card (`H`). A unit with a doctrine whose micro-autonomy is on takes a
+`Move` onto a resource node as the goal "take the point" — its squad drills onto it (to ground, a
+base of fire, bounds, grenades, the rush) and its units hold it, as an `Attack` naming no contact on
+a node does (TACTICS.md §5.0, §5.6) — and on a `Move` anywhere else it still goes there, firing on
+the way, but takes cover from fire it cannot see for at most 8 s in all since the order
+(TACTICS.md §5.1). A `Move` is never chased off its line by what the unit sees, and Retreat and
+Resupply still never pre-empt one. A unit whose micro-autonomy is off — the strategist's way to say
+"just go" — obeys a `Move` as this section describes, and so does every unit under `--bot-ai legacy`.
+The commander's own moves are retreats and refills, whose squads are marked falling back and do
+not react.
+
 **As built in H3** (`Scripts/Sim/Htn/UnitDomain.cs`, `SquadCensus.cs`; the engine half in
 `UnitManager`). The tree above is the domain, with these differences, each found by a test or in
 review:
@@ -1207,7 +1220,7 @@ Total: about 10–12 days before playtesting.
 | Plan thrash: facts flicker across a band edge and plans churn | Debug HUD plan row changes every scan | Hysteresis on every band (the 1.25 × sensor drop rule `UnitBrain.ShouldDropTarget` uses); only banded facts in the world state |
 | Obsolete plans run to completion | Units attack a contact that left | Executing conditions on every long-running operator (§3.7, shown necessary by P3); a test per operator that its premise failing fails the plan |
 | Bots become too good | Ground force loses every round with bots on | Every threshold (force ratios, strength fractions, radii) on `BotTraits` / `StrategistTraits`; coordinator caps (one locker runner, a third as deniers) |
-| Order semantics drift for human strategists | Players report units "not doing what they were told" | §5.2's rule: the order is the top-level task; `Move` is never second-guessed; autonomous Retreat only on bot-ordered units |
+| Order semantics drift for human strategists | Players report units "not doing what they were told" | §5.2's rule: the order is the top-level task; `Move` is never second-guessed by a unit whose micro-autonomy is off (TACTICS.md §5.9, the toggle); autonomous Retreat only on bot-ordered units |
 | Coordination costs rays | Fog or scan time grows on the HUD | Boards reuse existing scans and `VisibilityService`'s rays; no new line-of-sight queries in H1–H4 |
 | Vendored library diverges from upstream, or a bump changes behaviour | Upstream fixes a bug we hit; MTR changes again (#8, #12) | Pinned commit in `ThirdParty/FluidHTN/README`; `HtnPlannerTests` and `./scripts/htn-bench.sh` gate every bump (§3.8) |
 | Single maintainer | Upstream goes quiet | MIT, 3,340 lines, no dependencies: it becomes ours, with its 159 upstream tests' behaviour already pinned by the probes |

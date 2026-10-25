@@ -714,7 +714,9 @@ public sealed class SquadDrill
 	/// where it was last seen, and has not died since; then the squad's fired-from points,
 	/// one within <see cref="GunnerPlan.SameEnemyMeters"/> of a contact being that contact.
 	/// Only those within <see cref="DrillTraits.ThreatMeters"/> of the squad, or of the line
-	/// from it to where its order goes. Returns how many.
+	/// from it to where its order goes; and a contact behind the squad (<see cref="Behind"/>)
+	/// only when a member was fired upon from within <see cref="DrillTraits.FiredNearMeters"/>
+	/// of it. Returns how many.
 	/// </summary>
 	private int GatherEntries(int squad, uint tick, ContactMemory memory, Func<int, bool> alive, Vector3 centroid,
 		Vector3 toward)
@@ -722,12 +724,14 @@ public sealed class SquadDrill
 		DrillTraits traits = Traits;
 		Span<DrillEntry> store = Board.EntryStore(squad);
 		float reach = traits.ThreatMeters * traits.ThreatMeters;
+		int fired = Board.Fired(squad, tick, traits.FiredFromTicks, _fired);
 		int count = 0;
 		for (int i = 0; memory != null && i < memory.Count && count < SnapshotCodec.MaxPlayers; i++)
 		{
 			KnownContact known = memory.At(i);
 			if (!memory.IsRemembered(i, tick) || (alive != null && !alive(known.OwnerId))
-				|| OffLineSquared(known.Position, centroid, toward) > reach)
+				|| OffLineSquared(known.Position, centroid, toward) > reach
+				|| (Behind(known.Position, centroid, toward) && !FiredNear(known.Position, fired, traits.FiredNearMeters)))
 			{
 				continue;
 			}
@@ -736,7 +740,6 @@ public sealed class SquadDrill
 		}
 
 		int contacts = count;
-		int fired = Board.Fired(squad, tick, traits.FiredFromTicks, _fired);
 		for (int f = 0; f < fired && count < store.Length; f++)
 		{
 			DrillEntry entry = _fired[f];
@@ -1229,6 +1232,40 @@ public sealed class SquadDrill
 		return false;
 	}
 
+	/// <summary>
+	/// Whether <paramref name="point"/> is more than <see cref="BehindMeters"/> behind the
+	/// squad's <paramref name="centroid"/>, measured along the line from it to where its order
+	/// goes (<paramref name="toward"/>). Never within <see cref="BehindFromMeters"/> of where
+	/// the order goes: there the fight is on every side of the squad.
+	/// </summary>
+	private static bool Behind(Vector3 point, Vector3 centroid, Vector3 toward)
+	{
+		float dx = toward.X - centroid.X;
+		float dz = toward.Z - centroid.Z;
+		float length = MathF.Sqrt((dx * dx) + (dz * dz));
+		if (length <= BehindFromMeters)
+		{
+			return false;
+		}
+
+		float along = (((point.X - centroid.X) * dx) + ((point.Z - centroid.Z) * dz)) / length;
+		return along < -BehindMeters;
+	}
+
+	/// <summary>Whether one of the squad's first <paramref name="fired"/> fired-from points is within <paramref name="meters"/> of <paramref name="point"/>.</summary>
+	private bool FiredNear(Vector3 point, int fired, float meters)
+	{
+		for (int f = 0; f < fired; f++)
+		{
+			if (Flat(_fired[f].Feet, point) <= meters)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	/// <summary>The squared flat distance from <paramref name="point"/> to the segment from <paramref name="a"/> to <paramref name="b"/>.</summary>
 	private static float OffLineSquared(Vector3 point, Vector3 a, Vector3 b)
 	{
@@ -1250,6 +1287,16 @@ public sealed class SquadDrill
 
 	/// <summary>How far inside the far edge of the band a base with no wall goes, in the open.</summary>
 	public const float FireOpenInsideMeters = 3f;
+
+	/// <summary>
+	/// How far behind the squad, along the line to where its order goes, a contact stops being
+	/// the squad's unless it fired on a member (docs/TACTICS.md §4.2, T8): a player the squad
+	/// has walked past is for its units' own sights, not a reason to turn its base round.
+	/// </summary>
+	public const float BehindMeters = 5f;
+
+	/// <summary>Within this of where its order goes a squad keeps contacts on every side (<see cref="Behind"/>).</summary>
+	public const float BehindFromMeters = 20f;
 
 	/// <summary>A standing ground player's eye above their feet, as the units' cover searches take it.</summary>
 	public const float ThreatEyeMeters = 1.5f;

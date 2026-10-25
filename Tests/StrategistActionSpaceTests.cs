@@ -15,7 +15,7 @@ namespace Gdpyr.Tests;
 /// stopped meaning what it says. The schema below is deliberately *not* the
 /// shipped one. The action space reads block offsets, widths and field names out
 /// of what <c>welcome</c> published (docs/AGENT_API.md §6.2), so a test that built
-/// the real 1,092-float vector would be testing the encoder instead.
+/// the real 1,156-float vector would be testing the encoder instead.
 /// </summary>
 public class StrategistActionSpaceTests
 {

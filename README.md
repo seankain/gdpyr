@@ -18,10 +18,11 @@ dedicated-server authoritative.
 - [`docs/COVER.md`](docs/COVER.md) — cover: the low walls and blocks on the map, where the HTN
   bots and units stand to fight from behind them, aiming at what shows over a wall, and the
   computer strategist's builder laying sandbags in front of the squads it keeps holding ground
-- [`docs/TACTICS.md`](docs/TACTICS.md) — plan: unit tactics without micro — taking cover from
+- [`docs/TACTICS.md`](docs/TACTICS.md) — unit tactics without micro — taking cover from
   the shooter, gunners suppressing for a rifle assault, snipers firing from concealment, grenades
   behind cover, a move to a control point that fights its way there, and a per-unit switch the
-  strategist turns it off with
+  strategist turns it off with; T0–T8 are built, on by default since T8, with what bot-only rounds
+  measured on and off
 - [`docs/AI_DEBUG.md`](docs/AI_DEBUG.md) — spectating, and the AI debugger: every bot's, unit's
   and commander squad's HTN with the running, planned and paused tasks marked on it, as text, a
   graph and lines in the world
@@ -114,11 +115,11 @@ Four more flags change the computer players the authority keeps around, and how 
 | `--bots <n>:<m>` | ...and the strategists to `m` |
 | `--no-bots` | no computer players at all |
 | `--bot-ai legacy\|htn` | what they decide with: the HTN planners of [`docs/HTN_BOTS.md`](docs/HTN_BOTS.md), the default, or the code from before them |
-| `--unit-autonomy on\|off` | whether the strategist side's new units use tactics on their own ([`docs/TACTICS.md`](docs/TACTICS.md) §5.9); off by default until the tactics are measured, and a strategist changes it in game |
+| `--unit-autonomy on\|off` | whether the strategist side's new units use tactics on their own ([`docs/TACTICS.md`](docs/TACTICS.md) §5.9); on by default since T8, and a strategist changes it in game; `off` is how units fought before the tactics |
 
 None is needed to get bots: the numbers default to `BotGroundForce` and `BotStrategists` in
 `Match/default_gamemode.tres` (6 and 1), the AI to its `BotAi` (htn since H6), and the units'
-micro-autonomy to its `UnitAutonomy` (off). `--bots 4`
+micro-autonomy to its `UnitAutonomy` (on since TACTICS T8). `--bots 4`
 overrides only the ground force and leaves the strategists to the game mode. The training and
 evaluation scripts start their servers with `--bot-ai legacy` whatever the default is: the legacy
 bots are the baseline a policy is measured against ([`docs/TRAINING.md`](docs/TRAINING.md) §3,
@@ -129,7 +130,9 @@ buys a supply truck once it has eight fighting units, stations it behind its squ
 wounded squad, or a bot's wounded unit, to the nearest supply to heal; and, from T7
 ([`docs/TACTICS.md`](docs/TACTICS.md) §6), trains a heavy gunner at its pillboxes for every three
 riflemen past its garrison, one to each assault squad, and two snipers at its towers, which join
-the garrison or a squad holding a zone. The debug HUD's
+the garrison or a squad holding a zone. Every unit on foot with a doctrine — a rifleman, a heavy
+gunner, a sniper — uses the tactics of [`docs/TACTICS.md`](docs/TACTICS.md) §5 while its
+micro-autonomy is on, the default since T8, whoever ordered it. The debug HUD's
 `ground plan` row counts the ground bots on each task and the roles their coordinator handed out,
 `unit plan` the units on each task, `unit ms` what the unit pass costs a tick, `resupply` the units
 healing and the health given back this round (under either AI), and `commander` each computer
@@ -189,7 +192,7 @@ map:
 | `T` | queue a dropship at the barracks |
 | right-click a technical or a dropship, with units selected | they walk to it and get in, nearest first, up to its seats (four, or eight); the vehicle becomes the selection and waits for them — a dropship in the air comes down to be boarded |
 | `U` | every selected vehicle with anybody aboard lets them out round it, where it is; a dropship lands first |
-| `H`, or the card's **Tactics** button | the selection's tactics: **auto** units take cover from where they are fired on and fire back on their own, **direct** ones do what they are told ([`docs/TACTICS.md`](docs/TACTICS.md) §5.9); the **new units** button beside the points sets what the side's next units start with |
+| `H`, or the card's **Tactics** button | the selection's tactics ([`docs/TACTICS.md`](docs/TACTICS.md) §5.9). **Auto**, the default: units take cover from where they are fired on and fire back, throw grenades at enemies the side knows are behind cover, heavy gunners suppress where enemies are or were, snipers fire from concealment, pop out and move on, and a move onto a resource node is taken as a squad — to ground, a base of fire, bounds from cover, grenades, the rush — rather than walked into fire. **Direct**: they do what they are told, as before the tactics. The **new units** button beside the points sets what the side's next units start with |
 
 Right-clicking an enemy player orders an attack on that player rather than on the ground under
 them. Units are server-simulated and never predicted; the order marker appears immediately and the

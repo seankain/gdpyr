@@ -124,6 +124,7 @@ public sealed class AgentStrategistView
 				TargetDistanceMeters = unit.Order.IsStanding
 					? unit.GlobalPosition.DistanceTo(unit.Order.Target)
 					: 0f,
+				Autonomous = unit.Autonomy == MicroAutonomy.On,
 			};
 		}
 
