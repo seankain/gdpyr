@@ -731,7 +731,7 @@ strategist or a scenario turns micro-autonomy on.
     belt only a gunner's 1; the reload's crouch 1; firing from its spot 1; the line over cover 1;
     the range 2; a round from where a contact stands 1; nearest first 1; a forgotten contact 1; a
     dead one 1. The ground bot: the 1.5 s window 2; the 3 s cap 3; a lull resetting it 1; the clock
-    from going down, not from the fire 1; ducking at all 4; the pre-emption 1; Attack's select under
+    from going down, not from the fire 1; ducking at all 4; the pre-emption 2; Attack's select under
     fire 1; holding cover under fire 1; the brain's crouch 2, held fire 1, held throw 1. Two guards
     failed nothing and are gone: `SuppressPoint`'s {¬BeltLow}, which `reload` above it pre-empts on
     the tick anyway, and a check that `HoldCover` ducks only in its spot, which is the only place it
@@ -793,6 +793,11 @@ strategist or a scenario turns micro-autonomy on.
     Attack's select and the cover operators hold on `Contact≠none ∨ Suppressed`. (5) The 3 s clock
     ran from the start of the suppression, so a bot that ran to its spot under fire arrived with it
     spent: it now runs from going down. (1)–(3) predate T5; (4) and (5) are T5's own.
+  - **Suite**: `./scripts/playtest.sh Tests/Scenarios/*.json` on the T5 commit's build, default
+    `htn` and micro-autonomy off except where a scenario sets it: 27 of 27 passed, 0 failed, in
+    44 min 43 s. Among them `tactics_gunner_suppression`; the other three `tactics_*`, with
+    `tactics_sniper_overwatch`'s hides 2–3 and peeks 1–3 a seed; and the two that crouch players
+    behind a sandbag wall, `sandbag_cover` and `sandbag_absorbs`, after the stand-up fix.
   - **Differences from the plan above.** The tests are in `GunnerTests`, and the ground bot's in
     `GroundHtnTests` with the brain's half there too, so `BotBrainTests` stays as it was. "The
     nearest, then the next" is a round over the places, one burst each. A gunner into its reserve
