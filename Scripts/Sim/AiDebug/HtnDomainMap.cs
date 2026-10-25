@@ -20,6 +20,9 @@ public enum HtnDomainKind : byte
 
 	/// <summary>A commander squad's domain (§5.3).</summary>
 	Squad = 3,
+
+	/// <summary>A board squad's drill: fire and manoeuvre (docs/TACTICS.md §5.5).</summary>
+	Drill = 4,
 }
 
 public enum HtnNodeKind : byte

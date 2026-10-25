@@ -75,10 +75,11 @@ public enum UnitFact : byte
 	Cover,
 
 	/// <summary>
-	/// Its order is an attack on a control point: an attack that names no contact,
-	/// at a point on a resource node (<see cref="CapturePad"/>). The point is to be
-	/// taken and held: the unit goes onto it, fights from cover there when there is
-	/// any, and does not chase what it sees off it.
+	/// Its order is a control point to take: an attack that names no contact, or under
+	/// micro-autonomy a move (<see cref="UnitContext.TakesPointUnder"/>, docs/TACTICS.md
+	/// §5.6), at a point on a resource node (<see cref="CapturePad"/>). The point is to be
+	/// taken and held: the unit goes onto it, fights from cover there when there is any,
+	/// does its part in its squad's drill on the way, and does not chase what it sees off it.
 	/// </summary>
 	Objective,
 
@@ -160,9 +161,26 @@ public enum UnitFact : byte
 
 	/// <summary>
 	/// A heavy gunner's belt is under <see cref="UnitPlanTraits.BeltReserveRounds"/>, until a
-	/// reload fills it: it keeps those for what it can see. Every tick, from the weapon.
+	/// reload fills it: it keeps those for what it can see. Every tick, from the weapon. Not
+	/// while its squad bounds or assaults behind its fire (docs/TACTICS.md §5.5).
 	/// </summary>
 	BeltLow,
+
+	/// <summary>
+	/// <see cref="Htn.DrillPhase"/>: where its board squad's drill is (docs/TACTICS.md §5.5),
+	/// none for a squad that does not drill. On the scan, from the <see cref="DrillBoard"/>.
+	/// </summary>
+	DrillPhase,
+
+	/// <summary><see cref="Htn.DrillTask"/>: what its squad's drill tells it to do now. On the scan.</summary>
+	DrillTask,
+
+	/// <summary>
+	/// <see cref="CoverState"/> of the spot its drill task takes it to — a fire position,
+	/// cover from the threat point, a bound spot — and whether it stands in it. The spot is
+	/// the scan's; the band every tick's.
+	/// </summary>
+	DrillSpot,
 
 	Count,
 }
@@ -270,6 +288,21 @@ public enum UnitGoal : byte
 
 	/// <summary>A heavy gunner fills its belt, down behind its wall when it is in its spot.</summary>
 	Reload,
+
+	/// <summary>Its squad's drill: to cover from the threat point, firing on the way (docs/TACTICS.md §5.5).</summary>
+	DrillGround,
+
+	/// <summary>The drill's base of fire: to a low wall it can fire over at the threat point; in it, firing at it.</summary>
+	DrillFirePosition,
+
+	/// <summary>The drill's moving element: to its next spot towards the point, firing on the way, not stopping.</summary>
+	DrillBound,
+
+	/// <summary>The drill's element holding: in its spot, firing at the threat point while the other moves.</summary>
+	DrillHold,
+
+	/// <summary>The drill's assault: onto the point, or the threat point, without stopping or waiting for the squad.</summary>
+	DrillRush,
 }
 
 /// <summary>How the unit manager picks where to walk for an intent.</summary>
@@ -637,8 +670,9 @@ public struct UnitSense
 	public bool CoverHides;
 
 	/// <summary>
-	/// Its order is an attack on the control point at <see cref="UnitContext.ObjectivePoint"/>,
-	/// which the scan has filled in with the point's radius and the unit's post on it.
+	/// Its order is a control point to take at <see cref="UnitContext.ObjectivePoint"/>
+	/// (<see cref="UnitFact.Objective"/>), which the scan has filled in with the point's
+	/// radius and the unit's post on it.
 	/// </summary>
 	public bool Objective;
 
@@ -837,6 +871,31 @@ public sealed class UnitContext : BaseContext
 	public int ReactedTicks;
 
 	/// <summary>
+	/// Where its drill task takes it (docs/TACTICS.md §5.5), from its scan: a fire position,
+	/// cover from the threat point, or a bound spot. Only with <see cref="HasDrillPoint"/>.
+	/// </summary>
+	public bool HasDrillPoint;
+
+	/// <inheritdoc cref="HasDrillPoint"/>
+	public Vector3 DrillPoint;
+
+	/// <summary>A box beside <see cref="DrillPoint"/> hides it from the threat point: down behind it while it holds.</summary>
+	public bool DrillCovered;
+
+	/// <summary>
+	/// Where its drill's fire goes: its squad's threat point raised to
+	/// <see cref="GunnerPlan.SuppressAimMeters"/>, when the scan found it in range with a line
+	/// over the cover board (<see cref="DrillFires"/>).
+	/// </summary>
+	public Vector3 DrillAim;
+
+	/// <inheritdoc cref="DrillAim"/>
+	public bool DrillFires;
+
+	/// <summary>Where a rush goes when its order is not a point to take: the squad's threat point.</summary>
+	public Vector3 DrillRushPoint;
+
+	/// <summary>
 	/// Ticks a heavy gunner has suppressed under an order that goes somewhere since it last
 	/// gave it up, or was given the order, against <see cref="UnitPlanTraits.SuppressMaxTicks"/>.
 	/// </summary>
@@ -873,7 +932,32 @@ public sealed class UnitContext : BaseContext
 	public static bool IsTactic(UnitGoal goal) =>
 		goal is UnitGoal.TakeCoverFromFire or UnitGoal.ReturnFire or UnitGoal.ThrowGrenade or UnitGoal.ToHide
 			or UnitGoal.PopOut or UnitGoal.FireFromPeek or UnitGoal.Duck or UnitGoal.Relocate or UnitGoal.SuppressPoint
-			or UnitGoal.Reload;
+			or UnitGoal.Reload or UnitGoal.DrillGround or UnitGoal.DrillFirePosition or UnitGoal.DrillBound
+			or UnitGoal.DrillHold or UnitGoal.DrillRush;
+
+	/// <summary>
+	/// Whether an order onto a control point is a point to take (docs/TACTICS.md §5.6): an
+	/// attack that names no contact, as it always was; and a move, for a unit with a doctrine
+	/// whose micro-autonomy is on and whose squad is not falling back — the commander's
+	/// retreats and refills are moves so as not to stop. Off, a move is obeyed as given.
+	/// </summary>
+	public static bool TakesPointUnder(OrderKind order, int targetOwnerId, MicroAutonomy autonomy,
+		UnitDoctrine doctrine, SquadPhase phase) =>
+		(order == OrderKind.Attack && targetOwnerId == OwnerId.None)
+		|| (order == OrderKind.Move && autonomy == MicroAutonomy.On && doctrine != UnitDoctrine.None
+			&& phase != SquadPhase.FallingBack);
+
+	/// <summary>The drill tasks a unit is on its way in, which reacting to fire does not stop: a bound is to cover, and so is going to ground.</summary>
+	public static bool MovesInDrill(DrillTask task) => task is DrillTask.Ground or DrillTask.Bound or DrillTask.Rush;
+
+	/// <summary>
+	/// The base of fire while an element moves or assaults behind it (docs/TACTICS.md §5.5):
+	/// a heavy gunner then spends its reserve rather than stopping to fill its belt, and is
+	/// bounded by the drill rather than by its own cap.
+	/// </summary>
+	public bool CoversTheMove =>
+		Get(UnitFact.DrillTask) == (byte)DrillTask.FirePosition
+		&& Get(UnitFact.DrillPhase) is (byte)DrillPhase.Bound or (byte)DrillPhase.Grenades or (byte)DrillPhase.Rush;
 
 	/// <summary>
 	/// The orders a marksman peeks under (docs/TACTICS.md §5.3): an attack, a defend, none,
@@ -978,7 +1062,8 @@ public sealed class UnitContext : BaseContext
 	{
 		Reloading = reloading;
 		Shots = shots;
-		Sense(UnitFact.BeltLow, UnitTraits.Doctrine == UnitDoctrine.Gunner && rounds < Traits.BeltReserveRounds);
+		Sense(UnitFact.BeltLow, UnitTraits.Doctrine == UnitDoctrine.Gunner && rounds < Traits.BeltReserveRounds
+			&& !CoversTheMove);
 	}
 
 	/// <summary>
@@ -991,6 +1076,26 @@ public sealed class UnitContext : BaseContext
 		_suppressCount = Math.Min(places.Length, _suppress.Length);
 		places[.._suppressCount].CopyTo(_suppress);
 		Sense(UnitFact.Suppress, _suppressCount > 0 && Tick >= SuppressRetryTick);
+	}
+
+	/// <summary>
+	/// What its board squad's drill tells it, from its scan (docs/TACTICS.md §5.5): the
+	/// drill's phase, its own task, the spot that takes it to and whether a box there hides
+	/// it from the threat point, where its fire goes and whether it may, and where a rush
+	/// goes. None of it for a unit in no drill.
+	/// </summary>
+	public void SenseDrill(DrillPhase phase, DrillTask task, bool hasSpot, Vector3 spot, bool covered, bool fires,
+		Vector3 aim, Vector3 rush)
+	{
+		HasDrillPoint = hasSpot;
+		DrillPoint = spot;
+		DrillCovered = hasSpot && covered;
+		DrillFires = fires;
+		DrillAim = aim;
+		DrillRushPoint = rush;
+		Sense(UnitFact.DrillPhase, (byte)phase);
+		Sense(UnitFact.DrillTask, (byte)task);
+		SenseDrillSpot();
 	}
 
 	/// <summary>A new order, or a new life: suppressing starts over, its cap and any give-up with it.</summary>
@@ -1100,7 +1205,13 @@ public sealed class UnitContext : BaseContext
 		SenseObjective();
 		SenseFireCover();
 		SensePeekState();
+		SenseDrillSpot();
 	}
+
+	/// <summary>Its drill spot, every tick, as <see cref="SenseCover"/> is: the spot is the scan's, whether it stands in it now's.</summary>
+	private void SenseDrillSpot() =>
+		Sense(UnitFact.DrillSpot, (byte)CoverBands.Band(HasDrillPoint, Flat(Position, DrillPoint), true,
+			(CoverState)Get(UnitFact.DrillSpot)));
 
 	/// <summary>
 	/// Where a marksman is in its pair, every tick (docs/TACTICS.md §5.3): the pair is the
@@ -1152,13 +1263,16 @@ public sealed class UnitContext : BaseContext
 
 	/// <summary>
 	/// The point, every tick: the scan says which point the order is on, and the order
-	/// as it stands now must still be an attack on it — a new order is a new plan on the
-	/// tick it comes, not at the next scan. On it from <see cref="UnitPlanTraits.ObjectiveEnterMeters"/>
+	/// as it stands now must still be an attack on it, or a move onto it the unit takes it
+	/// under (<see cref="TakesPointUnder"/>) — a new order, or micro-autonomy switched off,
+	/// is a new plan on the tick it comes, not at the next scan. On it from <see cref="UnitPlanTraits.ObjectiveEnterMeters"/>
 	/// inside the edge, and to the edge, by the rule the economy counts bodies with.
 	/// </summary>
 	private void SenseObjective()
 	{
-		bool objective = _objective && Order.Kind == OrderKind.Attack && Order.TargetOwnerId == OwnerId.None
+		bool objective = _objective
+			&& TakesPointUnder(Order.Kind, Order.TargetOwnerId, (MicroAutonomy)Get(UnitFact.MicroAutonomy),
+				UnitTraits.Doctrine, (SquadPhase)Get(UnitFact.SquadPhase))
 			&& CapturePad.Covers(ObjectivePoint, ObjectiveRadius, Order.Target);
 		Sense(UnitFact.Objective, objective);
 
@@ -1239,6 +1353,8 @@ public sealed class UnitContext : BaseContext
 			UnitGoal.HoldCover or UnitGoal.HoldPointCover or UnitGoal.SuppressPoint or UnitGoal.Reload =>
 				Get(UnitFact.Cover) == (byte)CoverState.In,
 			UnitGoal.ReturnFire => Get(UnitFact.FireCover) == (byte)CoverState.In,
+			UnitGoal.DrillGround or UnitGoal.DrillFirePosition or UnitGoal.DrillHold =>
+				Get(UnitFact.DrillSpot) == (byte)CoverState.In && DrillCovered,
 			_ => false,
 		};
 
@@ -1524,8 +1640,60 @@ public sealed class UnitContext : BaseContext
 				Intent.Reload = true;
 				return FromCover();
 
+			case UnitGoal.DrillGround:
+				// To cover from the threat point without stopping, firing on the way; in it, or
+				// with none in reach, down where it is (docs/TACTICS.md §5.5).
+				TaskStatus grounded = ToDrillSpot();
+				Intent.Crouch = Intent.Move == UnitMove.Hold && Get(UnitFact.Contact) != (byte)UnitContact.Own;
+				return grounded;
+
+			case UnitGoal.DrillFirePosition:
+				// The base: to its low wall firing at the threat point, and from it.
+				FireAtThreat();
+				return ToDrillSpot();
+
+			case UnitGoal.DrillBound:
+				// To its next spot without stopping for what it sees: it fires on the way.
+				return ToDrillSpot();
+
+			case UnitGoal.DrillHold:
+				// In its spot; while an element moves or assaults, firing at the threat point to
+				// cover it, and down between whiles — behind its box, or in the open, smaller.
+				if (Get(UnitFact.DrillPhase) is (byte)DrillPhase.Bound or (byte)DrillPhase.Grenades
+					or (byte)DrillPhase.Rush)
+				{
+					FireAtThreat();
+				}
+
+				TaskStatus holding = ToDrillSpot();
+				Intent.Crouch = Intent.Move == UnitMove.Hold && !Intent.FireAt
+					&& Get(UnitFact.Contact) != (byte)UnitContact.Own;
+				return holding;
+
+			case UnitGoal.DrillRush:
+				// Onto the point, or the threat point, not waiting for the squad: the assault.
+				return Go(Is(UnitFact.Objective) ? ObjectivePost : DrillRushPoint, stopToFight: false);
+
 			default:
 				return TaskStatus.Failure;
+		}
+	}
+
+	/// <summary>To its drill spot without stopping, firing on the way; in it, or with none, where it stands.</summary>
+	private TaskStatus ToDrillSpot() =>
+		HasDrillPoint && Get(UnitFact.DrillSpot) != (byte)CoverState.In ? Go(DrillPoint, stopToFight: false) : Hold();
+
+	/// <summary>
+	/// Fire at its squad's threat point (docs/TACTICS.md §5.5), when its scan found it in its
+	/// engage range with a line over the cover board: a place, with no player named, so it is
+	/// nobody's focus and no grenade goes there by it.
+	/// </summary>
+	private void FireAtThreat()
+	{
+		if (DrillFires)
+		{
+			Intent.FireAt = true;
+			Intent.FirePoint = DrillAim;
 		}
 	}
 
@@ -1579,7 +1747,8 @@ public sealed class UnitContext : BaseContext
 	/// </summary>
 	private bool SuppressedLongEnough()
 	{
-		if (!GoesSomewhere(Order.Kind))
+		// The base of a drill is bounded by the drill (docs/TACTICS.md §5.5), not by this.
+		if (!GoesSomewhere(Order.Kind) || Get(UnitFact.DrillTask) == (byte)DrillTask.FirePosition)
 		{
 			return false;
 		}
@@ -1897,11 +2066,12 @@ public sealed class UnitDomainBuilder : BaseDomainBuilder<UnitDomainBuilder, Uni
 	/// The executing conditions every reaction to fire holds by (docs/TACTICS.md §5.1):
 	/// the strategist still lets it, rounds are still coming, the spot still hides it,
 	/// the cap is not spent, its squad is not falling back, its order is not one it
-	/// never reacts under, it has nothing of its own to fight from cover, and it is not
-	/// a marksman that has found a peek pair (§5.3).
+	/// never reacts under, it has nothing of its own to fight from cover, it is not
+	/// a marksman that has found a peek pair (§5.3), and it is not on its way in its
+	/// squad's drill (§5.5).
 	/// </summary>
 	public UnitDomainBuilder WhileReacting() =>
-		While(UnitFact.MicroAutonomy, MicroAutonomy.On).While(UnitFact.Peek, PeekState.None)
+		While(UnitFact.MicroAutonomy, MicroAutonomy.On).While(UnitFact.Peek, PeekState.None).WhileNotMovingInDrill()
 			.WhileNot(UnitFact.FiredUpon, FireKind.None)
 			.WhileNot(UnitFact.FireCover, CoverState.None).While(UnitFact.ReactSpent, false)
 			.WhileNot(UnitFact.SquadPhase, SquadPhase.FallingBack)
@@ -1918,6 +2088,67 @@ public sealed class UnitDomainBuilder : BaseDomainBuilder<UnitDomainBuilder, Uni
 			.WhileNot(UnitFact.Contact, UnitContact.Own).WhileNot(UnitFact.SquadPhase, SquadPhase.FallingBack)
 			.WhileNot(UnitFact.Order, OrderKind.Build).WhileNot(UnitFact.Order, OrderKind.Embark)
 			.WhileNot(UnitFact.Order, OrderKind.Unload);
+
+	/// <summary>
+	/// It is not on its way in its squad's drill (docs/TACTICS.md §5.5, <see cref="UnitContext.MovesInDrill"/>):
+	/// reacting to fire pre-empts the element holding, never the one moving, whose bound is to cover.
+	/// </summary>
+	public UnitDomainBuilder IfNotMovingInDrill() => Condition("DrillTask∉{Ground,Bound,Rush}", NotMovingInDrill);
+
+	/// <summary>Executing condition: as <see cref="IfNotMovingInDrill"/>, every tick.</summary>
+	public UnitDomainBuilder WhileNotMovingInDrill() =>
+		_executingConditions ? ExecutingCondition("while DrillTask∉{Ground,Bound,Rush}", NotMovingInDrill) : this;
+
+	private static bool NotMovingInDrill(UnitContext c) => !UnitContext.MovesInDrill((DrillTask)c.Get(UnitFact.DrillTask));
+
+	/// <summary>
+	/// A marksman's peek, timed to its squad's drill (docs/TACTICS.md §5.3, §5.5): as overwatch
+	/// it pops out only while an element moves or assaults; out of a drill, whenever it is ready.
+	/// </summary>
+	public UnitDomainBuilder IfPeekTimed() =>
+		Condition("DrillTask!=Overwatch or DrillPhase∈{Bound,Grenades,Rush}", c =>
+			c.Get(UnitFact.DrillTask) != (byte)DrillTask.Overwatch
+			|| c.Get(UnitFact.DrillPhase) is (byte)DrillPhase.Bound or (byte)DrillPhase.Grenades or (byte)DrillPhase.Rush);
+
+	/// <summary>
+	/// The unit's part in its squad's drill (docs/TACTICS.md §5.5), as a select: one sequence
+	/// per task, each holding while the strategist still lets it, its squad is not falling
+	/// back, the drill still gives it that task, and — for <paramref name="onPoint"/> — the
+	/// point is still its order's, else its order is still an attack. A task with no sequence
+	/// here, an overwatch or none, falls through to the order's own methods. Each holds by one
+	/// executing condition rather than four: the select appears twice, and the unit domain's
+	/// conditions are numbered into a byte on the debugger's wire (docs/AI_DEBUG.md §3.1).
+	/// </summary>
+	public UnitDomainBuilder Drill(bool onPoint)
+	{
+		Select("drill").Condition("MicroAutonomy=On and Doctrine!=None and SquadPhase!=FallingBack", Drills);
+		DrillStep("to ground", DrillTask.Ground, UnitGoal.DrillGround, onPoint);
+		DrillStep("fire position", DrillTask.FirePosition, UnitGoal.DrillFirePosition, onPoint);
+		DrillStep("bound", DrillTask.Bound, UnitGoal.DrillBound, onPoint);
+		DrillStep("hold", DrillTask.Hold, UnitGoal.DrillHold, onPoint);
+		DrillStep("rush", DrillTask.Rush, UnitGoal.DrillRush, onPoint);
+		return End();
+	}
+
+	private void DrillStep(string name, DrillTask task, UnitGoal goal, bool onPoint)
+	{
+		byte wanted = (byte)task;
+		Sequence(name).If(UnitFact.DrillTask, task);
+		Act(goal);
+		if (_executingConditions)
+		{
+			ExecutingCondition(onPoint ? $"while drilling {task} onto the point" : $"while drilling {task} in an attack",
+				c => Drills(c) && c.Get(UnitFact.DrillTask) == wanted
+					&& (onPoint ? c.Is(UnitFact.Objective) : c.Get(UnitFact.Order) == (byte)OrderKind.Attack));
+		}
+
+		End();
+		End();
+	}
+
+	private static bool Drills(UnitContext c) =>
+		c.Get(UnitFact.MicroAutonomy) == (byte)MicroAutonomy.On && c.UnitTraits.Doctrine != UnitDoctrine.None
+		&& c.Get(UnitFact.SquadPhase) != (byte)SquadPhase.FallingBack;
 
 	/// <summary>A marksman under an order it peeks under (docs/TACTICS.md §5.3, <see cref="UnitContext.PeeksUnder"/>).</summary>
 	public UnitDomainBuilder IfMarksman() =>
@@ -2046,11 +2277,13 @@ public static class UnitDomain
 			// Reacting to fire (docs/TACTICS.md §5.1): only with the strategist's leave
 			// (micro-autonomy), and below Retreat, which runs rather than hides. Not a
 			// marksman with a peek pair: its hide spot is concealed from where the fire came
-			// from already, and it answers fire by moving on (§5.3).
+			// from already, and it answers fire by moving on (§5.3). Not a unit on its way in
+			// its squad's drill: its bound is to cover (§5.5).
 			.Select("react to fire")
 				.If(UnitFact.MicroAutonomy, MicroAutonomy.On)
 				.IfHasDoctrine()
 				.If(UnitFact.Peek, PeekState.None)
+				.IfNotMovingInDrill()
 				.IfNot(UnitFact.FiredUpon, FireKind.None)
 				.IfNot(UnitFact.FireCover, CoverState.None)
 				.If(UnitFact.ReactSpent, false)
@@ -2117,6 +2350,7 @@ public static class UnitDomain
 				.Sequence("engage")
 					.If(UnitFact.Peek, PeekState.Ready)
 					.If(UnitFact.PeekTarget)
+					.IfPeekTimed()
 					.Act(UnitGoal.PopOut).WhilePeeking().While(UnitFact.PeekTarget).End()
 					.Act(UnitGoal.FireFromPeek).WhilePeeking().While(UnitFact.PeekTarget).End()
 					.Act(UnitGoal.Duck).WhilePeeking().End()
@@ -2144,6 +2378,29 @@ public static class UnitDomain
 					.Act(UnitGoal.SuppressPoint).WhileGunning().While(UnitFact.Suppress).End()
 				.End()
 			.End()
+			// A control point to take (docs/TACTICS.md §5.0, §5.6): an attack on one, or under
+			// micro-autonomy a move onto one. Onto it, from cover there when there is any, and
+			// without chasing what it sees off it; on the way, its part in its squad's drill.
+			.Select("take the point")
+				.If(UnitFact.Objective)
+				.Sequence("wait for squad")
+					.If(UnitFact.SquadPhase, SquadPhase.Gathering)
+					.Act(UnitGoal.WaitForSquad).While(UnitFact.SquadPhase, SquadPhase.Gathering)
+						.While(UnitFact.Objective).End()
+				.End()
+				.Drill(onPoint: true)
+				.Sequence("hold the point from cover")
+					.IfNot(UnitFact.Cover, CoverState.None)
+					.Act(UnitGoal.HoldPointCover).While(UnitFact.Objective).WhileNot(UnitFact.Cover, CoverState.None).End()
+				.End()
+				.Sequence("hold the point")
+					.If(UnitFact.OnObjective)
+					.Act(UnitGoal.HoldPoint).While(UnitFact.Objective).While(UnitFact.OnObjective).End()
+				.End()
+				.Sequence("take the point")
+					.Act(UnitGoal.TakePoint).While(UnitFact.Objective).End()
+				.End()
+			.End()
 			.Select("attack")
 				.If(UnitFact.Order, OrderKind.Attack)
 				.Sequence("wait for squad")
@@ -2151,24 +2408,7 @@ public static class UnitDomain
 					.Act(UnitGoal.WaitForSquad).While(UnitFact.SquadPhase, SquadPhase.Gathering)
 						.While(UnitFact.Order, OrderKind.Attack).End()
 				.End()
-				// An attack on a control point takes it: onto it, from cover there when there
-				// is any, and without chasing what it sees off it — above the fights below.
-				.Sequence("hold the point from cover")
-					.If(UnitFact.Objective)
-					.IfNot(UnitFact.Cover, CoverState.None)
-					.Act(UnitGoal.HoldPointCover).While(UnitFact.Objective).WhileNot(UnitFact.Cover, CoverState.None)
-						.While(UnitFact.Order, OrderKind.Attack).End()
-				.End()
-				.Sequence("hold the point")
-					.If(UnitFact.Objective)
-					.If(UnitFact.OnObjective)
-					.Act(UnitGoal.HoldPoint).While(UnitFact.Objective).While(UnitFact.OnObjective)
-						.While(UnitFact.Order, OrderKind.Attack).End()
-				.End()
-				.Sequence("take the point")
-					.If(UnitFact.Objective)
-					.Act(UnitGoal.TakePoint).While(UnitFact.Objective).While(UnitFact.Order, OrderKind.Attack).End()
-				.End()
+				.Drill(onPoint: false)
 				.Sequence("engage from cover")
 					.If(UnitFact.Contact, UnitContact.Own)
 					.IfNot(UnitFact.Cover, CoverState.None)

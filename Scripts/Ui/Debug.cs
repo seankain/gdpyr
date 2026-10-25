@@ -205,6 +205,9 @@ public partial class Debug : PanelContainer
 				// Being fired upon (docs/TACTICS.md §4.1): units with a round near them in the
 				// last three seconds, and what the round has sent past and into them.
 				SetProperty("fire", units.DescribeFire(NetworkManager.Instance.Tick));
+
+				// The squad drill (docs/TACTICS.md §5.5): each squad that drills, and its phase.
+				SetProperty("drill", units.DescribeDrills());
 			}
 
 			// Cover (docs/COVER.md): the boxes the planners know about, and how many units

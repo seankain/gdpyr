@@ -139,6 +139,19 @@ public partial class Unit : CharacterBody3D
 	public PeekPair Peek;
 
 	/// <summary>
+	/// Server-side, for a unit in a squad that drills (docs/TACTICS.md §5.5): the spot its
+	/// task there takes it to — a fire position, cover from the threat point, a bound spot —
+	/// which other units' searches leave alone. Never replicated.
+	/// </summary>
+	public bool HasDrillSpot;
+
+	/// <inheritdoc cref="HasDrillSpot"/>
+	public Vector3 DrillSpot;
+
+	/// <summary>Server-side: the tick its weapon last fired a round; 0 for never. What a drill's base of fire is judged firing by.</summary>
+	public uint LastShotTick;
+
+	/// <summary>
 	/// Whether it uses the tactics of docs/TACTICS.md §5 on its own (§5.9): the side's
 	/// default for new units when it is made, and the strategist's to change. Its
 	/// planner reads it every tick. On a client, what the strategist's state message

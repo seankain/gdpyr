@@ -20,8 +20,12 @@ namespace Gdpyr.Sim.AiDebug;
 /// </summary>
 public static class AiDebugCodec
 {
-	/// <summary>First byte of both messages. A spectator on another version is told nothing it would misread.</summary>
-	public const byte Version = 1;
+	/// <summary>
+	/// First byte of both messages. A spectator on another version is told nothing it would
+	/// misread. 2: the drill's signature after the squad's, and a drill as a reference and a
+	/// trace's domain (docs/TACTICS.md §5.5).
+	/// </summary>
+	public const byte Version = 2;
 
 	public const int MaxLabels = SimConfig.MaxUnits + SnapshotCodec.MaxPlayers;
 	public const int MaxCommanders = 4;
@@ -105,6 +109,7 @@ public static class AiDebugCodec
 		w.U32(frame.GroundSignature);
 		w.U32(frame.UnitSignature);
 		w.U32(frame.SquadSignature);
+		w.U32(frame.DrillSignature);
 
 		int labels = Math.Min(frame.Labels.Count, MaxLabels);
 		w.U16((ushort)labels);
@@ -186,6 +191,7 @@ public static class AiDebugCodec
 			GroundSignature = r.U32(),
 			UnitSignature = r.U32(),
 			SquadSignature = r.U32(),
+			DrillSignature = r.U32(),
 		};
 
 		int labels = r.U16();
@@ -420,7 +426,7 @@ public static class AiDebugCodec
 	{
 		trace.Clear();
 		var domain = (HtnDomainKind)r.U8();
-		if (!r.Ok || domain > HtnDomainKind.Squad)
+		if (!r.Ok || domain > HtnDomainKind.Drill)
 		{
 			return false;
 		}
@@ -609,7 +615,7 @@ public static class AiDebugCodec
 			var kind = (AiEntityKind)U8();
 			int id = I32();
 			byte slot = U8();
-			return kind is AiEntityKind.Player or AiEntityKind.Unit or AiEntityKind.Squad
+			return kind is AiEntityKind.Player or AiEntityKind.Unit or AiEntityKind.Squad or AiEntityKind.Drill
 				? new AiEntityRef(kind, id, slot)
 				: default;
 		}

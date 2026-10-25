@@ -30,6 +30,8 @@ public class AiDebugCodecTests
 		Assert.Equal(frame.GroundSignature, back.GroundSignature);
 		Assert.Equal(frame.UnitSignature, back.UnitSignature);
 		Assert.Equal(frame.SquadSignature, back.SquadSignature);
+		Assert.Equal(frame.DrillSignature, back.DrillSignature);
+		Assert.NotEqual(0u, back.DrillSignature);
 
 		Assert.Equal(2, back.Labels.Count);
 		AiLabel bot = back.Labels[0];
@@ -67,12 +69,41 @@ public class AiDebugCodecTests
 	}
 
 	[Fact]
+	public void ADrillsInspection_RoundTrips_WithItsTraceAndItsSpots()
+	{
+		var planning = new DrillPlanning(DrillTraits.Default);
+		DrillContext c = planning.CreateContext();
+		c.Tick = 600;
+		c.Encode(new DrillSense { HasThreat = true, FiredUpon = true, LeadMeters = 30f, HasGunner = true });
+		planning.Tick(c);
+
+		var inspect = new AiInspect { Ref = AiEntityRef.Drill(5), Planning = true, Goal = (byte)c.Intent.Phase };
+		HtnTracer.Capture(planning.Map, c, c.History, inspect.Trace);
+		inspect.Add(AiMarkerKey.Threat, new Vector3(-30f, 0.5f, -15f));
+		inspect.Add(AiMarkerKey.DrillSpot, new Vector3(-31f, 0.5f, -40f));
+		inspect.Add(AiMarkerKey.DrillSpot, new Vector3(-28f, 0.5f, -41f));
+		inspect.Add(AiValueKey.DrillPhase, (int)c.Intent.Phase);
+
+		var frame = new AiDebugFrame { Tick = 600, BotAi = BotAi.Htn, DrillSignature = planning.Map.Signature };
+		frame.Inspected.Add(inspect);
+		Assert.True(AiDebugCodec.TryDecodeFrame(AiDebugCodec.EncodeFrame(frame), out AiDebugFrame back));
+
+		AiInspect got = back.Find(AiEntityRef.Drill(5));
+		Assert.NotNull(got);
+		Assert.Equal((byte)DrillPhase.GoToGround, got.Goal);
+		Assert.Equal(HtnDomainKind.Drill, got.Trace.Domain);
+		AssertSameTrace(inspect.Trace, got.Trace);
+		Assert.Equal(2, got.Markers.Count(m => m.Key == AiMarkerKey.DrillSpot));
+		Assert.NotNull(back.MapFor(HtnDomainKind.Drill));
+	}
+
+	[Fact]
 	public void AnEmptyFrame_IsSmall_AndRoundTrips()
 	{
 		var frame = new AiDebugFrame { Tick = 9, BotAi = BotAi.Legacy };
 		byte[] bytes = AiDebugCodec.EncodeFrame(frame);
 
-		Assert.True(bytes.Length <= 24, $"{bytes.Length} bytes for nothing");
+		Assert.True(bytes.Length <= 28, $"{bytes.Length} bytes for nothing");
 		Assert.True(AiDebugCodec.TryDecodeFrame(bytes, out AiDebugFrame back));
 		Assert.Equal(BotAi.Legacy, back.BotAi);
 		Assert.Empty(back.Labels);
@@ -242,6 +273,7 @@ public class AiDebugCodecTests
 			GroundSignature = HtnDomains.Ground.Signature,
 			UnitSignature = HtnDomains.Unit.Signature,
 			SquadSignature = HtnDomains.Squad.Signature,
+			DrillSignature = HtnDomains.Drill.Signature,
 		};
 
 		frame.Labels.Add(new AiLabel

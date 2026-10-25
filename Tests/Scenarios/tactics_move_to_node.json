@@ -1,0 +1,42 @@
+{
+  "name": "a gunner and six riflemen moved onto a node ground bots hold take it as a squad: to cover, a base of fire, bounds, an assault",
+  "bot_ai": "htn",
+  "unit_autonomy": "on",
+  "seeds": [1, 2, 3],
+  "duration_ticks": 5400,
+  "warmup_ticks": 60,
+  "roster": { "ground": 4, "strategists": 1 },
+
+  "seats": [
+    { "id": "idle", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json" },
+    { "id": "chair", "team": "strategist", "policy": "strategist", "step_mul": 6,
+      "script": { "repeat": false, "steps": [
+        { "ticks": 5340, "commands": [
+          { "cmd": "order", "kind": "move", "units": ["g1", "r1", "r2", "r3", "r4", "r5", "r6"], "target": [-30, -15] }
+        ] }
+      ] } }
+  ],
+
+  "spawns": [
+    { "peer": "idle", "at": [110, 1, 110], "look": [0, 0] },
+    { "structure": "sandbag_wall", "team": "strategist", "at": [-27, 0.5, -17], "yaw": 0 },
+    { "structure": "sandbag_wall", "team": "strategist", "at": [-34, 0.5, -16], "yaw": 0 },
+    { "structure": "sandbag_wall", "team": "strategist", "at": [-33, 0.5, -31], "yaw": 0 },
+    { "structure": "sandbag_wall", "team": "strategist", "at": [-26, 0.5, -42], "yaw": 0 },
+    { "structure": "sandbag_wall", "team": "strategist", "at": [-34, 0.5, -54], "yaw": 0 },
+    { "unit": "heavy_gunner", "id": "g1", "team": "strategist", "at": [-30, 0.5, -77], "order": "none" },
+    { "unit": "infantry", "id": "r1", "team": "strategist", "at": [-33, 0.5, -75], "order": "none" },
+    { "unit": "infantry", "id": "r2", "team": "strategist", "at": [-27, 0.5, -75], "order": "none" },
+    { "unit": "infantry", "id": "r3", "team": "strategist", "at": [-36, 0.5, -77], "order": "none" },
+    { "unit": "infantry", "id": "r4", "team": "strategist", "at": [-24, 0.5, -77], "order": "none" },
+    { "unit": "infantry", "id": "r5", "team": "strategist", "at": [-33, 0.5, -79], "order": "none" },
+    { "unit": "infantry", "id": "r6", "team": "strategist", "at": [-27, 0.5, -79], "order": "none" }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.squad_drill[phase=5].count", "op": "over_seeds", "cmp": ">=", "value": 1, "fraction": 1.0 },
+    { "metric": "events.node_captured[node=0,owner=2].count", "op": "over_seeds", "cmp": ">=", "value": 1, "fraction": 0.5 },
+    { "metric": "events.kill[attacker<0,attacker>-65536].count", "op": "over_seeds", "cmp": ">=", "value": 5, "fraction": 0.5 }
+  ]
+}

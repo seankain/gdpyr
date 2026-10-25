@@ -4,7 +4,7 @@ using Gdpyr.Sim.Htn;
 namespace Gdpyr.Sim.AiDebug;
 
 /// <summary>
-/// The three domains, built here for the side of the wire that does not plan
+/// The four domains, built here for the side of the wire that does not plan
 /// (docs/AI_DEBUG.md §3.1). A spectator's process has no bots and no planning
 /// contexts — those are the server's — but it has the same code, so it builds the
 /// same domains and numbers them the same way, and a task index off the wire means
@@ -26,11 +26,16 @@ public static class HtnDomains
 	private static readonly Lazy<HtnDomainMap> SquadMap =
 		new(() => HtnDomainMap.Build(HtnDomainKind.Squad, CommanderDomain.Build(new PooledHtnFactory())));
 
+	private static readonly Lazy<HtnDomainMap> DrillMap =
+		new(() => HtnDomainMap.Build(HtnDomainKind.Drill, DrillDomain.Build(new PooledHtnFactory())));
+
 	public static HtnDomainMap Ground => GroundMap.Value;
 
 	public static HtnDomainMap Unit => UnitMap.Value;
 
 	public static HtnDomainMap Squad => SquadMap.Value;
+
+	public static HtnDomainMap Drill => DrillMap.Value;
 
 	/// <summary>The map for a domain, or null for <see cref="HtnDomainKind.None"/>.</summary>
 	public static HtnDomainMap For(HtnDomainKind kind) => kind switch
@@ -38,10 +43,11 @@ public static class HtnDomains
 		HtnDomainKind.Ground => Ground,
 		HtnDomainKind.Unit => Unit,
 		HtnDomainKind.Squad => Squad,
+		HtnDomainKind.Drill => Drill,
 		_ => null,
 	};
 
-	/// <summary>Parses <c>ground</c>, <c>unit</c> or <c>squad</c> (and a few spellings of each), for the console.</summary>
+	/// <summary>Parses <c>ground</c>, <c>unit</c>, <c>squad</c> or <c>drill</c> (and a few spellings of each), for the console.</summary>
 	public static bool TryParse(string text, out HtnDomainKind kind)
 	{
 		switch (text?.Trim().ToLowerInvariant())
@@ -62,6 +68,11 @@ public static class HtnDomains
 			case "commander":
 			case "strategist":
 				kind = HtnDomainKind.Squad;
+				return true;
+
+			case "drill":
+			case "drills":
+				kind = HtnDomainKind.Drill;
 				return true;
 
 			default:

@@ -7,12 +7,13 @@ using Godot;
 namespace Gdpyr.Rts;
 
 /// <summary>
-/// A heavy gunner's base of fire (docs/TACTICS.md §5.2), without the drill: on its scan,
+/// A heavy gunner's base of fire (docs/TACTICS.md §5.2): on its scan,
 /// a gunner under micro-autonomy with nothing of its own to shoot gathers the places the
 /// side knows of an enemy — where one is seen now by any friend, was last seen, or fired
 /// at it from — and keeps those in its gun's reach with a line to them over the cover
-/// board; its planner fires bursts at them. No ray: what the side remembers, the unit's
-/// own fire memory, and the cover board.
+/// board; its planner fires bursts at them. As its squad drill's base it fires where the
+/// drill says (§5.5). No ray: what the side remembers, the unit's own fire memory, the
+/// drill's list, and the cover board.
 /// </summary>
 public partial class UnitManager
 {
@@ -27,7 +28,7 @@ public partial class UnitManager
 	/// (<see cref="Suppress(Unit, uint, ref Vector3, ref Vector3, ref float)"/>).
 	/// </summary>
 	private void SenseGunner(Unit unit, UnitContext plan, in UnitOrder order, uint tick, ContactMemory memory,
-		bool objective)
+		bool objective, int squad)
 	{
 		bool may = unit.Autonomy == MicroAutonomy.On && unit.Traits.Doctrine == UnitDoctrine.Gunner
 			&& unit.Team == Team.Strategist && unit.TargetOwnerId == OwnerId.None
@@ -35,6 +36,15 @@ public partial class UnitManager
 		if (!may)
 		{
 			plan.SenseSuppress(ReadOnlySpan<Vector3>.Empty);
+			return;
+		}
+
+		// The base of its squad's drill fires where the drill says, squad-mates' fired-from
+		// points among them (docs/TACTICS.md §4.2, §5.2).
+		int drilled = DrillPlaces(unit, plan, squad);
+		if (drilled >= 0)
+		{
+			plan.SenseSuppress(_drillPlaces.AsSpan(0, drilled));
 			return;
 		}
 

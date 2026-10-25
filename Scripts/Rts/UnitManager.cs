@@ -282,6 +282,7 @@ public partial class UnitManager : Node
 		if (_planning != null)
 		{
 			CountSquads();
+			RunDrills(tick);
 		}
 
 		UnitsResupplied = 0;
@@ -707,6 +708,8 @@ public partial class UnitManager : Node
 			return;
 		}
 
+		unit.LastShotTick = tick;
+
 		Vector3 muzzle = unit.EyePosition;
 		ProjectileStats projectile = WeaponCatalog.Projectiles.Length > unit.Weapon.DefinitionId
 			? WeaponCatalog.Projectiles[unit.Weapon.DefinitionId]
@@ -1003,6 +1006,7 @@ public partial class UnitManager : Node
 		if (bots.Ai == BotAi.Htn)
 		{
 			_planning = new UnitPlanning(UnitPlanTraits.Default);
+			_drill = new SquadDrill(new DrillPlanning(DrillTraits.Default), Squads.Capacity);
 			GD.Print("[rts] units plan with the HTN (docs/HTN_BOTS.md §5.2)");
 		}
 	}
@@ -1023,6 +1027,7 @@ public partial class UnitManager : Node
 	/// <summary>Drops a unit's plan: it has a new order, or it is dead. Its pooled queues go back to the pool.</summary>
 	private void ResetPlan(Unit unit)
 	{
+		unit.HasDrillSpot = false;
 		if (unit.Plan != null)
 		{
 			_planning?.Reset(unit.Plan);
@@ -1090,15 +1095,20 @@ public partial class UnitManager : Node
 		float sensor = unit.Traits.SensorRadiusMeters;
 		bool attackNamed = order.Kind == OrderKind.Attack && order.TargetOwnerId != OwnerId.None;
 
-		// An attack on a control point (docs/HTN_BOTS.md §5.2, "take the point"): one
-		// that names no contact, at a point on a resource node, by the rule the economy
-		// counts bodies with.
+		int squad = Squads.SquadOf(unit.UnitId);
+		Squad board = Squads.At(squad);
+		bool hasSquad = squad >= 0 && _census.AliveIn(squad) > 0;
+
+		// A control point to take (docs/HTN_BOTS.md §5.2, "take the point"): an attack that
+		// names no contact, at a point on a resource node, by the rule the economy counts
+		// bodies with; and under micro-autonomy a move onto one (docs/TACTICS.md §5.6).
 		bool objective = false;
 		Vector3 node = Vector3.Zero;
 		float nodeRadius = 0f;
 		EconomyService economy = CombatManager.Instance?.Economy;
-		for (int i = 0; order.Kind == OrderKind.Attack && !attackNamed && economy != null && i < economy.NodeCount
-			&& !objective; i++)
+		bool takes = UnitContext.TakesPointUnder(order.Kind, order.TargetOwnerId, unit.Autonomy, unit.Traits.Doctrine,
+			hasSquad ? board.Phase : SquadPhase.Moving);
+		for (int i = 0; takes && economy != null && i < economy.NodeCount && !objective; i++)
 		{
 			ResourceNode candidate = economy.NodeAt(i);
 			if (candidate != null && candidate.Covers(order.Target))
@@ -1174,9 +1184,6 @@ public partial class UnitManager : Node
 			tick, (OddsBand)plan.Get(UnitFact.Odds), engagedRadiusMeters: traits.EngagedFriendMeters);
 		plan.FriendPoint = around.NearestFriendPosition;
 
-		int squad = Squads.SquadOf(unit.UnitId);
-		Squad board = Squads.At(squad);
-		bool hasSquad = squad >= 0 && _census.AliveIn(squad) > 0;
 		plan.HasSquad = hasSquad;
 		plan.SquadAlive = hasSquad ? _census.AliveIn(squad) : 0;
 		plan.SquadCentroid = hasSquad ? _census.CentroidOf(squad) : at;
@@ -1253,9 +1260,13 @@ public partial class UnitManager : Node
 		plan.ObjectivePoint = node;
 		plan.ObjectiveRadius = nodeRadius;
 
+		// Its part in its squad's drill (docs/TACTICS.md §5.5), before everything the drill
+		// changes: where a gunner suppresses, whether it reacts, where its cover is.
+		SenseDrill(unit, plan, squad);
+
 		// A heavy gunner's places to suppress (docs/TACTICS.md §5.2), before its cover, which
 		// is behind a wall it can fire over at the nearest.
-		SenseGunner(unit, plan, order, tick, memory, objective);
+		SenseGunner(unit, plan, order, tick, memory, objective, squad);
 
 		// Cover from the fire when it is reacting to it (docs/TACTICS.md §5.1), else cover
 		// from the fight: one spot a unit, so one or the other.
@@ -1271,10 +1282,10 @@ public partial class UnitManager : Node
 		// A grenade at a hidden enemy (docs/TACTICS.md §5.4): on its way first, when its
 		// order goes somewhere.
 		SenseGrenade(unit, plan, order, tick, memory, UnitContext.GoesSomewhere(order.Kind),
-			OrderToward(plan, order, objective, node));
+			OrderToward(plan, order, objective, node), squad);
 
 		// A marksman's peek pair and whom to peek at (docs/TACTICS.md §5.3).
-		SenseMarksman(unit, plan, order, tick, memory, objective);
+		SenseMarksman(unit, plan, order, tick, memory, objective, squad);
 
 		plan.FallbackPoint = plan.HasStaging ? plan.StagingPoint
 			: TryNearestRally(unit.Team, at, out Vector3 rally) ? rally
@@ -1330,6 +1341,16 @@ public partial class UnitManager : Node
 		{
 			unit.HasCoverSpot = false;
 			return false;
+		}
+
+		// The base of its squad's drill fights from the fire position the drill found it
+		// (docs/TACTICS.md §5.5): a low wall it can fire over at the threat point.
+		if (plan.Get(UnitFact.DrillTask) == (byte)DrillTask.FirePosition && plan.HasDrillPoint)
+		{
+			unit.HasCoverSpot = false;
+			plan.HasCoverPoint = true;
+			plan.CoverPoint = plan.DrillPoint;
+			return true;
 		}
 
 		CoverSpot spot;
@@ -2563,6 +2584,7 @@ public partial class UnitManager : Node
 		ResetFire();
 		ResetGrenades();
 		ResetAutonomy();
+		ResetDrills();
 	}
 
 	/// <summary>

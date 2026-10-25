@@ -44,11 +44,11 @@ public class UnitHtnTests
 		public bool HasTarget;
 		public Vector3 TargetPoint;
 
-		public Squaddie(bool executingConditions = true, IFactory factory = null)
+		public Squaddie(bool executingConditions = true, IFactory factory = null, UnitTraits? traits = null)
 		{
 			factory ??= new PooledHtnFactory();
 			Domain = UnitDomain.Build(factory, executingConditions);
-			C = new UnitContext(factory, UnitPlanTraits.Default, Rifleman);
+			C = new UnitContext(factory, UnitPlanTraits.Default, traits ?? Rifleman);
 			C.Init();
 			C.PlannerState.OnNewPlan = plan => Plans.Add(Names(plan));
 			C.PlannerState.OnReplacePlan = (_, _, plan) =>
@@ -1293,6 +1293,103 @@ public class UnitHtnTests
 		Assert.Equal(UnitGoal.HoldPoint, unit.Goal);
 	}
 
+	/// <summary>A unit moved onto the control point at <see cref="Objective"/>, at <paramref name="at"/>, its micro-autonomy as given.</summary>
+	private static Squaddie MovedOntoThePoint(Vector3 at, MicroAutonomy autonomy, UnitTraits? traits = null,
+		SquadPhase phase = SquadPhase.Moving)
+	{
+		var unit = new Squaddie(traits: traits);
+		unit.C.Position = at;
+		unit.C.SenseAutonomy(autonomy);
+		unit.Order(OrderKind.Move, Objective);
+		unit.C.ObjectivePoint = Objective;
+		unit.C.ObjectiveRadius = PointRadius;
+		unit.C.ObjectivePost = Objective + PostOffset;
+		unit.C.Encode(new UnitSense
+		{
+			HealthFraction = 1f,
+			Odds = OddsBand.Even,
+			Objective = true,
+			HasSquad = phase != SquadPhase.Moving,
+			SquadPhase = phase,
+		});
+		return unit;
+	}
+
+	[Fact]
+	public void AMoveOntoAControlPoint_UnderMicroAutonomy_IsThePointToTake()
+	{
+		// docs/TACTICS.md §5.6, T-D1: taking the point is the goal.
+		Squaddie unit = MovedOntoThePoint(Anchor, MicroAutonomy.On);
+		unit.Tick();
+		Assert.True(unit.C.Is(UnitFact.Objective));
+		Assert.Equal(UnitGoal.TakePoint, unit.Goal);
+		Assert.Equal(Objective + PostOffset, unit.C.Intent.Point);
+	}
+
+	[Fact]
+	public void AMoveOntoAControlPoint_WithMicroAutonomyOff_IsObeyed()
+	{
+		Squaddie unit = MovedOntoThePoint(Anchor, MicroAutonomy.Off);
+		unit.Tick();
+		Assert.False(unit.C.Is(UnitFact.Objective));
+		Assert.Equal(UnitGoal.Obey, unit.Goal);
+		Assert.Equal(UnitMove.Order, unit.C.Intent.Move);
+	}
+
+	[Fact]
+	public void SwitchingMicroAutonomyOff_TurnsTheTakeBackIntoAMove_OnTheTick()
+	{
+		Squaddie unit = MovedOntoThePoint(Anchor, MicroAutonomy.On);
+		unit.Tick();
+		Assert.Equal(UnitGoal.TakePoint, unit.Goal);
+
+		unit.C.SenseAutonomy(MicroAutonomy.Off);
+		unit.Tick();
+		Assert.Equal(UnitGoal.Obey, unit.Goal);
+	}
+
+	[Fact]
+	public void AMoveAnywhereElse_IsObeyed_WhateverItsMicroAutonomy()
+	{
+		Squaddie unit = MovedOntoThePoint(Anchor, MicroAutonomy.On);
+		unit.Order(OrderKind.Move, Objective + new Vector3(40f, 0f, 0f));
+		unit.Tick();
+		Assert.False(unit.C.Is(UnitFact.Objective));
+		Assert.Equal(UnitGoal.Obey, unit.Goal);
+	}
+
+	[Fact]
+	public void AMoveOntoAPoint_NeverChasesWhatItSees_OrTheFightAFriendIsIn()
+	{
+		// Engage focus, support and advance are an attack's; a move onto a point does none.
+		Squaddie unit = MovedOntoThePoint(Anchor, MicroAutonomy.On);
+		unit.See(Anchor + new Vector3(30f, 0.5f, 0f));
+		unit.Sense(UnitFact.FriendEngaged, true);
+		for (int i = 0; i < 30; i++)
+		{
+			unit.Tick();
+			Assert.DoesNotContain(unit.Goal, new[] { UnitGoal.EngageFocus, UnitGoal.Support, UnitGoal.Advance });
+		}
+
+		Assert.Equal(UnitGoal.TakePoint, unit.Goal);
+		Assert.False(unit.C.Intent.StopToFight);
+	}
+
+	[Fact]
+	public void AMoveOntoAPoint_ByAUnitWithNoDoctrine_OrASquadFallingBack_IsObeyed()
+	{
+		var builder = new UnitTraits(30f, 0f, 1.5f, 20f, UnitDoctrine.None);
+		Squaddie truck = MovedOntoThePoint(Anchor, MicroAutonomy.On, builder);
+		truck.Tick();
+		Assert.Equal(UnitGoal.Obey, truck.Goal);
+
+		// The commander's refills and retreats are moves so as not to stop (§5.6).
+		Squaddie refill = MovedOntoThePoint(Anchor, MicroAutonomy.On, phase: SquadPhase.FallingBack);
+		refill.Tick();
+		Assert.False(refill.C.Is(UnitFact.Objective));
+		Assert.Equal(UnitGoal.Obey, refill.Goal);
+	}
+
 	// ---- keeping pace with the squad ---------------------------------------
 
 	/// <summary>A unit advancing on <see cref="Objective"/> with its squad's centroid <paramref name="behind"/> metres further back.</summary>
@@ -1567,7 +1664,7 @@ public class UnitHtnTests
 	// ---- sharing and allocation --------------------------------------------
 
 	/// <summary>How many situations <see cref="Situation"/> has.</summary>
-	private const int Situations = 26;
+	private const int Situations = 28;
 
 	private static readonly UnitTraits Sniper = new(70f, 70f, 1.5f, 20f, UnitDoctrine.Marksman);
 
@@ -1586,8 +1683,10 @@ public class UnitHtnTests
 	/// on its way to a spot behind cover from the fire, and in it. Then a defender with a
 	/// hidden enemy to throw a grenade at (§5.4). The last two are a defending marksman
 	/// with a peek pair (§5.3): away from it, and in its hide spot with somebody to peek
-	/// at — which a rifleman, offered the same, does not take. The last two are a
-	/// defending heavy gunner (§5.2) with a place to suppress, and into its reserve.
+	/// at — which a rifleman, offered the same, does not take. The next two are a
+	/// defending heavy gunner (§5.2) with a place to suppress, and into its reserve. The
+	/// last two are a unit in its squad's drill (§5.5): moved onto the point and bounding,
+	/// and holding under an attack elsewhere.
 	/// </summary>
 	private static void Situation(UnitContext c, int phase, out OrderKind order, out bool hasTarget)
 	{
@@ -1595,6 +1694,7 @@ public class UnitHtnTests
 		bool fired = phase is 19 or 20;
 		bool peek = phase is 22 or 23;
 		bool gunner = phase is 24 or 25;
+		bool drill = phase is 26 or 27;
 		c.ObjectivePoint = phase == 15 ? c.Position : Objective;
 		c.HasCoverPoint = phase == 16;
 		c.CoverPoint = Objective + new Vector3(0f, 0f, -6f);
@@ -1605,11 +1705,14 @@ public class UnitHtnTests
 			HealthFraction = 1f,
 			HasCover = phase == 16,
 			CoverHides = phase == 16,
-			Objective = point,
+			Objective = point || phase == 26,
 			HasFireCover = fired,
 			FireCoverHides = fired,
 		});
-		c.SenseAutonomy(fired || phase == 21 || peek || gunner ? MicroAutonomy.On : MicroAutonomy.Off);
+		c.SenseAutonomy(fired || phase == 21 || peek || gunner || drill ? MicroAutonomy.On : MicroAutonomy.Off);
+		c.SenseDrill(drill ? DrillPhase.Bound : DrillPhase.None,
+			phase == 26 ? DrillTask.Bound : phase == 27 ? DrillTask.Hold : DrillTask.None, drill,
+			Anchor + new Vector3(0f, 0f, 6f), true, phase == 27, Objective + new Vector3(0f, 1.3f, 0f), Objective);
 		c.SenseGrenade(phase == 21, Anchor + new Vector3(0f, 0f, 18f));
 		c.SenseFire(fired ? FireKind.NearMiss : FireKind.None, Anchor + new Vector3(50f, 1.5f, 0f), c.Tick, 0);
 		Vector3 hide = phase == 23 ? c.Position : Anchor + new Vector3(-6f, 0f, 0f);
@@ -1626,6 +1729,7 @@ public class UnitHtnTests
 			11 => OrderKind.Patrol,
 			17 => OrderKind.Embark,
 			18 => OrderKind.Unload,
+			27 => OrderKind.Attack,
 			_ => OrderKind.Move,
 		};
 		hasTarget = phase is 5 or 8;
@@ -1728,7 +1832,7 @@ public class UnitHtnTests
 			UnitGoal.HoldPost, UnitGoal.Patrol, UnitGoal.Obey, UnitGoal.Resupply, UnitGoal.TakePoint,
 			UnitGoal.HoldPoint, UnitGoal.HoldPointCover, UnitGoal.Obey, UnitGoal.Obey, UnitGoal.TakeCoverFromFire,
 			UnitGoal.ReturnFire, UnitGoal.ThrowGrenade, UnitGoal.HoldPost, UnitGoal.HoldPost, UnitGoal.HoldPost,
-			UnitGoal.HoldPost,
+			UnitGoal.HoldPost, UnitGoal.DrillBound, UnitGoal.DrillHold,
 		};
 		Assert.Equal(Situations, expected.Length);
 
@@ -1770,7 +1874,7 @@ public class UnitHtnTests
 		gunner.Position = c.Position;
 		gunner.HasPost = true;
 		gunner.PostPoint = c.PostPoint;
-		for (int phase = 24; phase < Situations; phase++)
+		for (int phase = 24; phase < 26; phase++)
 		{
 			planning.Reset(gunner);
 			Situation(gunner, phase, out OrderKind order, out bool hasTarget);

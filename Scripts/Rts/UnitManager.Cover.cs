@@ -22,8 +22,8 @@ public partial class UnitManager
 	/// </summary>
 	public CoverBoard Cover { get; } = new();
 
-	/// <summary>Reused by every unit's cover search: the spots other units have taken, behind cover and to hide in.</summary>
-	private readonly Vector3[] _coverClaims = new Vector3[SimConfig.MaxUnits * 2];
+	/// <summary>Reused by every unit's cover search: the spots other units have taken, behind cover, to hide in and in a drill.</summary>
+	private readonly Vector3[] _coverClaims = new Vector3[SimConfig.MaxUnits * 3];
 
 	/// <summary>
 	/// Reads the map's cover boxes onto the board. Only boxes: a <c>CSGBox3D</c>'s
@@ -105,12 +105,13 @@ public partial class UnitManager
 
 	/// <summary>
 	/// Where the units of <paramref name="team"/> other than <paramref name="self"/> have taken
-	/// cover, and where its marksmen hide (docs/TACTICS.md §5.3).
+	/// cover, where its marksmen hide (docs/TACTICS.md §5.3), and where its squads' drills
+	/// send them (§5.5).
 	/// </summary>
 	private ReadOnlySpan<Vector3> CoverClaims(Unit self, Team team)
 	{
 		int count = 0;
-		for (int i = 0; i < _ordered.Count && count < _coverClaims.Length - 1; i++)
+		for (int i = 0; i < _ordered.Count && count < _coverClaims.Length - 2; i++)
 		{
 			Unit unit = _ordered[i];
 			if (unit == self || !unit.IsAlive || unit.Team != team)
@@ -126,6 +127,11 @@ public partial class UnitManager
 			if (unit.HasPeek)
 			{
 				_coverClaims[count++] = unit.Peek.Hide;
+			}
+
+			if (unit.HasDrillSpot && count < _coverClaims.Length)
+			{
+				_coverClaims[count++] = unit.DrillSpot;
 			}
 		}
 
@@ -207,7 +213,7 @@ public partial class UnitManager
 			&& Cover.Count > 0 && FiredUpon.IsRecent(unit.Fire, tick)
 			&& order.Kind is not (OrderKind.Build or OrderKind.Embark or OrderKind.Unload)
 			&& (unit.TargetOwnerId == OwnerId.None || UnitContext.FightsOnTheWay(order.Kind))
-			&& !(objective && holds);
+			&& !(objective && holds) && !UnitContext.MovesInDrill((DrillTask)plan.Get(UnitFact.DrillTask));
 		if (!reacts)
 		{
 			return false;

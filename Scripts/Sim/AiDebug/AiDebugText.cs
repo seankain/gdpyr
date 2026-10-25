@@ -126,6 +126,14 @@ public static class AiDebugText
 					text.Append($" · in squad {slot} of {BotRoster.NameOf(commander)}");
 				}
 
+				// docs/TACTICS.md §5.5: what its squad's drill has it doing.
+				if (inspect.TryValue(AiValueKey.DrillTask, out int drillTask)
+					&& inspect.TryValue(AiValueKey.DrillSquad, out int drillSquad))
+				{
+					inspect.TryValue(AiValueKey.DrillPhase, out int drillPhase);
+					text.Append($" · drill {drillSquad} {(DrillPhase)drillPhase}: {(DrillTask)drillTask}");
+				}
+
 				if (!inspect.Planning)
 				{
 					text.Append(" · no plan (legacy)");
@@ -136,6 +144,23 @@ public static class AiDebugText
 
 			case AiEntityKind.Squad:
 				text.Append(" · commander squad");
+				break;
+
+			case AiEntityKind.Drill:
+				inspect.TryValue(AiValueKey.Elements, out int elements);
+				inspect.TryValue(AiValueKey.Bounds, out int bounds);
+				inspect.TryValue(AiValueKey.GiveUps, out int giveUps);
+				text.Append($" · squad drill · {elements} taking part · {bounds} bounds");
+				if (inspect.TryValue(AiValueKey.Moving, out int moving) && moving != 0)
+				{
+					text.Append($" · half {(DrillElement)moving} moving");
+				}
+
+				if (giveUps > 0)
+				{
+					text.Append($" · given up {giveUps}×");
+				}
+
 				break;
 		}
 

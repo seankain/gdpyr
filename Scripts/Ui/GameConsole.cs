@@ -349,7 +349,7 @@ public partial class GameConsole : CanvasLayer
 
 		_commands.Register("play", "play", "stop spectating, and pick a side", _ => SetSpectating(false));
 
-		_commands.Register("ai_tree", "ai_tree <ground|unit|squad>", "print an HTN domain as a tree, with its conditions",
+		_commands.Register("ai_tree", "ai_tree <ground|unit|squad|drill>", "print an HTN domain as a tree, with its conditions",
 			AiTree);
 
 		_commands.Register("ai_plan", $"ai_plan [{AiTargets.Usage}]",
@@ -633,7 +633,7 @@ public partial class GameConsole : CanvasLayer
 	{
 		if (args.Count != 1 || !HtnDomains.TryParse(args[0], out HtnDomainKind kind))
 		{
-			return ConsoleResult.Failed("usage: ai_tree <ground|unit|squad>");
+			return ConsoleResult.Failed("usage: ai_tree <ground|unit|squad|drill>");
 		}
 
 		HtnDomainMap map = HtnDomains.For(kind);
