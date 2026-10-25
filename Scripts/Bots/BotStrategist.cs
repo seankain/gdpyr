@@ -48,6 +48,10 @@ public sealed class BotStrategist
 	/// <summary>Builders with nothing to build, gathered per decision.</summary>
 	private readonly int[] _idleBuilders = new int[SimConfig.MaxUnits];
 
+	/// <summary>Its units on the field, and on structures' training queues, by doctrine. Rebuilt per decision (T7).</summary>
+	private readonly int[] _byDoctrine = new int[(int)UnitDoctrine.Marksman + 1];
+	private readonly int[] _queuedByDoctrine = new int[(int)UnitDoctrine.Marksman + 1];
+
 	/// <summary>The places it means to fortify, and which resource node each one is.</summary>
 	private readonly FortificationSite[] _sites = new FortificationSite[SimConfig.MaxResourceNodes];
 	private readonly int[] _siteNodes = new int[SimConfig.MaxResourceNodes];
@@ -189,6 +193,7 @@ public sealed class BotStrategist
 			Decide(tick, combat, units);
 			Fortify(tick, combat, units);
 			QueueSupply(combat, units);
+			Train(combat, units);
 			Build(combat, units);
 			ApplyIntents(tick, units);
 			return;
@@ -236,6 +241,7 @@ public sealed class BotStrategist
 			}
 
 			int cost = UnitCatalog.CostOf(unit.DefinitionId);
+			UnitDoctrine doctrine = UnitCatalog.TraitsFor(unit.DefinitionId).Doctrine;
 			_commandUnits[count++] = new CommandUnit
 			{
 				Id = unit.UnitId,
@@ -245,6 +251,8 @@ public sealed class BotStrategist
 				Armour = unit.DefinitionId == UnitCatalog.Tank,
 				Scout = unit.DefinitionId == UnitCatalog.Technical,
 				Supply = UnitCatalog.IsSupply(unit.DefinitionId),
+				Gunner = doctrine == UnitDoctrine.Gunner,
+				Marksman = doctrine == UnitDoctrine.Marksman,
 				Engaging = unit.State == UnitStateId.Engaging,
 				Claimed = IsClaimed(unit, tick),
 			};
@@ -1036,6 +1044,76 @@ public sealed class BotStrategist
 			units.ServerQueueUnit(_peerId, door, UnitCatalog.SupplyTruck);
 		}
 	}
+
+	/// <summary>
+	/// Heavy gunners at its pillboxes and snipers at its sniper towers
+	/// (docs/TACTICS.md §6, T7), as many as <see cref="StrategistBrain.TrainedWanted"/>
+	/// asks for the riflemen it has: a gunner for each assault squad the commander
+	/// forms round one, no more than it has slots for, and snipers for the squads
+	/// holding ground. What a structure trains is told apart by its doctrine, as the
+	/// commander tells its units apart. The commander's only: legacy is left as it
+	/// was (D5). After <see cref="QueueSupply"/>, so a builder waiting for a structure
+	/// keeps its points, and before <see cref="Build"/>, which spends every point left
+	/// at the barracks.
+	/// </summary>
+	private void Train(CombatManager combat, UnitManager units)
+	{
+		Array.Clear(_byDoctrine);
+		Array.Clear(_queuedByDoctrine);
+		for (int i = 0; i < units.SlotCount; i++)
+		{
+			Unit unit = units.UnitAt(i);
+			if (unit != null && unit.IsAlive && unit.Team == Team.Strategist)
+			{
+				_byDoctrine[DoctrineIndex(unit.DefinitionId)]++;
+			}
+		}
+
+		for (int slot = 0; slot < SimConfig.MaxStructures; slot++)
+		{
+			if (Trainer(units, slot) is { } structure)
+			{
+				_queuedByDoctrine[DoctrineIndex(structure.TrainsUnit)] += structure.Queue.Count;
+			}
+		}
+
+		int riflemen = _byDoctrine[(int)UnitDoctrine.Rifleman];
+		int live = units.LiveUnitCount;
+		for (int slot = 0; slot < SimConfig.MaxStructures; slot++)
+		{
+			Structure structure = Trainer(units, slot);
+			if (structure == null)
+			{
+				continue;
+			}
+
+			byte kind = structure.TrainsUnit;
+			int doctrine = DoctrineIndex(kind);
+			int wanted = StrategistBrain.TrainedWanted((UnitDoctrine)doctrine, riflemen, _commander.AssaultSlots, _traits);
+
+			// The balance is re-read per structure, as per barracks: the last one may have spent it.
+			if (StrategistBrain.ShouldTrain(combat.Match.StrategistPoints - _savings, UnitCatalog.CostOf(kind),
+					_byDoctrine[doctrine], _queuedByDoctrine[doctrine], wanted, structure.Queue.Count, live, _traits,
+					SimConfig.MaxUnits)
+				&& units.ServerTrain(_peerId, slot))
+			{
+				_queuedByDoctrine[doctrine]++;
+			}
+		}
+	}
+
+	/// <summary>A finished structure of its own that trains a unit, or null: what <c>ServerTrain</c> would take.</summary>
+	private static Structure Trainer(UnitManager units, int slot)
+	{
+		Structure structure = units.StructureAt(slot);
+		return structure is { IsDestroyed: false, IsBuilt: true, Trains: true } && structure.Team == Team.Strategist
+			? structure
+			: null;
+	}
+
+	/// <summary>A unit kind's doctrine, as an index into the per-doctrine counts.</summary>
+	private static int DoctrineIndex(byte definitionId) =>
+		Math.Min((int)UnitCatalog.TraitsFor(definitionId).Doctrine, (int)UnitDoctrine.Marksman);
 
 	/// <summary>Puts a builder on the first queue it owns, when it has fewer than it wants.</summary>
 	private void QueueBuilder(CombatManager combat, UnitManager units, int builders)

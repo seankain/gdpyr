@@ -1,6 +1,6 @@
 # Unit tactics — implementation plan
 
-Status: **T0–T6 built (§6); T7–T8 are plan. Decisions T-D1 to T-D7 taken (§8).** Planned from the
+Status: **T0–T7 built (§6); T8 is plan. Decisions T-D1 to T-D7 taken (§8).** Planned from the
 code at `6213d05`. Extends the unit HTN of [`HTN_BOTS.md`](HTN_BOTS.md) §5.2 and the cover of
 [`COVER.md`](COVER.md).
 
@@ -97,6 +97,7 @@ HTN_BOTS.md §4.2 holds. Added:
 | Engine half | `Scripts/Rts/UnitManager.cs` | Encodes the new facts; carries out the new intent fields. |
 | Ground domain | `GroundDomain.cs`, `BotPilot.cs`, `BotBrain.cs` | `GroundFact.Suppressed`, `GroundIntent.Duck`, `BotSituation.Duck` (§5.7). |
 | Debugger | `Scripts/Sim/AiDebug/` | The drill as a domain kind; new facts and goals in `HtnSchema` / `AiGoals`; world lines for threat points, fire lines and bound spots. |
+| Commander | `StrategistBrain.TrainedWanted` and `ShouldTrain`, `StrategistTraits.RiflemenPerGunner` and `Snipers`; `Commander.Route` (`Spearhead`, `Holding`), `CommandUnit.Gunner` and `Marksman`; `BotStrategist.Train` (T7) | Gunners trained at its pillboxes and snipers at its towers; one gunner to an assault squad, attached as a tank is; snipers to the squads holding ground. Composition only: the drill is the units'. |
 | Agent events | `Scripts/Sim/Agent/AgentEvents.cs` | `grenade_thrown` (T0: thrower, its catalog id, whether the target was hidden); `unit_task` (a unit started one of §5's goals, from T1) and `squad_drill` (a drill phase change, from T6), each added with the first thing that emits it. For scenarios; additive. |
 
 ---
@@ -253,7 +254,8 @@ domain's "gunner" select, below "marksman" and above Attack):
 | Domain | `reload` [BeltLow] `Reload` {BeltLow}; `suppress` [Suppress] `SuppressPoint` {Suppress}; both {MicroAutonomy=on, a gunner under an order it suppresses under, Contact≠own, not falling back}. Into the reserve, `reload` pre-empts `suppress` on the tick (P2). |
 | In a drill | As built in T6: always the base (`DrillRole.Base`), its task `FirePosition` in every phase in contact. Its fire position is the drill's (§5.5): a low-wall spot 20–40 m from the threat point it can fire over at the suppression point, the first of the best four 30° or more off the assault's axis, else the best; with none in reach and the threat beyond 40 m, an open point 3 m inside that; inside the band and with none, where it stands. Its places are the drill's: the threat point first, then the rest of the squad's list nearest it, those it reaches with a line over the cover board — else its own, as above. Its 8 s cap does not apply (the drill's 60 s does). The drill does not bound until the base is firing, or 6 s have passed. |
 | Lift and shift | Unit rounds pass through friendly units (`UnitManager.QuerySegment` skips the shooter's team), so lifting fire is about tempo, not safety: in the rush, once an assault member is within 8 m of the threat point, the base's places are only the entries within 25 m beyond it (further from the assault than it is) and none within 8 m of an assault member; with none, its task is `Rush` and it goes onto the point with the assault (T6). |
-| Leading the assault | The gunner sets the tempo: its position is the first move after contact, its fire is the trigger for the bounds, and the commander builds assault squads round gunners (T7). A drill whose gunner dies falls back to a rifle half as its base. |
+| Leading the assault | The gunner sets the tempo: its position is the first move after contact, its fire is the trigger for the bounds, and the commander builds assault squads round gunners. A drill whose gunner dies falls back to a rifle half as its base. |
+| The commander's | As built in T7 (`StrategistBrain`, `Commander.Route`, `BotStrategist.Train`): a computer strategist under `htn` trains a gunner at a finished pillbox of its own while it has fewer — counting the ones queued — than one for every `RiflemenPerGunner` (3) riflemen past its garrison and no more than the commander's slots for assault squads (`Commander.AssaultSlots`: the assault squads it has and the slots still free), by the barracks' rules (it can afford it, at most `QueueDepth` on the pillbox's queue, under the field cap), before the barracks spend what is left. A gunner never joins the garrison or scouts, and never a commander squad that has one: it refills a depleted squad without one, else joins the assault squad with riflemen and no gunner, the most riflemen first, as escort armour attaches a tank (HTN_BOTS.md §5.3), else a short squad, else the squad still forming, else a new one; with every slot taken by squads that have one, it waits in no squad. Legacy trains nothing at a structure (D5). |
 
 ### 5.3 Sniper: concealment, pop out, relocate — requirement 2
 
@@ -273,6 +275,7 @@ below Build and above Attack):
 | Bounds | A walk to a hide spot, under `ToHide` or `Relocate`, of more than 12 s (`PeekWalkMaxTicks`) gives peeking up for 10 s (`PeekRetryTicks`): no pair, the order's branches. Every operator holds only while micro-autonomy is on, it has a pair and its order is one it peeks under; `PopOut` and `FireFromPeek` also while it has a target. |
 | React to fire | Not for a marksman with a pair (`Peek=none` on the select and its executing conditions): its hide spot is concealed from where the fire came from already, which is one of the pair's threats. Found in T4's first runs: React stood it up to fire back, it saw its shooter, a target of its own ended React, `ToHide` crouched it, it lost the target, and React began again, every scan. Without a pair it reacts as a rifleman does. |
 | `unit_task` | Goals 21 to hide, 22 pop out, 23 fire from a peek, 24 duck, 25 relocate. Behind a low wall a duck begins and ends on one tick, so 24 is seen only from a block. |
+| The commander's | As built in T7: a computer strategist under `htn` trains snipers at its finished sniper towers up to `StrategistTraits.Snipers` (2) on the field, counting the ones queued, once it has the garrison's four riflemen on the field. A sniper joins a squad holding a zone — the garrison at home, or a squad sent to reinforce one — the fewest snipers first, then the nearest; the garrison's are on top of its four riflemen. Never the scout or an assault being formed: with no squad holding ground (the garrison out on an assault, say) it waits in no squad. A squad it joined that is later sent to attack takes it along, as it takes any member. |
 | In a drill | As built in T6: overwatch (`DrillRole.Overwatch`, task `Overwatch`), not an element and no spot of the drill's. Its "engage" needs the drill to be bounding, at its grenades or rushing (`IfPeekTimed`), so it pops out while an element moves; between, it waits hidden. With no pair it falls through to taking the point. |
 
 ### 5.4 Grenades at known enemies behind cover — requirement 4
@@ -1024,6 +1027,76 @@ strategist or a scenario turns micro-autonomy on.
   tanks (HTN_BOTS.md §5.3); snipers join the garrison or a reinforcing squad, never the scout.
   The drill is the units', so this is composition only.
 - Tests in `CommanderHtnTests` and `StrategistBrainTests`.
+- **Result — built.**
+  - `dotnet test`: 2134 passed, 0 failed (2115 before; 19 new: 12 in `CommanderHtnTests`, 7 in
+    `StrategistBrainTests`). The commander's churned round — what its determinism, 0 B and
+    goal-coverage tests walk — has gunners and snipers in it, about one in nine of its new riflemen
+    each, and a new test walks it for 2,000 decisions checking after every one that no squad has two
+    gunners, the garrison none, and neither the scout nor the trucks a gunner or a sniper. `dotnet
+    build Gdpyr.csproj`: 0 warnings, 0 errors.
+  - **The tests test something.** One piece removed at a time, the count of tests that failed — the
+    garrison: no gunner 3; no sniper by its fill 2; its snipers on top of its riflemen 1. A sniper:
+    only to a squad holding ground 4; only a squad under Defend 4; the fewest snipers first 1. The
+    scout: never a gunner 2, never a sniper 2. A gunner: a refilling squad without one 1; attached
+    at all (`Spearhead`) 1; never to a squad with one 4; to a squad with riflemen 1; the most
+    riflemen first 1; a short squad without one 1; the squad forming without one 2; the smallest
+    squad without one 1; never the garrison as the last resort 1. The counts: gunners and snipers on
+    joining 1 and 1, each decision 4 and 1; `AssaultSlots`' free slots 1, and assault squads only 1.
+    Training: riflemen past the garrison 1; no more gunners than slots 1; zero riflemen a gunner
+    training none 1; snipers once the garrison's riflemen are out 1; counting the ones queued 1; the
+    barracks' rules 1. One first failed nothing: a gunner skipping a squad with no riflemen, which
+    mattered only when every squad without a gunner was tanks alone;
+    `AGunner_IsNotASquadOfTanks_Base_ButStartsOneForTheRiflemen` fails without it. Two guards were
+    taken out before the runs, as saying nothing "under Defend" does not: a sniper's squad not
+    falling back, and being the garrison or an assault — only those two are given Defend, and a
+    squad that starts falling back gives its task up. The routing rows were run on the code before
+    `AssaultSlots`, which only counts at the end of a decision; the rest on the final code.
+  - **Cost** (a temporary test, not committed; Release, `TieredCompilation` off, Intel Xeon @ 2.10
+    GHz, four cores, with the scenario suite running beside it): `Commander.Decide` over 64 units —
+    46 riflemen, 7 gunners, 3 snipers, 4 tanks, 4 technicals — every unit routed again every other
+    decision, 4,000 decisions a run: 11.7–14.7 µs a decision over ten runs, against 11.6–13.2 µs for
+    the same units with their gunner and sniper flags cleared. One decision every 30 ticks a
+    strategist. Without tiering off the first runs of each differed by up to 50 µs, JIT and not the
+    routing. `BotStrategist.Train` is two passes over the units and the structure slots a decision,
+    in the engine, and allocates nothing (its counts are two arrays of four).
+  - **Scenario** `htn_commander_trains`: the HTN computer strategist given a finished pillbox at
+    (80, −80) and a sniper tower at (120, −80) beside its barracks and eleven riflemen, H6's idle
+    seat in the far corner. Claims: 0 pilot fallbacks; at least two gunners and two snipers trained
+    at a structure (`unit_built[tier=6,barracks<0]`, `[tier=5,barracks<0]`) every seed. Seeds 1–2,
+    2,400 ticks, on the build before the cap below: 3 gunners and 2 snipers each seed; under
+    `--bot-ai legacy`, otherwise the same file, 0 and 0 — both claims fail, as they should (D5). A
+    probe (a temporary print, not committed) showed each commander squad's members every 5 s. In
+    2,400 ticks the three assault squads had a gunner each by 626, 1,221 and 1,501 ticks, the
+    garrison none; both snipers waited in no squad, the garrison being out on a combined assault
+    from the first decision and no squad holding a zone. One seed of 9,000 ticks: the garrison was
+    home by 3,006 ticks, and both snipers stood with it from then to the end, six with its four
+    riflemen; five assault squads of 7–8, one gunner in each.
+  - **Found by the round, fixed here.** On the build before the cap the 9,000-tick round trained a
+    sixth gunner, which waited in no squad from 8,711 ticks: every slot was taken — the garrison,
+    the scout, the trucks and five assault squads, each with a gunner — and one gunner for every
+    three riflemen past the garrison was some ten by then. The commander places one a squad, so the
+    rule is capped at its slots for assault squads (`Commander.AssaultSlots`). The same round with
+    the cap trained five, none waiting.
+  - **Suite**: `./scripts/playtest.sh Tests/Scenarios/*.json` on the T7 commit's build, default
+    `htn` and micro-autonomy off except where a scenario sets it: 29 of 29 passed, 0 failed, in 50
+    min 42 s. Among them `htn_commander_trains` on the capped build — 2 and 3 gunners, 2 snipers a
+    seed — `htn_recon_finds_contact`, `htn_squad_retreats`, `htn_strategist_defends_node` and
+    `htn_strategist_digs_in`, and the five `tactics_*`.
+  - **Differences from the plan above.** The plan gave no numbers: a gunner for every three riflemen
+    past the garrison, so a squad of four forms round one, no more than the commander has slots for;
+    two snipers, once the garrison's riflemen are on the field. A gunner is placed by a rule of its
+    own beside escort armour's — a squad with riflemen and no gunner, the most riflemen first, where
+    a tank takes the fewest tanks, then the most members — and never the garrison, as a tank is not.
+    A sniper with no squad holding ground waits in no squad rather than walk out after a garrison on
+    an assault, and goes with a squad it joined that is later sent to attack; the garrison's snipers
+    are on top of its four riflemen. Training is after the trucks and before the barracks, which
+    spend every point left. The plan named only the two test classes; the scenario is added.
+  - **Not checked.** A round in which the ground force fights back — whether squads formed round
+    gunners take or hold more, or a sniper beside the garrison lives longer — which is T8's measure,
+    with micro-autonomy on and off; with the default off, a gunner and a sniper fight as H3–H6's
+    units do. A sniper joining a squad reinforcing a zone in a round (the tests only). A person
+    sharing the army with the commander. A display: the debug HUD's `commander` row does not show
+    gunners or snipers.
 
 ### T8 — Measure, switch on, document (1–2 days, then ongoing)
 

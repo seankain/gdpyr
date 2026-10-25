@@ -25,6 +25,18 @@ public struct CommandUnit
 	/// <summary>A supply truck (D2, H5): never in a fighting squad; the commander stations it where its squads will want it.</summary>
 	public bool Supply;
 
+	/// <summary>
+	/// A heavy gunner (docs/TACTICS.md §5.2, T7): an assault squad's base of fire. At
+	/// most one a squad, attached as a tank is; never the garrison or the scout.
+	/// </summary>
+	public bool Gunner;
+
+	/// <summary>
+	/// A sniper (docs/TACTICS.md §5.3, T7): it joins the garrison or a squad
+	/// reinforcing a zone, and waits in no squad while there is none; never the scout.
+	/// </summary>
+	public bool Marksman;
+
 	/// <summary>What <see cref="Strength"/> is at full health: its cost. What resupply can bring it back to.</summary>
 	public float FullStrength;
 
@@ -101,6 +113,16 @@ public struct CommandSquad
 	/// next scout (§5.3, Recon), and is kept out of a combined assault.
 	/// </summary>
 	public int Scouts;
+
+	/// <summary>Heavy gunners in it: one at most (T7).</summary>
+	public int Gunners;
+
+	/// <summary>
+	/// Snipers in it. The garrison's are on top of its
+	/// <see cref="CommanderTraits.GarrisonUnits"/> riflemen: a sniper stands with them,
+	/// not in place of one (T7).
+	/// </summary>
+	public int Marksmen;
 
 	public int Engaging;
 
@@ -340,6 +362,13 @@ public sealed class Commander
 	/// <summary>Whether the last decision wanted a scout out.</summary>
 	public bool ReconWanted { get; private set; }
 
+	/// <summary>
+	/// Slots for assault squads after the last decision: the assault squads it has and
+	/// the slots still free. A heavy gunner goes one to a squad (T7), so this is as
+	/// many as it can place.
+	/// </summary>
+	public int AssaultSlots { get; private set; }
+
 	public CommandSquad SquadAt(int squad) => InRange(squad) ? _squads[squad] : default;
 
 	/// <summary>What the squad's running task asked for at the last decision.</summary>
@@ -383,6 +412,7 @@ public sealed class Commander
 		_lastLiveTick = 0;
 		BuyTimeZone = -1;
 		ReconWanted = false;
+		AssaultSlots = 0;
 		Overflows = 0;
 	}
 
@@ -447,6 +477,12 @@ public sealed class Commander
 				Plan(s, world, units);
 			}
 		}
+
+		AssaultSlots = 0;
+		for (int s = GarrisonSlot + 1; s < _squads.Length; s++)
+		{
+			AssaultSlots += !_squads[s].Active || _squads[s].Role == CommandRole.Assault ? 1 : 0;
+		}
 	}
 
 	// ---- membership --------------------------------------------------------
@@ -476,6 +512,8 @@ public sealed class Commander
 			_squads[s].Members = 0;
 			_squads[s].Armour = 0;
 			_squads[s].Scouts = 0;
+			_squads[s].Gunners = 0;
+			_squads[s].Marksmen = 0;
 			_squads[s].Engaging = 0;
 			_squads[s].Strength = 0f;
 			_squads[s].FullStrength = 0f;
@@ -494,6 +532,8 @@ public sealed class Commander
 			squad.Members++;
 			squad.Armour += units[i].Armour ? 1 : 0;
 			squad.Scouts += units[i].Scout ? 1 : 0;
+			squad.Gunners += units[i].Gunner ? 1 : 0;
+			squad.Marksmen += units[i].Marksman ? 1 : 0;
 			squad.Engaging += units[i].Engaging ? 1 : 0;
 			squad.Strength += MathF.Max(units[i].Strength, 0f);
 			squad.FullStrength += MathF.Max(units[i].FullStrength, 0f);
@@ -512,12 +552,14 @@ public sealed class Commander
 	/// <summary>
 	/// Puts every unit in no squad into one, in the unit manager's order: a supply
 	/// truck into the trucks' squad, and never anywhere else; the garrison while it is
-	/// short and at home, riflemen only — a tank goes with infantry, a technical's
-	/// 70 m sensor is wasted at home, and a unit produced while the garrison is out on
-	/// an assault would walk out after it alone; one scout when recon is wanted; then a
-	/// depleted squad that is refilling; then, for a tank, an infantry squad to escort
-	/// it; then an idle squad too weak for its target; then the squad forming from
-	/// production.
+	/// short of riflemen and at home, riflemen only — a tank goes with infantry, a
+	/// technical's 70 m sensor is wasted at home, a heavy gunner is an assault's, and a
+	/// unit produced while the garrison is out on an assault would walk out after it
+	/// alone; one scout when recon is wanted; a sniper with a squad holding a zone, and
+	/// nowhere else (T7); then a depleted squad that is refilling; then, for a tank, an
+	/// infantry squad to escort it, and for a heavy gunner a rifle squad without one;
+	/// then an idle squad too weak for its target; then the squad forming from
+	/// production. A gunner never joins a squad that has one.
 	/// </summary>
 	private void Route(uint tick, ReadOnlySpan<CommandUnit> units)
 	{
@@ -539,8 +581,8 @@ public sealed class Commander
 		bool garrisonHome = _squads[GarrisonSlot].Task != CommandTask.Attack;
 		for (int i = 0; i < units.Length; i++)
 		{
-			if (Free(units, i) && !units[i].Armour && !units[i].Scout && !units[i].Supply && garrisonHome
-				&& _squads[GarrisonSlot].Members < _traits.GarrisonUnits)
+			if (Free(units, i) && Rifleman(units[i]) && garrisonHome
+				&& _squads[GarrisonSlot].Members - _squads[GarrisonSlot].Marksmen < _traits.GarrisonUnits)
 			{
 				Join(Ensure(GarrisonSlot, CommandRole.Garrison, tick), units, i);
 			}
@@ -565,20 +607,34 @@ public sealed class Commander
 				continue;
 			}
 
-			int squad = Refilling();
+			// A sniper holds ground, so it waits for a squad that does rather than form
+			// an assault of its own (docs/TACTICS.md §6, T7).
+			if (units[i].Marksman)
+			{
+				Join(Holding(units[i].Position), units, i);
+				continue;
+			}
+
+			bool gunner = units[i].Gunner;
+			int squad = Refilling(gunner);
 			if (squad < 0 && units[i].Armour)
 			{
 				squad = Escort();
 			}
 
-			if (squad < 0)
+			if (squad < 0 && gunner)
 			{
-				squad = ShortSquad();
+				squad = Spearhead();
 			}
 
 			if (squad < 0)
 			{
-				squad = Forming(tick);
+				squad = ShortSquad(gunner);
+			}
+
+			if (squad < 0)
+			{
+				squad = Forming(tick, gunner);
 			}
 
 			Join(squad, units, i);
@@ -587,10 +643,19 @@ public sealed class Commander
 
 	private bool Free(ReadOnlySpan<CommandUnit> units, int i) => _unitSquad[i] < 0 && !units[i].Claimed;
 
+	/// <summary>A rifleman: none of the kinds the commander places by kind — a tank, a technical, a truck, a gunner or a sniper.</summary>
+	private static bool Rifleman(in CommandUnit unit) =>
+		!unit.Armour && !unit.Scout && !unit.Supply && !unit.Gunner && !unit.Marksman;
+
+	/// <summary>Members of a squad that are riflemen, by <see cref="Rifleman"/>'s rule. Trucks are never in one with others.</summary>
+	private static int Riflemen(in CommandSquad squad) =>
+		squad.Members - squad.Armour - squad.Scouts - squad.Gunners - squad.Marksmen;
+
 	/// <summary>
 	/// The scout (§5.3, "one technical — else one rifleman"): a technical in no squad,
 	/// else one in an assault squad with nothing to do and no fight, else a rifleman
-	/// in no squad, else one from the squad still forming. -1 for none.
+	/// in no squad, else one from the squad still forming. Never a heavy gunner or a
+	/// sniper (T7). -1 for none.
 	/// </summary>
 	private int Recruit(ReadOnlySpan<CommandUnit> units)
 	{
@@ -598,7 +663,8 @@ public sealed class Commander
 		{
 			for (int i = 0; i < units.Length; i++)
 			{
-				if (units[i].Claimed || units[i].Armour || units[i].Supply || (pass < 2 && !units[i].Scout))
+				if (units[i].Claimed || units[i].Armour || units[i].Supply || units[i].Gunner || units[i].Marksman
+					|| (pass < 2 && !units[i].Scout))
 				{
 					continue;
 				}
@@ -639,6 +705,8 @@ public sealed class Commander
 		left.Members--;
 		left.Armour -= units[i].Armour ? 1 : 0;
 		left.Scouts -= units[i].Scout ? 1 : 0;
+		left.Gunners -= units[i].Gunner ? 1 : 0;
+		left.Marksmen -= units[i].Marksman ? 1 : 0;
 		left.Strength -= strength;
 		left.StrengthAtFormation = MathF.Max(left.StrengthAtFormation - strength, 0f);
 		if (left.Members == 0)
@@ -647,13 +715,14 @@ public sealed class Commander
 		}
 	}
 
-	private int Refilling()
+	/// <summary>A depleted assault squad refilling; for a <paramref name="gunner"/>, one without a gunner. -1 for none.</summary>
+	private int Refilling(bool gunner)
 	{
 		for (int s = 0; s < _squads.Length; s++)
 		{
 			ref CommandSquad squad = ref _squads[s];
 			if (squad.Active && squad.Role == CommandRole.Assault && squad.Depleted && !squad.FallingBack
-				&& squad.Strength < squad.StrengthAtFormation)
+				&& squad.Strength < squad.StrengthAtFormation && (!gunner || squad.Gunners == 0))
 			{
 				return s;
 			}
@@ -684,13 +753,70 @@ public sealed class Commander
 		return best;
 	}
 
-	private int ShortSquad()
+	/// <summary>
+	/// For a heavy gunner (T7), as <see cref="Escort"/> is for a tank: the assault
+	/// squad with riflemen in it and no gunner, the most riflemen first — the gunner
+	/// is its base of fire (docs/TACTICS.md §5.2). -1 for none.
+	/// </summary>
+	private int Spearhead()
+	{
+		int best = -1;
+		for (int s = 0; s < _squads.Length; s++)
+		{
+			ref CommandSquad squad = ref _squads[s];
+			if (!squad.Active || squad.Role != CommandRole.Assault || squad.FallingBack || squad.Gunners > 0
+				|| Riflemen(squad) <= 0)
+			{
+				continue;
+			}
+
+			if (best < 0 || Riflemen(squad) > Riflemen(_squads[best]))
+			{
+				best = s;
+			}
+		}
+
+		return best;
+	}
+
+	/// <summary>
+	/// For a sniper (T7): a squad holding a zone — the garrison at home, or a squad
+	/// sent to reinforce one, the only squads under Defend; one falling back has
+	/// given its task up — the fewest snipers first, then the nearest. Never the
+	/// scout, the trucks, or a squad attacking or waiting for a target. -1 for none.
+	/// </summary>
+	private int Holding(Vector3 at)
+	{
+		int best = -1;
+		float bestDistance = float.MaxValue;
+		for (int s = 0; s < _squads.Length; s++)
+		{
+			ref CommandSquad squad = ref _squads[s];
+			if (!squad.Active || squad.Task != CommandTask.Defend)
+			{
+				continue;
+			}
+
+			float distance = Flat(squad.Centroid, at);
+			if (best < 0 || squad.Marksmen < _squads[best].Marksmen
+				|| (squad.Marksmen == _squads[best].Marksmen && distance < bestDistance))
+			{
+				best = s;
+				bestDistance = distance;
+			}
+		}
+
+		return best;
+	}
+
+	/// <summary>An idle assault squad too weak for its target; for a <paramref name="gunner"/>, one without a gunner. -1 for none.</summary>
+	private int ShortSquad(bool gunner)
 	{
 		for (int s = 0; s < _squads.Length; s++)
 		{
 			ref CommandSquad squad = ref _squads[s];
 			if (squad.Active && squad.Role == CommandRole.Assault && squad.Short && squad.Task == CommandTask.None
-				&& !squad.FallingBack && !squad.Depleted)
+				&& !squad.FallingBack && !squad.Depleted && (!gunner || squad.Gunners == 0))
 			{
 				return s;
 			}
@@ -699,12 +825,18 @@ public sealed class Commander
 		return -1;
 	}
 
-	/// <summary>The assault squad still forming, else a new one, else the smallest assault squad, else the garrison.</summary>
-	private int Forming(uint tick)
+	/// <summary>
+	/// The assault squad still forming, else a new one, else the smallest assault
+	/// squad, else the garrison. For a <paramref name="gunner"/>, only squads without
+	/// one, and never the garrison: with every slot taken by squads that have a
+	/// gunner, it is left in no squad (-1).
+	/// </summary>
+	private int Forming(uint tick, bool gunner)
 	{
 		for (int s = 0; s < _squads.Length; s++)
 		{
-			if (_squads[s].Active && _squads[s].Role == CommandRole.Assault && !_squads[s].Ready)
+			if (_squads[s].Active && _squads[s].Role == CommandRole.Assault && !_squads[s].Ready
+				&& (!gunner || _squads[s].Gunners == 0))
 			{
 				return s;
 			}
@@ -719,14 +851,14 @@ public sealed class Commander
 		int smallest = -1;
 		for (int s = 0; s < _squads.Length; s++)
 		{
-			if (_squads[s].Active && _squads[s].Role == CommandRole.Assault
+			if (_squads[s].Active && _squads[s].Role == CommandRole.Assault && (!gunner || _squads[s].Gunners == 0)
 				&& (smallest < 0 || _squads[s].Members < _squads[smallest].Members))
 			{
 				smallest = s;
 			}
 		}
 
-		return smallest >= 0 ? smallest : Ensure(GarrisonSlot, CommandRole.Garrison, tick);
+		return smallest >= 0 || gunner ? smallest : Ensure(GarrisonSlot, CommandRole.Garrison, tick);
 	}
 
 	private int FindRole(CommandRole role)
@@ -791,6 +923,8 @@ public sealed class Commander
 		joined.Members++;
 		joined.Armour += units[i].Armour ? 1 : 0;
 		joined.Scouts += units[i].Scout ? 1 : 0;
+		joined.Gunners += units[i].Gunner ? 1 : 0;
+		joined.Marksmen += units[i].Marksman ? 1 : 0;
 		joined.Strength += MathF.Max(units[i].Strength, 0f);
 
 		// The most it has been: a unit refilling a depleted squad makes up what it lost

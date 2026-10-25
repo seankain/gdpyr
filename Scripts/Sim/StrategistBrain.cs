@@ -55,9 +55,25 @@ public readonly struct StrategistTraits
 	/// </summary>
 	public readonly int UnitsBeforeSupply;
 
+	/// <summary>
+	/// Riflemen it wants on the field past the garrison for each heavy gunner it
+	/// trains at a pillbox (docs/TACTICS.md §6, T7): three, so that an assault squad
+	/// of four forms round one gunner, its base of fire (§5.2), and the commander
+	/// attaches one to each. Zero trains none. Only the commander trains them;
+	/// legacy, the RL baseline, never does (D5).
+	/// </summary>
+	public readonly int RiflemenPerGunner;
+
+	/// <summary>
+	/// Snipers it keeps on the field, trained at its sniper towers once it has the
+	/// garrison's riflemen (T7): one to stand with the garrison and one with a squad
+	/// holding a zone (§5.3). Zero trains none. The commander's only, as gunners are.
+	/// </summary>
+	public readonly int Snipers;
+
 	public StrategistTraits(int decisionIntervalTicks, int queueDepth, int garrisonUnits,
 		float reorderRadiusMeters, int infantryPerHeavy = 3, int builders = 1, int unitsBeforeBuilders = 4,
-		int supplyTrucks = 1, int unitsBeforeSupply = 8)
+		int supplyTrucks = 1, int unitsBeforeSupply = 8, int riflemenPerGunner = 3, int snipers = 2)
 	{
 		DecisionIntervalTicks = Math.Max(decisionIntervalTicks, 1);
 		QueueDepth = Math.Max(queueDepth, 0);
@@ -68,6 +84,8 @@ public readonly struct StrategistTraits
 		UnitsBeforeBuilders = Math.Max(unitsBeforeBuilders, 0);
 		SupplyTrucks = Math.Max(supplyTrucks, 0);
 		UnitsBeforeSupply = Math.Max(unitsBeforeSupply, 0);
+		RiflemenPerGunner = Math.Max(riflemenPerGunner, 0);
+		Snipers = Math.Max(snipers, 0);
 	}
 
 	/// <summary>
@@ -212,6 +230,40 @@ public static class StrategistBrain
 
 		return costs[0] > 0 && balance >= costs[0];
 	}
+
+	// ---- units a structure trains (docs/TACTICS.md §6, T7) -------------------
+
+	/// <summary>
+	/// How many units of <paramref name="doctrine"/> it wants on the field, for the
+	/// <paramref name="riflemen"/> it has: a heavy gunner for every
+	/// <see cref="StrategistTraits.RiflemenPerGunner"/> riflemen past the garrison, so
+	/// that each assault squad can form round one, and no more than the
+	/// <paramref name="assaultSlots"/> its commander has for assault squads — one
+	/// goes to a squad, and one past that would wait with nowhere to go;
+	/// <see cref="StrategistTraits.Snipers"/> once it has the garrison's riflemen, to
+	/// stand with the squads holding ground; and none of any other doctrine, which a
+	/// structure does not train.
+	/// </summary>
+	public static int TrainedWanted(UnitDoctrine doctrine, int riflemen, int assaultSlots, in StrategistTraits traits) =>
+		doctrine switch
+		{
+			UnitDoctrine.Gunner => traits.RiflemenPerGunner > 0
+				? Math.Min(Math.Max(riflemen - traits.GarrisonUnits, 0) / traits.RiflemenPerGunner,
+					Math.Max(assaultSlots, 0))
+				: 0,
+			UnitDoctrine.Marksman => riflemen >= traits.GarrisonUnits ? traits.Snipers : 0,
+			_ => 0,
+		};
+
+	/// <summary>
+	/// Whether to put another unit on a structure's training queue: fewer of its kind
+	/// on the field than <paramref name="wanted"/>, counting the ones already queued at
+	/// any structure, and the barracks' own rule (<see cref="ShouldQueue"/>) for the
+	/// structure's queue — afford it, keep the queue short, stay under the field cap.
+	/// </summary>
+	public static bool ShouldTrain(int balance, int cost, int trained, int queuedTrained, int wanted, int queued,
+		int liveUnits, in StrategistTraits traits, int unitCap) =>
+		trained + queuedTrained < wanted && ShouldQueue(balance, cost, queued, liveUnits, traits, unitCap);
 
 	// ---- builders and structures (docs/NETCODE.md §10.5) --------------------
 

@@ -42,6 +42,8 @@ public class CommanderHtnTests
 	private const float Technical = 150f;
 	private const float Tank = 400f;
 	private const float Truck = 120f;
+	private const float Gunner = 90f;
+	private const float Sniper = 60f;
 
 	private sealed class Rig
 	{
@@ -71,18 +73,22 @@ public class CommanderHtnTests
 
 		/// <summary>A unit; <paramref name="fullStrength"/> 0 is one resupply cannot bring back, as the tests before H5 had.</summary>
 		public ushort Add(Vector3 at, float strength = Rifleman, bool armour = false, bool scout = false,
-			bool supply = false, float fullStrength = 0f)
+			bool supply = false, float fullStrength = 0f, bool gunner = false, bool marksman = false)
 		{
 			ushort id = _nextId++;
 			Units.Add(new CommandUnit
 			{
 				Id = id, Position = at, Strength = strength, Armour = armour, Scout = scout, Supply = supply,
-				FullStrength = fullStrength,
+				FullStrength = fullStrength, Gunner = gunner, Marksman = marksman,
 			});
 			return id;
 		}
 
 		public ushort AddTruck(Vector3 at) => Add(at, Truck, supply: true, fullStrength: Truck);
+
+		public ushort AddGunner(Vector3 at) => Add(at, Gunner, gunner: true);
+
+		public ushort AddSniper(Vector3 at) => Add(at, Sniper, marksman: true);
 
 		/// <summary>Every unit worth its full cost at full health: squads resupply can bring back (D2).</summary>
 		public void Heals()
@@ -238,6 +244,237 @@ public class CommanderHtnTests
 		ushort second = rig.Add(Vector3.Zero, Tank, armour: true);
 		rig.Decide();
 		Assert.Equal(squad, rig.Commander.SquadOf(second));
+	}
+
+	// ---- gunners and snipers (docs/TACTICS.md §6, T7) ------------------------
+
+	[Fact]
+	public void AGunner_IsNeverTheGarrison_AndAnAssaultFormsRoundIt()
+	{
+		var rig = new Rig();
+		ushort gunner = rig.AddGunner(Vector3.Zero);
+		rig.AddRiflemen(7);
+		rig.Decide();
+
+		CommandSquad garrison = rig.Squad(Commander.GarrisonSlot);
+		Assert.Equal(4, garrison.Members);
+		Assert.Equal(0, garrison.Gunners);
+
+		// The first unit on the field, and still not home's: it formed the next
+		// assault, which the riflemen after the garrison filled — a gunner and three.
+		int squad = rig.Commander.SquadOf(gunner);
+		Assert.NotEqual(Commander.GarrisonSlot, squad);
+		Assert.Equal(CommandRole.Assault, rig.Squad(squad).Role);
+		Assert.Equal(4, rig.Squad(squad).Members);
+		Assert.Equal(1, rig.Squad(squad).Gunners);
+		Assert.True(rig.Squad(squad).Ready);
+	}
+
+	[Fact]
+	public void AGunner_JoinsTheRifleSquadWithoutOne_WithTheMostRiflemen()
+	{
+		var rig = new Rig();
+		rig.AddRiflemen(12);
+		rig.Decide();
+		int[] assaults = Assaults(rig);
+		Assert.Equal(2, assaults.Length);
+
+		// The first squad loses a rifleman: the second has more, and gets the gunner.
+		rig.Kill(rig.Members(assaults[0])[0]);
+		ushort first = rig.AddGunner(Vector3.Zero);
+		rig.Decide();
+		Assert.Equal(assaults[1], rig.Commander.SquadOf(first));
+
+		// The next goes to the squad without one, though it has fewer riflemen.
+		ushort second = rig.AddGunner(Vector3.Zero);
+		rig.Decide();
+		Assert.Equal(assaults[0], rig.Commander.SquadOf(second));
+		Assert.Equal(1, rig.Squad(assaults[0]).Gunners);
+		Assert.Equal(1, rig.Squad(assaults[1]).Gunners);
+	}
+
+	[Fact]
+	public void ASecondGunner_FormsASquadOfItsOwn_RatherThanJoinOneThatHasAGunner()
+	{
+		var rig = new Rig();
+		rig.AddRiflemen(4);
+		ushort first = rig.AddGunner(Vector3.Zero);
+		rig.AddRiflemen(1);
+		rig.Decide();
+
+		// The squad still forming has a gunner and a rifleman: the second gunner does
+		// not join it, and the next riflemen fill the first squad still forming.
+		int squad = rig.Commander.SquadOf(first);
+		ushort second = rig.AddGunner(Vector3.Zero);
+		rig.Decide();
+		int own = rig.Commander.SquadOf(second);
+		Assert.True(own > Commander.GarrisonSlot);
+		Assert.NotEqual(squad, own);
+		Assert.Equal(1, rig.Squad(squad).Gunners);
+		Assert.Equal(1, rig.Squad(own).Gunners);
+
+		ushort rifleman = rig.Add(Vector3.Zero);
+		rig.Decide();
+		Assert.Equal(squad, rig.Commander.SquadOf(rifleman));
+	}
+
+	[Fact]
+	public void AGunner_IsNotASquadOfTanks_Base_ButStartsOneForTheRiflemen()
+	{
+		var rig = new Rig();
+		rig.AddRiflemen(4);
+		for (int i = 0; i < 4; i++)
+		{
+			rig.Add(Vector3.Zero, Tank, armour: true);
+		}
+
+		rig.Decide();
+		int tanks = rig.Assault;
+		Assert.Equal(4, rig.Squad(tanks).Armour);
+
+		// No riflemen to cover, so no drill: it forms the next squad, and the next
+		// rifleman joins it rather than the tanks.
+		ushort gunner = rig.AddGunner(Vector3.Zero);
+		rig.Decide();
+		int own = rig.Commander.SquadOf(gunner);
+		Assert.True(own > Commander.GarrisonSlot);
+		Assert.NotEqual(tanks, own);
+
+		ushort rifleman = rig.Add(Vector3.Zero);
+		rig.Decide();
+		Assert.Equal(own, rig.Commander.SquadOf(rifleman));
+	}
+
+	[Fact]
+	public void WithEverySquadAGunner_AndNoSlotLeft_AGunnerWaitsInNoSquad()
+	{
+		var rig = new Rig();
+		rig.AddRiflemen(4);
+		for (int squad = 1; squad < rig.Commander.Capacity; squad++)
+		{
+			rig.AddGunner(Vector3.Zero);
+			rig.AddRiflemen(3);
+		}
+
+		ushort extra = rig.AddGunner(Vector3.Zero);
+		ushort rifleman = rig.Add(Vector3.Zero);
+		rig.Decide();
+
+		for (int s = 0; s < rig.Commander.Capacity; s++)
+		{
+			Assert.True(rig.Squad(s).Gunners <= 1);
+		}
+
+		Assert.Equal(-1, rig.Commander.SquadOf(extra));
+
+		// A rifleman still finds the smallest squad, as before.
+		Assert.True(rig.Commander.SquadOf(rifleman) > Commander.GarrisonSlot);
+	}
+
+	[Fact]
+	public void AssaultSlots_AreTheAssaultSquads_AndTheSlotsStillFree()
+	{
+		var rig = new Rig();
+		rig.AddRiflemen(4);
+		rig.Decide();
+		Assert.Equal(rig.Commander.Capacity - 1, rig.Commander.AssaultSlots);
+
+		// An assault squad is one of them; the trucks' squad is not.
+		rig.AddRiflemen(4);
+		rig.AddTruck(Vector3.Zero);
+		rig.Decide();
+		Assert.True(rig.Assault > Commander.GarrisonSlot);
+		Assert.True(rig.Find(CommandRole.Supply) > Commander.GarrisonSlot);
+		Assert.Equal(rig.Commander.Capacity - 2, rig.Commander.AssaultSlots);
+	}
+
+	[Fact]
+	public void ASniper_StandsWithTheGarrison_OnTopOfItsRiflemen()
+	{
+		var rig = new Rig();
+		rig.AddRiflemen(4);
+		rig.Decide();
+
+		ushort sniper = rig.AddSniper(Vector3.Zero);
+		ushort fifth = rig.Add(Vector3.Zero);
+		rig.Decide();
+		Assert.Equal(Commander.GarrisonSlot, rig.Commander.SquadOf(sniper));
+		Assert.Equal(5, rig.Squad(Commander.GarrisonSlot).Members);
+		Assert.Equal(1, rig.Squad(Commander.GarrisonSlot).Marksmen);
+		Assert.NotEqual(Commander.GarrisonSlot, rig.Commander.SquadOf(fifth));
+
+		// A rifleman lost from the garrison is made up by a rifleman.
+		rig.Kill(rig.Members(Commander.GarrisonSlot).First(id => id != sniper));
+		ushort fresh = rig.Add(Vector3.Zero);
+		rig.Decide();
+		Assert.Equal(Commander.GarrisonSlot, rig.Commander.SquadOf(fresh));
+	}
+
+	[Fact]
+	public void ASecondSniper_GoesToASquadReinforcingAZone_TheFewestSnipersFirst()
+	{
+		var rig = new Rig();
+		rig.AddRiflemen(8);
+		rig.Zones.SetHolder(NearZone, NodeHolder.Strategist, contested: true);
+		rig.Decide();
+		int reinforcing = rig.Assault;
+		Assert.Equal(CommandTask.Defend, rig.Squad(reinforcing).Task);
+
+		// Both at home: the first stands with the garrison, the nearer; the second
+		// with the squad on the node, which has none.
+		ushort first = rig.AddSniper(Vector3.Zero);
+		ushort second = rig.AddSniper(Vector3.Zero);
+		rig.Decide();
+		Assert.Equal(Commander.GarrisonSlot, rig.Commander.SquadOf(first));
+		Assert.Equal(reinforcing, rig.Commander.SquadOf(second));
+	}
+
+	[Fact]
+	public void ASniper_NeverFormsAnAssault_AndWaitsForASquadHoldingGround()
+	{
+		var rig = new Rig();
+		ushort tank = rig.Add(Vector3.Zero, Tank, armour: true);
+		ushort sniper = rig.AddSniper(Vector3.Zero);
+		rig.Decide(2);
+		Assert.True(rig.Commander.SquadOf(tank) > Commander.GarrisonSlot);
+		Assert.Equal(-1, rig.Commander.SquadOf(sniper));
+
+		// The garrison forms, and is defending home from the decision after.
+		rig.AddRiflemen(4);
+		rig.Decide(2);
+		Assert.Equal(Commander.GarrisonSlot, rig.Commander.SquadOf(sniper));
+	}
+
+	[Fact]
+	public void ASniper_DoesNotFollowAGarrisonOutOnAnAssault()
+	{
+		var rig = new Rig();
+		rig.Zones.SetHolder(FarZone, NodeHolder.GroundForce, contested: false);
+		rig.AddRiflemen(12);
+		Guard(rig, FarNode, 3);
+		rig.Decide();
+		Assert.Equal(CommandTask.Attack, rig.Squad(Commander.GarrisonSlot).Task);
+
+		ushort sniper = rig.AddSniper(Vector3.Zero);
+		Guard(rig, FarNode, 3);
+		rig.Decide();
+		Assert.NotEqual(Commander.GarrisonSlot, rig.Commander.SquadOf(sniper));
+	}
+
+	[Fact]
+	public void NeitherAGunnerNorASniper_IsTheScout()
+	{
+		// No technical and no rifleman: the side wants a scout after 20 s quiet, and
+		// has only a gunner in the squad forming and a sniper with no squad to join.
+		var rig = new Rig();
+		ushort gunner = rig.AddGunner(Vector3.Zero);
+		ushort sniper = rig.AddSniper(Vector3.Zero);
+		rig.Decide(CommanderTraits.Default.ReconQuietTicks / 30 + 2);
+
+		Assert.True(rig.Commander.ReconWanted);
+		Assert.Equal(-1, rig.Find(CommandRole.Scout));
+		Assert.Equal(CommandRole.Assault, rig.Squad(rig.Commander.SquadOf(gunner)).Role);
+		Assert.Equal(-1, rig.Commander.SquadOf(sniper));
 	}
 
 	// ---- Attack: stage, pause, strike -----------------------------------------
@@ -1540,7 +1777,7 @@ public class CommanderHtnTests
 	/// going round the nodes, nodes changing hands, units hurt and killed, squads
 	/// staging, striking, falling back and refilling. Returns a trace of every intent.
 	/// </summary>
-	private static long Churn(Rig rig, int decisions, List<string> trace = null)
+	private static long Churn(Rig rig, int decisions, List<string> trace = null, Action check = null)
 	{
 		uint seed = 12345;
 		uint Next() => seed = (seed * 1664525u) + 1013904223u;
@@ -1554,8 +1791,12 @@ public class CommanderHtnTests
 				bool tank = Next() % 7 == 0;
 				bool technical = !tank && Next() % 5 == 0;
 				bool truck = !tank && !technical && Next() % 13 == 0;
-				float cost = tank ? Tank : technical ? Technical : truck ? Truck : Rifleman;
-				rig.Add(new Vector3(Next() % 10, 0f, Next() % 10), cost, tank, technical, truck, cost);
+				uint kind = Next() % 9;
+				bool gunner = !tank && !technical && !truck && kind == 0;
+				bool marksman = !tank && !technical && !truck && kind == 1;
+				float cost = tank ? Tank : technical ? Technical : truck ? Truck : gunner ? Gunner : marksman ? Sniper
+					: Rifleman;
+				rig.Add(new Vector3(Next() % 10, 0f, Next() % 10), cost, tank, technical, truck, cost, gunner, marksman);
 			}
 
 			for (int i = 0; i < rig.Units.Count; i++)
@@ -1600,6 +1841,7 @@ public class CommanderHtnTests
 			long before = GC.GetAllocatedBytesForCurrentThread();
 			rig.Decide();
 			bytes += GC.GetAllocatedBytesForCurrentThread() - before;
+			check?.Invoke();
 
 			if (trace != null)
 			{
@@ -1639,6 +1881,45 @@ public class CommanderHtnTests
 
 		// Combined assaults among them.
 		Assert.Contains(first, line => line.Contains($":{CommandGoal.Stage}:") && !line.EndsWith(":-1"));
+	}
+
+	[Fact]
+	public void AcrossARound_NoSquadHasTwoGunners_AndNeitherAGunnerNorASniperScouts()
+	{
+		var rig = new Rig();
+		int gunnersPlaced = 0;
+		int twoGunnersOut = 0;
+		int snipersHolding = 0;
+		Churn(rig, 2000, check: () =>
+		{
+			int squadsWithAGunner = 0;
+			for (int s = 0; s < rig.Commander.Capacity; s++)
+			{
+				CommandSquad squad = rig.Squad(s);
+				int gunners = 0;
+				int marksmen = 0;
+				foreach (ushort id in rig.Members(s))
+				{
+					CommandUnit unit = rig.Units.Find(u => u.Id == id);
+					gunners += unit.Gunner ? 1 : 0;
+					marksmen += unit.Marksman ? 1 : 0;
+				}
+
+				Assert.True(gunners <= 1, $"squad {s} has {gunners} gunners");
+				Assert.False(squad.Role is CommandRole.Scout or CommandRole.Supply && gunners + marksmen > 0);
+				Assert.False(squad.Role == CommandRole.Garrison && gunners > 0);
+				gunnersPlaced += gunners;
+				squadsWithAGunner += gunners;
+				snipersHolding += marksmen;
+			}
+
+			twoGunnersOut += squadsWithAGunner >= 2 ? 1 : 0;
+		});
+
+		// And the round put them in squads, more than one gunner at a time.
+		Assert.True(gunnersPlaced > 0);
+		Assert.True(twoGunnersOut > 0);
+		Assert.True(snipersHolding > 0);
 	}
 
 	[Fact]
