@@ -57,6 +57,13 @@ public enum GroundFact : byte
 	/// </summary>
 	Cover,
 
+	/// <summary>
+	/// A round of the strategist's side passed within <see cref="NearMiss.Meters"/> of it,
+	/// or hit it, in the last <see cref="GroundPlanTraits.SuppressedTicks"/>
+	/// (docs/TACTICS.md §5.7). Every tick, from the near-miss pass.
+	/// </summary>
+	Suppressed,
+
 	Count,
 }
 
@@ -207,6 +214,12 @@ public struct GroundIntent
 
 	/// <summary>Tap the use key while the weapon in hand is not an explosive: a weapon locker cycles it.</summary>
 	public bool UseLocker;
+
+	/// <summary>
+	/// Down behind its wall under fire (docs/TACTICS.md §5.7): crouched in its spot and
+	/// holding its fire, until the fire stops or it has been down long enough.
+	/// </summary>
+	public bool Duck;
 }
 
 /// <summary>
@@ -256,10 +269,21 @@ public readonly struct GroundPlanTraits
 	/// <summary>A spot further from the threat than this is out of the fight.</summary>
 	public readonly float CoverMaxThreatMeters;
 
+	/// <summary>How long after a round came near it a bot is suppressed (docs/TACTICS.md §5.7).</summary>
+	public readonly int SuppressedTicks;
+
+	/// <summary>
+	/// How long a suppressed bot stays down behind its wall, from when it goes down: then it
+	/// rises and fights whatever is still coming, until the fire has stopped long enough to
+	/// end the suppression.
+	/// </summary>
+	public readonly int SuppressedMaxTicks;
+
 	public GroundPlanTraits(float healthOkFraction, float healthCriticalFraction, float healthHysteresis,
 		float alliesNearMeters, float alliesNearHoldMeters, float investigateRadiusMeters, float lockerArriveMeters,
 		int pathToLockerTimeoutTicks, int useLockerTimeoutTicks, int useTapIntervalTicks, float buddyLeashMeters,
-		float coverSearchMeters = 25f, float coverMinThreatMeters = 8f, float coverMaxThreatMeters = 55f)
+		float coverSearchMeters = 25f, float coverMinThreatMeters = 8f, float coverMaxThreatMeters = 55f,
+		int suppressedTicks = SimConfig.TickRate * 3 / 2, int suppressedMaxTicks = SimConfig.TickRate * 3)
 	{
 		HealthOkFraction = healthOkFraction;
 		HealthCriticalFraction = healthCriticalFraction;
@@ -275,13 +299,17 @@ public readonly struct GroundPlanTraits
 		CoverSearchMeters = MathF.Max(coverSearchMeters, 0f);
 		CoverMinThreatMeters = MathF.Max(coverMinThreatMeters, 0f);
 		CoverMaxThreatMeters = MathF.Max(coverMaxThreatMeters, CoverMinThreatMeters);
+		SuppressedTicks = Math.Max(suppressedTicks, 0);
+		SuppressedMaxTicks = Math.Max(suppressedMaxTicks, 0);
 	}
 
 	/// <summary>
 	/// §5.1's numbers. The locker gets two seconds of tapping — a DMR needs two swaps
 	/// to reach the launcher (rifle → launcher → DMR → rifle), a quarter-second apart —
 	/// and thirty seconds of walking, the length of the map at a jog. Cover is looked
-	/// for within 25 m, between 8 m and 55 m of the fight (docs/COVER.md §5).
+	/// for within 25 m, between 8 m and 55 m of the fight (docs/COVER.md §5). A round
+	/// suppresses for 1.5 s after it, and a bot stays down for 3 s of it at most
+	/// (docs/TACTICS.md §5.7).
 	/// </summary>
 	public static GroundPlanTraits Default => new(
 		healthOkFraction: 0.6f,
@@ -297,7 +325,9 @@ public readonly struct GroundPlanTraits
 		buddyLeashMeters: 12f,
 		coverSearchMeters: 25f,
 		coverMinThreatMeters: 8f,
-		coverMaxThreatMeters: 55f);
+		coverMaxThreatMeters: 55f,
+		suppressedTicks: SimConfig.TickRate * 3 / 2,
+		suppressedMaxTicks: SimConfig.TickRate * 3);
 }
 
 /// <summary>
@@ -353,6 +383,9 @@ public struct GroundSense
 public sealed class GroundContext : BaseContext
 {
 	private readonly byte[] _facts = new byte[(int)GroundFact.Count];
+
+	/// <summary>The tick it first went down in this suppression, behind its wall; <see cref="uint.MaxValue"/> for not yet.</summary>
+	private uint _downSince = uint.MaxValue;
 
 	public GroundContext(IFactory factory, in GroundPlanTraits traits)
 	{
@@ -438,6 +471,45 @@ public sealed class GroundContext : BaseContext
 	public void Sense(GroundFact fact, bool value) => Sense(fact, value ? (byte)1 : (byte)0);
 
 	public void SetRole(GroundRole role) => Sense(GroundFact.Role, (byte)role);
+
+	/// <summary>
+	/// Being suppressed (docs/TACTICS.md §5.7), every tick: within
+	/// <see cref="GroundPlanTraits.SuppressedTicks"/> of the last round of the strategist's
+	/// side that came near it, from the near-miss pass; 0 for none this life.
+	/// </summary>
+	public void SenseSuppressed(uint lastRoundTick)
+	{
+		bool suppressed = lastRoundTick != 0 && Tick >= lastRoundTick
+			&& Tick - lastRoundTick <= (uint)Traits.SuppressedTicks;
+		if (!suppressed)
+		{
+			_downSince = uint.MaxValue;
+		}
+
+		Sense(GroundFact.Suppressed, suppressed);
+	}
+
+	/// <summary>
+	/// Whether a bot in its spot stays down this tick: suppressed, and down for less than
+	/// <see cref="GroundPlanTraits.SuppressedMaxTicks"/> of this suppression — the clock
+	/// starts the first tick it is down, not when the fire began, so a bot that ran to its
+	/// spot under fire still gets its three seconds there. Past that it rises regardless,
+	/// until a lull ends the suppression. Idempotent within a tick.
+	/// </summary>
+	private bool StaysDown()
+	{
+		if (!Is(GroundFact.Suppressed))
+		{
+			return false;
+		}
+
+		if (_downSince == uint.MaxValue)
+		{
+			_downSince = Tick;
+		}
+
+		return Tick - _downSince < (uint)Traits.SuppressedMaxTicks;
+	}
 
 	public GroundRole Role => (GroundRole)Get(GroundFact.Role);
 
@@ -615,7 +687,10 @@ public sealed class GroundContext : BaseContext
 					return TaskStatus.Failure;
 				}
 
+				// Down behind the wall while the fire keeps it there (docs/TACTICS.md §5.7):
+				// holding cover is only ever in the spot.
 				Intent.TargetOwnerId = FocusOwnerId;
+				Intent.Duck = StaysDown();
 				return Walk(GroundMove.Cover, CoverPoint);
 
 			default:
@@ -739,6 +814,28 @@ public sealed class GroundDomainBuilder : BaseDomainBuilder<GroundDomainBuilder,
 		return this;
 	}
 
+	/// <summary>
+	/// A fight it can see, or fire coming at it (docs/TACTICS.md §5.7): suppressed, a bot
+	/// with a spot goes to it even when what is firing is out of its sight.
+	/// </summary>
+	public GroundDomainBuilder IfVisibleOrSuppressed() =>
+		Condition("Contact=Visible or Suppressed",
+			c => c.Get(GroundFact.Contact) == (byte)ContactLevel.Visible || c.Is(GroundFact.Suppressed));
+
+	/// <summary>
+	/// In contact, live or a ghost, or fire coming at it (docs/TACTICS.md §5.7): a bot down
+	/// behind its wall long enough for the team to forget who is firing is still being
+	/// fired at, and its wall is still the place to be.
+	/// </summary>
+	public GroundDomainBuilder IfInContactOrSuppressed() => Condition("Contact!=None or Suppressed", InContactOrSuppressed);
+
+	/// <summary>Executing condition: as <see cref="IfInContactOrSuppressed"/>, every tick.</summary>
+	public GroundDomainBuilder WhileInContactOrSuppressed() =>
+		_executingConditions ? ExecutingCondition("while Contact!=None or Suppressed", InContactOrSuppressed) : this;
+
+	private static bool InContactOrSuppressed(GroundContext c) =>
+		c.Get(GroundFact.Contact) != (byte)ContactLevel.None || c.Is(GroundFact.Suppressed);
+
 	/// <summary>A predicted outcome: true while planning, forgotten before execution; a scan has to make it true.</summary>
 	public GroundDomainBuilder Predict<TValue>(GroundFact fact, TValue value) where TValue : struct, Enum
 	{
@@ -796,8 +893,10 @@ public static class GroundDomain
 						.WhileNot(GroundFact.Contact, ContactLevel.Visible).End()
 				.End()
 			.End()
+			// In contact, or under fire from what it has lost track of: the second reaches only
+			// "fight from cover", the one branch that needs no contact in sight.
 			.Select("attack")
-				.IfNot(GroundFact.Contact, ContactLevel.None)
+				.IfInContactOrSuppressed()
 				.Sequence("engage armour")
 					.If(GroundFact.ThreatKind, Threat.Armour)
 					.Act(GroundGoal.EngageArmour).If(GroundFact.Armed, Arms.Explosive)
@@ -807,16 +906,17 @@ public static class GroundDomain
 				// Before the fights in the open: a bot with a low wall within reach of a
 				// fight it can see walks to it and fights from behind it, and keeps doing
 				// so while the fight lasts — a ghost included, which is what a contact is
-				// while it crouches to reload (docs/COVER.md §5).
+				// while it crouches to reload (docs/COVER.md §5). Fire coming at it does the
+				// same for one it cannot see, from a spot it kept (docs/TACTICS.md §5.7).
 				.Sequence("fight from cover")
 					.If(GroundFact.ThreatKind, Threat.Infantry)
-					.If(GroundFact.Contact, ContactLevel.Visible)
+					.IfVisibleOrSuppressed()
 					.IfNot(GroundFact.Cover, CoverState.None)
 					.Act(GroundGoal.TakeCover).WhileNot(GroundFact.Cover, CoverState.None)
-						.WhileNot(GroundFact.Contact, ContactLevel.None).While(GroundFact.ThreatKind, Threat.Infantry)
+						.WhileInContactOrSuppressed().While(GroundFact.ThreatKind, Threat.Infantry)
 						.Predict(GroundFact.Cover, CoverState.In).End()
 					.Act(GroundGoal.HoldCover).If(GroundFact.Cover, CoverState.In).While(GroundFact.Cover, CoverState.In)
-						.WhileNot(GroundFact.Contact, ContactLevel.None).While(GroundFact.ThreatKind, Threat.Infantry).End()
+						.WhileInContactOrSuppressed().While(GroundFact.ThreatKind, Threat.Infantry).End()
 				.End()
 				.Sequence("press with allies")
 					.If(GroundFact.ThreatKind, Threat.Infantry)

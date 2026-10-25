@@ -107,11 +107,11 @@ public partial class UnitManager
 
 	/// <summary>
 	/// The debug HUD's <c>fire</c> row: who is under fire now, what this round has sent at
-	/// the units, and the grenades they have thrown back at enemies hidden behind cover
-	/// (docs/TACTICS.md §5.4).
+	/// the units, the grenades they have thrown back at enemies hidden behind cover
+	/// (docs/TACTICS.md §5.4), and the gunners firing at places they cannot see (§5.2).
 	/// </summary>
 	public string DescribeFire(uint tick) =>
-		$"{UnitsFiredUpon(tick)} under fire  {NearMissesNoted} near misses  {HitsNoted} hits  {HiddenThrows} grenades over cover this round";
+		$"{UnitsFiredUpon(tick)} under fire  {NearMissesNoted} near misses  {HitsNoted} hits  {HiddenThrows} grenades over cover this round  {GunnersSuppressing()} gunners suppressing";
 
 	/// <summary>What one unit makes of one round: where it reckons it came from, and how close it was.</summary>
 	private void Note(Unit unit, in FireSource source, FireKind kind, uint tick)

@@ -129,6 +129,20 @@ public sealed class PlayerCombat
 	public int ShotsFired { get; set; }
 
 	/// <summary>
+	/// Server-side: a ground bot that plans, which perceives the strategist's fire
+	/// (docs/TACTICS.md §5.7). Set by the bot director; false for a person, who is
+	/// suppressed by rounds and nothing else, and for a legacy bot, which plans nothing.
+	/// </summary>
+	public bool PerceivesFire { get; set; }
+
+	/// <summary>
+	/// Server-side, for a player that <see cref="PerceivesFire"/>: the last tick a round of
+	/// the strategist's side passed within <see cref="NearMiss.Meters"/> of it or hit it, or
+	/// one's blast reached it; 0 for never this life. Never replicated.
+	/// </summary>
+	public uint LastFiredUponTick { get; set; }
+
+	/// <summary>
 	/// Client-side only: the last tick on which this client predicted a weapon
 	/// event. The server's ammo count is a round trip old, so applying it to a
 	/// weapon that has fired since would make the HUD count backwards.
@@ -234,6 +248,7 @@ public sealed class PlayerCombat
 	public void Respawn()
 	{
 		Health = SimConfig.MaxHealth;
+		LastFiredUponTick = 0;
 		Equip(PendingLoadout);
 	}
 

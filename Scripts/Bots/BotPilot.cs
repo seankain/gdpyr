@@ -182,6 +182,12 @@ public sealed class BotPilot
 
 	public bool Sweeping => _plan != null && _plan.Is(GroundFact.Sweep);
 
+	/// <summary>The strategist's fire is coming near it (docs/TACTICS.md §5.7). For the debug HUD.</summary>
+	public bool Suppressed => _plan != null && _plan.Is(GroundFact.Suppressed);
+
+	/// <summary>Down behind its wall under that fire. For the debug HUD.</summary>
+	public bool Ducking => _plan is { Intent.Duck: true };
+
 	/// <summary>Trips to the locker it gave up on, for the coordinator (§3.4, P4).</summary>
 	public int FailedLockerTrips => _plan?.FailedLockerTrips ?? 0;
 
@@ -309,10 +315,11 @@ public sealed class BotPilot
 		bool keepMoving = false;
 		bool use = false;
 		bool inCover = false;
+		bool duck = false;
 		if (_plan != null)
 		{
-			hasGoal = Planned(character, explosive, tick, hasTarget, targetGround, out goal, out keepMoving, out use,
-				out inCover);
+			hasGoal = Planned(character, explosive, tick, hasTarget, targetGround, combat.LastFiredUponTick, out goal,
+				out keepMoving, out use, out inCover, out duck);
 		}
 		else if (hasTarget)
 		{
@@ -359,9 +366,13 @@ public sealed class BotPilot
 			use: use,
 			inCover: inCover,
 			reloading: combat.Equipped.IsReloading,
-			grenadeAim: grenadeAim);
+			grenadeAim: duck ? Vector3.Zero : grenadeAim,
+			duck: duck);
 
-		_wantedToMove = hasGoal || (hasTarget && visible);
+		// Standing in its spot behind cover it means to stay put, target or no: a bot that
+		// counted as wanting to move there was "stuck" every half second, and jumped —
+		// which stands one up from behind its wall (docs/TACTICS.md §5.7).
+		_wantedToMove = hasGoal || (hasTarget && visible && !inCover);
 
 		return BotBrain.Frame(tick, _peerId, situation, _traits);
 	}
@@ -614,10 +625,11 @@ public sealed class BotPilot
 	/// <summary>
 	/// One tick of the ground domain (docs/HTN_BOTS.md §5.1): the bot's position and
 	/// hands into the context, the planner ticked, and the intent it leaves turned
-	/// into where to walk, whether to keep walking, and whether to tap use.
+	/// into where to walk, whether to keep walking, whether to tap use, and whether to
+	/// stay down behind its wall under fire (docs/TACTICS.md §5.7).
 	/// </summary>
 	private bool Planned(fps_controller character, bool explosive, uint tick, bool hasTarget, Vector3 targetPosition,
-		out Vector3 goal, out bool keepMoving, out bool use, out bool inCover)
+		uint lastFiredUponTick, out Vector3 goal, out bool keepMoving, out bool use, out bool inCover, out bool duck)
 	{
 		GroundContext plan = _plan;
 		plan.Tick = tick;
@@ -633,12 +645,17 @@ public sealed class BotPilot
 		// are the scan's, the walk to it is every tick's (docs/COVER.md §5).
 		plan.Sense(GroundFact.Cover, (byte)CoverBands.Band(plan.HasCoverPoint, Flat(plan.Position, plan.CoverPoint),
 			_coverHides, (CoverState)plan.Get(GroundFact.Cover)));
+
+		// And whether the strategist's rounds are coming near it, every tick: a burst is
+		// over in a second (docs/TACTICS.md §5.7).
+		plan.SenseSuppressed(lastFiredUponTick);
 		_planning.Tick(plan);
 		_planWasAlive = true;
 
 		GroundIntent intent = plan.Intent;
 		keepMoving = intent.Move == GroundMove.Run;
 		inCover = false;
+		duck = false;
 
 		// A tap is a press and a release. Pressed on one tick and a quarter-second
 		// apart, which is long enough for the swap to be in hand before the next
@@ -667,6 +684,7 @@ public sealed class BotPilot
 				// steps back in when a body shoves it off.
 				float off = Flat(plan.Position, intent.Point);
 				inCover = off <= CoverBands.ArriveMeters;
+				duck = inCover && intent.Duck;
 				keepMoving = !inCover;
 				return intent.HasPoint && off > CoverSettleMeters;
 
@@ -810,7 +828,11 @@ public sealed class BotPilot
 			plan.HasLocker = false;
 		}
 
-		sense.Cover = SenseCover(character, team, at, plan);
+		// A fight this scan does not see but the team remembers is a ghost now, whatever the
+		// last scan made it; and fire still coming is a fight still on, remembered or not
+		// (docs/TACTICS.md §5.7).
+		sense.Cover = SenseCover(character, team, at, plan,
+			remembered: (sense.VisibleHostiles == 0 && sense.Remembered) || plan.Is(GroundFact.Suppressed));
 
 		plan.Encode(sense);
 	}
@@ -824,8 +846,14 @@ public sealed class BotPilot
 	/// wall beside it still hides it from there and it is still in the fight, else
 	/// take the best one no other bot has. A remembered fight keeps the spot it had;
 	/// no fight lets it go. No ray: the board is boxes.
+	///
+	/// Remembered is this scan's word, not the last one's: a bot that has just crouched
+	/// behind its wall — to reload, or under fire (docs/TACTICS.md §5.7) — loses sight of
+	/// the fight on the scan it was still visible on the last, and kept its spot only by
+	/// luck of the timing.
 	/// </summary>
-	private CoverState SenseCover(fps_controller character, Team team, Vector3 at, GroundContext plan)
+	private CoverState SenseCover(fps_controller character, Team team, Vector3 at, GroundContext plan,
+		bool remembered)
 	{
 		CoverBoard board = UnitManager.Instance?.Cover;
 		if (board == null || board.Count == 0)
@@ -837,7 +865,7 @@ public sealed class BotPilot
 		bool fight = TryCoverThreat(team, out Vector3 threat, out float threatEye, out float threatChest);
 		if (!fight)
 		{
-			if (plan.HasCoverPoint && plan.Get(GroundFact.Contact) == (byte)ContactLevel.Ghost)
+			if (plan.HasCoverPoint && remembered)
 			{
 				return CoverBands.Band(true, Flat(at, plan.CoverPoint), _coverHides,
 					(CoverState)plan.Get(GroundFact.Cover));

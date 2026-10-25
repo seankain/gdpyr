@@ -162,11 +162,18 @@ public readonly struct BotSituation
 	/// </summary>
 	public readonly Vector3 GrenadeAim;
 
+	/// <summary>
+	/// Down behind its wall under fire (docs/TACTICS.md §5.7): in its spot, it crouches
+	/// below the wall as it does to reload, and neither fires nor throws. It keeps looking
+	/// where its target is, so it is on it when it rises.
+	/// </summary>
+	public readonly bool Duck;
+
 	public BotSituation(bool alive, float yaw, float pitch, float speed, bool hasTarget, Vector3 aimDirection,
 		float targetDistance, bool targetVisible, int ticksOnTarget, bool hasDestination, Vector3 moveDirection,
 		float destinationDistance, bool stuck, bool needsReload, bool semiAutomatic = false, bool holdFire = false,
 		bool keepMoving = false, bool use = false, bool inCover = false, bool reloading = false,
-		Vector3 grenadeAim = default)
+		Vector3 grenadeAim = default, bool duck = false)
 	{
 		Alive = alive;
 		Yaw = yaw;
@@ -189,6 +196,7 @@ public readonly struct BotSituation
 		InCover = inCover;
 		Reloading = reloading;
 		GrenadeAim = grenadeAim;
+		Duck = duck;
 	}
 }
 
@@ -412,11 +420,12 @@ public static class BotBrain
 			buttons |= InputButtons.Reload;
 		}
 
-		if (situation.InCover && situation.Reloading)
+		if (situation.InCover && (situation.Reloading || situation.Duck))
 		{
-			// Down behind the wall while the magazine goes in: a crouched body behind
-			// one is hidden from whoever is in front of it (docs/NETCODE.md §10.5).
-			// Released when the reload is done, which stands it back up to fire.
+			// Down behind the wall while the magazine goes in, or while the fire keeps it
+			// there: a crouched body behind one is hidden from whoever is in front of it
+			// (docs/NETCODE.md §10.5, docs/TACTICS.md §5.7). Released when the reload is
+			// done or the fire lets it up, which stands it back up to fire.
 			buttons |= InputButtons.Crouch;
 		}
 
@@ -453,7 +462,7 @@ public static class BotBrain
 	/// </summary>
 	public static bool ShouldThrow(in BotSituation situation, in BotTraits traits, float yaw, float pitch)
 	{
-		if (!situation.HasTarget || situation.GrenadeAim == Vector3.Zero
+		if (!situation.HasTarget || situation.GrenadeAim == Vector3.Zero || situation.Duck
 			|| situation.TicksOnTarget < traits.ReactionTicks)
 		{
 			return false;
@@ -468,7 +477,7 @@ public static class BotBrain
 	/// </summary>
 	public static bool ShouldFire(in BotSituation situation, in BotTraits traits, float yaw, float pitch)
 	{
-		if (!situation.HasTarget || !situation.TargetVisible || situation.HoldFire
+		if (!situation.HasTarget || !situation.TargetVisible || situation.HoldFire || situation.Duck
 			|| situation.AimDirection == Vector3.Zero)
 		{
 			return false;

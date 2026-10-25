@@ -68,8 +68,9 @@ public enum UnitFact : byte
 
 	/// <summary>
 	/// <see cref="CoverState"/>: a spot behind cover from its own target — a low wall
-	/// it can fire over — or, for a builder, from whatever is shooting at it, and
-	/// whether it is standing in it (docs/COVER.md §6).
+	/// it can fire over — or, for a builder, from whatever is shooting at it, or for a
+	/// heavy gunner with no target, from the nearest place it suppresses
+	/// (docs/TACTICS.md §5.2), and whether it is standing in it (docs/COVER.md §6).
 	/// </summary>
 	Cover,
 
@@ -147,6 +148,21 @@ public enum UnitFact : byte
 	/// <see cref="UnitPlanTraits.BurnedMaxTicks"/>.
 	/// </summary>
 	Burned,
+
+	/// <summary>
+	/// A place for a heavy gunner to suppress (docs/TACTICS.md §5.2): where the side sees an
+	/// enemy, last saw one, or a round came from, in reach and with a line to it over the
+	/// cover board. On the scan; off for <see cref="UnitPlanTraits.SuppressRetryTicks"/>
+	/// after suppressing for <see cref="UnitPlanTraits.SuppressMaxTicks"/> under an order
+	/// that goes somewhere.
+	/// </summary>
+	Suppress,
+
+	/// <summary>
+	/// A heavy gunner's belt is under <see cref="UnitPlanTraits.BeltReserveRounds"/>, until a
+	/// reload fills it: it keeps those for what it can see. Every tick, from the weapon.
+	/// </summary>
+	BeltLow,
 
 	Count,
 }
@@ -245,6 +261,15 @@ public enum UnitGoal : byte
 
 	/// <summary>To another pair, holding its fire on the way: its pair is burned, or a threat is too near.</summary>
 	Relocate,
+
+	/// <summary>
+	/// A heavy gunner's bursts at the places it may suppress, the nearest first and then the
+	/// next, from a low wall it can fire over when there is one (docs/TACTICS.md §5.2).
+	/// </summary>
+	SuppressPoint,
+
+	/// <summary>A heavy gunner fills its belt, down behind its wall when it is in its spot.</summary>
+	Reload,
 }
 
 /// <summary>How the unit manager picks where to walk for an intent.</summary>
@@ -314,6 +339,12 @@ public struct UnitIntent
 	/// (docs/TACTICS.md §5.3). What is nearer it still shoots.
 	/// </summary>
 	public bool HoldFire;
+
+	/// <summary>
+	/// Reload now, with nothing to fire at: a heavy gunner filling its belt before it is
+	/// empty (docs/TACTICS.md §5.2).
+	/// </summary>
+	public bool Reload;
 }
 
 /// <summary>
@@ -445,6 +476,24 @@ public readonly struct UnitPlanTraits
 	/// <inheritdoc cref="RecentFireMeters"/>
 	public readonly int RecentFireTicks;
 
+	/// <summary>How long one of a heavy gunner's bursts at a place lasts (docs/TACTICS.md §5.2)…</summary>
+	public readonly int SuppressBurstTicks;
+
+	/// <summary>…and how often one starts.</summary>
+	public readonly int SuppressCycleTicks;
+
+	/// <summary>The rounds a heavy gunner keeps in its belt for what it can see: under this, it suppresses nothing, and reloads.</summary>
+	public readonly int BeltReserveRounds;
+
+	/// <summary>
+	/// How long a heavy gunner may suppress under an order that goes somewhere before it
+	/// gives it up (P4): the order still arrives…
+	/// </summary>
+	public readonly int SuppressMaxTicks;
+
+	/// <summary>…and how long it carries the order out before it suppresses again.</summary>
+	public readonly int SuppressRetryTicks;
+
 	public UnitPlanTraits(float healthOkFraction, float healthCriticalFraction, float healthHysteresis,
 		float engagedFriendMeters, float paceAheadMeters, float paceResumeMeters, int paceMaxWaitTicks,
 		float postSpacingMeters, float postMinRadiusMeters, float postLeashShare, int underFireTicks,
@@ -455,7 +504,10 @@ public readonly struct UnitPlanTraits
 		int minHideTicks = SimConfig.TickRate * 2, int peekMaxTicks = SimConfig.TickRate * 9 / 2, int shotsPerPeek = 2,
 		int peeksPerPair = 2, float holdFireMeters = 30f, int peekWalkMaxTicks = SimConfig.TickRate * 12,
 		int peekRetryTicks = SimConfig.TickRate * 10, int burnedMaxTicks = SimConfig.TickRate * 20,
-		float relocateMeters = 8f, float recentFireMeters = 6f, int recentFireTicks = SimConfig.TickRate * 20)
+		float relocateMeters = 8f, float recentFireMeters = 6f, int recentFireTicks = SimConfig.TickRate * 20,
+		int suppressBurstTicks = SimConfig.TickRate, int suppressCycleTicks = SimConfig.TickRate * 2,
+		int beltReserveRounds = 30, int suppressMaxTicks = SimConfig.TickRate * 8,
+		int suppressRetryTicks = SimConfig.TickRate * 8)
 	{
 		HealthOkFraction = healthOkFraction;
 		HealthCriticalFraction = healthCriticalFraction;
@@ -492,6 +544,11 @@ public readonly struct UnitPlanTraits
 		RelocateMeters = MathF.Max(relocateMeters, 0f);
 		RecentFireMeters = MathF.Max(recentFireMeters, 0f);
 		RecentFireTicks = Math.Max(recentFireTicks, 0);
+		SuppressCycleTicks = Math.Max(suppressCycleTicks, 1);
+		SuppressBurstTicks = Math.Clamp(suppressBurstTicks, 1, SuppressCycleTicks);
+		BeltReserveRounds = Math.Max(beltReserveRounds, 0);
+		SuppressMaxTicks = Math.Max(suppressMaxTicks, 1);
+		SuppressRetryTicks = Math.Max(suppressRetryTicks, 0);
 	}
 
 	/// <summary>
@@ -508,7 +565,10 @@ public readonly struct UnitPlanTraits
 	/// hides 2 s between peeks, fires two shots or for 4.5 s a peek, and two peeks a pair;
 	/// on its way it fires at nothing beyond 30 m; a walk of 12 s to a hide spot gives
 	/// peeking up for 10 s; a burned pair moves it 8 m from the last fire spot and 6 m
-	/// from every one of the last 20 s, for 20 s at most (§5.3).
+	/// from every one of the last 20 s, for 20 s at most (§5.3). A heavy gunner fires a
+	/// one-second burst every two seconds at a place it suppresses, keeps the last 30
+	/// rounds of its belt for what it sees, and under an order that goes somewhere
+	/// suppresses for 8 s and then carries the order out for 8 s (§5.2).
 	/// </summary>
 	public static UnitPlanTraits Default => new(
 		healthOkFraction: 0.6f,
@@ -624,6 +684,14 @@ public sealed class UnitContext : BaseContext
 	private readonly Vector3[] _recentFire = new Vector3[RecentFireCapacity];
 	private readonly uint[] _recentFireTick = new uint[RecentFireCapacity];
 	private int _recentFireNext;
+	private readonly Vector3[] _suppress = new Vector3[GunnerPlan.Capacity];
+	private int _suppressCount;
+	private uint _suppressTick = uint.MaxValue;
+	private uint _cycleStart;
+	private uint _cycleIndex = uint.MaxValue;
+	private uint _lastBurstTick = uint.MaxValue;
+	private bool _hasBurstFeet;
+	private Vector3 _burstFeet;
 
 	/// <summary>How many fire spots a marksman remembers for relocating away from: a peek every 4.5 s or so for 20 s, and some to spare.</summary>
 	public const int RecentFireCapacity = 8;
@@ -768,6 +836,18 @@ public sealed class UnitContext : BaseContext
 	/// <summary>Ticks it has spent reacting to fire under its current order, against <see cref="UnitPlanTraits.ReactMaxTicks"/>.</summary>
 	public int ReactedTicks;
 
+	/// <summary>
+	/// Ticks a heavy gunner has suppressed under an order that goes somewhere since it last
+	/// gave it up, or was given the order, against <see cref="UnitPlanTraits.SuppressMaxTicks"/>.
+	/// </summary>
+	public int SuppressedTicks;
+
+	/// <summary>Suppressing was given up on: <see cref="UnitFact.Suppress"/> stays off until this tick.</summary>
+	public uint SuppressRetryTick;
+
+	/// <summary>Times it gave suppressing up. For the tests.</summary>
+	public int SuppressionsGivenUp;
+
 	/// <summary>A resupply was given up on: <see cref="UnitFact.Supply"/> stays off until this tick.</summary>
 	public uint SupplyRetryTick;
 
@@ -792,7 +872,8 @@ public sealed class UnitContext : BaseContext
 	/// <summary>The goals of docs/TACTICS.md §5: what the agent stream's <c>unit_task</c> reports a unit starting.</summary>
 	public static bool IsTactic(UnitGoal goal) =>
 		goal is UnitGoal.TakeCoverFromFire or UnitGoal.ReturnFire or UnitGoal.ThrowGrenade or UnitGoal.ToHide
-			or UnitGoal.PopOut or UnitGoal.FireFromPeek or UnitGoal.Duck or UnitGoal.Relocate;
+			or UnitGoal.PopOut or UnitGoal.FireFromPeek or UnitGoal.Duck or UnitGoal.Relocate or UnitGoal.SuppressPoint
+			or UnitGoal.Reload;
 
 	/// <summary>
 	/// The orders a marksman peeks under (docs/TACTICS.md §5.3): an attack, a defend, none,
@@ -800,6 +881,16 @@ public sealed class UnitContext : BaseContext
 	/// </summary>
 	public static bool PeeksUnder(OrderKind order, bool objective) =>
 		order is OrderKind.Attack or OrderKind.Defend or OrderKind.None || objective;
+
+	/// <summary>
+	/// The orders a heavy gunner suppresses under (docs/TACTICS.md §5.2): those a marksman
+	/// peeks under, the orders with a fight of their own. On a move or a patrol it shoots on
+	/// the walk, as it always has.
+	/// </summary>
+	public static bool SuppressesUnder(OrderKind order, bool objective) => PeeksUnder(order, objective);
+
+	/// <summary>The places it may suppress, from its scan, nearest first.</summary>
+	public ReadOnlySpan<Vector3> SuppressPlaces => _suppress.AsSpan(0, _suppressCount);
 
 	/// <summary>
 	/// An order that goes somewhere: one that reacting to fire must not stop for good,
@@ -878,11 +969,36 @@ public sealed class UnitContext : BaseContext
 	/// <summary>The unit has tried its throw, whether a grenade left its hand or not: nothing to throw at until the next scan.</summary>
 	public void Threw() => Sense(UnitFact.Grenade, false);
 
-	/// <summary>What its weapon is doing, every tick: reloading or not, and how many rounds it has fired.</summary>
-	public void SenseWeapon(bool reloading, uint shots = 0)
+	/// <summary>
+	/// What its weapon is doing, every tick: reloading or not, how many rounds it has fired,
+	/// and how many it has left — which, for a heavy gunner, is whether it is into the
+	/// rounds it keeps (docs/TACTICS.md §5.2).
+	/// </summary>
+	public void SenseWeapon(bool reloading, uint shots = 0, int rounds = int.MaxValue)
 	{
 		Reloading = reloading;
 		Shots = shots;
+		Sense(UnitFact.BeltLow, UnitTraits.Doctrine == UnitDoctrine.Gunner && rounds < Traits.BeltReserveRounds);
+	}
+
+	/// <summary>
+	/// The places a heavy gunner may suppress, from its scan (docs/TACTICS.md §5.2), nearest
+	/// first; none for a unit that may not. The engine has found them; the planner says
+	/// when to fire at which.
+	/// </summary>
+	public void SenseSuppress(ReadOnlySpan<Vector3> places)
+	{
+		_suppressCount = Math.Min(places.Length, _suppress.Length);
+		places[.._suppressCount].CopyTo(_suppress);
+		Sense(UnitFact.Suppress, _suppressCount > 0 && Tick >= SuppressRetryTick);
+	}
+
+	/// <summary>A new order, or a new life: suppressing starts over, its cap and any give-up with it.</summary>
+	public void ResetSuppress()
+	{
+		SuppressedTicks = 0;
+		_suppressTick = uint.MaxValue;
+		SuppressRetryTick = 0;
 	}
 
 	/// <summary>
@@ -1120,7 +1236,8 @@ public sealed class UnitContext : BaseContext
 	{
 		bool inSpot = goal switch
 		{
-			UnitGoal.HoldCover or UnitGoal.HoldPointCover => Get(UnitFact.Cover) == (byte)CoverState.In,
+			UnitGoal.HoldCover or UnitGoal.HoldPointCover or UnitGoal.SuppressPoint or UnitGoal.Reload =>
+				Get(UnitFact.Cover) == (byte)CoverState.In,
 			UnitGoal.ReturnFire => Get(UnitFact.FireCover) == (byte)CoverState.In,
 			_ => false,
 		};
@@ -1390,9 +1507,105 @@ public sealed class UnitContext : BaseContext
 
 				return Go(HidePoint, stopToFight: false);
 
+			case UnitGoal.SuppressPoint:
+				// Bursts at the places it may suppress, from its spot behind a low wall it can
+				// fire over at the nearest when it has one, walking to it firing; else from
+				// where it stands (docs/TACTICS.md §5.2).
+				if (SuppressedLongEnough())
+				{
+					return GiveUpSuppress();
+				}
+
+				Burst();
+				return FromCover();
+
+			case UnitGoal.Reload:
+				// Its belt filled where it fights from: down behind the wall in its spot.
+				Intent.Reload = true;
+				return FromCover();
+
 			default:
 				return TaskStatus.Failure;
 		}
+	}
+
+	/// <summary>In its spot behind cover it stands its ground; with one in reach it walks to it, firing; with none it stands where it is.</summary>
+	private TaskStatus FromCover() =>
+		Get(UnitFact.Cover) == (byte)CoverState.In ? Hold()
+		: Get(UnitFact.Cover) != (byte)CoverState.None ? Go(CoverPoint, stopToFight: false)
+		: Hold();
+
+	/// <summary>
+	/// A heavy gunner's burst, this tick (docs/TACTICS.md §5.2): fire at the place for the
+	/// first <see cref="UnitPlanTraits.SuppressBurstTicks"/> of every
+	/// <see cref="UnitPlanTraits.SuppressCycleTicks"/>, and each new burst at the next place
+	/// after the last one's — the nearest, then the next, and round again. A replan does not
+	/// restart the rhythm; a lull of a whole cycle does, so the first burst after one is at
+	/// once. A place gone from the list mid-burst is not fired at again. Idempotent within a
+	/// tick.
+	/// </summary>
+	private void Burst()
+	{
+		uint cycle = (uint)Traits.SuppressCycleTicks;
+		if (_lastBurstTick == uint.MaxValue || Tick < _lastBurstTick || Tick - _lastBurstTick > cycle)
+		{
+			_cycleStart = Tick;
+			_cycleIndex = uint.MaxValue;
+			_hasBurstFeet = false;
+		}
+
+		_lastBurstTick = Tick;
+		ReadOnlySpan<Vector3> places = SuppressPlaces;
+		uint elapsed = Tick - _cycleStart;
+		uint index = elapsed / cycle;
+		if (index != _cycleIndex || (_hasBurstFeet && GunnerPlan.Near(places, _burstFeet) < 0))
+		{
+			int next = GunnerPlan.Next(places, _hasBurstFeet, _burstFeet);
+			_cycleIndex = index;
+			_hasBurstFeet = next >= 0;
+			_burstFeet = next >= 0 ? places[next] : _burstFeet;
+		}
+
+		if (_hasBurstFeet && elapsed % cycle < (uint)Traits.SuppressBurstTicks)
+		{
+			Intent.FireAt = true;
+			Intent.FirePoint = GunnerPlan.AimPoint(_burstFeet);
+		}
+	}
+
+	/// <summary>
+	/// Counts a tick of suppressing, once a tick however often the operator runs, under an
+	/// order that goes somewhere; true once that has lasted <see cref="UnitPlanTraits.SuppressMaxTicks"/>.
+	/// </summary>
+	private bool SuppressedLongEnough()
+	{
+		if (!GoesSomewhere(Order.Kind))
+		{
+			return false;
+		}
+
+		if (Tick != _suppressTick)
+		{
+			_suppressTick = Tick;
+			SuppressedTicks++;
+		}
+
+		return SuppressedTicks > Traits.SuppressMaxTicks;
+	}
+
+	/// <summary>
+	/// Suppressing that ran out of time under an order that goes somewhere: counted, and no
+	/// place to suppress for <see cref="UnitPlanTraits.SuppressRetryTicks"/>, so the next plan
+	/// is the order's (§3.4, P4). Set here rather than on the next scan so the replan this
+	/// failure causes already sees it.
+	/// </summary>
+	private TaskStatus GiveUpSuppress()
+	{
+		SuppressionsGivenUp++;
+		SuppressedTicks = 0;
+		SuppressRetryTick = Tick + (uint)Traits.SuppressRetryTicks;
+		Sense(UnitFact.Suppress, false);
+		return TaskStatus.Failure;
 	}
 
 	/// <summary>In its hide spot, hidden or ready.</summary>
@@ -1733,6 +1946,26 @@ public sealed class UnitDomainBuilder : BaseDomainBuilder<UnitDomainBuilder, Uni
 
 	private static bool Displaced(UnitContext c) => c.Is(UnitFact.Burned) || c.Is(UnitFact.Standoff);
 
+	/// <summary>A heavy gunner under an order it suppresses under (docs/TACTICS.md §5.2, <see cref="UnitContext.SuppressesUnder"/>).</summary>
+	public UnitDomainBuilder IfGunner() =>
+		Condition("Doctrine=Gunner and Order∈{Attack,Defend,None} or Objective", IsGunner);
+
+	/// <summary>
+	/// The executing conditions both of a heavy gunner's operators hold by (docs/TACTICS.md
+	/// §5.2): the strategist still lets it, its order is still one it suppresses under, it
+	/// has no target of its own, and its squad is not falling back.
+	/// </summary>
+	public UnitDomainBuilder WhileGunning() =>
+		_executingConditions
+			? While(UnitFact.MicroAutonomy, MicroAutonomy.On)
+				.ExecutingCondition("while Doctrine=Gunner and Order∈{Attack,Defend,None} or Objective", IsGunner)
+				.WhileNot(UnitFact.Contact, UnitContact.Own).WhileNot(UnitFact.SquadPhase, SquadPhase.FallingBack)
+			: this;
+
+	private static bool IsGunner(UnitContext c) =>
+		c.UnitTraits.Doctrine == UnitDoctrine.Gunner
+		&& UnitContext.SuppressesUnder((OrderKind)c.Get(UnitFact.Order), c.Is(UnitFact.Objective));
+
 	/// <summary>
 	/// A primitive task whose operator asks the unit for <paramref name="goal"/>. Set
 	/// directly rather than through <c>Do</c>, which takes no abort callback: an
@@ -1892,6 +2125,25 @@ public static class UnitDomain
 					.Act(UnitGoal.ToHide).WhilePeeking().End()
 				.End()
 			.End()
+			// A heavy gunner (docs/TACTICS.md §5.2): only with the strategist's leave, and only
+			// with nothing of its own to shoot — a target it sees it fights as before. Into its
+			// reserve it fills its belt; else it suppresses the places the side knows of. With
+			// neither it falls through to its order.
+			.Select("gunner")
+				.If(UnitFact.MicroAutonomy, MicroAutonomy.On)
+				.IfGunner()
+				.IfNot(UnitFact.Contact, UnitContact.Own)
+				.IfNot(UnitFact.SquadPhase, SquadPhase.FallingBack)
+				.Sequence("reload")
+					.If(UnitFact.BeltLow)
+					.Act(UnitGoal.Reload).WhileGunning().While(UnitFact.BeltLow).End()
+				.End()
+				.Sequence("suppress")
+					.If(UnitFact.Suppress)
+					// Into its reserve, "reload" above takes over on the tick (P2).
+					.Act(UnitGoal.SuppressPoint).WhileGunning().While(UnitFact.Suppress).End()
+				.End()
+			.End()
 			.Select("attack")
 				.If(UnitFact.Order, OrderKind.Attack)
 				.Sequence("wait for squad")
@@ -2034,6 +2286,7 @@ public sealed class UnitPlanning
 	{
 		Planner.Reset(context);
 		context.ResetReact();
+		context.ResetSuppress();
 		context.History?.RecordReset();
 	}
 }

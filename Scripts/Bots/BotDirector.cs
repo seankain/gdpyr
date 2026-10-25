@@ -384,12 +384,16 @@ public sealed class BotDirector
 		int deniers = 0;
 		int runners = 0;
 		int sweepers = 0;
+		int suppressed = 0;
+		int ducking = 0;
 		foreach (BotPilot pilot in _pilots.Values)
 		{
 			goals[(int)pilot.Goal]++;
 			deniers += pilot.Role == GroundRole.Denier ? 1 : 0;
 			runners += pilot.Role == GroundRole.LockerRunner ? 1 : 0;
 			sweepers += pilot.Sweeping ? 1 : 0;
+			suppressed += pilot.Suppressed ? 1 : 0;
+			ducking += pilot.Ducking ? 1 : 0;
 		}
 
 		var text = new System.Text.StringBuilder();
@@ -406,7 +410,7 @@ public sealed class BotDirector
 			text.Append(goals[0]).Append(" idle  ");
 		}
 
-		text.Append($"| {deniers} denier {runners} runner {sweepers} sweep");
+		text.Append($"| {deniers} denier {runners} runner {sweepers} sweep | {suppressed} suppressed {ducking} down");
 		return text.ToString();
 	}
 
@@ -651,6 +655,13 @@ public sealed class BotDirector
 			Equip(combat, peerId);
 			_pilots[peerId] = new BotPilot(peerId, character, BotTraits.Default, GroundContacts, _groundPlanning,
 				GroundCover);
+
+			// A bot that plans perceives the strategist's fire (docs/TACTICS.md §5.7); a
+			// legacy one would only pay for a pass nothing reads.
+			if (combat.Find(peerId) is { } seat)
+			{
+				seat.PerceivesFire = _groundPlanning != null;
+			}
 		}
 
 		GD.Print($"[bots] {BotRoster.NameOf(peerId)} joined as {team}");

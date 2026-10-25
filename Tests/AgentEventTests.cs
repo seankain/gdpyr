@@ -253,10 +253,14 @@ public class AgentEventTests
 		Assert.Equal(23, (int)UnitGoal.FireFromPeek);
 		Assert.Equal(24, (int)UnitGoal.Duck);
 		Assert.Equal(25, (int)UnitGoal.Relocate);
+		Assert.Equal(26, (int)UnitGoal.SuppressPoint);
+		Assert.Equal(27, (int)UnitGoal.Reload);
 		Assert.True(UnitContext.IsTactic(UnitGoal.TakeCoverFromFire));
 		Assert.True(UnitContext.IsTactic(UnitGoal.ReturnFire));
 		Assert.True(UnitContext.IsTactic(UnitGoal.ThrowGrenade));
 		Assert.True(UnitContext.IsTactic(UnitGoal.FireFromPeek));
+		Assert.True(UnitContext.IsTactic(UnitGoal.SuppressPoint));
+		Assert.True(UnitContext.IsTactic(UnitGoal.Reload));
 		Assert.False(UnitContext.IsTactic(UnitGoal.HoldCover));
 	}
 

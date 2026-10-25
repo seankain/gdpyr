@@ -38,11 +38,15 @@ public partial class PlayerCrouchingState : State
 
 		// Standing up used to be a coroutine that resolved on a render frame, which
 		// made the transition tick-dependent and therefore unreplayable. It resolves
-		// within the tick now; the shape cast still keeps the player crouched under
-		// anything too low to stand up in.
+		// within the tick now — the standing pose, applied on this tick — and the shape
+		// cast still keeps the player crouched under anything too low to stand up in.
+		// Played backwards instead, the stand-up was paused by the idle state it hands
+		// over to, or cut short by walking's animation, and the body stayed crouched
+		// until the next crouch (docs/TACTICS.md §5.7).
 		if (!input.Held(InputButtons.Crouch) && !CrouchShapeCast.IsColliding())
 		{
-			PlayerAnimation.Play("crouch", -1.0, -CrouchSpeed * 1.5f, true);
+			PlayerAnimation.Play("crouch");
+			PlayerAnimation.Seek(0.0, true);
 			OnStateTransition("PlayerIdleState");
 		}
 	}

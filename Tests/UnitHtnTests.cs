@@ -1567,9 +1567,14 @@ public class UnitHtnTests
 	// ---- sharing and allocation --------------------------------------------
 
 	/// <summary>How many situations <see cref="Situation"/> has.</summary>
-	private const int Situations = 24;
+	private const int Situations = 26;
 
 	private static readonly UnitTraits Sniper = new(70f, 70f, 1.5f, 20f, UnitDoctrine.Marksman);
+
+	private static readonly UnitTraits Gunner = new(45f, 45f, 1.5f, 15f, UnitDoctrine.Gunner);
+
+	/// <summary>Where a defending gunner's scan found somebody to suppress (docs/TACTICS.md §5.2).</summary>
+	private static readonly Vector3[] GunnerPlaces = { Anchor + new Vector3(0f, 0f, 25f) };
 
 	/// <summary>
 	/// Twenty-two situations, one per operator of §5.2 and two for Advance, as an order and
@@ -1581,13 +1586,15 @@ public class UnitHtnTests
 	/// on its way to a spot behind cover from the fire, and in it. Then a defender with a
 	/// hidden enemy to throw a grenade at (§5.4). The last two are a defending marksman
 	/// with a peek pair (§5.3): away from it, and in its hide spot with somebody to peek
-	/// at — which a rifleman, offered the same, does not take.
+	/// at — which a rifleman, offered the same, does not take. The last two are a
+	/// defending heavy gunner (§5.2) with a place to suppress, and into its reserve.
 	/// </summary>
 	private static void Situation(UnitContext c, int phase, out OrderKind order, out bool hasTarget)
 	{
 		bool point = phase is >= 14 and <= 16;
 		bool fired = phase is 19 or 20;
 		bool peek = phase is 22 or 23;
+		bool gunner = phase is 24 or 25;
 		c.ObjectivePoint = phase == 15 ? c.Position : Objective;
 		c.HasCoverPoint = phase == 16;
 		c.CoverPoint = Objective + new Vector3(0f, 0f, -6f);
@@ -1602,18 +1609,20 @@ public class UnitHtnTests
 			HasFireCover = fired,
 			FireCoverHides = fired,
 		});
-		c.SenseAutonomy(fired || phase == 21 || peek ? MicroAutonomy.On : MicroAutonomy.Off);
+		c.SenseAutonomy(fired || phase == 21 || peek || gunner ? MicroAutonomy.On : MicroAutonomy.Off);
 		c.SenseGrenade(phase == 21, Anchor + new Vector3(0f, 0f, 18f));
 		c.SenseFire(fired ? FireKind.NearMiss : FireKind.None, Anchor + new Vector3(50f, 1.5f, 0f), c.Tick, 0);
 		Vector3 hide = phase == 23 ? c.Position : Anchor + new Vector3(-6f, 0f, 0f);
 		c.SensePeek(peek, hide, hide, true, peek ? OwnerId.ForPeer(7) : OwnerId.None, standoff: false);
+		c.SenseSuppress(phase == 24 ? GunnerPlaces : ReadOnlySpan<Vector3>.Empty);
+		c.SenseWeapon(false, 0, phase == 25 ? 10 : 150);
 
 		order = phase switch
 		{
 			0 or 4 or 5 or 6 or 7 or 13 or 14 or 15 or 16 => OrderKind.Attack,
 			1 or 2 => OrderKind.Build,
 			3 => OrderKind.Attack,
-			8 or 9 or 10 or 19 or 20 or 21 or 22 or 23 => OrderKind.Defend,
+			8 or 9 or 10 or 19 or 20 or 21 or 22 or 23 or 24 or 25 => OrderKind.Defend,
 			11 => OrderKind.Patrol,
 			17 => OrderKind.Embark,
 			18 => OrderKind.Unload,
@@ -1657,8 +1666,8 @@ public class UnitHtnTests
 		{
 			// Inside the leash round the anchor, and for three in five, far enough ahead
 			// of the squad on the way to the objective to wait for it. One in four is a
-			// marksman.
-			UnitContext c = planning.CreateContext(i % 4 == 3 ? Sniper : Rifleman);
+			// marksman, and one in four a heavy gunner.
+			UnitContext c = planning.CreateContext(i % 4 == 3 ? Sniper : i % 4 == 2 ? Gunner : Rifleman);
 			c.Position = Anchor + new Vector3(i * 0.1f, 0f, 3f);
 			c.HasSquad = true;
 			c.SquadAlive = 4;
@@ -1718,7 +1727,8 @@ public class UnitHtnTests
 			UnitGoal.EngageFocus, UnitGoal.Support, UnitGoal.Advance, UnitGoal.EngageInLeash, UnitGoal.AnswerCall,
 			UnitGoal.HoldPost, UnitGoal.Patrol, UnitGoal.Obey, UnitGoal.Resupply, UnitGoal.TakePoint,
 			UnitGoal.HoldPoint, UnitGoal.HoldPointCover, UnitGoal.Obey, UnitGoal.Obey, UnitGoal.TakeCoverFromFire,
-			UnitGoal.ReturnFire, UnitGoal.ThrowGrenade, UnitGoal.HoldPost, UnitGoal.HoldPost,
+			UnitGoal.ReturnFire, UnitGoal.ThrowGrenade, UnitGoal.HoldPost, UnitGoal.HoldPost, UnitGoal.HoldPost,
+			UnitGoal.HoldPost,
 		};
 		Assert.Equal(Situations, expected.Length);
 
@@ -1738,7 +1748,7 @@ public class UnitHtnTests
 		sniper.Position = c.Position;
 		sniper.HasPost = true;
 		sniper.PostPoint = c.PostPoint;
-		for (int phase = 22; phase < Situations; phase++)
+		for (int phase = 22; phase < 24; phase++)
 		{
 			planning.Reset(sniper);
 			Situation(sniper, phase, out OrderKind order, out bool hasTarget);
@@ -1753,6 +1763,22 @@ public class UnitHtnTests
 			}
 
 			Assert.Equal(phase == 22 ? UnitGoal.ToHide : UnitGoal.PopOut, sniper.Intent.Goal);
+		}
+
+		// The gunner's two: bursts at the place; and into its reserve, its belt filled.
+		UnitContext gunner = planning.CreateContext(Gunner);
+		gunner.Position = c.Position;
+		gunner.HasPost = true;
+		gunner.PostPoint = c.PostPoint;
+		for (int phase = 24; phase < Situations; phase++)
+		{
+			planning.Reset(gunner);
+			Situation(gunner, phase, out OrderKind order, out bool hasTarget);
+			gunner.Track(gunner.Position, new UnitOrder { Kind = order, Target = gunner.ObjectivePoint, Anchor = Anchor },
+				hasTarget, Anchor + new Vector3(0f, 0.5f, 5f));
+			planning.Tick(gunner);
+
+			Assert.Equal(phase == 24 ? UnitGoal.SuppressPoint : UnitGoal.Reload, gunner.Intent.Goal);
 		}
 	}
 

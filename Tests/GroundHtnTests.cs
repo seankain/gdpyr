@@ -795,17 +795,280 @@ public class GroundHtnTests
 		Assert.False(c.IsDirty);
 	}
 
+	// ---- suppressed (docs/TACTICS.md §5.7) -------------------------------------
+
+	private static readonly GroundPlanTraits Ground = GroundPlanTraits.Default;
+
+	/// <summary>A bot in its spot behind a wall, in a fight it could see when it got there.</summary>
+	private static Bot InItsSpot()
+	{
+		Bot bot = Seeing(Threat.Infantry);
+		bot.Sense(GroundFact.Cover, CoverState.In);
+		bot.Tick(3);
+		Assert.Equal(GroundGoal.HoldCover, bot.Goal);
+		return bot;
+	}
+
+	/// <summary>Ticks of the pilot's, the last round that came near the bot on <paramref name="lastRound"/>: this tick when it is 0.</summary>
+	private static void UnderFire(Bot bot, int ticks = 1, uint lastRound = 0)
+	{
+		for (int i = 0; i < ticks; i++)
+		{
+			bot.C.Tick++;
+			bot.C.SenseSuppressed(lastRound != 0 ? lastRound : bot.C.Tick);
+			bot.Planner.Tick(bot.Domain, bot.C);
+		}
+	}
+
+	[Fact]
+	public void ARound_SuppressesForASecondAndAHalf()
+	{
+		var bot = new Bot();
+		uint round = bot.C.Tick;
+		bot.C.SenseSuppressed(round);
+		Assert.True(bot.C.Is(GroundFact.Suppressed));
+
+		bot.C.Tick = round + (uint)Ground.SuppressedTicks;
+		bot.C.SenseSuppressed(round);
+		Assert.True(bot.C.Is(GroundFact.Suppressed));
+
+		bot.C.Tick++;
+		bot.C.SenseSuppressed(round);
+		Assert.False(bot.C.Is(GroundFact.Suppressed));
+
+		// None this life.
+		bot.C.SenseSuppressed(0);
+		Assert.False(bot.C.Is(GroundFact.Suppressed));
+		Assert.Equal(SimConfig.TickRate * 3 / 2, Ground.SuppressedTicks);
+	}
+
+	[Fact]
+	public void SuppressedInItsSpot_ItStaysDown_For3s_ThenRisesRegardless()
+	{
+		Bot bot = InItsSpot();
+		Assert.False(bot.C.Intent.Duck);
+
+		UnderFire(bot);
+		Assert.Equal(GroundGoal.HoldCover, bot.Goal);
+		Assert.True(bot.C.Intent.Duck);
+
+		// Down for three seconds of fire that keeps coming, and up on the next tick of it.
+		UnderFire(bot, Ground.SuppressedMaxTicks - 1);
+		Assert.True(bot.C.Intent.Duck);
+		UnderFire(bot);
+		Assert.Equal(GroundGoal.HoldCover, bot.Goal);
+		Assert.True(bot.C.Is(GroundFact.Suppressed));
+		Assert.False(bot.C.Intent.Duck);
+
+		UnderFire(bot, SimConfig.TickRate * 5);
+		Assert.False(bot.C.Intent.Duck);
+	}
+
+	[Fact]
+	public void ABotThatRanToItsSpotUnderFire_StillGetsItsThreeSecondsDownThere()
+	{
+		Bot bot = Seeing(Threat.Infantry);
+		bot.Sense(GroundFact.Cover, CoverState.Near);
+		UnderFire(bot, Ground.SuppressedMaxTicks + 30);
+		Assert.Equal(GroundGoal.TakeCover, bot.Goal);
+		Assert.False(bot.C.Intent.Duck);
+
+		// In its spot it is down for three seconds of the fire, from the tick it gets there.
+		bot.Sense(GroundFact.Cover, CoverState.In);
+		int down = 0;
+		for (int i = 0; i < Ground.SuppressedMaxTicks * 2; i++)
+		{
+			UnderFire(bot);
+			down += bot.C.Intent.Duck ? 1 : 0;
+		}
+
+		Assert.Equal(GroundGoal.HoldCover, bot.Goal);
+		Assert.Equal(Ground.SuppressedMaxTicks, down);
+	}
+
+	[Fact]
+	public void ALullThatEndsTheSuppression_StartsTheClockAgain()
+	{
+		Bot bot = InItsSpot();
+		UnderFire(bot, Ground.SuppressedMaxTicks + 10);
+		Assert.False(bot.C.Intent.Duck);
+
+		// The fire stops long enough to end it, and comes back: down again.
+		UnderFire(bot, Ground.SuppressedTicks, lastRound: bot.C.Tick);
+		Assert.True(bot.C.Is(GroundFact.Suppressed));
+		UnderFire(bot, 1, lastRound: bot.C.Tick - (uint)Ground.SuppressedTicks);
+
+		Assert.False(bot.C.Is(GroundFact.Suppressed));
+		Assert.Equal(GroundGoal.HoldCover, bot.Goal);
+		UnderFire(bot);
+		Assert.True(bot.C.Intent.Duck);
+	}
+
+	[Fact]
+	public void OnItsWayToItsSpot_ItDoesNotDuck()
+	{
+		Bot bot = Seeing(Threat.Infantry);
+		bot.Sense(GroundFact.Cover, CoverState.Near);
+		UnderFire(bot, 3);
+
+		Assert.Equal(GroundGoal.TakeCover, bot.Goal);
+		Assert.False(bot.C.Intent.Duck);
+	}
+
+	[Fact]
+	public void Suppressed_ABotWhoseFightIsOutOfSight_GoesToTheSpotItKept_RatherThanInvestigating()
+	{
+		Bot bot = new Bot();
+		bot.Sense(GroundFact.Contact, ContactLevel.Ghost);
+		bot.Sense(GroundFact.ThreatKind, Threat.Infantry);
+		bot.Sense(GroundFact.Cover, CoverState.Near);
+		bot.Tick(3);
+		Assert.Equal(GroundGoal.InvestigateGhost, bot.Goal);
+
+		UnderFire(bot);
+		Assert.Equal(GroundGoal.TakeCover, bot.Goal);
+		Assert.Equal(CoverSpot, bot.C.Intent.Point);
+	}
+
+	[Fact]
+	public void InTheOpen_SuppressedWithASpot_ItTakesCoverOverEngaging_AndWithoutOne_FightsOn()
+	{
+		Bot open = Seeing(Threat.Infantry);
+		open.Tick(3);
+		Assert.Equal(GroundGoal.Engage, open.Goal);
+
+		UnderFire(open, 3);
+		Assert.Equal(GroundGoal.Engage, open.Goal);
+		Assert.False(open.C.Intent.Duck);
+
+		open.Sense(GroundFact.Cover, CoverState.Near);
+		UnderFire(open);
+		Assert.Equal(GroundGoal.TakeCover, open.Goal);
+	}
+
+	[Fact]
+	public void UnderFireItCannotPlace_ItKeepsToItsSpot_AndWithoutTheFire_ItGoes()
+	{
+		// Down long enough for the team to forget who was firing, with the rounds still coming.
+		Bot pinned = InItsSpot();
+		UnderFire(pinned);
+		pinned.Sense(GroundFact.Contact, ContactLevel.None);
+		UnderFire(pinned, 5);
+		Assert.Equal(GroundGoal.HoldCover, pinned.Goal);
+
+		// A reload in the spot, and back to it: planned afresh, it still plans the wall.
+		pinned.Sense(GroundFact.MagazineLow, true);
+		UnderFire(pinned);
+		Assert.Equal(GroundGoal.Reload, pinned.Goal);
+		pinned.Sense(GroundFact.MagazineLow, false);
+		UnderFire(pinned, 2);
+		Assert.Equal(GroundGoal.HoldCover, pinned.Goal);
+
+		Bot quiet = InItsSpot();
+		quiet.Sense(GroundFact.Contact, ContactLevel.None);
+		quiet.Tick(5);
+		Assert.NotEqual(GroundGoal.HoldCover, quiet.Goal);
+
+		// Suppressed with no contact and no spot, it has no fight to take: as before.
+		var open = new Bot();
+		UnderFire(open, 3);
+		Assert.Equal(GroundGoal.Standoff, open.Goal);
+	}
+
+	[Fact]
+	public void NotSuppressed_NothingChanges()
+	{
+		Bot bot = InItsSpot();
+		bot.C.SenseSuppressed(0);
+		bot.Tick(Ground.SuppressedMaxTicks);
+
+		Assert.Equal(GroundGoal.HoldCover, bot.Goal);
+		Assert.False(bot.C.Intent.Duck);
+	}
+
+	[Fact]
+	public void Retreat_ReplacesBeingPinnedDown()
+	{
+		Bot bot = InItsSpot();
+		bot.C.FallbackPoint = new Vector3(2f, 0.5f, 7f);
+		UnderFire(bot);
+		Assert.True(bot.C.Intent.Duck);
+
+		bot.Sense(GroundFact.Health, HealthBand.Critical);
+		bot.Sense(GroundFact.Odds, OddsBand.Outnumbered);
+		UnderFire(bot);
+
+		Assert.Equal(GroundGoal.FallBack, bot.Goal);
+		Assert.False(bot.C.Intent.Duck);
+	}
+
+	[Fact]
+	public void TheDebuggerNamesTheFact()
+	{
+		Assert.Equal("Suppressed", Gdpyr.Sim.AiDebug.HtnSchema.Ground.FactName((int)GroundFact.Suppressed));
+		Assert.Equal("True", Gdpyr.Sim.AiDebug.HtnSchema.Ground.FactValue((int)GroundFact.Suppressed, 1));
+	}
+
+	/// <summary>The brain's half: a bot told to duck, in its spot, with a target it would otherwise shoot.</summary>
+	private static BotSituation Facing(bool duck, bool inCover = true, Vector3 grenadeAim = default,
+		bool needsReload = false, bool visible = true)
+	{
+		Aim.Angles(Vector3.Right, out float yaw, out _);
+		return new BotSituation(alive: true, yaw: yaw, pitch: 0f, speed: 0f, hasTarget: true, aimDirection: Vector3.Right,
+			targetDistance: 30f, targetVisible: visible, ticksOnTarget: 60, hasDestination: false,
+			moveDirection: Vector3.Zero, destinationDistance: 0f, stuck: false, needsReload: needsReload,
+			inCover: inCover, grenadeAim: grenadeAim, duck: duck);
+	}
+
+	[Fact]
+	public void Ducking_TheBotCrouchesAndHoldsItsFire_AndUp_ItShoots()
+	{
+		BotTraits traits = BotTraits.Default;
+		InputFrame down = BotBrain.Frame(0, BotRoster.FirstPeerId, Facing(duck: true), traits);
+		Assert.True(down.Held(InputButtons.Crouch));
+		Assert.False(down.Held(InputButtons.Fire));
+		Assert.False(BotBrain.ShouldFire(Facing(duck: true), traits, Facing(true).Yaw, 0f));
+
+		InputFrame up = BotBrain.Frame(0, BotRoster.FirstPeerId, Facing(duck: false), traits);
+		Assert.False(up.Held(InputButtons.Crouch));
+		Assert.True(up.Held(InputButtons.Fire));
+	}
+
+	[Fact]
+	public void Ducking_ItThrowsNothing_AndReloadsIfItNeedsTo()
+	{
+		BotTraits traits = BotTraits.Default;
+		BotSituation winding = Facing(duck: true, grenadeAim: Vector3.Right);
+		Assert.False(BotBrain.ShouldThrow(winding, traits, winding.Yaw, 0f));
+		Assert.True(BotBrain.ShouldThrow(Facing(duck: false, grenadeAim: Vector3.Right), traits, winding.Yaw, 0f));
+
+		// Down behind the wall it cannot see the fight: a reload there is between fights.
+		InputFrame down = BotBrain.Frame(0, BotRoster.FirstPeerId, Facing(duck: true, needsReload: true, visible: false),
+			traits);
+		Assert.True(down.Held(InputButtons.Reload));
+		Assert.True(down.Held(InputButtons.Crouch));
+	}
+
 	// ---- sharing and allocation --------------------------------------------
 
-	/// <summary>Ten situations, one per branch of §5.1, as facts.</summary>
+	/// <summary>How many situations <see cref="Situation"/> has.</summary>
+	private const int Situations = 11;
+
+	/// <summary>
+	/// Eleven situations: one per branch of §5.1, as facts, and a bot in its spot behind
+	/// cover pinned down by a gunner (docs/TACTICS.md §5.7).
+	/// </summary>
 	private static void Situation(GroundContext c, int phase)
 	{
 		c.Sense(GroundFact.Contact, (byte)(phase switch
 		{
 			1 => ContactLevel.Ghost,
-			2 or 3 or 4 or 5 => ContactLevel.Visible,
+			2 or 3 or 4 or 5 or 10 => ContactLevel.Visible,
 			_ => ContactLevel.None,
 		}));
+		c.HasCoverPoint = phase == 10;
+		c.Sense(GroundFact.Cover, (byte)(phase == 10 ? CoverState.In : CoverState.None));
+		c.SenseSuppressed(phase == 10 ? c.Tick : 0);
 		c.Sense(GroundFact.ThreatKind, (byte)(phase == 4 ? Threat.Armour : Threat.Infantry));
 		c.Sense(GroundFact.AlliesNear, phase == 2);
 		c.Sense(GroundFact.Role, (byte)(phase switch
@@ -843,7 +1106,7 @@ public class GroundHtnTests
 				c.Tick = t;
 				if ((t + i) % 10 == 0)
 				{
-					Situation(c, (int)(((t + i) / 10 + i) % 10));
+					Situation(c, (int)(((t + i) / 10 + i) % Situations));
 				}
 
 				planning.Tick(c);
@@ -891,7 +1154,7 @@ public class GroundHtnTests
 					c.Tick = t;
 					if ((t + i) % interval == 0)
 					{
-						Situation(c, (int)(((t + i) / interval + i) % 10));
+						Situation(c, (int)(((t + i) / interval + i) % Situations));
 						dirtied += c.IsDirty ? 1 : 0;
 					}
 

@@ -49,7 +49,8 @@ public sealed class HtnSchema
 		typeof(bool), // InsideDefences
 		typeof(bool), // MagazineLow
 		typeof(bool), // Sweep
-		typeof(CoverState)); // Cover
+		typeof(CoverState), // Cover
+		typeof(bool)); // Suppressed
 
 	public static readonly HtnSchema Unit = new(HtnDomainKind.Unit, typeof(UnitFact), typeof(UnitGoal),
 		typeof(OrderKind), // Order
@@ -76,7 +77,9 @@ public sealed class HtnSchema
 		typeof(PeekState), // Peek
 		typeof(bool), // PeekTarget
 		typeof(bool), // Standoff
-		typeof(bool)); // Burned
+		typeof(bool), // Burned
+		typeof(bool), // Suppress
+		typeof(bool)); // BeltLow
 
 	public static readonly HtnSchema Squad = new(HtnDomainKind.Squad, typeof(CommandFact), typeof(CommandGoal),
 		typeof(CommandTask), // Task
