@@ -1,0 +1,35 @@
+{
+  "name": "the HTN strategist trains heavy gunners at its pillbox and snipers at its tower",
+  "bot_ai": "htn",
+  "seeds": [1, 2],
+  "duration_ticks": 2400,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 1 },
+
+  "seats": [
+    { "id": "idle", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json" }
+  ],
+
+  "spawns": [
+    { "peer": "idle", "at": [110, 1, 110], "look": [0, 0] },
+    { "structure": "pillbox", "team": "strategist", "at": [80, 0.5, -80], "yaw": 0 },
+    { "structure": "sniper_tower", "team": "strategist", "at": [120, 0.5, -80], "yaw": 0 },
+    { "unit": "infantry", "team": "strategist", "at": [92, 1, -88], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [96, 1, -88], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [100, 1, -88], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [104, 1, -88], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [92, 1, -85], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [96, 1, -85], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [100, 1, -85], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [104, 1, -85], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [92, 1, -82], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [96, 1, -82], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [100, 1, -82], "order": "none" }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.unit_built[tier=6,barracks<0].count", "op": ">=", "value": 2 },
+    { "metric": "events.unit_built[tier=5,barracks<0].count", "op": ">=", "value": 2 }
+  ]
+}

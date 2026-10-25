@@ -126,7 +126,10 @@ bots are the baseline a policy is measured against ([`docs/TRAINING.md`](docs/TR
 with the HTN of [`docs/HTN_BOTS.md`](docs/HTN_BOTS.md) §5.1 (H2), the units with §5.2's (H3),
 whoever ordered them, and the computer strategist with §5.3's commander (H4) — which, from H5,
 buys a supply truck once it has eight fighting units, stations it behind its squads, and sends a
-wounded squad, or a bot's wounded unit, to the nearest supply to heal. The debug HUD's
+wounded squad, or a bot's wounded unit, to the nearest supply to heal; and, from T7
+([`docs/TACTICS.md`](docs/TACTICS.md) §6), trains a heavy gunner at its pillboxes for every three
+riflemen past its garrison, one to each assault squad, and two snipers at its towers, which join
+the garrison or a squad holding a zone. The debug HUD's
 `ground plan` row counts the ground bots on each task and the roles their coordinator handed out,
 `unit plan` the units on each task, `unit ms` what the unit pass costs a tick, `resupply` the units
 healing and the health given back this round (under either AI), and `commander` each computer

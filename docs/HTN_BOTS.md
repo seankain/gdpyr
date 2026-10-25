@@ -719,6 +719,19 @@ never retreating, 1; with it not recalled when home is threatened, 1; with it jo
 threatened, 1; stopping at the fewest that beat the node, 1; without the two-squad and unit-count
 rule, 1; with a squad forming of technicals only sent, 1.
 
+**Gunners and snipers, T7** ([`TACTICS.md`](TACTICS.md) §5.2, §5.3, §6). The commander trains at
+its structures as it buys at its barracks, before them: a heavy gunner at a finished pillbox for
+every three riflemen past the garrison (`StrategistTraits.RiflemenPerGunner`), no more than it has
+slots for assault squads (`Commander.AssaultSlots`), and two snipers at its sniper towers once it
+has the garrison's riflemen (`Snipers`), each counting the ones queued and by the barracks' queue
+rules (`StrategistBrain.TrainedWanted`, `ShouldTrain`). In the assignment a gunner
+is placed as escort armour places a tank: never the garrison or the scout, and at most one to a
+squad — a depleted squad refilling without one, else the assault squad with riflemen and no gunner,
+the most riflemen first, else the squad forming, else a new one, else none. A sniper joins a squad
+holding a zone, the garrison at home or one reinforcing a zone, the fewest snipers first, and waits
+in no squad while there is none; the garrison's snipers are on top of its four riflemen. Legacy
+trains nothing at a structure (D5).
+
 ### 5.4 The five tasks at each layer
 
 | Task | Ground bot | RTS unit | Strategist commander |
