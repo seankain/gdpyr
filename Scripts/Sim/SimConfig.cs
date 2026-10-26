@@ -177,6 +177,9 @@ public static class SimConfig
 	/// <summary>Weapon slots a ground-force loadout carries: melee, sidearm, large.</summary>
 	public const int WeaponSlots = 3;
 
+	/// <summary>The slot the pistol is carried in: what a life with no primary starts on (docs/LOADOUT.md §5.1).</summary>
+	public const int SidearmSlot = 1;
+
 	/// <summary>The slot the large weapon — rifle, DMR or launcher — is carried in.</summary>
 	public const int LargeSlot = WeaponSlots - 1;
 

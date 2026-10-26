@@ -82,16 +82,18 @@ public class DemoCodecTests
 	[Theory]
 	[InlineData(1)]
 	[InlineData(2)]
-	public void TheVersionIsThree_SinceTheUnitRecordCarriesPosture_AndAnOlderDemoIsRefusedWithItsReason(int older)
+	[InlineData(3)]
+	public void TheVersionIsFour_SinceThePlayerRecordCarriesTheKit_AndAnOlderDemoIsRefusedWithItsReason(int older)
 	{
-		// docs/TACTICS.md §5.8: the unit record is 14 bytes, its flag byte split in two;
-		// a version-2 demo's 13-byte records would misread, so it is refused, saying why.
-		Assert.Equal(3, DemoFormat.Version);
+		// docs/LOADOUT.md §6.3: the player record is 32 bytes and its zero large weapon
+		// means no primary; a version-3 demo's 29-byte records would misread, so it is
+		// refused, saying why (as version 3 refused version 2's unit records).
+		Assert.Equal(4, DemoFormat.Version);
 
 		DemoHeader old = Header();
 		old.Version = (byte)older;
 		Assert.False(old.IsPlayable(out string reason));
-		Assert.Equal($"demo format version {older}; this build reads 3", reason);
+		Assert.Equal($"demo format version {older}; this build reads 4", reason);
 	}
 
 	[Fact]

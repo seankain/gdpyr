@@ -991,6 +991,11 @@ public partial class PlayerManager : Node
 				Health = combat?.SnapshotHealth ?? (byte)SimConfig.MaxHealth,
 				Ammo = combat?.SnapshotAmmo ?? (byte)0,
 				WeaponFlags = combat?.SnapshotFlags ?? (byte)0,
+				Reserve = combat?.SnapshotReserve ?? (ushort)0,
+
+				// A vest's points are L3's; until then every record says none.
+				ArmourPoints = 0,
+				Kit = combat?.SnapshotKit ?? (byte)0,
 			};
 		}
 

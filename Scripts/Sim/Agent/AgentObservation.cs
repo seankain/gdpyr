@@ -36,6 +36,9 @@ public struct AgentSelfView
 	public int Health;
 	public bool Alive;
 	public float MoveSpeedScale;
+
+	/// <summary>Hand grenades left (docs/LOADOUT.md §9). One of the extras, not the vector.</summary>
+	public int Grenades;
 }
 
 /// <summary>What the seat is holding.</summary>
@@ -55,6 +58,12 @@ public struct AgentWeaponView
 	public bool Ads;
 	public bool CarryingGun;
 	public bool MountedOnGun;
+
+	/// <summary>Spare rounds for the weapon in the hands, or -1 for one that reloads forever. An extra.</summary>
+	public int Reserve;
+
+	/// <summary>What the kit's pouches hold for it when full, or -1 for unlimited. An extra.</summary>
+	public int ReserveMax;
 }
 
 /// <summary>
@@ -180,6 +189,43 @@ public static class AgentObservation
 
 	/// <summary>The layout, in order. This is what <c>welcome</c> publishes.</summary>
 	public static ReadOnlySpan<AgentField> Fields => Table;
+
+	private static readonly AgentField[] ExtraTable =
+	{
+		new("self.grenades", 0, 1, 0f, SimConfig.MaxGrenades),
+		new("weapon.reserve", 1, 1, -1f, KitFlags.MaxReserve),
+		new("weapon.reserve_max", 2, 1, -1f, KitFlags.MaxReserve),
+	};
+
+	/// <summary>
+	/// Fields beyond the vector, in raw units rather than normalized (docs/LOADOUT.md
+	/// §9, L-D15). Every JSON observation carries them by name; a binary one only when
+	/// its session asked at <c>hello</c> (<c>"extras": true</c>), after the vector and
+	/// any planes, with bit 3 of the frame's flags set. So the vector — and the
+	/// schema's version — stay what every trained policy reads until L8 appends its
+	/// floats. Offsets are into the extras, not the vector.
+	/// </summary>
+	public static ReadOnlySpan<AgentField> ExtraFields => ExtraTable;
+
+	/// <summary>Floats in the extras.</summary>
+	public static int ExtraFloats { get; } = Total(ExtraTable);
+
+	/// <summary>The bit of a binary observation's flags that says the extras follow.</summary>
+	public const ushort ExtrasFlag = 8;
+
+	/// <summary>Writes the extras. Returns the floats written, or 0 when <paramref name="into"/> is too small.</summary>
+	public static int EncodeExtras(in AgentSelfView self, in AgentWeaponView weapon, Span<float> into)
+	{
+		if (into.Length < ExtraFloats)
+		{
+			return 0;
+		}
+
+		into[0] = Math.Clamp(self.Grenades, 0, SimConfig.MaxGrenades);
+		into[1] = Math.Clamp(weapon.Reserve, -1, KitFlags.MaxReserve);
+		into[2] = Math.Clamp(weapon.ReserveMax, -1, KitFlags.MaxReserve);
+		return ExtraFloats;
+	}
 
 	/// <summary>Where a named run starts, or -1. For tests and for readable assertions.</summary>
 	public static int OffsetOf(string name)

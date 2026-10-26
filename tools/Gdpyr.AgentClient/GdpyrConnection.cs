@@ -31,6 +31,20 @@ public sealed class GdpyrObservation
 	/// <summary>The optional feature planes, or empty when the session did not ask for them.</summary>
 	public float[] Planes = Array.Empty<float>();
 
+	/// <summary>
+	/// The ground fields beyond the vector, in raw units (docs/LOADOUT.md §9), or empty
+	/// when the session did not ask for them at hello.
+	/// </summary>
+	public float[] Extras = Array.Empty<float>();
+
+	/// <summary>One of the fields beyond the vector, by name, when this observation carries it.</summary>
+	public bool TryExtra(GdpyrSchema schema, string name, out float value)
+	{
+		int at = schema.ExtraOffset(name);
+		value = at >= 0 && at < Extras.Length ? Extras[at] : 0f;
+		return at >= 0 && at < Extras.Length;
+	}
+
 	/// <summary>A named run of the vector, by the schema's field name.</summary>
 	public ReadOnlySpan<float> Field(GdpyrSchema schema, string name)
 	{
@@ -45,6 +59,26 @@ public sealed class GdpyrObservation
 		ReadOnlySpan<float> run = Field(schema, name);
 		return run.Length > 0 ? run[0] : 0f;
 	}
+}
+
+/// <summary>
+/// A ground seat's kit, as a scenario or a <c>spawn</c> names it (docs/LOADOUT.md §9):
+/// what is sent, not what the server makes of it, which refuses a kit that breaks a
+/// loadout rule rather than trimming it.
+/// </summary>
+public sealed class GdpyrKit
+{
+	/// <summary>none, dmr, rifle or launcher.</summary>
+	public string Primary = "rifle";
+
+	public int Magazines = 5;
+
+	public int Grenades = 3;
+
+	/// <summary>none, light, medium or heavy.</summary>
+	public string Armour = "none";
+
+	public override string ToString() => $"{Primary} {Magazines} {Grenades} {Armour}";
 }
 
 /// <summary>One command for a strategist seat (docs/AGENT_API.md §7.4).</summary>
@@ -257,6 +291,22 @@ public sealed class GdpyrSchema
 
 	public int PlaneChannels;
 
+	/// <summary>Floats in a ground observation's extras, or 0 on a server that publishes none.</summary>
+	public int ExtraFloats;
+
+	/// <summary>The bit of a packed observation's flags that says the extras follow.</summary>
+	public int ExtrasFlag = 8;
+
+	private readonly Dictionary<string, int> _extras = new();
+
+	/// <summary>The fields beyond the ground vector (docs/LOADOUT.md §9), by name.</summary>
+	public IReadOnlyCollection<string> ExtraNames => _extras.Keys;
+
+	/// <summary>Where a field beyond the vector sits among the extras, or -1.</summary>
+	public int ExtraOffset(string name) => _extras.TryGetValue(name, out int at) ? at : -1;
+
+	internal void AddExtra(string name, int offset) => _extras[name] = offset;
+
 	public int TickRate = 60;
 
 	/// <summary>
@@ -371,25 +421,34 @@ public sealed class GdpyrConnection : IDisposable
 	/// <summary>What the last <c>step</c> reported about the seats this session holds.</summary>
 	public IReadOnlyList<GdpyrSeatStatus> LastStep => _lastStep;
 
-	/// <summary>Connects and completes the handshake.</summary>
+	/// <summary>
+	/// Connects and completes the handshake. <paramref name="extras"/> asks for the
+	/// ground fields beyond the vector in every packed observation (docs/LOADOUT.md §9),
+	/// which the playtest harness reads and a policy trained on the vector has no use for.
+	/// </summary>
 	public static async Task<GdpyrConnection> ConnectAsync(string host = "127.0.0.1", int port = 7900,
-		string token = null, CancellationToken cancel = default)
+		string token = null, CancellationToken cancel = default, bool extras = false)
 	{
 		var client = new TcpClient();
 		await client.ConnectAsync(host, port, cancel).ConfigureAwait(false);
 
 		var connection = new GdpyrConnection(client);
-		await connection.HelloAsync(token, cancel).ConfigureAwait(false);
+		await connection.HelloAsync(token, extras, cancel).ConfigureAwait(false);
 		return connection;
 	}
 
-	private async Task HelloAsync(string token, CancellationToken cancel)
+	private async Task HelloAsync(string token, bool extras, CancellationToken cancel)
 	{
 		JsonElement welcome = await RequestAsync(writer =>
 		{
 			writer.WriteString("op", "hello");
 			writer.WriteNumber("protocol", AgentProtocol.Version);
 			writer.WriteString("observations", "binary");
+			if (extras)
+			{
+				writer.WriteBoolean("extras", true);
+			}
+
 			if (token != null)
 			{
 				writer.WriteString("token", token);
@@ -442,6 +501,17 @@ public sealed class GdpyrConnection : IDisposable
 		{
 			read.Add(field.GetProperty("name").GetString(), field.GetProperty("offset").GetInt32(),
 				field.GetProperty("count").GetInt32());
+		}
+
+		// The fields beyond the vector, which a server from before L1 does not publish.
+		if (ground.TryGetProperty("extras", out JsonElement extras))
+		{
+			read.ExtraFloats = extras.GetProperty("floats").GetInt32();
+			read.ExtrasFlag = extras.TryGetProperty("flag", out JsonElement flag) ? flag.GetInt32() : 8;
+			foreach (JsonElement field in extras.GetProperty("fields").EnumerateArray())
+			{
+				read.AddExtra(field.GetProperty("name").GetString(), field.GetProperty("offset").GetInt32());
+			}
 		}
 
 		if (schema.TryGetProperty("strategist_observation", out JsonElement strategist))
@@ -688,17 +758,32 @@ public sealed class GdpyrConnection : IDisposable
 	/// Places one of this session's seats, or a unit, where a scenario asked for it
 	/// (docs/AGENT_API.md §9.1). Scenario plumbing, not something a policy uses.
 	/// </summary>
+	/// <param name="at">Where to put the seat, or null to leave it where it is and only equip <paramref name="kit"/>.</param>
+	/// <param name="kit">The kit to equip and respawn with (docs/LOADOUT.md §9), or null to keep the seat's.</param>
 	public Task SpawnSeatAsync(int seat, float[] at, float yaw = 0f, float pitch = 0f,
-		CancellationToken cancel = default) =>
+		CancellationToken cancel = default, GdpyrKit kit = null) =>
 		RequestAsync(writer =>
 		{
 			writer.WriteString("op", "spawn");
 			writer.WriteNumber("seat", seat);
-			WriteVector(writer, "at", at);
-			writer.WriteStartArray("look");
-			writer.WriteNumberValue(yaw);
-			writer.WriteNumberValue(pitch);
-			writer.WriteEndArray();
+			if (at != null)
+			{
+				WriteVector(writer, "at", at);
+				writer.WriteStartArray("look");
+				writer.WriteNumberValue(yaw);
+				writer.WriteNumberValue(pitch);
+				writer.WriteEndArray();
+			}
+
+			if (kit != null)
+			{
+				writer.WriteStartObject("kit");
+				writer.WriteString("primary", kit.Primary);
+				writer.WriteNumber("magazines", kit.Magazines);
+				writer.WriteNumber("grenades", kit.Grenades);
+				writer.WriteString("armour", kit.Armour);
+				writer.WriteEndObject();
+			}
 		}, cancel);
 
 	/// <summary>Puts a unit on the field for a scenario. Returns its unit id.</summary>
@@ -1083,9 +1168,11 @@ public sealed class GdpyrConnection : IDisposable
 		uint tick = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(body.AsSpan(8));
 
 		bool planes = (flags & 4) != 0;
+		bool extras = Schema.ExtraFloats > 0 && (flags & Schema.ExtrasFlag) != 0;
 		int total = (body.Length - header) / 4;
 		int planeFloats = planes ? Schema.PlaneFloats : 0;
-		int vector = total - planeFloats;
+		int extraFloats = extras ? Schema.ExtraFloats : 0;
+		int vector = total - planeFloats - extraFloats;
 
 		GdpyrPolicy policy;
 		if (vector == Schema.Floats)
@@ -1117,6 +1204,13 @@ public sealed class GdpyrConnection : IDisposable
 				body.AsSpan(header + ((vector + i) * 4)));
 		}
 
+		var extra = new float[extraFloats];
+		for (int i = 0; i < extra.Length; i++)
+		{
+			extra[i] = System.Buffers.Binary.BinaryPrimitives.ReadSingleLittleEndian(
+				body.AsSpan(header + ((vector + planeFloats + i) * 4)));
+		}
+
 		Tick = tick;
 		return new GdpyrObservation
 		{
@@ -1127,6 +1221,7 @@ public sealed class GdpyrConnection : IDisposable
 			Policy = policy,
 			Values = values,
 			Planes = grid,
+			Extras = extra,
 		};
 	}
 

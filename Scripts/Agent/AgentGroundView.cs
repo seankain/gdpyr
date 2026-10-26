@@ -34,7 +34,12 @@ public sealed class AgentGroundView
 	/// <paramref name="peerId"/>. Returns false when the seat has no character to
 	/// observe from, which is what a policy sees between a despawn and a respawn.
 	/// </summary>
-	public bool Encode(int peerId, uint tick, int stepMul, in AgentLimits limits, Span<float> into)
+	/// <param name="extras">
+	/// Where the fields beyond the vector go (<see cref="AgentObservation.ExtraFields"/>),
+	/// taken from the same views on the same tick.
+	/// </param>
+	public bool Encode(int peerId, uint tick, int stepMul, in AgentLimits limits, Span<float> into,
+		Span<float> extras)
 	{
 		CombatManager combat = CombatManager.Instance;
 		PlayerCombat player = combat?.Find(peerId);
@@ -60,6 +65,7 @@ public sealed class AgentGroundView
 
 		AgentObjectiveView objective = Objective(combat, character, player.Team);
 
+		AgentObservation.EncodeExtras(self, weapon, extras);
 		return AgentObservation.Encode(round, self, weapon, _views.AsSpan(0, carried), _rays, objective, into)
 			== AgentObservation.Floats;
 	}
@@ -94,6 +100,7 @@ public sealed class AgentGroundView
 		Health = player.Health,
 		Alive = player.IsAlive,
 		MoveSpeedScale = character.MoveSpeedScale,
+		Grenades = player.Grenades.Count,
 	};
 
 	private static AgentWeaponView Weapon(PlayerCombat player, fps_controller character, uint tick)
@@ -123,6 +130,12 @@ public sealed class AgentGroundView
 			Ads = (character.PreviousButtons & (ushort)InputButtons.Ads) != 0,
 			CarryingGun = carrying != CarryKind.None,
 			MountedOnGun = guns?.TryMounted(player.PeerId, out _) ?? false,
+
+			// The kit's pouches, for a weapon that has any (docs/LOADOUT.md §9).
+			Reserve = state.HasUnlimitedReserve ? -1 : state.Reserve,
+			ReserveMax = state.HasUnlimitedReserve
+				? -1
+				: Loadout.ReserveFor(player.Loadout, WeaponCatalog.CarryFor(state.DefinitionId)),
 		};
 	}
 

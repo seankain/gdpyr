@@ -20,15 +20,23 @@ public class SnapshotCodecTests
 		Health = 73,
 		Ammo = 17,
 		WeaponFlags = Sim.WeaponFlags.Pack(2, reloading: true, Team.GroundForce),
+		Reserve = 270,
+		ArmourPoints = 100,
+		Kit = KitFlags.Pack(new LoadoutSelection
+		{
+			Large = 3, Magazines = 9, Grenades = 0, Armour = BodyArmourTier.Heavy,
+		}),
 	};
 
 	[Fact]
-	public void Player_IsTwentyNineBytesOnTheWire()
+	public void Player_IsThirtyTwoBytesOnTheWire()
 	{
 		// docs/NETCODE.md §7 budgets ~30 B per player at 30-60 Hz. M2 spends three
-		// of the remaining bytes on health, ammo and weapon flags.
-		Assert.Equal(29, PlayerSnapshot.SizeBytes);
-		Assert.Equal(5 + (8 * 29), SnapshotCodec.PayloadBytes(8));
+		// of the remaining bytes on health, ammo and weapon flags, and the loadout's
+		// record v2 three more on the spare rounds, the vest and the kit
+		// (docs/LOADOUT.md §6.1).
+		Assert.Equal(32, PlayerSnapshot.SizeBytes);
+		Assert.Equal(5 + (8 * 32), SnapshotCodec.PayloadBytes(8));
 	}
 
 	[Fact]
@@ -51,6 +59,9 @@ public class SnapshotCodecTests
 			Assert.Equal(players[i].Health, into[i].Health);
 			Assert.Equal(players[i].Ammo, into[i].Ammo);
 			Assert.Equal(players[i].WeaponFlags, into[i].WeaponFlags);
+			Assert.Equal(270, into[i].Reserve);
+			Assert.Equal(100, into[i].ArmourPoints);
+			Assert.Equal(players[i].Kit, into[i].Kit);
 			Assert.Equal(2, into[i].EquippedSlot);
 			Assert.True(into[i].IsReloading);
 			Assert.True(into[i].IsAlive);
@@ -83,6 +94,82 @@ public class SnapshotCodecTests
 	{
 		byte[] payload = SnapshotCodec.Encode(1, new[] { Sample(1), Sample(2) });
 		Assert.False(SnapshotCodec.TryDecode(payload.AsSpan(0, payload.Length - 5), new PlayerSnapshot[4], out _, out _));
+	}
+
+	[Fact]
+	public void TheKitByteCarriesTheVestTheMagazinesAndTheGrenades()
+	{
+		for (int magazines = 0; magazines <= Loadout.PouchSlots; magazines++)
+		{
+			for (int grenades = 0; grenades <= SimConfig.MaxGrenades; grenades++)
+			{
+				for (int tier = 0; tier <= (int)BodyArmourTier.Heavy; tier++)
+				{
+					byte kit = KitFlags.Pack(new LoadoutSelection
+					{
+						Magazines = (byte)magazines, Grenades = (byte)grenades, Armour = (BodyArmourTier)tier,
+					});
+					Assert.Equal(magazines, KitFlags.Magazines(kit));
+					Assert.Equal(grenades, KitFlags.Grenades(kit));
+					Assert.Equal((BodyArmourTier)tier, KitFlags.Vest(kit));
+				}
+			}
+		}
+	}
+
+	[Fact]
+	public void TheSpareWordHoldsNineRiflePouchesAndAHeavyVest()
+	{
+		ushort spare = KitFlags.PackSpare(270, 100);
+		Assert.Equal(270, KitFlags.Reserve(spare));
+		Assert.Equal(100, KitFlags.ArmourPoints(spare));
+
+		// Clamped to their fields rather than spilling into each other.
+		ushort over = KitFlags.PackSpare(10_000, 1_000);
+		Assert.Equal(KitFlags.MaxReserve, KitFlags.Reserve(over));
+		Assert.Equal(KitFlags.MaxArmourPoints, KitFlags.ArmourPoints(over));
+		ushort under = KitFlags.PackSpare(-1, -5);
+		Assert.Equal(0, KitFlags.Reserve(under));
+		Assert.Equal(0, KitFlags.ArmourPoints(under));
+		Assert.True(KitFlags.MaxReserve >= 9 * 30);
+		Assert.True(KitFlags.MaxArmourPoints >= 100);
+	}
+
+	[Fact]
+	public void AZeroLargeWeaponIsNoPrimary()
+	{
+		// Since record v2 the large bits' zero means no primary rather than "not said".
+		byte flags = Sim.WeaponFlags.Pack(1, reloading: false, Team.GroundForce, largeChoice: -1, grenades: 2);
+		Assert.Equal(-1, Sim.WeaponFlags.LargeChoice(flags));
+		Assert.Equal(2, Sim.WeaponFlags.Grenades(flags));
+
+		for (int choice = 0; choice < SimConfig.LargeWeaponChoices; choice++)
+		{
+			Assert.Equal(choice, Sim.WeaponFlags.LargeChoice(Sim.WeaponFlags.Pack(2, false, Team.GroundForce, choice)));
+		}
+	}
+
+	[Fact]
+	public void AMalformedKitByteDecodesToSomethingSanitizeCanTrim()
+	{
+		// Every bit set: fifteen magazines, three grenades, heavy. The reader sanitizes.
+		var malformed = new PlayerSnapshot { PeerId = 9, Kit = 0xFF, Reserve = 0xFFFF, ArmourPoints = 0xFF };
+		byte[] payload = SnapshotCodec.Encode(5, new[] { malformed });
+		var into = new PlayerSnapshot[1];
+		Assert.True(SnapshotCodec.TryDecode(payload, into, out _, out _));
+
+		Assert.Equal(15, KitFlags.Magazines(into[0].Kit));
+		Assert.Equal(KitFlags.MaxReserve, into[0].Reserve);
+		Assert.Equal(KitFlags.MaxArmourPoints, into[0].ArmourPoints);
+
+		LoadoutSelection kit = Loadout.Sanitize(new LoadoutSelection
+		{
+			Large = 3,
+			Magazines = (byte)KitFlags.Magazines(into[0].Kit),
+			Grenades = (byte)KitFlags.Grenades(into[0].Kit),
+			Armour = KitFlags.Vest(into[0].Kit),
+		}, new byte[] { 2, 3, 4 }, 3);
+		Assert.True(kit.Magazines + kit.Grenades <= Loadout.PouchSlots);
 	}
 
 	[Fact]

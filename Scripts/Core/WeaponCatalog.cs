@@ -96,6 +96,13 @@ public static class WeaponCatalog
 	public const byte HandGrenade = 12;
 
 	/// <summary>
+	/// No primary (docs/LOADOUT.md L-D1): the large slot's id when a kit carries none.
+	/// <see cref="Loadout.NoPrimary"/>, which lives in <c>Scripts/Sim</c> so that the
+	/// rules testable without the engine can name it.
+	/// </summary>
+	public const byte None = Loadout.NoPrimary;
+
+	/// <summary>
 	/// The large-weapon choice a ground-force player makes before each spawn, and
 	/// what a weapon locker holds (docs/NETCODE.md §10.6). The order is the locker's
 	/// cycle and, like the catalog's, a protocol constant: the snapshot names the
@@ -119,6 +126,21 @@ public static class WeaponCatalog
 	/// process, so a weapon's optic is the same one everywhere.
 	/// </summary>
 	public static AimStats[] Aim { get; private set; } = System.Array.Empty<AimStats>();
+
+	/// <summary>
+	/// What carrying each weapon costs (docs/LOADOUT.md §4.1), parallel to
+	/// <see cref="Definitions"/>. Tuned in the <c>.tres</c> files and loaded on every
+	/// process, so a kit weighs the same on the server and on the client wearing it.
+	/// </summary>
+	public static CarryStats[] Carry { get; private set; } = System.Array.Empty<CarryStats>();
+
+	/// <summary>
+	/// What the default kit weighs: L-D4's reference, at which a player moves at the
+	/// speeds their movement states author. Computed from <see cref="Carry"/> rather
+	/// than written down, so the default kit's speed is exactly 1 however the weights
+	/// are tuned.
+	/// </summary>
+	public static float ReferenceWeightKg { get; private set; } = Loadout.BaseKitWeightKg;
 
 	public static bool IsLoaded { get; private set; }
 
@@ -149,6 +171,7 @@ public static class WeaponCatalog
 		var stats = new WeaponStats[Paths.Length];
 		var projectiles = new ProjectileStats[Paths.Length];
 		var aim = new AimStats[Paths.Length];
+		var carry = new CarryStats[Paths.Length];
 
 		for (int i = 0; i < Paths.Length; i++)
 		{
@@ -166,12 +189,15 @@ public static class WeaponCatalog
 			stats[i] = definition.ToStats();
 			projectiles[i] = definition.Projectile?.ToStats() ?? default;
 			aim[i] = definition.ToAimStats();
+			carry[i] = definition.ToCarryStats();
 		}
 
 		Definitions = definitions;
 		Stats = stats;
 		Projectiles = projectiles;
 		Aim = aim;
+		Carry = carry;
+		ReferenceWeightKg = Loadout.WeightKg(DefaultLoadout, carry);
 		IsLoaded = true;
 	}
 
@@ -190,19 +216,57 @@ public static class WeaponCatalog
 	/// </summary>
 	public static AimStats AimFor(byte id) => id < Aim.Length ? Aim[id] : AimStats.None;
 
-	public static string NameOf(byte id) => Definition(id)?.Name.ToString() ?? $"#{id}";
+	/// <summary>What carrying a weapon costs; nothing for an id this build does not have, or for no primary.</summary>
+	public static CarryStats CarryFor(byte id) => id < Carry.Length ? Carry[id] : default;
+
+	public static string NameOf(byte id) =>
+		id == None ? "—" : Definition(id)?.Name.ToString() ?? $"#{id}";
 
 	/// <summary>
 	/// Clamps a loadout to something this build can actually spawn. Loadout choices
 	/// arrive from clients, so "id 200" and "a launcher in the melee slot" are both
-	/// things the server has to answer for.
+	/// things the server has to answer for. The hammer and the pistol are always
+	/// carried; the rest is <see cref="Loadout.Sanitize"/>'s (docs/LOADOUT.md §4.1).
 	/// </summary>
-	public static LoadoutSelection Sanitize(LoadoutSelection loadout) => new()
+	public static LoadoutSelection Sanitize(LoadoutSelection loadout)
 	{
-		Melee = Hammer,
-		Sidearm = Pistol,
-		Large = IsLargeWeapon(loadout.Large) ? loadout.Large : Rifle,
-	};
+		LoadoutSelection kit = Loadout.Sanitize(loadout, LargeWeapons, Rifle);
+		kit.Melee = Hammer;
+		kit.Sidearm = Pistol;
+		return kit;
+	}
+
+	/// <summary>
+	/// Reads a kit spelt out by name — <c>rifle 5 3 none</c> — into one this build can
+	/// spawn, or says which rule it breaks (<see cref="Loadout.TryParse"/>).
+	/// </summary>
+	public static bool TryParseKit(string primary, int magazines, int grenades, string armour,
+		out LoadoutSelection kit, out string error)
+	{
+		if (!Loadout.TryParse(primary, magazines, grenades, armour, LargeWeapons, out kit, out error))
+		{
+			return false;
+		}
+
+		kit = Sanitize(kit);
+		return true;
+	}
+
+	/// <summary>What a kit weighs [kg], from the catalog's carry stats.</summary>
+	public static float WeightOf(in LoadoutSelection kit) => Loadout.WeightKg(kit, Carry);
+
+	/// <summary>
+	/// The speed a kit allows, against the default kit's (L-D4). Computed from L1 and
+	/// applied to movement from L4.
+	/// </summary>
+	public static float SpeedScaleOf(in LoadoutSelection kit) => Loadout.SpeedScale(WeightOf(kit), ReferenceWeightKg);
+
+	/// <summary>A kit in one line, for a log, the console or a death screen: <c>rifle · 5 mags · 3 grenades · no vest</c>.</summary>
+	public static string Describe(in LoadoutSelection kit) =>
+		$"{(kit.HasPrimary ? NameOf(kit.Large) : "no primary")}"
+		+ (kit.HasPrimary ? $" · {kit.Magazines} mag{(kit.Magazines == 1 ? string.Empty : "s")}" : string.Empty)
+		+ $" · {kit.Grenades} grenade{(kit.Grenades == 1 ? string.Empty : "s")}"
+		+ $" · {(kit.Armour == BodyArmourTier.None ? "no vest" : $"{Loadout.ArmourNames[(int)kit.Armour]} vest")}";
 
 	public static bool IsLargeWeapon(byte id) => LargeChoiceOf(id) >= 0;
 
@@ -223,11 +287,17 @@ public static class WeaponCatalog
 	/// <summary>What a weapon locker swaps <paramref name="current"/> for: the next large weapon, wrapping.</summary>
 	public static byte LockerSwap(byte current) => LockerSim.Next(current, LargeWeapons);
 
-	/// <summary>The loadout a player who has not chosen one spawns with.</summary>
+	/// <summary>
+	/// The kit a player who has not chosen one spawns with, every bot's but for its
+	/// primary, and every agent seat's (docs/LOADOUT.md L-D3).
+	/// </summary>
 	public static LoadoutSelection DefaultLoadout => new()
 	{
 		Melee = Hammer,
 		Sidearm = Pistol,
 		Large = Rifle,
+		Magazines = Loadout.DefaultMagazines,
+		Grenades = Loadout.DefaultGrenades,
+		Armour = BodyArmourTier.None,
 	};
 }

@@ -18,9 +18,10 @@ namespace Gdpyr.Sim;
 /// The large weapon came with the weapon locker (docs/NETCODE.md §10.6), for the
 /// same reason: it changes mid-life now, and the owning client predicts its own
 /// weapon, so it has to be told which one it is holding by something that cannot
-/// be missed. It is an index into the large-weapon choices plus one, so that a
-/// zero — every byte written before it existed, including every demo — means "not
-/// said" rather than "the first choice".
+/// be missed. It is an index into the large-weapon choices plus one. A zero meant
+/// "not said" until the loadout's record v2 (docs/LOADOUT.md §6.1); since then it
+/// means **no primary**, and a demo written before is refused rather than misread
+/// (<c>DemoFormat.Version</c> 4).
 ///
 /// The grenade count came with hand grenades (docs/NETCODE.md §10.9) and took the
 /// last two bits. The owner predicts its own throws, so this is what corrects its
@@ -39,7 +40,7 @@ public static class WeaponFlags
 
 	/// <param name="largeChoice">
 	/// Which of the large weapons the player is carrying, as an index into the
-	/// choices (<c>WeaponCatalog.LargeWeapons</c>), or -1 to say nothing.
+	/// choices (<c>WeaponCatalog.LargeWeapons</c>), or -1 for none.
 	/// </param>
 	/// <param name="grenades">Hand grenades left, clamped to <see cref="SimConfig.MaxGrenades"/>.</param>
 	public static byte Pack(int slot, bool reloading, Team team, int largeChoice = -1, int grenades = 0)
@@ -69,8 +70,7 @@ public static class WeaponFlags
 
 	/// <summary>
 	/// Which large weapon the player is carrying, as an index into the choices, or
-	/// -1 when the byte does not say — an old demo, or a value this build has no
-	/// weapon for.
+	/// -1 for no primary.
 	/// </summary>
 	public static int LargeChoice(byte flags)
 	{

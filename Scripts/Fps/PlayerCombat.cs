@@ -75,10 +75,11 @@ public sealed class PlayerCombat
 	public int Slot { get; set; }
 
 	/// <summary>
-	/// What this life is carrying: the loadout it was spawned with, and since the
-	/// weapon locker, whatever large weapon was swapped in at one since
-	/// (docs/NETCODE.md §10.6). The next life starts from <see cref="PendingLoadout"/>
-	/// again.
+	/// What this life is carrying: the kit it was spawned with, and since the weapon
+	/// locker, whatever large weapon was swapped in at one since (docs/NETCODE.md
+	/// §10.6). The next life starts from <see cref="PendingLoadout"/> again. On a
+	/// client it is the server's word, read off the player record (docs/LOADOUT.md
+	/// §6.1), which is what its reserve — and from L4 its speed — are derived from.
 	/// </summary>
 	public LoadoutSelection Loadout { get; private set; }
 
@@ -88,9 +89,10 @@ public sealed class PlayerCombat
 	public readonly WeaponState[] Weapons = new WeaponState[SimConfig.WeaponSlots];
 
 	/// <summary>
-	/// Hand grenades this life (docs/NETCODE.md §10.9): <see cref="GrenadeSim.Carried"/>
-	/// at every spawn, thrown by their own key whatever slot is up. Stepped from the
-	/// recorded frames on the server and the owning client alike, as a weapon is.
+	/// Hand grenades this life (docs/NETCODE.md §10.9): the kit's grenade pouches at
+	/// every spawn (docs/LOADOUT.md L-D1), thrown by their own key whatever slot is up.
+	/// Stepped from the recorded frames on the server and the owning client alike, as
+	/// a weapon is.
 	/// </summary>
 	public GrenadeState Grenades;
 
@@ -173,33 +175,48 @@ public sealed class PlayerCombat
 	/// <summary>What raising the equipped weapon's sights does.</summary>
 	public AimStats EquippedAim => WeaponCatalog.AimFor(EquippedDefinitionId);
 
-	/// <summary>Arms all three slots from a loadout and selects the large weapon.</summary>
+	/// <summary>
+	/// A bit per slot that holds a weapon, for <see cref="WeaponSim.SelectSlot"/>: all
+	/// three, or the hammer and the pistol with no primary. From the kit, which the
+	/// server and the owning client both know.
+	/// </summary>
+	public int OccupiedSlots =>
+		Weapons[SimConfig.LargeSlot].IsEmpty ? WeaponSim.AllSlots & ~(1 << SimConfig.LargeSlot) : WeaponSim.AllSlots;
+
+	/// <summary>
+	/// Arms every slot from a kit (docs/LOADOUT.md §5.1): the primary with a full
+	/// magazine and its pouches' rounds spare, the grenades the kit's pouches hold,
+	/// and the primary up — or the pistol, when the kit has none.
+	/// </summary>
 	public void Equip(LoadoutSelection loadout)
 	{
 		Loadout = WeaponCatalog.Sanitize(loadout);
-		for (int slot = 0; slot < SimConfig.WeaponSlots; slot++)
+		for (int slot = 0; slot < SimConfig.LargeSlot; slot++)
 		{
 			byte id = Loadout[slot];
 			Weapons[slot] = WeaponState.Ready(id, WeaponCatalog.StatsFor(id));
 		}
 
+		ArmLarge();
+
 		// Sights come down with the weapons they were on: a life starts at the hip.
 		Aim = default;
 
-		// A life starts with a full belt of grenades, as it does with full magazines.
-		Grenades = GrenadeState.Full(GrenadeSim.Carried);
+		// A life starts with its grenade pouches full, as it does with full magazines.
+		Grenades = GrenadeState.Full(Loadout.Grenades);
 		PrimaryRoundsThisLife = 0;
 
 		// Spawning with the large weapon up is what a player wants every time; the
-		// alternative is a keypress at the start of every life.
-		Slot = SimConfig.LargeSlot;
+		// alternative is a keypress at the start of every life. With none, the pistol.
+		Slot = Loadout.HasPrimary ? SimConfig.LargeSlot : SimConfig.SidearmSlot;
 	}
 
 	/// <summary>
-	/// Puts a different large weapon in the large slot, with a full magazine — what a
-	/// weapon locker does (docs/NETCODE.md §10.6). The other two slots, and which
-	/// slot is in the player's hands, are left alone: a player who walked up with the
-	/// pistol out is still holding it.
+	/// Puts a different large weapon in the large slot, with a full magazine and the
+	/// kit's pouches full of its rounds — what a weapon locker does (docs/NETCODE.md
+	/// §10.6, docs/LOADOUT.md L-D10). The other two slots, and which slot is in the
+	/// player's hands, are left alone: a player who walked up with the pistol out is
+	/// still holding it.
 	///
 	/// Server-side when it is a locker's doing; a client calls it too, when the
 	/// snapshot says the large weapon is not the one it has been predicting with.
@@ -209,14 +226,29 @@ public sealed class PlayerCombat
 		LoadoutSelection loadout = Loadout;
 		loadout.Large = largeWeaponId;
 		Loadout = WeaponCatalog.Sanitize(loadout);
+		ArmLarge();
+	}
 
+	/// <summary>
+	/// Fills the large slot from <see cref="Loadout"/>: its primary, full, or nothing.
+	/// The sights come down with a weapon taken out of the hands, and a player left
+	/// holding an empty slot is handed the pistol.
+	/// </summary>
+	private void ArmLarge()
+	{
 		byte id = Loadout.Large;
-		Weapons[SimConfig.LargeSlot] = WeaponState.Ready(id, WeaponCatalog.StatsFor(id));
+		Weapons[SimConfig.LargeSlot] = Loadout.HasPrimary
+			? WeaponState.Ready(id, WeaponCatalog.StatsFor(id), Sim.Loadout.ReserveFor(Loadout, WeaponCatalog.CarryFor(id)))
+			: WeaponState.Empty;
 
 		if (Slot == SimConfig.LargeSlot)
 		{
 			// The sights come down with the weapon they were on, as at a respawn.
 			Aim = default;
+			if (!Loadout.HasPrimary)
+			{
+				Slot = SimConfig.SidearmSlot;
+			}
 		}
 	}
 
@@ -261,20 +293,39 @@ public sealed class PlayerCombat
 		Equip(PendingLoadout);
 	}
 
-	/// <summary>Client-side: takes the server's word for health, ammunition, side, large weapon and grenades.</summary>
-	public void ApplyAuthoritative(byte health, byte ammo, byte flags, uint ackTick, bool isLocal)
+	/// <summary>
+	/// Client-side: takes the server's word for health, ammunition, side, the kit and
+	/// grenades. <paramref name="reserve"/> is the primary's spare rounds and
+	/// <paramref name="kit"/> the record's kit byte (docs/LOADOUT.md §6.1).
+	/// </summary>
+	public void ApplyAuthoritative(byte health, byte ammo, byte flags, ushort reserve, byte kit, uint ackTick,
+		bool isLocal)
 	{
 		Health = health;
 		Team = WeaponFlags.TeamOf(flags);
 
-		// Which large weapon is the server's to say, and it is said in every snapshot,
-		// so a swap at a locker — or a respawn with a different choice — reaches the
-		// owner's prediction however many packets were lost on the way. Applied before
-		// the ammunition below, so the count lands in the weapon it belongs to.
-		if (WeaponCatalog.TryLargeWeaponAt(WeaponFlags.LargeChoice(flags), out byte large)
-			&& Weapons[SimConfig.LargeSlot].DefinitionId != large)
+		// The kit is the server's to say, and it is said in every snapshot, so a swap
+		// at a locker — or a respawn with a different choice — reaches the owner's
+		// prediction however many packets were lost on the way. The large weapon is the
+		// weapon byte's, zero for none; the pouches and the vest are the kit byte's.
+		// Applied before the ammunition below, so the count lands in the weapon it
+		// belongs to.
+		byte large = WeaponCatalog.TryLargeWeaponAt(WeaponFlags.LargeChoice(flags), out byte id)
+			? id
+			: WeaponCatalog.None;
+		LoadoutSelection recorded = WeaponCatalog.Sanitize(new LoadoutSelection
 		{
-			SwapLarge(large);
+			Large = large,
+			Magazines = (byte)KitFlags.Magazines(kit),
+			Grenades = (byte)KitFlags.Grenades(kit),
+			Armour = KitFlags.Vest(kit),
+		});
+
+		bool swapped = Weapons[SimConfig.LargeSlot].DefinitionId != recorded.Large;
+		Loadout = recorded;
+		if (swapped)
+		{
+			ArmLarge();
 		}
 
 		int slot = WeaponFlags.Slot(flags);
@@ -297,11 +348,20 @@ public sealed class PlayerCombat
 
 		// The owner predicts its own weapon, so the server's count is only applied
 		// once it accounts for everything predicted locally. Otherwise every shot
-		// would show the round it just spent coming back.
+		// would show the round it just spent coming back. The reserve is predicted
+		// the same way, by the reloads the owner steps itself (docs/LOADOUT.md §7.1).
 		if (ackTick >= LastPredictedWeaponTick)
 		{
 			Slot = slot;
-			Weapons[slot].Ammo = ammo;
+			if (!Weapons[slot].IsEmpty)
+			{
+				Weapons[slot].Ammo = ammo;
+			}
+
+			if (!Weapons[SimConfig.LargeSlot].IsEmpty)
+			{
+				Weapons[SimConfig.LargeSlot].Reserve = (short)reserve;
+			}
 		}
 	}
 
@@ -309,6 +369,12 @@ public sealed class PlayerCombat
 		WeaponCatalog.LargeChoiceOf(Weapons[SimConfig.LargeSlot].DefinitionId), Grenades.Count);
 
 	public byte SnapshotAmmo => (byte)Mathf.Clamp(Weapons[Slot].Ammo, 0, byte.MaxValue);
+
+	/// <summary>The primary's spare rounds for the record: none with no primary.</summary>
+	public ushort SnapshotReserve => (ushort)Mathf.Clamp(Weapons[SimConfig.LargeSlot].Reserve, 0, KitFlags.MaxReserve);
+
+	/// <summary>The kit for the record (<see cref="KitFlags"/>).</summary>
+	public byte SnapshotKit => KitFlags.Pack(Loadout);
 
 	public byte SnapshotHealth => (byte)Mathf.Clamp(Health, 0, byte.MaxValue);
 }

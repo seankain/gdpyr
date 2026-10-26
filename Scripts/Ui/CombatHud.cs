@@ -142,15 +142,10 @@ public partial class CombatHud : CanvasLayer
 		Emplacement gun = null;
 		bool mounted = emplacements != null && emplacements.TryMounted(combat.PeerId, out gun);
 
-		WeaponStats stats = mounted ? gun.Stats : combat.EquippedStats;
-		string weapon = WeaponCatalog.NameOf(mounted ? gun.WeaponDefinitionId : combat.EquippedDefinitionId);
-		short ammo = mounted ? gun.Weapon.Ammo : combat.Equipped.Ammo;
-
 		_status.Text = $"HP {combat.Health}   grenades {combat.Grenades.Count}\nK {combat.Kills}  D {combat.Deaths}";
-		_ammo.Text = stats.HasUnlimitedAmmo
-			? $"{weapon}\n--"
-			: $"{weapon}\n{ammo} / {stats.MagazineSize}"
-				+ (!mounted && combat.Equipped.IsReloading ? "  reloading" : string.Empty);
+		_ammo.Text = mounted
+			? $"{WeaponCatalog.NameOf(gun.WeaponDefinitionId)}\n{gun.Weapon.Ammo} / {gun.Stats.MagazineSize}"
+			: AmmoLine(combat.EquippedDefinitionId, combat.Equipped, combat.EquippedStats);
 
 		_round.Text = match.Phase switch
 		{
@@ -164,6 +159,31 @@ public partial class CombatHud : CanvasLayer
 		_prompt.Text = dead || awaitingRole ? string.Empty : emplacements?.PromptFor(combat) ?? string.Empty;
 		_loadout.Refresh(!awaitingRole && (dead || match.Phase == RoundPhase.Ended),
 			combat.PendingLoadout.Large);
+	}
+
+	/// <summary>
+	/// The ammunition corner for a weapon in the hands (docs/LOADOUT.md §7.4): magazine
+	/// and reserve — <c>rifle  30 / 150</c>, <c>pistol  12 / ∞</c>, <c>rifle  0 / 0  dry</c>
+	/// once both are spent — the hammer's <c>--</c>, and <c>—</c> for an empty slot.
+	/// </summary>
+	private static string AmmoLine(byte id, in WeaponState state, in WeaponStats stats)
+	{
+		if (state.IsEmpty)
+		{
+			return "—";
+		}
+
+		string weapon = WeaponCatalog.NameOf(id);
+		if (stats.HasUnlimitedAmmo)
+		{
+			return $"{weapon}\n--";
+		}
+
+		string reserve = state.HasUnlimitedReserve ? "∞" : state.Reserve.ToString();
+		string after = state.IsReloading ? "  reloading"
+			: state.Ammo <= 0 && state.Reserve == 0 ? "  dry"
+			: string.Empty;
+		return $"{weapon}\n{state.Ammo} / {reserve}{after}";
 	}
 
 	public void FlashHitMarker(bool killed)

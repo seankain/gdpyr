@@ -56,6 +56,9 @@ public sealed partial class AgentServer : IDisposable
 	/// <summary>One buffer per observation space, reused: an observation a tick is not an allocation a tick.</summary>
 	private readonly float[] _groundObservation = new float[AgentObservation.Floats];
 
+	/// <summary>The ground fields beyond the vector (<see cref="AgentObservation.ExtraFields"/>), from the same encode.</summary>
+	private readonly float[] _groundExtras = new float[AgentObservation.ExtraFloats];
+
 	private readonly float[] _strategistObservation = new float[AgentStrategistObservation.Floats];
 
 	private byte[] _observationBytes;

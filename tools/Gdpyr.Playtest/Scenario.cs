@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json;
+using Gdpyr.AgentClient;
 
 namespace Gdpyr.Playtest;
 
@@ -196,8 +197,31 @@ public sealed class ScenarioSeat
 
 	public ScenarioScript Script;
 
+	/// <summary>
+	/// The kit a ground seat spawns and respawns with (docs/LOADOUT.md §9), sent with
+	/// its <c>spawn</c>; null for the seat's own, the default kit but for its primary.
+	/// </summary>
+	public GdpyrKit Kit;
+
 	/// <summary>Filled in by the runner once the server has said which peer id this is.</summary>
 	public int PeerId;
+}
+
+/// <summary>
+/// The loadout limits a scenario's <c>kit</c> is checked against before a server is
+/// started, so a typo fails at parse time rather than as a refusal mid-run. The
+/// game's own are <c>Loadout</c>'s and <c>SimConfig</c>'s, which the harness does not
+/// compile; <c>ScenarioTests</c> pins these to them.
+/// </summary>
+public static class ScenarioKit
+{
+	public static readonly string[] Primaries = { "none", "dmr", "rifle", "launcher" };
+
+	public static readonly string[] Armours = { "none", "light", "medium", "heavy" };
+
+	public const int PouchSlots = 9;
+
+	public const int MaxGrenades = 3;
 }
 
 /// <summary>Something a scenario puts on the map before the clock starts.</summary>
@@ -475,10 +499,87 @@ public sealed class Scenario
 			}
 
 			seat.Script = ReadScript(scenario, element);
+			seat.Kit = ReadKit(scenario, seat, element);
 			CheckScriptFits(scenario, seat);
 			scenario.Seats.Add(seat);
 			index++;
 		}
+	}
+
+	/// <summary>
+	/// A seat's <c>kit</c>: <c>{"primary":"rifle","magazines":0,"grenades":0,"armour":"none"}</c>,
+	/// any field left out being the default kit's. Refused here when it names a primary
+	/// or a vest there is none of, or does not fit the pouches.
+	/// </summary>
+	private static GdpyrKit ReadKit(Scenario scenario, ScenarioSeat seat, JsonElement element)
+	{
+		if (!element.TryGetProperty("kit", out JsonElement kit))
+		{
+			return null;
+		}
+
+		string where = $"'{scenario.Name}': seat '{seat.Id}'";
+		if (kit.ValueKind != JsonValueKind.Object)
+		{
+			throw new ScenarioException($"{where} has a 'kit' that is not an object");
+		}
+
+		if (seat.Policy != "ground")
+		{
+			throw new ScenarioException($"{where} is a strategist, and a strategist carries no kit");
+		}
+
+		var read = new GdpyrKit();
+		foreach (JsonProperty field in kit.EnumerateObject())
+		{
+			switch (field.Name)
+			{
+				case "primary" when field.Value.ValueKind == JsonValueKind.String:
+					read.Primary = field.Value.GetString();
+					break;
+				case "armour" when field.Value.ValueKind == JsonValueKind.String:
+					read.Armour = field.Value.GetString();
+					break;
+				case "magazines" when field.Value.ValueKind == JsonValueKind.Number
+					&& field.Value.TryGetInt32(out int magazines):
+					read.Magazines = magazines;
+					break;
+				case "grenades" when field.Value.ValueKind == JsonValueKind.Number
+					&& field.Value.TryGetInt32(out int grenades):
+					read.Grenades = grenades;
+					break;
+				default:
+					throw new ScenarioException($"{where}: kit field '{field.Name}' is not primary, magazines,"
+						+ " grenades or armour, or has the wrong type");
+			}
+		}
+
+		if (Array.IndexOf(ScenarioKit.Primaries, read.Primary) < 0)
+		{
+			throw new ScenarioException($"{where}: kit primary '{read.Primary}' is not one of"
+				+ $" {string.Join(", ", ScenarioKit.Primaries)}");
+		}
+
+		if (Array.IndexOf(ScenarioKit.Armours, read.Armour) < 0)
+		{
+			throw new ScenarioException($"{where}: kit armour '{read.Armour}' is not one of"
+				+ $" {string.Join(", ", ScenarioKit.Armours)}");
+		}
+
+		if (read.Grenades < 0 || read.Grenades > ScenarioKit.MaxGrenades || read.Magazines < 0
+			|| read.Magazines + read.Grenades > ScenarioKit.PouchSlots)
+		{
+			throw new ScenarioException($"{where}: a kit of {read.Magazines} magazines and {read.Grenades}"
+				+ $" grenades does not fit {ScenarioKit.PouchSlots} pouches of which {ScenarioKit.MaxGrenades}"
+				+ " may be grenades");
+		}
+
+		if (read.Primary == "none" && read.Magazines > 0)
+		{
+			throw new ScenarioException($"{where}: a kit with no primary carries no magazines");
+		}
+
+		return read;
 	}
 
 	private static ScenarioScript ReadScript(Scenario scenario, JsonElement seat)

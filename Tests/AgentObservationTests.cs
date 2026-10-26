@@ -925,4 +925,85 @@ public class AgentObservationTests
 		Assert.Equal(AgentObservation.MovementStates,
 			observation.GetProperty("self.movement_state").GetArrayLength());
 	}
+
+	// ---- the fields beyond the vector (docs/LOADOUT.md §9) ----------------------
+
+	[Fact]
+	public void TheVectorIsUnchangedAndTheKitRidesBesideIt()
+	{
+		// L1's fields are extras, so obs-3's vector — what every trained policy reads —
+		// is still 145 floats until L8 appends its own.
+		Assert.Equal(145, AgentObservation.Floats);
+		Assert.Equal("gdpyr-agent-obs-3", AgentProtocol.SchemaVersion);
+		Assert.Equal(3, AgentObservation.ExtraFloats);
+
+		var names = new System.Collections.Generic.List<string>();
+		foreach (AgentField field in AgentObservation.ExtraFields)
+		{
+			names.Add(field.Name);
+			Assert.Equal(1, field.Count);
+			Assert.InRange(field.Offset, 0, AgentObservation.ExtraFloats - 1);
+			Assert.Equal(-1, AgentObservation.OffsetOf(field.Name));
+		}
+
+		Assert.Equal(new[] { "self.grenades", "weapon.reserve", "weapon.reserve_max" }, names);
+	}
+
+	[Fact]
+	public void TheExtrasAreInRawUnits()
+	{
+		var self = new AgentSelfView { Grenades = 2 };
+		var weapon = new AgentWeaponView { Reserve = 120, ReserveMax = 150 };
+		var into = new float[AgentObservation.ExtraFloats];
+		Assert.Equal(AgentObservation.ExtraFloats, AgentObservation.EncodeExtras(self, weapon, into));
+		Assert.Equal(new[] { 2f, 120f, 150f }, into);
+
+		// The pistol reloads forever, and says so.
+		weapon = new AgentWeaponView { Reserve = -1, ReserveMax = -1 };
+		AgentObservation.EncodeExtras(self, weapon, into);
+		Assert.Equal(-1f, into[1]);
+		Assert.Equal(-1f, into[2]);
+
+		Assert.Equal(0, AgentObservation.EncodeExtras(self, weapon, new float[2]));
+	}
+
+	[Fact]
+	public void AJsonObservationNamesTheExtrasAndTheSchemaPublishesThem()
+	{
+		var values = new float[AgentObservation.Floats];
+		float[] extras = { 3f, 0f, 150f };
+
+		var buffer = new ArrayBufferWriter<byte>(16384);
+		using (var writer = new Utf8JsonWriter(buffer))
+		{
+			writer.WriteStartObject();
+			AgentJson.WriteObservation(writer, AgentObservation.Fields, values, AgentObservation.ExtraFields, extras);
+			writer.WriteEndObject();
+		}
+
+		using (JsonDocument document = JsonDocument.Parse(buffer.WrittenMemory))
+		{
+			JsonElement observation = document.RootElement.GetProperty("observation");
+			Assert.Equal(3f, observation.GetProperty("self.grenades").GetSingle());
+			Assert.Equal(0f, observation.GetProperty("weapon.reserve").GetSingle());
+			Assert.Equal(150f, observation.GetProperty("weapon.reserve_max").GetSingle());
+			Assert.True(observation.TryGetProperty("weapon.magazine", out _));
+		}
+
+		var schema = new ArrayBufferWriter<byte>(65536);
+		using (var writer = new Utf8JsonWriter(schema))
+		{
+			writer.WriteStartObject();
+			AgentJson.WriteSchema(writer);
+			writer.WriteEndObject();
+		}
+
+		using JsonDocument published = JsonDocument.Parse(schema.WrittenMemory);
+		JsonElement block = published.RootElement.GetProperty("schema").GetProperty("ground_observation")
+			.GetProperty("extras");
+		Assert.Equal(AgentObservation.ExtraFloats, block.GetProperty("floats").GetInt32());
+		Assert.Equal(AgentObservation.ExtrasFlag, block.GetProperty("flag").GetInt32());
+		Assert.Equal("weapon.reserve", block.GetProperty("fields")[1].GetProperty("name").GetString());
+		Assert.Equal(1, block.GetProperty("fields")[1].GetProperty("offset").GetInt32());
+	}
 }

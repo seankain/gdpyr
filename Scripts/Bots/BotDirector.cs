@@ -758,12 +758,12 @@ public sealed class BotDirector
 		byte large = slot % 3 == 2 ? WeaponCatalog.Launcher
 			: (slot & 1) == 0 ? WeaponCatalog.Rifle
 			: WeaponCatalog.Dmr;
-		player.PendingLoadout = new LoadoutSelection
-		{
-			Melee = WeaponCatalog.Hammer,
-			Sidearm = WeaponCatalog.Pistol,
-			Large = large,
-		};
+
+		// The primary by slot, and the rest the default kit's — five magazines, three
+		// grenades, no vest — until per-role kits (docs/LOADOUT.md L-D14).
+		LoadoutSelection kit = WeaponCatalog.DefaultLoadout;
+		kit.Large = large;
+		player.PendingLoadout = kit;
 		player.Equip(player.PendingLoadout);
 	}
 }

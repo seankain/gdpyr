@@ -142,6 +142,23 @@ public partial class WeaponDefinition : Resource
 	[Export]
 	public Vector3 AimRotation;
 
+	[ExportCategory("Carrying")]
+
+	/// <summary>
+	/// What the weapon weighs with its first magazine [kg] (docs/LOADOUT.md §4.1).
+	/// Only a primary's is counted: the hammer and the pistol are the base kit, which
+	/// every kit carries.
+	/// </summary>
+	[Export]
+	public float CarryWeightKg;
+
+	/// <summary>Rounds one pouch of spare ammunition holds: a magazine, or two launcher grenades. 0 for none.</summary>
+	[Export]
+	public int PouchRounds;
+
+	[Export]
+	public float PouchWeightKg;
+
 	[ExportCategory("WeaponSway")]
 	[Export]
 	public Vector2 SwayMin = new Vector2(-20,20);
@@ -176,6 +193,9 @@ public partial class WeaponDefinition : Resource
 		IsMelee || AimMagnification <= 1f
 			? AimStats.None
 			: new AimStats(AimMagnification, WeaponStats.SecondsToTicks(AimSeconds), Scoped);
+
+	/// <summary>What carrying this weapon and its pouches costs (docs/LOADOUT.md §4.1).</summary>
+	public CarryStats ToCarryStats() => new(CarryWeightKg, PouchRounds, PouchWeightKg);
 
 	/// <summary>The simulation's view of this weapon: everything in ticks and rounds.</summary>
 	public WeaponStats ToStats() => new(

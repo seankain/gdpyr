@@ -466,6 +466,29 @@ public sealed class Runner
 			? _connection.Schema.StrategistNames
 			: _connection.Schema.Names;
 
+		// The ground fields beyond the vector, in raw units (docs/LOADOUT.md §9): one
+		// float each, named plainly.
+		if (observation.Policy == GdpyrPolicy.Ground)
+		{
+			foreach (string name in _connection.Schema.ExtraNames)
+			{
+				if (!observation.TryExtra(_connection.Schema, name, out float value))
+				{
+					continue;
+				}
+
+				if (primary)
+				{
+					metrics.Sample(name, observation.Tick, value);
+				}
+
+				if (id != null)
+				{
+					metrics.Sample($"{id}.{name}", observation.Tick, value);
+				}
+			}
+		}
+
 		foreach (string name in names)
 		{
 			ReadOnlySpan<float> run = observation.Field(_connection.Schema, name);
@@ -495,6 +518,26 @@ public sealed class Runner
 	private async Task SpawnAsync(Scenario scenario, StreamWriter trace, CancellationToken cancel)
 	{
 		_labels.Clear();
+
+		// A seat with a kit and nowhere to be put is equipped where it stands; one that
+		// has a spawn below takes its kit with it (docs/LOADOUT.md §9).
+		foreach (ScenarioSeat kitted in scenario.Seats)
+		{
+			if (kitted.Kit == null || HasSpawn(scenario, kitted.Id))
+			{
+				continue;
+			}
+
+			await _connection.SpawnSeatAsync(kitted.PeerId, null, cancel: cancel, kit: kitted.Kit)
+				.ConfigureAwait(false);
+			Trace(trace, _connection.Tick, "spawn", writer =>
+			{
+				writer.WriteString("peer", kitted.Id);
+				writer.WriteNumber("seat", kitted.PeerId);
+				writer.WriteString("kit", kitted.Kit.ToString());
+			});
+		}
+
 		foreach (ScenarioSpawn spawn in scenario.Spawns)
 		{
 			if (spawn.Structure != null)
@@ -562,7 +605,7 @@ public sealed class Runner
 
 			float yaw = spawn.Look is { Length: > 0 } ? spawn.Look[0] : 0f;
 			float pitch = spawn.Look is { Length: > 1 } ? spawn.Look[1] : 0f;
-			await _connection.SpawnSeatAsync(seat.PeerId, spawn.At, yaw, pitch, cancel).ConfigureAwait(false);
+			await _connection.SpawnSeatAsync(seat.PeerId, spawn.At, yaw, pitch, cancel, seat.Kit).ConfigureAwait(false);
 
 			Trace(trace, _connection.Tick, "spawn", writer =>
 			{
@@ -571,6 +614,10 @@ public sealed class Runner
 				WriteVector(writer, "at", spawn.At);
 				writer.WriteNumber("yaw", yaw);
 				writer.WriteNumber("pitch", pitch);
+				if (seat.Kit != null)
+				{
+					writer.WriteString("kit", seat.Kit.ToString());
+				}
 			});
 		}
 	}
@@ -584,6 +631,19 @@ public sealed class Runner
 		}
 
 		writer.WriteEndArray();
+	}
+
+	private static bool HasSpawn(Scenario scenario, string seatId)
+	{
+		foreach (ScenarioSpawn spawn in scenario.Spawns)
+		{
+			if (spawn.Unit == null && spawn.Structure == null && spawn.Peer == seatId)
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	private static ScenarioSeat Seat(Scenario scenario, string id)

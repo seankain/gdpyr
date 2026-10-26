@@ -318,7 +318,7 @@ public partial class CombatManager : Node
 			return;
 		}
 
-		combat.Slot = WeaponSim.SelectSlot(combat.Slot, input);
+		combat.Slot = WeaponSim.SelectSlot(combat.Slot, input, combat.OccupiedSlots);
 
 		// After the slot, so that the weapon that has just come up is the one whose
 		// raise this tick counts against.
@@ -1287,7 +1287,7 @@ public partial class CombatManager : Node
 		combat.History.Clear();
 		combat.Character?.SetDeadPresentation(false);
 		PlayerManager.Instance?.TeleportToSpawn(combat.PeerId, combat.Deaths);
-		GD.Print($"[combat] peer {combat.PeerId} respawned with {WeaponCatalog.NameOf(combat.Loadout.Large)}");
+		GD.Print($"[combat] peer {combat.PeerId} respawned with {WeaponCatalog.Describe(combat.Loadout)}");
 	}
 
 	private void ServerRound(uint tick)
@@ -1777,7 +1777,7 @@ public partial class CombatManager : Node
 			return;
 		}
 
-		combat.Slot = WeaponSim.SelectSlot(combat.Slot, input);
+		combat.Slot = WeaponSim.SelectSlot(combat.Slot, input, combat.OccupiedSlots);
 		Ads.Step(ref combat.Aim, combat.EquippedAim, input);
 
 		// The same throw the server will make from the same frame, so the grenade leaves
@@ -1880,8 +1880,8 @@ public partial class CombatManager : Node
 		}
 
 		bool wasAlive = combat.IsAlive;
-		combat.ApplyAuthoritative(snapshot.Health, snapshot.Ammo, snapshot.WeaponFlags, snapshot.LastInputTick,
-			combat == Local);
+		combat.ApplyAuthoritative(snapshot.Health, snapshot.Ammo, snapshot.WeaponFlags, snapshot.Reserve, snapshot.Kit,
+			snapshot.LastInputTick, combat == Local);
 
 		// A player the server has put back on the field is a player it has stopped
 		// waiting on, whatever became of the answer this client sent. Belt and braces:
@@ -2044,8 +2044,9 @@ public partial class CombatManager : Node
 	// ---- loadout -----------------------------------------------------------
 
 	/// <summary>
-	/// Asks the server for a different large weapon on the next spawn. Applied
-	/// immediately when this process is the authority.
+	/// Asks the server for a different large weapon on the next spawn, keeping the
+	/// rest of the kit asked for before. Applied immediately when this process is the
+	/// authority.
 	/// </summary>
 	public void RequestLoadout(byte largeWeaponId)
 	{
@@ -2054,19 +2055,37 @@ public partial class CombatManager : Node
 			return;
 		}
 
-		LoadoutSelection wanted = WeaponCatalog.Sanitize(new LoadoutSelection { Large = largeWeaponId });
+		LoadoutSelection wanted = Local.PendingLoadout;
+		wanted.Large = largeWeaponId;
+		RequestLoadout(wanted);
+	}
+
+	/// <summary>
+	/// Asks the server for a whole kit on the next spawn (docs/LOADOUT.md §5.3:
+	/// <c>ClientSelectLoadout</c> widened to the kit, next-spawn only). Applied
+	/// immediately when this process is the authority.
+	/// </summary>
+	public void RequestLoadout(LoadoutSelection kit)
+	{
+		if (Local == null)
+		{
+			return;
+		}
+
+		LoadoutSelection wanted = WeaponCatalog.Sanitize(kit);
 		Local.PendingLoadout = wanted;
 
 		NetworkManager net = NetworkManager.Instance;
 		if (net != null && net.IsClient)
 		{
-			RpcId(1, MethodName.ClientSelectLoadout, wanted.Large);
+			RpcId(1, MethodName.ClientSelectLoadout, wanted.Large, wanted.Magazines, wanted.Grenades,
+				(byte)wanted.Armour);
 		}
 	}
 
 	[Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false,
 		TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-	private void ClientSelectLoadout(byte largeWeaponId)
+	private void ClientSelectLoadout(byte largeWeaponId, byte magazines, byte grenades, byte armour)
 	{
 		if (NetworkManager.Instance is not { IsServer: true })
 		{
@@ -2079,9 +2098,15 @@ public partial class CombatManager : Node
 			return;
 		}
 
-		// Sanitized rather than trusted: this is a byte a client chose
+		// Sanitized rather than trusted: these are bytes a client chose
 		// (docs/NETCODE.md §1).
-		combat.PendingLoadout = WeaponCatalog.Sanitize(new LoadoutSelection { Large = largeWeaponId });
+		combat.PendingLoadout = WeaponCatalog.Sanitize(new LoadoutSelection
+		{
+			Large = largeWeaponId,
+			Magazines = magazines,
+			Grenades = grenades,
+			Armour = (BodyArmourTier)armour,
+		});
 	}
 
 	// ---- replication -------------------------------------------------------

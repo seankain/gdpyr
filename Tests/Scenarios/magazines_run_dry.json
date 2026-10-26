@@ -1,0 +1,30 @@
+{
+  "name": "a rifle with no spare magazines fires its 30 rounds and no more",
+  "seeds": [6, 7],
+  "duration_ticks": 720,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 0 },
+
+  "seats": [
+    {
+      "id": "rifleman", "team": "ground", "policy": "ground", "step_mul": 4,
+      "script": "scripts/crouch_and_fire.json",
+      "kit": { "primary": "rifle", "magazines": 0, "grenades": 0, "armour": "none" }
+    }
+  ],
+
+  "spawns": [
+    { "structure": "sandbag_wall", "team": "strategist", "at": [-60, 0.5, 50], "yaw": 0 },
+    { "peer": "rifleman", "at": [-60, 1, 60], "look": [0, 0] }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.damage.count", "op": "between", "value": [25, 30] },
+    { "metric": "events.structure_lost.count", "op": "==", "value": 0 },
+    { "metric": "observation.weapon.reserve_max.last", "op": "==", "value": 0 },
+    { "metric": "observation.weapon.reserve.last", "op": "==", "value": 0 },
+    { "metric": "observation.weapon.magazine.last", "op": "==", "value": 0 },
+    { "metric": "observation.self.grenades.last", "op": "==", "value": 0 }
+  ]
+}
