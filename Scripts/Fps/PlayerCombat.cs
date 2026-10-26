@@ -129,6 +129,14 @@ public sealed class PlayerCombat
 	public int ShotsFired { get; set; }
 
 	/// <summary>
+	/// Server-side: rounds the large slot has fired this life, reported as a kill's
+	/// <c>rounds_fired</c> (docs/LOADOUT.md L0, which sizes the default kit's spare
+	/// magazines from it). Reset at every spawn and not by a locker's swap: the life
+	/// spending them is the same one.
+	/// </summary>
+	public int PrimaryRoundsThisLife { get; set; }
+
+	/// <summary>
 	/// Server-side: a ground bot that plans, which perceives the strategist's fire
 	/// (docs/TACTICS.md §5.7). Set by the bot director; false for a person, who is
 	/// suppressed by rounds and nothing else, and for a legacy bot, which plans nothing.
@@ -180,6 +188,7 @@ public sealed class PlayerCombat
 
 		// A life starts with a full belt of grenades, as it does with full magazines.
 		Grenades = GrenadeState.Full(GrenadeSim.Carried);
+		PrimaryRoundsThisLife = 0;
 
 		// Spawning with the large weapon up is what a player wants every time; the
 		// alternative is a keypress at the start of every life.

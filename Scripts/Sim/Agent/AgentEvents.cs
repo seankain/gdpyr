@@ -104,11 +104,19 @@ public struct AgentEvent
 /// </summary>
 public static class AgentEventSchema
 {
+	/// <summary>
+	/// A kill's <c>rounds_fired</c> when the victim was a unit or a structure, which
+	/// carries no primary for it to count.
+	/// </summary>
+	public const float NoRoundsFired = -1f;
+
 	private static readonly string[][] Names =
 	{
 		new[] { "seed", "ground_tickets", "strategist_points", "duration_minutes", "" },      // RoundStart
 		new[] { "outcome", "ground_tickets", "units_lost", "duration_minutes", "units_built" }, // RoundEnd
-		new[] { "attacker", "victim", "weapon", "distance", "" },                              // Kill
+		// rounds_fired: the rounds a player victim's large slot fired in the life that just
+		// ended (docs/LOADOUT.md L0); NoRoundsFired for a unit or a structure.
+		new[] { "attacker", "victim", "weapon", "distance", "rounds_fired" },                  // Kill
 		new[] { "attacker", "victim", "weapon", "amount", "remaining" },                       // Damage
 		// A unit a sniper tower or pillbox trained names it as barracks -(slot + 1)
 		// (docs/NETCODE.md §10.8): negative is "not a barracks" to a reader that only knows those.

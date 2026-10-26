@@ -339,6 +339,10 @@ public partial class CombatManager : Node
 		}
 
 		combat.ShotsFired++;
+		if (combat.Slot == SimConfig.LargeSlot)
+		{
+			combat.PrimaryRoundsThisLife++;
+		}
 
 		if (stats.IsMelee)
 		{
@@ -1007,7 +1011,8 @@ public partial class CombatManager : Node
 				float range = attacker?.Character == null
 					? 0f
 					: attacker.Character.SimPosition.DistanceTo(structure.Pose.Base);
-				AgentEventBus.Emit(AgentEventKind.Kill, tick, attackerOwnerId, victimId, weapon, range);
+				AgentEventBus.Emit(AgentEventKind.Kill, tick, attackerOwnerId, victimId, weapon, range,
+					AgentEventSchema.NoRoundsFired);
 			}
 		}
 
@@ -1076,7 +1081,7 @@ public partial class CombatManager : Node
 			if (killed)
 			{
 				AgentEventBus.Emit(AgentEventKind.Kill, tick, attackerOwnerId, victimId, weapon,
-					UnitSeparation(attacker, unit));
+					UnitSeparation(attacker, unit), AgentEventSchema.NoRoundsFired);
 			}
 		}
 
@@ -1173,7 +1178,8 @@ public partial class CombatManager : Node
 				amount, victim.Health);
 			if (killed)
 			{
-				AgentEventBus.Emit(AgentEventKind.Kill, tick, attackerOwnerId, victim.PeerId, weapon, range);
+				AgentEventBus.Emit(AgentEventKind.Kill, tick, attackerOwnerId, victim.PeerId, weapon, range,
+					victim.PrimaryRoundsThisLife);
 			}
 		}
 
@@ -1197,7 +1203,8 @@ public partial class CombatManager : Node
 		Match.RegisterGroundDeath(tick);
 
 		GD.Print($"[combat] peer {victim.PeerId} killed by {DescribeOwner(attackerOwnerId)}"
-			+ $" | tickets {Match.GroundTickets}");
+			+ $" | tickets {Match.GroundTickets}"
+			+ $" | {WeaponCatalog.NameOf(victim.Loadout.Large)} {victim.PrimaryRoundsThisLife} rounds this life");
 		return HitFlags.Killed;
 	}
 

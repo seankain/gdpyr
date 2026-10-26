@@ -679,13 +679,13 @@ plumbing. What the game owes is the raw record, because otherwise every trainer 
 from position deltas and gets it slightly wrong.
 
 ```json
-{"kind":"kill","tick":51204,"attacker":2147483641,"victim":3,"weapon":2,"distance":63.4}
+{"kind":"kill","tick":51204,"attacker":2147483641,"victim":3,"weapon":2,"distance":63.4,"rounds_fired":47}
 ```
 
 | Event | Fields beyond `tick` |
 |---|---|
 | `round_start` / `round_end` | seed, outcome, duration, the whole `RoundSummary` |
-| `kill` / `death` | attacker, victim, weapon, distance |
+| `kill` / `death` | attacker, victim, weapon, distance, rounds_fired — the rounds a player victim's large slot fired in the life the kill ended, a locker's swap included; −1 for a unit or a structure ([`LOADOUT.md`](LOADOUT.md) L0) |
 | `damage` | attacker, victim, amount, remaining |
 | `unit_built` / `unit_lost` | unit id, tier, barracks, position — a unit a sniper tower or pillbox trained has `barracks` = −(slot + 1) ([`NETCODE.md`](NETCODE.md) §10.8) |
 | `node_captured` | node, owner, claimant — `claimant` is the side that held it before, `NodeHolder` numbered: 0 neutral, 1 ground force, 2 strategist; x, z |

@@ -308,7 +308,7 @@ public sealed class EpisodeMetrics
 	{
 		["round_start"] = new[] { "seed", "ground_tickets", "strategist_points", "duration_minutes" },
 		["round_end"] = new[] { "outcome", "ground_tickets", "units_lost", "duration_minutes", "units_built" },
-		["kill"] = new[] { "attacker", "victim", "weapon", "distance" },
+		["kill"] = new[] { "attacker", "victim", "weapon", "distance", "rounds_fired" },
 		["damage"] = new[] { "attacker", "victim", "weapon", "amount", "remaining" },
 		["unit_built"] = new[] { "unit", "tier", "barracks", "x", "z" },
 		["unit_lost"] = new[] { "unit", "tier", "killer", "x", "z" },
