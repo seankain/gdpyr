@@ -30,6 +30,9 @@ dedicated-server authoritative.
   journal, and what playback does with it
 - [`docs/VEHICLES.md`](docs/VEHICLES.md) — vehicles that carry units: the technical with seats,
   boarding and unloading, and a vertical take-off and landing dropship
+- [`docs/LOADOUT.md`](docs/LOADOUT.md) — the ground force's loadout, planned: a locker panel for
+  the primary, spare magazines or grenades and body armour, weight that sets movement speed, and
+  resupply at the locker; L0–L8, nothing built yet
 - [`docs/LAN.md`](docs/LAN.md) — hosting a room of machines from a checkout, with a dev build
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — AWS EC2 dedicated-server runbook
 
