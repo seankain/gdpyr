@@ -1,25 +1,15 @@
 [gd_scene format=3 uid="uid://wec3a0an2atb"]
 
+[ext_resource type="Script" uid="uid://dworldroot01" path="res://Scripts/Core/WorldRoot.cs" id="1_worldroot"]
 [ext_resource type="Material" uid="uid://cgh5xjavqxrgv" path="res://Levels/materials/PrototypeMat1.tres" id="2_4viys"]
 [ext_resource type="Texture2D" uid="uid://cpd0vl6ggnxlq" path="res://Textures/kenney_prototype/PNG/Green/texture_01.png" id="3_ugpq5"]
-[ext_resource type="Script" uid="uid://dworldroot01" path="res://Scripts/Core/WorldRoot.cs" id="1_worldroot"]
-[ext_resource type="Script" path="res://Scripts/Rts/Barracks.cs" id="4_barracks"]
-[ext_resource type="Script" path="res://Scripts/Rts/ResourceNode.cs" id="5_resourcenode"]
-[ext_resource type="Script" path="res://Scripts/Fps/Emplacement.cs" id="6_emplacement"]
-[ext_resource type="Script" path="res://Scripts/Fps/AmmoCan.cs" id="7_ammocan"]
-[ext_resource type="Script" path="res://Scripts/Rts/DefenseMount.cs" id="8_defense"]
-[ext_resource type="Script" path="res://Scripts/Fps/WeaponLocker.cs" id="9_locker"]
-
-[sub_resource type="NavigationMesh" id="NavigationMesh_ground"]
-
-[sub_resource type="BoxShape3D" id="BoxShape3D_barracks"]
-size = Vector3(8, 6, 8)
-
-[sub_resource type="BoxMesh" id="BoxMesh_barracks"]
-size = Vector3(8, 6, 8)
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_barracks"]
-albedo_color = Color(0.5, 0.18, 0.15, 1)
+[ext_resource type="Script" uid="uid://bjjcu5mfqiocw" path="res://Scripts/Rts/Barracks.cs" id="4_barracks"]
+[ext_resource type="Script" uid="uid://cxvwabhyxemfo" path="res://Scripts/Rts/ResourceNode.cs" id="5_resourcenode"]
+[ext_resource type="Script" uid="uid://5q5q4twkxa7x" path="res://Scripts/Fps/Emplacement.cs" id="6_emplacement"]
+[ext_resource type="Script" uid="uid://c2be2mj5coamy" path="res://Scripts/Fps/AmmoCan.cs" id="7_ammocan"]
+[ext_resource type="Script" uid="uid://d30qp6prc0xvt" path="res://Scripts/Rts/DefenseMount.cs" id="8_defense"]
+[ext_resource type="Script" uid="uid://d1v3u2uki6be7" path="res://Scripts/Fps/WeaponLocker.cs" id="9_locker"]
+[ext_resource type="PackedScene" uid="uid://cl1bqr2cnooqw" path="res://Scenes/Environment/Pillbox.tscn" id="10_kq4yt"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_xaant"]
 sky_top_color = Color(0.335715, 0.270978, 1, 1)
@@ -64,6 +54,17 @@ albedo_color = Color(0.62, 0.64, 0.68, 1)
 albedo_texture = ExtResource("3_ugpq5")
 uv1_triplanar = true
 
+[sub_resource type="NavigationMesh" id="NavigationMesh_ground"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_barracks"]
+size = Vector3(8, 6, 8)
+
+[sub_resource type="BoxMesh" id="BoxMesh_barracks"]
+size = Vector3(8, 6, 8)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_barracks"]
+albedo_color = Color(0.5, 0.18, 0.15, 1)
+
 [node name="Test" type="Node3D" unique_id=133298753]
 script = ExtResource("1_worldroot")
 
@@ -71,24 +72,25 @@ script = ExtResource("1_worldroot")
 transform = Transform3D(1, 0, 0, 0, -4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 27.6282, 0)
 shadow_enabled = true
 
-[node name="PlayerSpawns" type="Node3D" parent="."]
+[node name="PlayerSpawns" type="Node3D" parent="." unique_id=917411401]
+transform = Transform3D(0.7536093, 0, -0.6573226, 0, 1, 0, 0.6573226, 0, 0.7536093, -104.631836, 0, 100.35796)
 
-[node name="Spawn1" type="Marker3D" parent="PlayerSpawns" groups=["player_spawn"]]
+[node name="Spawn1" type="Marker3D" parent="PlayerSpawns" unique_id=971154935 groups=["player_spawn"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.41335, 4.067, 7.49199)
 
-[node name="Spawn2" type="Marker3D" parent="PlayerSpawns" groups=["player_spawn"]]
+[node name="Spawn2" type="Marker3D" parent="PlayerSpawns" unique_id=899896499 groups=["player_spawn"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.58665, 4.067, 7.49199)
 
-[node name="Spawn3" type="Marker3D" parent="PlayerSpawns" groups=["player_spawn"]]
+[node name="Spawn3" type="Marker3D" parent="PlayerSpawns" unique_id=111422782 groups=["player_spawn"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.58665, 4.067, 7.49199)
 
-[node name="Spawn4" type="Marker3D" parent="PlayerSpawns" groups=["player_spawn"]]
+[node name="Spawn4" type="Marker3D" parent="PlayerSpawns" unique_id=1338524738 groups=["player_spawn"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9.58665, 4.067, 7.49199)
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=43366670]
 environment = SubResource("Environment_u3uwf")
 
-[node name="StaticBody3D" type="StaticBody3D" parent="." groups=["navmesh"] unique_id=2136398228]
+[node name="StaticBody3D" type="StaticBody3D" parent="." unique_id=2136398228 groups=["navmesh"]]
 visible = false
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D" unique_id=157797565]
@@ -133,7 +135,7 @@ shape = SubResource("BoxShape3D_bxyf7")
 transform = Transform3D(10, 0, 0, 0, 0.5, 0, 0, 0, 10, 0, -1.73985, 0)
 mesh = SubResource("BoxMesh_ayfm2")
 
-[node name="CSGCombiner3D" type="CSGCombiner3D" parent="." groups=["navmesh"] unique_id=438970693]
+[node name="CSGCombiner3D" type="CSGCombiner3D" parent="." unique_id=438970693 groups=["navmesh"]]
 use_collision = true
 
 [node name="Floor" type="CSGBox3D" parent="CSGCombiner3D" unique_id=1137603522]
@@ -189,185 +191,185 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.24246, 4.01604, -3.21066)
 size = Vector3(1, 0.265625, 1)
 material = SubResource("StandardMaterial3D_kgbsf")
 
-[node name="Range25m" type="CSGBox3D" parent="CSGCombiner3D"]
+[node name="Range25m" type="CSGBox3D" parent="CSGCombiner3D" unique_id=1624465493]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, -18)
 size = Vector3(0.6, 2, 0.6)
 
-[node name="Range50m" type="CSGBox3D" parent="CSGCombiner3D"]
+[node name="Range50m" type="CSGBox3D" parent="CSGCombiner3D" unique_id=576007003]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, -43)
 size = Vector3(0.6, 2, 0.6)
 
-[node name="Range100m" type="CSGBox3D" parent="CSGCombiner3D"]
+[node name="Range100m" type="CSGBox3D" parent="CSGCombiner3D" unique_id=2004093750]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, -93)
 size = Vector3(0.6, 2, 0.6)
 
-[node name="Range150m" type="CSGBox3D" parent="CSGCombiner3D"]
+[node name="Range150m" type="CSGBox3D" parent="CSGCombiner3D" unique_id=1910386558]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, -143)
 size = Vector3(0.6, 2, 0.6)
 
-[node name="CoverLow01" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+[node name="CoverLow01" type="CSGBox3D" parent="CSGCombiner3D" unique_id=97240970 groups=["cover"]]
 transform = Transform3D(-0.744498, 0, 0.667624, 0, 1, 0, -0.667624, 0, -0.744498, 17.882193, 1.1, -8.426719)
 size = Vector3(5, 1.2, 0.8)
 material = SubResource("StandardMaterial3D_coverlow")
 
-[node name="CoverLow02" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+[node name="CoverLow02" type="CSGBox3D" parent="CSGCombiner3D" unique_id=1263692863 groups=["cover"]]
 transform = Transform3D(-0.867036, 0, 0.498245, 0, 1, 0, -0.498245, 0, -0.867036, 38.71582, 1.1, 6.645437)
 size = Vector3(4, 1.2, 0.8)
 material = SubResource("StandardMaterial3D_coverlow")
 
-[node name="CoverLow03" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+[node name="CoverLow03" type="CSGBox3D" parent="CSGCombiner3D" unique_id=1204995734 groups=["cover"]]
 transform = Transform3D(0.5, 0, 0.866025, 0, 1, 0, -0.866025, 0, 0.5, -16, 1.1, -40)
 size = Vector3(4, 1.2, 0.8)
 material = SubResource("StandardMaterial3D_coverlow")
 
-[node name="CoverLow04" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
-transform = Transform3D(-0.92794, 0, 0.372728, 0, 1, 0, -0.372728, 0, -0.92794, 54.154409, 1.1, 14.13668)
+[node name="CoverLow04" type="CSGBox3D" parent="CSGCombiner3D" unique_id=2099081866 groups=["cover"]]
+transform = Transform3D(-0.92794, 0, 0.372728, 0, 1, 0, -0.372728, 0, -0.92794, 54.154408, 1.1, 14.13668)
 size = Vector3(4, 1.2, 0.8)
 material = SubResource("StandardMaterial3D_coverlow")
 
-[node name="CoverLow05" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+[node name="CoverLow05" type="CSGBox3D" parent="CSGCombiner3D" unique_id=549714020 groups=["cover"]]
 transform = Transform3D(0.707107, 0, 0.707107, 0, 1, 0, -0.707107, 0, 0.707107, 36, 1.1, -38)
 size = Vector3(5, 1.2, 0.8)
 material = SubResource("StandardMaterial3D_coverlow")
 
-[node name="CoverLow06" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+[node name="CoverLow06" type="CSGBox3D" parent="CSGCombiner3D" unique_id=652315703 groups=["cover"]]
 transform = Transform3D(0.642788, 0, 0.766044, 0, 1, 0, -0.766044, 0, 0.642788, 18, 1.1, -58)
 size = Vector3(4, 1.2, 0.8)
 material = SubResource("StandardMaterial3D_coverlow")
 
-[node name="CoverLow07" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+[node name="CoverLow07" type="CSGBox3D" parent="CSGCombiner3D" unique_id=704471881 groups=["cover"]]
 transform = Transform3D(0.707107, 0, 0.707107, 0, 1, 0, -0.707107, 0, 0.707107, 72, 1.1, -45)
 size = Vector3(4, 1.2, 0.8)
 material = SubResource("StandardMaterial3D_coverlow")
 
-[node name="CoverLow08" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+[node name="CoverLow08" type="CSGBox3D" parent="CSGCombiner3D" unique_id=1647338032 groups=["cover"]]
 transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -42, 1.1, -8)
 size = Vector3(4, 1.2, 0.8)
 material = SubResource("StandardMaterial3D_coverlow")
 
-[node name="CoverLow09" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+[node name="CoverLow09" type="CSGBox3D" parent="CSGCombiner3D" unique_id=1641100313 groups=["cover"]]
 transform = Transform3D(0.866025, 0, 0.5, 0, 1, 0, -0.5, 0, 0.866025, -22, 1.1, -27)
 size = Vector3(4, 1.2, 0.8)
 material = SubResource("StandardMaterial3D_coverlow")
 
-[node name="CoverLow10" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+[node name="CoverLow10" type="CSGBox3D" parent="CSGCombiner3D" unique_id=981201513 groups=["cover"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -40, 1.1, -88)
 size = Vector3(4, 1.2, 0.8)
 material = SubResource("StandardMaterial3D_coverlow")
 
-[node name="CoverLow11" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+[node name="CoverLow11" type="CSGBox3D" parent="CSGCombiner3D" unique_id=1985720415 groups=["cover"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -30, 1.1, -114)
 size = Vector3(4, 1.2, 0.8)
 material = SubResource("StandardMaterial3D_coverlow")
 
-[node name="CoverLow12" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+[node name="CoverLow12" type="CSGBox3D" parent="CSGCombiner3D" unique_id=1674273785 groups=["cover"]]
 transform = Transform3D(0.939693, 0, 0.34202, 0, 1, 0, -0.34202, 0, 0.939693, 12, 1.1, -78)
 size = Vector3(4, 1.2, 0.8)
 material = SubResource("StandardMaterial3D_coverlow")
 
-[node name="CoverLow13" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+[node name="CoverLow13" type="CSGBox3D" parent="CSGCombiner3D" unique_id=1051538077 groups=["cover"]]
 transform = Transform3D(0.766044, 0, 0.642788, 0, 1, 0, -0.642788, 0, 0.766044, 60, 1.1, -70)
 size = Vector3(4, 1.2, 0.8)
 material = SubResource("StandardMaterial3D_coverlow")
 
-[node name="CoverLow14" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+[node name="CoverLow14" type="CSGBox3D" parent="CSGCombiner3D" unique_id=1711744978 groups=["cover"]]
 transform = Transform3D(0.34202, 0, 0.939693, 0, 1, 0, -0.939693, 0, 0.34202, -70, 1.1, -20)
 size = Vector3(4, 1.2, 0.8)
 material = SubResource("StandardMaterial3D_coverlow")
 
-[node name="CoverLow15" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+[node name="CoverLow15" type="CSGBox3D" parent="CSGCombiner3D" unique_id=2136779835 groups=["cover"]]
 transform = Transform3D(0.707107, 0, 0.707107, 0, 1, 0, -0.707107, 0, 0.707107, 80, 1.1, -15)
 size = Vector3(4, 1.2, 0.8)
 material = SubResource("StandardMaterial3D_coverlow")
 
-[node name="CoverLow16" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+[node name="CoverLow16" type="CSGBox3D" parent="CSGCombiner3D" unique_id=439252357 groups=["cover"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -35, 1.1, -60)
 size = Vector3(4, 1.2, 0.8)
 material = SubResource("StandardMaterial3D_coverlow")
 
-[node name="CoverLow17" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+[node name="CoverLow17" type="CSGBox3D" parent="CSGCombiner3D" unique_id=2003580842 groups=["cover"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 18, 1.1, 28)
 size = Vector3(4, 1.2, 0.8)
 material = SubResource("StandardMaterial3D_coverlow")
 
-[node name="CoverLow18" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+[node name="CoverLow18" type="CSGBox3D" parent="CSGCombiner3D" unique_id=1586929829 groups=["cover"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -22, 1.1, 30)
 size = Vector3(4, 1.2, 0.8)
 material = SubResource("StandardMaterial3D_coverlow")
 
-[node name="CoverBlock01" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+[node name="CoverBlock01" type="CSGBox3D" parent="CSGCombiner3D" unique_id=2005895447 groups=["cover"]]
 transform = Transform3D(0.939693, 0, 0.34202, 0, 1, 0, -0.34202, 0, 0.939693, 30, 1.9, -25)
 size = Vector3(3, 2.8, 3)
 material = SubResource("StandardMaterial3D_coverblock")
 
-[node name="CoverBlock02" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+[node name="CoverBlock02" type="CSGBox3D" parent="CSGCombiner3D" unique_id=2004446859 groups=["cover"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -50, 1.9, -55)
 size = Vector3(3, 2.8, 3)
 material = SubResource("StandardMaterial3D_coverblock")
 
-[node name="CoverBlock03" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+[node name="CoverBlock03" type="CSGBox3D" parent="CSGCombiner3D" unique_id=337362714 groups=["cover"]]
 transform = Transform3D(0.707107, 0, 0.707107, 0, 1, 0, -0.707107, 0, 0.707107, 48, 1.9, -55)
 size = Vector3(4, 2.8, 2)
 material = SubResource("StandardMaterial3D_coverblock")
 
-[node name="CoverBlock04" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+[node name="CoverBlock04" type="CSGBox3D" parent="CSGCombiner3D" unique_id=808160699 groups=["cover"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 65, 2, 35)
 size = Vector3(3, 3, 3)
 material = SubResource("StandardMaterial3D_coverblock")
 
-[node name="CoverBlock05" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+[node name="CoverBlock05" type="CSGBox3D" parent="CSGCombiner3D" unique_id=1745441735 groups=["cover"]]
 transform = Transform3D(0.965926, 0, 0.258819, 0, 1, 0, -0.258819, 0, 0.965926, -20, 1.9, -70)
 size = Vector3(2.5, 2.8, 4)
 material = SubResource("StandardMaterial3D_coverblock")
 
-[node name="CoverBlock06" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+[node name="CoverBlock06" type="CSGBox3D" parent="CSGCombiner3D" unique_id=1421597981 groups=["cover"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 85, 1.9, -40)
 size = Vector3(3, 2.8, 3)
 material = SubResource("StandardMaterial3D_coverblock")
 
-[node name="CoverBlock07" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+[node name="CoverBlock07" type="CSGBox3D" parent="CSGCombiner3D" unique_id=1781991451 groups=["cover"]]
 transform = Transform3D(0.866025, 0, 0.5, 0, 1, 0, -0.5, 0, 0.866025, -85, 1.9, -60)
 size = Vector3(3, 2.8, 3)
 material = SubResource("StandardMaterial3D_coverblock")
 
-[node name="CoverBlock08" type="CSGBox3D" parent="CSGCombiner3D" groups=["cover"]]
+[node name="CoverBlock08" type="CSGBox3D" parent="CSGCombiner3D" unique_id=1518744962 groups=["cover"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 45, 1.9, -75)
 size = Vector3(3, 2.8, 3)
 material = SubResource("StandardMaterial3D_coverblock")
 
-[node name="NavigationRegion3D" type="NavigationRegion3D" parent="." groups=["navigation_region"]]
+[node name="NavigationRegion3D" type="NavigationRegion3D" parent="." unique_id=694747907 groups=["navigation_region"]]
 navigation_mesh = SubResource("NavigationMesh_ground")
 
-[node name="StrategistAnchor" type="Marker3D" parent="." groups=["strategist_anchor"]]
+[node name="StrategistAnchor" type="Marker3D" parent="." unique_id=211032217 groups=["strategist_anchor"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, -35)
 
-[node name="Barracks1" type="Node3D" parent="." groups=["barracks"]]
+[node name="Barracks1" type="Node3D" parent="." unique_id=440905068 groups=["barracks"]]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 100, 0.5, -100)
 script = ExtResource("4_barracks")
 
-[node name="SpawnPoint" type="Marker3D" parent="Barracks1"]
+[node name="SpawnPoint" type="Marker3D" parent="Barracks1" unique_id=189996134]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -6)
 
-[node name="Building" type="StaticBody3D" parent="Barracks1" groups=["navmesh"]]
+[node name="Building" type="StaticBody3D" parent="Barracks1" unique_id=375488425 groups=["navmesh"]]
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="Barracks1/Building"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Barracks1/Building" unique_id=237305952]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 0)
 shape = SubResource("BoxShape3D_barracks")
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="Barracks1/Building"]
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Barracks1/Building" unique_id=1261109950]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 0)
 mesh = SubResource("BoxMesh_barracks")
 surface_material_override/0 = SubResource("StandardMaterial3D_barracks")
 
-[node name="DefenseGunA" type="Node3D" parent="Barracks1" groups=["barracks_defense"]]
+[node name="DefenseGunA" type="Node3D" parent="Barracks1" unique_id=1860529949 groups=["barracks_defense"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.5, 0, -4.5)
 script = ExtResource("8_defense")
 
-[node name="DefenseGunB" type="Node3D" parent="Barracks1" groups=["barracks_defense"]]
+[node name="DefenseGunB" type="Node3D" parent="Barracks1" unique_id=1277974961 groups=["barracks_defense"]]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 5.5, 0, 4.5)
 script = ExtResource("8_defense")
 
-[node name="DefenseMortar" type="Node3D" parent="Barracks1" groups=["barracks_defense"]]
+[node name="DefenseMortar" type="Node3D" parent="Barracks1" unique_id=787933348 groups=["barracks_defense"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6, 0)
 script = ExtResource("8_defense")
 Kind = 1
@@ -376,54 +378,48 @@ MinRangeMeters = 15.0
 ReactionSeconds = 1.5
 MuzzleHeightMeters = 0.6
 
-[node name="ResourceNode1" type="Node3D" parent="." groups=["resource_node"]]
+[node name="ResourceNode1" type="Node3D" parent="." unique_id=971308757 groups=["resource_node"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -30, 0.5, -15)
 script = ExtResource("5_resourcenode")
-CaptureRadiusMeters = 10.0
-CaptureSeconds = 8.0
-IncomePoints = 25
-IncomeIntervalSeconds = 5.0
 
-[node name="ResourceNode2" type="Node3D" parent="." groups=["resource_node"]]
+[node name="ResourceNode2" type="Node3D" parent="." unique_id=112001716 groups=["resource_node"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, -35)
 script = ExtResource("5_resourcenode")
 CaptureRadiusMeters = 12.0
 CaptureSeconds = 10.0
 IncomePoints = 35
-IncomeIntervalSeconds = 5.0
 
-[node name="ResourceNode3" type="Node3D" parent="." groups=["resource_node"]]
+[node name="ResourceNode3" type="Node3D" parent="." unique_id=939772662 groups=["resource_node"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -25, 0.5, -100)
 script = ExtResource("5_resourcenode")
-CaptureRadiusMeters = 10.0
-CaptureSeconds = 8.0
-IncomePoints = 25
-IncomeIntervalSeconds = 5.0
 
-[node name="Emplacement1" type="Node3D" parent="." groups=["emplacement"]]
+[node name="Emplacement1" type="Node3D" parent="." unique_id=1711532423 groups=["emplacement"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6, 0.5, 4)
 script = ExtResource("6_emplacement")
 
-[node name="Emplacement2" type="Node3D" parent="." groups=["emplacement"]]
+[node name="Emplacement2" type="Node3D" parent="." unique_id=299286092 groups=["emplacement"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14, 0.5, 4)
 script = ExtResource("6_emplacement")
 
-[node name="AmmoCan1" type="Node3D" parent="." groups=["ammo_can"]]
+[node name="AmmoCan1" type="Node3D" parent="." unique_id=14519601 groups=["ammo_can"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 0.5, 10)
 script = ExtResource("7_ammocan")
 
-[node name="AmmoCan2" type="Node3D" parent="." groups=["ammo_can"]]
+[node name="AmmoCan2" type="Node3D" parent="." unique_id=1655212685 groups=["ammo_can"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0.5, 10)
 script = ExtResource("7_ammocan")
 
-[node name="AmmoCan3" type="Node3D" parent="." groups=["ammo_can"]]
+[node name="AmmoCan3" type="Node3D" parent="." unique_id=1007227544 groups=["ammo_can"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 10)
 script = ExtResource("7_ammocan")
 
-[node name="AmmoCan4" type="Node3D" parent="." groups=["ammo_can"]]
+[node name="AmmoCan4" type="Node3D" parent="." unique_id=1961124977 groups=["ammo_can"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0.5, 10)
 script = ExtResource("7_ammocan")
 
-[node name="WeaponLocker1" type="Node3D" parent="." groups=["weapon_locker"]]
-transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 8, 0.5, 11)
+[node name="WeaponLocker1" type="Node3D" parent="." unique_id=1271025105 groups=["weapon_locker"]]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -79.45079, 1.9452214, 91.375694)
 script = ExtResource("9_locker")
+
+[node name="Pillbox" parent="." unique_id=1295239688 instance=ExtResource("10_kq4yt")]
+transform = Transform3D(-0.7202122, 0, -0.69375384, 0, 1, 0, 0.69375384, 0, -0.7202122, -75.83365, 0.5, 87.4643)

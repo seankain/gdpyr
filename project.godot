@@ -15,29 +15,18 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 [application]
 
 config/name="gdpyr"
-; The main menu, not the map: every launch passes through it, and one that named a
-; mode on the command line passes straight through to res://Scenes/Test.tscn
-; before a widget is built (Scripts/Ui/MainMenu.cs).
 run/main_scene="res://Scenes/MainMenu.tscn"
 config/features=PackedStringArray("4.6", "C#", "GL Compatibility")
 config/icon="res://icon.svg"
 
 [autoload]
 
-; Order matters. Every manager holds a static Instance that the next one may read
-; in _Ready, and PlayerManager is last because it is the only one that ticks: it
-; drives the others in a written-down order rather than inheriting one from this
-; list (docs/IMPLEMENTATION_PLAN.md §M3).
 Bootstrap="*res://Scripts/Core/Bootstrap.cs"
 NetworkManager="*res://Scripts/Net/NetworkManager.cs"
 CombatManager="*res://Scripts/Match/CombatManager.cs"
 UnitManager="*res://Scripts/Rts/UnitManager.cs"
 EmplacementManager="*res://Scripts/Fps/EmplacementManager.cs"
 PlayerManager="*res://Scripts/Net/PlayerManager.cs"
-; After PlayerManager, and the only autoload that is not part of the simulation:
-; it ticks nothing and is read by nothing. It is an autoload rather than a node in
-; a scene because it has to exist at the main menu as well as in the map —
-; `playdemo` is asked for before there is a round (docs/DEMOS.md §3).
 GameConsole="*res://Scripts/Ui/GameConsole.cs"
 
 [dotnet]
@@ -106,7 +95,6 @@ weapon_large={
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":51,"key_label":0,"unicode":51,"location":0,"echo":false,"script":null)
 ]
 }
-
 fire={
 "deadzone": 0.5,
 "events": [Object(InputEventMouseButton,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"button_mask":0,"position":Vector2(0, 0),"global_position":Vector2(0, 0),"factor":1.0,"button_index":1,"canceled":false,"pressed":false,"double_click":false,"script":null)
@@ -127,29 +115,16 @@ melee={
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":86,"key_label":0,"unicode":118,"location":0,"echo":false,"script":null)
 ]
 }
-
-; M5: one key for every interaction with a heavy gun or an ammunition can — pick
-; up, put down, mount, dismount, resupply — and, since armour, a tap at a weapon
-; locker. The bit it sets has been on the wire since M1 (InputButtons.Use); this is
-; the device end of it finally being sampled.
 use={
 "deadzone": 0.5,
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":69,"key_label":0,"unicode":101,"location":0,"echo":false,"script":null)
 ]
 }
-
-; Hand grenades (docs/NETCODE.md §10.9): thrown from the off hand, whatever is in the
-; other. InputButtons.Grenade, bit 11 of the frame.
 throw_grenade={
 "deadzone": 0.5,
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":71,"key_label":0,"unicode":103,"location":0,"echo":false,"script":null)
 ]
 }
-
-; M3: the strategist's controls. Panning reuses move_* (WASD) rather than adding a
-; second set, and selection reuses the mouse buttons under their own names so that
-; "fire" is never what a strategist does. Keys on the movement row are deliberately
-; avoided for orders (docs/IMPLEMENTATION_PLAN.md §M3).
 team_ground={
 "deadzone": 0.5,
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":4194332,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)
@@ -240,10 +215,6 @@ rts_cancel_build={
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":4194308,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)
 ]
 }
-
-; Builders and what they put up (docs/NETCODE.md §10.5): 4 queues a builder beside
-; the three tiers, and 5/6/7 arm a structure the next right-click places, the way
-; X/C/B arm an order.
 rts_build_builder={
 "deadzone": 0.5,
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":52,"key_label":0,"unicode":52,"location":0,"echo":false,"script":null)
@@ -300,36 +271,22 @@ rts_toggle_keys={
 ]
 }
 
-[navigation]
-
-; The navigation map rasterizes a baked mesh's edges at its own cell size, so these
-; have to match what UnitManager.BakeNavigation bakes with or the two disagree about
-; where the walkable edges are. Both divide the infantry's radius, height and climb
-; exactly (docs/IMPLEMENTATION_PLAN.md §M3).
-3d/default_cell_size=0.2
-3d/default_cell_height=0.1
-
 [layer_names]
 
 3d_render/layer_1="Default"
 3d_render/layer_2="Weapon"
-; Characters sit on their own physics layer from M2: a projectile's world query
-; must not find them, because player hits are resolved against recorded hitboxes
-; instead (docs/NETCODE.md §5). Units joined them on layer 3 in M3, for the same
-; reason. Keep in step with Scripts/Core/CollisionLayers.cs.
 3d_physics/layer_1="World"
 3d_physics/layer_2="Players"
 3d_physics/layer_3="Units"
 
+[navigation]
+
+3d/default_cell_size=0.2
+3d/default_cell_height=0.1
+
 [physics]
 
-; Pinned rather than left at the engine default: server and clients must run the
-; same solver for prediction to reconcile (docs/IMPLEMENTATION_PLAN.md §3). This
-; project's movement was tuned under GodotPhysics3D; moving to Jolt is a one-line
-; change here, to be made deliberately and re-tuned, not inherited from an engine
-; default changing underneath us.
 3d/physics_engine="GodotPhysics3D"
-common/physics_ticks_per_second=60
 
 [rendering]
 
