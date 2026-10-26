@@ -235,4 +235,109 @@ public class LoadoutTests
 
 		Assert.Equal(new[] { "none", "light", "medium", "heavy" }, Loadout.ArmourNames);
 	}
+
+	// ---- a kit taken at a locker (§5.3, L-D10) ----------------------------
+
+	private static readonly WeaponStats RifleStats = new(FireMode.Auto, 6, magazineSize: 30, reloadTicks: 120, damage: 20f);
+	private static readonly WeaponStats LauncherStats = new(FireMode.Semi, 60, magazineSize: 1, reloadTicks: 150, damage: 40f);
+
+	[Fact]
+	public void AKitSanitizeWouldLeaveAloneIsValid()
+	{
+		Assert.True(Loadout.IsValid(Default, LargeWeapons));
+		Assert.True(Loadout.IsValid(Kit(Loadout.NoPrimary, 0, 3, BodyArmourTier.Heavy), LargeWeapons));
+		Assert.True(Loadout.IsValid(Kit(Launcher, 9, 0), LargeWeapons));
+
+		// The melee and sidearm slots are not the asker's to choose, so a request that
+		// left them zero is still the kit it names.
+		Assert.True(Loadout.IsValid(new LoadoutSelection { Large = Dmr, Magazines = 2, Grenades = 1 }, LargeWeapons));
+	}
+
+	[Fact]
+	public void AKitSanitizeWouldTrimIsNotValid()
+	{
+		Assert.False(Loadout.IsValid(Kit(Hammer, 1, 1), LargeWeapons));          // not a large weapon
+		Assert.False(Loadout.IsValid(Kit(200, 0, 0), LargeWeapons));             // not a weapon
+		Assert.False(Loadout.IsValid(Kit(Rifle, 7, 3), LargeWeapons));           // ten pouches
+		Assert.False(Loadout.IsValid(Kit(Rifle, 0, 4), LargeWeapons));           // four grenades
+		Assert.False(Loadout.IsValid(Kit(Loadout.NoPrimary, 1, 0), LargeWeapons)); // magazines for nothing
+		Assert.False(Loadout.IsValid(Kit(Rifle, 1, 1, (BodyArmourTier)4), LargeWeapons));
+	}
+
+	[Fact]
+	public void ALargeWeaponIsFoundByItsPlaceInTheList()
+	{
+		Assert.Equal(0, Loadout.IndexOf(Dmr, LargeWeapons));
+		Assert.Equal(2, Loadout.IndexOf(Launcher, LargeWeapons));
+		Assert.Equal(-1, Loadout.IndexOf(Pistol, LargeWeapons));
+		Assert.Equal(-1, Loadout.IndexOf(Loadout.NoPrimary, LargeWeapons));
+	}
+
+	[Fact]
+	public void ADifferentPrimaryComesFullWithFullPouches()
+	{
+		WeaponState rifle = WeaponState.Ready(Rifle, RifleStats, 150);
+		rifle.Ammo = 4;
+		rifle.Reserve = 20;
+
+		WeaponState launcher = Loadout.RefitPrimary(rifle, Kit(Launcher, 3, 0), LauncherStats, Carry[Launcher]);
+
+		Assert.Equal(Launcher, launcher.DefinitionId);
+		Assert.Equal(1, launcher.Ammo);
+		Assert.Equal(6, launcher.Reserve);
+		Assert.False(launcher.IsReloading);
+	}
+
+	[Fact]
+	public void TheSamePrimaryKeepsItsMagazineAndItsSpareRounds()
+	{
+		WeaponState rifle = WeaponState.Ready(Rifle, RifleStats, 150);
+		rifle.Ammo = 4;
+		rifle.Reserve = 20;
+		rifle.ShotIndex = 26;
+
+		// More pouches come empty: nothing is refilled by asking.
+		WeaponState kept = Loadout.RefitPrimary(rifle, Kit(Rifle, 9, 0), RifleStats, Carry[Rifle]);
+		Assert.Equal(4, kept.Ammo);
+		Assert.Equal(20, kept.Reserve);
+		Assert.Equal(26u, kept.ShotIndex);
+
+		// Fewer lose what no longer fits.
+		rifle.Reserve = 150;
+		kept = Loadout.RefitPrimary(rifle, Kit(Rifle, 2, 3), RifleStats, Carry[Rifle]);
+		Assert.Equal(4, kept.Ammo);
+		Assert.Equal(60, kept.Reserve);
+	}
+
+	[Fact]
+	public void NoPrimaryEmptiesTheSlotAndAPrimaryFillsAnEmptyOne()
+	{
+		WeaponState rifle = WeaponState.Ready(Rifle, RifleStats, 150);
+		Assert.True(Loadout.RefitPrimary(rifle, Kit(Loadout.NoPrimary, 0, 3), RifleStats, Carry[Rifle]).IsEmpty);
+
+		WeaponState taken = Loadout.RefitPrimary(WeaponState.Empty, Kit(Rifle, 2, 0), RifleStats, Carry[Rifle]);
+		Assert.Equal(Rifle, taken.DefinitionId);
+		Assert.Equal(30, taken.Ammo);
+		Assert.Equal(60, taken.Reserve);
+
+		Assert.True(Loadout.RefitPrimary(WeaponState.Empty, Kit(Loadout.NoPrimary, 0, 0), RifleStats, default).IsEmpty);
+	}
+
+	[Fact]
+	public void AWeaponThatReloadsForeverStaysThatWay()
+	{
+		// Not a player's primary today, but the sentinel is never turned into a count.
+		WeaponState unlimited = WeaponState.Ready(Rifle, RifleStats);
+		Assert.Equal(-1, Loadout.RefitPrimary(unlimited, Kit(Rifle, 0, 0), RifleStats, Carry[Rifle]).Reserve);
+	}
+
+	[Theory]
+	[InlineData(3, 3, 3)]
+	[InlineData(3, 1, 1)] // fewer grenade pouches lose the grenades that no longer fit
+	[InlineData(1, 3, 1)] // more come empty
+	[InlineData(0, 0, 0)]
+	public void GrenadesAreKeptUpToTheKitsPouches(int carried, int pouches, int kept)
+	{
+		Assert.Equal(kept, Loadout.RefitGrenades((byte)carried, Kit(Rifle, 0, pouches)));
+	}
 }

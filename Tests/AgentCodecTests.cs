@@ -257,4 +257,24 @@ public class AgentCodecTests
 		Assert.False(AgentJson.TryReadKit(Json(json), out _, out _, out _, out _, out string error));
 		Assert.Contains(says, error);
 	}
+
+	[Fact]
+	public void TheClientsKitIsTheKitTheServerReads()
+	{
+		// The two halves are written apart on purpose (docs/AGENT_API.md §4); a kit sent
+		// with attach, spawn or loadout has to arrive as the kit the caller meant.
+		var sent = new Gdpyr.AgentClient.GdpyrKit { Primary = "dmr", Magazines = 4, Grenades = 1, Armour = "heavy" };
+		var buffer = new System.Buffers.ArrayBufferWriter<byte>(128);
+		using (var writer = new System.Text.Json.Utf8JsonWriter(buffer))
+		{
+			writer.WriteStartObject();
+			Gdpyr.AgentClient.GdpyrConnection.WriteKit(writer, sent);
+			writer.WriteEndObject();
+		}
+
+		System.Text.Json.JsonElement root = System.Text.Json.JsonDocument.Parse(buffer.WrittenMemory).RootElement;
+		Assert.True(AgentJson.TryReadKit(root.GetProperty("kit"), out string primary, out int magazines,
+			out int grenades, out string armour, out _));
+		Assert.Equal(("dmr", 4, 1, "heavy"), (primary, magazines, grenades, armour));
+	}
 }

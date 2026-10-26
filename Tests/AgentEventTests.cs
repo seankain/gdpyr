@@ -291,12 +291,44 @@ public class AgentEventTests
 	{
 		// docs/TACTICS.md §5.5: the phase is the DrillPhase's number, and a scenario names it.
 		Assert.Equal(20, (int)AgentEventKind.SquadDrill);
-		Assert.Equal(AgentEventKind.SquadDrill, AgentEventSchema.Last);
 		Assert.Equal("squad_drill", AgentEventSchema.NameOf(AgentEventKind.SquadDrill));
 		Assert.Equal(new[] { "squad", "phase", "elements", "x", "z" },
 			AgentEventSchema.FieldsOf(AgentEventKind.SquadDrill).ToArray());
 		Assert.Equal(5, (int)DrillPhase.Bound);
 		Assert.Equal(7, (int)DrillPhase.Rush);
+	}
+
+	[Fact]
+	public void Kit_IsAppendedAfterSquadDrill_AndNamesThePrimaryByCatalogId()
+	{
+		// docs/LOADOUT.md §5.3: a kit taken at a locker. Appended, so every kind before
+		// it keeps its number.
+		Assert.Equal(21, (int)AgentEventKind.Kit);
+		Assert.Equal(AgentEventKind.Kit, AgentEventSchema.Last);
+		Assert.Equal("kit", AgentEventSchema.NameOf(AgentEventKind.Kit));
+		Assert.Equal(new[] { "peer", "primary", "armour", "magazines", "grenades" },
+			AgentEventSchema.FieldsOf(AgentEventKind.Kit).ToArray());
+		Assert.Equal(-1, AgentEventSchema.NoPrimary);
+	}
+
+	[Fact]
+	public void AKitSerializesAsItsNamedFields()
+	{
+		var buffer = new ArrayBufferWriter<byte>(256);
+		using (var writer = new Utf8JsonWriter(buffer))
+		{
+			AgentJson.WriteEvent(writer, AgentEvent.Make(AgentEventKind.Kit, 600, 3, 4, 2, 3f, 0f));
+		}
+
+		using JsonDocument document = JsonDocument.Parse(buffer.WrittenMemory);
+		JsonElement root = document.RootElement;
+		Assert.Equal("kit", root.GetProperty("kind").GetString());
+		Assert.Equal(600u, root.GetProperty("tick").GetUInt32());
+		Assert.Equal(3, root.GetProperty("peer").GetInt32());
+		Assert.Equal(4, root.GetProperty("primary").GetInt32());
+		Assert.Equal(2, root.GetProperty("armour").GetInt32());
+		Assert.Equal(3.0, root.GetProperty("magazines").GetDouble());
+		Assert.Equal(0.0, root.GetProperty("grenades").GetDouble());
 	}
 
 	[Fact]

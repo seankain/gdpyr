@@ -571,8 +571,9 @@ public sealed class GdpyrConnection : IDisposable
 	/// Claims a ground seat, spawning a bot when the side has none free
 	/// (docs/AGENT_API.md §2.2). Returns the seat's peer id.
 	/// </summary>
+	/// <param name="kit">The kit the seat starts every episode with (docs/LOADOUT.md §9), or null for its bot's.</param>
 	public async Task<int> AttachGroundAsync(int stepMul = 4, int peerId = 0,
-		CancellationToken cancel = default)
+		CancellationToken cancel = default, GdpyrKit kit = null)
 	{
 		JsonElement response = await RequestAsync(writer =>
 		{
@@ -584,6 +585,8 @@ public sealed class GdpyrConnection : IDisposable
 			{
 				writer.WriteNumber("peer_id", peerId);
 			}
+
+			WriteKit(writer, kit);
 		}, cancel).ConfigureAwait(false);
 
 		return response.GetProperty("seat").GetInt32();
@@ -775,16 +778,50 @@ public sealed class GdpyrConnection : IDisposable
 				writer.WriteEndArray();
 			}
 
-			if (kit != null)
-			{
-				writer.WriteStartObject("kit");
-				writer.WriteString("primary", kit.Primary);
-				writer.WriteNumber("magazines", kit.Magazines);
-				writer.WriteNumber("grenades", kit.Grenades);
-				writer.WriteString("armour", kit.Armour);
-				writer.WriteEndObject();
-			}
+			WriteKit(writer, kit);
 		}, cancel);
+
+	/// <summary>
+	/// Asks for a kit for one of this session's ground seats (docs/LOADOUT.md §9): taken
+	/// at the weapon locker it stands at (<paramref name="when"/> <c>"locker"</c>), through
+	/// the validator a person's request goes through, or kept for its next spawn
+	/// (<c>"spawn"</c>). Returns <c>"applied"</c>, or the refusal's code — <c>dead</c>,
+	/// <c>not_at_locker</c>, <c>mounted</c>, <c>carrying</c>, <c>invalid</c>,
+	/// <c>too_soon</c> — which is an answer, not an error. A kit that is not one throws.
+	/// </summary>
+	public async Task<string> LoadoutAsync(int seat, GdpyrKit kit, string when = "locker",
+		CancellationToken cancel = default)
+	{
+		JsonElement response = await RequestAsync(writer =>
+		{
+			writer.WriteString("op", "loadout");
+			writer.WriteNumber("seat", seat);
+			writer.WriteString("when", when);
+			WriteKit(writer, kit ?? new GdpyrKit());
+		}, cancel).ConfigureAwait(false);
+
+		return response.TryGetProperty("applied", out JsonElement applied) && applied.ValueKind == JsonValueKind.True
+			? "applied"
+			: response.TryGetProperty("refusal", out JsonElement refusal) && refusal.ValueKind == JsonValueKind.String
+				? refusal.GetString()
+				: "unknown";
+	}
+
+	/// <summary>A kit as the server reads one (<c>AgentJson.TryReadKit</c>); nothing for null.</summary>
+	internal static void WriteKit(Utf8JsonWriter writer, GdpyrKit kit)
+	{
+		if (kit == null)
+		{
+			return;
+		}
+
+		writer.WriteStartObject("kit");
+		writer.WriteString("primary", kit.Primary);
+		writer.WriteNumber("magazines", kit.Magazines);
+		writer.WriteNumber("grenades", kit.Grenades);
+		writer.WriteString("armour", kit.Armour);
+		writer.WriteEndObject();
+	}
 
 	/// <summary>Puts a unit on the field for a scenario. Returns its unit id.</summary>
 	public async Task<int> SpawnUnitAsync(string unit, string team, float[] at, string order = "none",

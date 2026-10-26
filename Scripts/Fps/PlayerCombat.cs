@@ -75,9 +75,9 @@ public sealed class PlayerCombat
 	public int Slot { get; set; }
 
 	/// <summary>
-	/// What this life is carrying: the kit it was spawned with, and since the weapon
-	/// locker, whatever large weapon was swapped in at one since (docs/NETCODE.md
-	/// §10.6). The next life starts from <see cref="PendingLoadout"/> again. On a
+	/// What this life is carrying: the kit it was spawned with, or the one it took at
+	/// a weapon locker since (docs/LOADOUT.md §5.3). The next life starts from
+	/// <see cref="PendingLoadout"/>, which a locker's kit also sets (L-D11). On a
 	/// client it is the server's word, read off the player record (docs/LOADOUT.md
 	/// §6.1), which is what its reserve — and from L4 its speed — are derived from.
 	/// </summary>
@@ -133,10 +133,16 @@ public sealed class PlayerCombat
 	/// <summary>
 	/// Server-side: rounds the large slot has fired this life, reported as a kill's
 	/// <c>rounds_fired</c> (docs/LOADOUT.md L0, which sizes the default kit's spare
-	/// magazines from it). Reset at every spawn and not by a locker's swap: the life
+	/// magazines from it). Reset at every spawn and not by a locker's kit: the life
 	/// spending them is the same one.
 	/// </summary>
 	public int PrimaryRoundsThisLife { get; set; }
+
+	/// <summary>
+	/// Server-side: the tick this player last took a kit at a locker, 0 for never — what
+	/// holds them to one a quarter-second (<see cref="KitRequest.MinIntervalTicks"/>).
+	/// </summary>
+	public uint LastKitTick { get; set; }
 
 	/// <summary>
 	/// Server-side: a ground bot that plans, which perceives the strategist's fire
@@ -212,21 +218,31 @@ public sealed class PlayerCombat
 	}
 
 	/// <summary>
-	/// Puts a different large weapon in the large slot, with a full magazine and the
-	/// kit's pouches full of its rounds — what a weapon locker does (docs/NETCODE.md
-	/// §10.6, docs/LOADOUT.md L-D10). The other two slots, and which slot is in the
-	/// player's hands, are left alone: a player who walked up with the pistol out is
-	/// still holding it.
+	/// Takes a kit at a weapon locker (docs/LOADOUT.md L-D10): only what changed is
+	/// re-equipped. A different primary comes with a full magazine and full pouches;
+	/// the same one keeps its magazine and spare rounds, losing what fewer pouches no
+	/// longer hold; grenades are kept up to the kit's grenade pouches. A pouch added
+	/// is empty until the locker's resupply fills it (L5), so asking under fire
+	/// refills nothing. The hammer, the pistol, and which slot is in the player's hands
+	/// are left alone — a player who walked up with the pistol out is still holding
+	/// it — unless the primary in them is given up, when the pistol comes up.
 	///
-	/// Server-side when it is a locker's doing; a client calls it too, when the
-	/// snapshot says the large weapon is not the one it has been predicting with.
+	/// Server-side: the validator's to call (<c>CombatManager.TryApplyLockerKit</c>).
+	/// A client learns the result from the player record, as it learns a respawn's.
 	/// </summary>
-	public void SwapLarge(byte largeWeaponId)
+	public void ApplyKit(LoadoutSelection kit)
 	{
-		LoadoutSelection loadout = Loadout;
-		loadout.Large = largeWeaponId;
-		Loadout = WeaponCatalog.Sanitize(loadout);
-		ArmLarge();
+		Loadout = WeaponCatalog.Sanitize(kit);
+		byte id = Loadout.Large;
+		bool changed = Weapons[SimConfig.LargeSlot].DefinitionId != id;
+		Weapons[SimConfig.LargeSlot] = Sim.Loadout.RefitPrimary(Weapons[SimConfig.LargeSlot], Loadout,
+			WeaponCatalog.StatsFor(id), WeaponCatalog.CarryFor(id));
+		Grenades.Count = Sim.Loadout.RefitGrenades(Grenades.Count, Loadout);
+
+		if (changed)
+		{
+			HandOverLarge();
+		}
 	}
 
 	/// <summary>
@@ -240,7 +256,12 @@ public sealed class PlayerCombat
 		Weapons[SimConfig.LargeSlot] = Loadout.HasPrimary
 			? WeaponState.Ready(id, WeaponCatalog.StatsFor(id), Sim.Loadout.ReserveFor(Loadout, WeaponCatalog.CarryFor(id)))
 			: WeaponState.Empty;
+		HandOverLarge();
+	}
 
+	/// <summary>What changing the weapon in the large slot does to the hands holding it.</summary>
+	private void HandOverLarge()
+	{
 		if (Slot == SimConfig.LargeSlot)
 		{
 			// The sights come down with the weapon they were on, as at a respawn.
@@ -304,8 +325,8 @@ public sealed class PlayerCombat
 		Health = health;
 		Team = WeaponFlags.TeamOf(flags);
 
-		// The kit is the server's to say, and it is said in every snapshot, so a swap
-		// at a locker — or a respawn with a different choice — reaches the owner's
+		// The kit is the server's to say, and it is said in every snapshot, so a kit
+		// taken at a locker — or a respawn with a different choice — reaches the owner's
 		// prediction however many packets were lost on the way. The large weapon is the
 		// weapon byte's, zero for none; the pouches and the vest are the kit byte's.
 		// Applied before the ammunition below, so the count lands in the weapon it

@@ -212,8 +212,12 @@ public struct GroundIntent
 	/// <summary>Shoot this one when the scan can see it and the weapon can hurt it; 0 for the nearest.</summary>
 	public int TargetOwnerId;
 
-	/// <summary>Tap the use key while the weapon in hand is not an explosive: a weapon locker cycles it.</summary>
-	public bool UseLocker;
+	/// <summary>
+	/// Ask the weapon locker for a launcher kit while the weapon in hand is not an
+	/// explosive (docs/LOADOUT.md §8): the pilot sends it through the one validator a
+	/// person's request goes through, and says so when it is refused (<see cref="GroundContext.KitRefused"/>).
+	/// </summary>
+	public bool TakeLauncher;
 
 	/// <summary>
 	/// Down behind its wall under fire (docs/TACTICS.md §5.7): crouched in its spot and
@@ -243,19 +247,17 @@ public readonly struct GroundPlanTraits
 	public readonly float InvestigateRadiusMeters;
 
 	/// <summary>
-	/// How close to the locker counts as at it: inside <see cref="SimConfig.LockerReachMeters"/>, and
-	/// outside the 1.5 m a bot's navigation agent calls arrived, so a bot that has stopped has got there.
+	/// How close to the locker's footprint counts as at it (<see cref="LockerSupply.FootprintDistance"/>):
+	/// inside <see cref="SimConfig.LockerReachMeters"/>, so a kit asked for from there is taken. The bot
+	/// walks to <see cref="LockerSupply.StandPoint"/>, nearer than this, and is at the locker on the way.
 	/// </summary>
 	public readonly float LockerArriveMeters;
 
 	/// <summary>How long a walk to the locker may take before the trip is given up.</summary>
 	public readonly int PathToLockerTimeoutTicks;
 
-	/// <summary>How long a bot at the locker may tap before the trip is given up (§3.4, P4: the give-up fact).</summary>
+	/// <summary>How long a bot at the locker may wait for a launcher in its hands before the trip is given up (§3.4, P4: the give-up fact).</summary>
 	public readonly int UseLockerTimeoutTicks;
-
-	/// <summary>Ticks between use taps: long enough that the swap has landed before the next one is decided.</summary>
-	public readonly int UseTapIntervalTicks;
 
 	/// <summary>How far the buddy may be before advancing with it means walking to it first.</summary>
 	public readonly float BuddyLeashMeters;
@@ -281,7 +283,7 @@ public readonly struct GroundPlanTraits
 
 	public GroundPlanTraits(float healthOkFraction, float healthCriticalFraction, float healthHysteresis,
 		float alliesNearMeters, float alliesNearHoldMeters, float investigateRadiusMeters, float lockerArriveMeters,
-		int pathToLockerTimeoutTicks, int useLockerTimeoutTicks, int useTapIntervalTicks, float buddyLeashMeters,
+		int pathToLockerTimeoutTicks, int useLockerTimeoutTicks, float buddyLeashMeters,
 		float coverSearchMeters = 25f, float coverMinThreatMeters = 8f, float coverMaxThreatMeters = 55f,
 		int suppressedTicks = SimConfig.TickRate * 3 / 2, int suppressedMaxTicks = SimConfig.TickRate * 3)
 	{
@@ -294,7 +296,6 @@ public readonly struct GroundPlanTraits
 		LockerArriveMeters = MathF.Max(lockerArriveMeters, 0f);
 		PathToLockerTimeoutTicks = Math.Max(pathToLockerTimeoutTicks, 1);
 		UseLockerTimeoutTicks = Math.Max(useLockerTimeoutTicks, 1);
-		UseTapIntervalTicks = Math.Max(useTapIntervalTicks, 2);
 		BuddyLeashMeters = MathF.Max(buddyLeashMeters, 0f);
 		CoverSearchMeters = MathF.Max(coverSearchMeters, 0f);
 		CoverMinThreatMeters = MathF.Max(coverMinThreatMeters, 0f);
@@ -304,9 +305,11 @@ public readonly struct GroundPlanTraits
 	}
 
 	/// <summary>
-	/// §5.1's numbers. The locker gets two seconds of tapping — a DMR needs two swaps
-	/// to reach the launcher (rifle → launcher → DMR → rifle), a quarter-second apart —
-	/// and thirty seconds of walking, the length of the map at a jog. Cover is looked
+	/// §5.1's numbers. A bot is at the locker 0.8 m from its footprint, inside the
+	/// metre a kit is taken from (docs/LOADOUT.md L-D8); it gets two seconds there for
+	/// the launcher to be in its hands — the kit is taken on the tick it asks, and the
+	/// pistol, if that was out, put away for it after — and thirty seconds of walking,
+	/// the length of the map at a jog. Cover is looked
 	/// for within 25 m, between 8 m and 55 m of the fight (docs/COVER.md §5). A round
 	/// suppresses for 1.5 s after it, and a bot stays down for 3 s of it at most
 	/// (docs/TACTICS.md §5.7).
@@ -318,10 +321,9 @@ public readonly struct GroundPlanTraits
 		alliesNearMeters: 15f,
 		alliesNearHoldMeters: 18f,
 		investigateRadiusMeters: 100f,
-		lockerArriveMeters: 2f,
+		lockerArriveMeters: 0.8f,
 		pathToLockerTimeoutTicks: SimConfig.TickRate * 30,
 		useLockerTimeoutTicks: SimConfig.TickRate * 2,
-		useTapIntervalTicks: SimConfig.TickRate / 4,
 		buddyLeashMeters: 12f,
 		coverSearchMeters: 25f,
 		coverMinThreatMeters: 8f,
@@ -423,8 +425,16 @@ public sealed class GroundContext : BaseContext
 	/// <summary>The nearest teammates' centroid, else the spawn.</summary>
 	public Vector3 FallbackPoint;
 
+	/// <summary>The nearest weapon locker: its origin, and which way its racks face (<see cref="LockerSupply"/>).</summary>
 	public bool HasLocker;
 	public Vector3 LockerPoint;
+	public float LockerYaw;
+
+	/// <summary>
+	/// Set by the pilot when the launcher kit it asked the locker for was refused
+	/// (docs/LOADOUT.md §8): the trip is given up, as a timeout gives it up.
+	/// </summary>
+	public bool KitRefused;
 
 	/// <summary>The remembered contact to walk to: the nearest one worth investigating.</summary>
 	public Vector3 GhostPoint;
@@ -587,7 +597,9 @@ public sealed class GroundContext : BaseContext
 					return GiveUpLockerTrip();
 				}
 
-				Walk(GroundMove.Run, LockerPoint);
+				// A refusal from an earlier trip is not this one's.
+				KitRefused = false;
+				Walk(GroundMove.Run, LockerSupply.StandPoint(LockerPoint, LockerYaw));
 				return AtLocker ? TaskStatus.Success : TaskStatus.Continue;
 
 			case GroundGoal.UseLocker:
@@ -596,22 +608,23 @@ public sealed class GroundContext : BaseContext
 					return GiveUpLockerTrip();
 				}
 
-				Walk(GroundMove.Point, LockerPoint);
+				Walk(GroundMove.Point, LockerSupply.StandPoint(LockerPoint, LockerYaw));
 				if (Explosive)
 				{
-					// What the swap handed over is the scan's to say, but the hands are
+					// What the kit handed over is the scan's to say, but the hands are
 					// the bot's own: the fact is set here so the next task's condition
 					// sees it this tick.
 					Sense(GroundFact.Armed, (byte)Arms.Explosive);
 					return TaskStatus.Success;
 				}
 
-				if (running > (uint)Traits.UseLockerTimeoutTicks)
+				if (KitRefused || running > (uint)Traits.UseLockerTimeoutTicks)
 				{
+					KitRefused = false;
 					return GiveUpLockerTrip();
 				}
 
-				Intent.UseLocker = true;
+				Intent.TakeLauncher = true;
 				return TaskStatus.Continue;
 
 			case GroundGoal.EngageArmour:
@@ -698,7 +711,7 @@ public sealed class GroundContext : BaseContext
 		}
 	}
 
-	private bool AtLocker => Flat(Position, LockerPoint) <= Traits.LockerArriveMeters;
+	private bool AtLocker => LockerSupply.FootprintDistance(Position, LockerPoint, LockerYaw) <= Traits.LockerArriveMeters;
 
 	private TaskStatus Walk(GroundMove move, Vector3 point)
 	{

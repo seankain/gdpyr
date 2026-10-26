@@ -178,6 +178,7 @@ class GdpyrEnv:
         feature_planes: bool = False,
         episode_ticks: int = 3600,
         timeout: float = 30.0,
+        kit: Optional[Dict[str, Any]] = None,
     ) -> None:
         if policy not in ("ground", "strategist"):
             raise ValueError("policy is 'ground' or 'strategist'")
@@ -187,6 +188,10 @@ class GdpyrEnv:
         self.stepped = stepped
         self.feature_planes = feature_planes
         self.episode_ticks = episode_ticks
+        #: The kit a ground seat starts every episode with (docs/LOADOUT.md §9):
+        #: ``{"primary": "rifle", "magazines": 5, "grenades": 3, "armour": "none"}``,
+        #: any field left out being the default kit's. None keeps the seat's bot's.
+        self.kit = kit
 
         self._timeout = timeout
         self._socket = socket.create_connection((host, port), timeout=timeout)
@@ -311,6 +316,27 @@ class GdpyrEnv:
         response = self._request({"op": "list_units", "seat": self.seat})
         return list(response.get("units", []))
 
+    def loadout(self, kit: Dict[str, Any], when: str = "locker") -> Dict[str, Any]:
+        """Asks for a kit for this ground seat (``LOADOUT.md`` §9).
+
+        ``when="locker"`` takes it at the weapon locker the seat is standing at,
+        through the validator a person's request goes through; ``"spawn"`` keeps it
+        for the next spawn. The answer's ``applied`` says whether it was taken, and
+        ``refusal`` why not — ``dead``, ``not_at_locker``, ``mounted``, ``carrying``,
+        ``invalid`` or ``too_soon`` — which is an answer, not an error::
+
+            answer = env.loadout({"primary": "launcher", "magazines": 3})
+            if not answer["applied"]:
+                print(answer["refusal"])
+
+        ``reset`` puts the seat back in the kit it was attached with, so a kit taken
+        here does not start the next episode.
+        """
+        if self.policy != "ground":
+            raise AgentError("a strategist carries no kit")
+
+        return self._request({"op": "loadout", "seat": self.seat, "kit": dict(kit), "when": when})
+
     def sample_action(self) -> GroundAction:
         """A uniformly silly ground action. For smoke tests, not for training."""
         return GroundAction(
@@ -377,14 +403,16 @@ class GdpyrEnv:
         )
 
     def _attach(self) -> None:
-        response = self._request(
-            {
-                "op": "attach",
-                "team": "strategist" if self.policy == "strategist" else "ground",
-                "policy": self.policy,
-                "step_mul": self.step_mul,
-            }
-        )
+        request: Dict[str, Any] = {
+            "op": "attach",
+            "team": "strategist" if self.policy == "strategist" else "ground",
+            "policy": self.policy,
+            "step_mul": self.step_mul,
+        }
+        if self.kit is not None:
+            request["kit"] = dict(self.kit)
+
+        response = self._request(request)
         self.seat = int(response["seat"])
 
     def _advance(self, action: Any) -> Observation:

@@ -1,0 +1,23 @@
+{
+  "name": "an HTN bot sent to the weapon locker for armour takes a launcher kit there, and spawns again in its own",
+  "bot_ai": "htn",
+  "seeds": [1, 2, 3],
+  "duration_ticks": 3600,
+  "warmup_ticks": 60,
+  "roster": { "ground": 3, "strategists": 0 },
+
+  "seats": [
+    { "id": "idle", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json" }
+  ],
+
+  "spawns": [
+    { "peer": "idle", "at": [110, 1, 110], "look": [0, 0] },
+    { "unit": "tank", "team": "strategist", "at": [8, 1, -35.5], "order": "none" }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.kit.count", "op": ">=", "value": 1 },
+    { "metric": "events.kit.primary.min", "op": "==", "value": 4 }
+  ]
+}

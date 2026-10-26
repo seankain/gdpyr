@@ -127,6 +127,7 @@ public sealed class EpisodeMetrics
 		"grenade_thrown" => "hidden",
 		"unit_task" => "goal",
 		"squad_drill" => "phase",
+		"kit" => "primary",
 		_ => null,
 	};
 
@@ -296,7 +297,7 @@ public sealed class EpisodeMetrics
 		"round_start", "round_end", "kill", "damage", "unit_built", "unit_lost", "node_captured",
 		"seat_attached", "seat_released", "structure_placed", "structure_built", "structure_lost",
 		"squad_task", "contact_spotted", "node_contested", "unit_embarked", "unit_disembarked", "dropship_landed",
-		"grenade_thrown", "unit_task", "squad_drill",
+		"grenade_thrown", "unit_task", "squad_drill", "kit",
 	};
 
 	/// <summary>
@@ -327,6 +328,7 @@ public sealed class EpisodeMetrics
 		["grenade_thrown"] = new[] { "thrower", "tier", "hidden", "x", "z" },
 		["unit_task"] = new[] { "unit", "tier", "goal", "x", "z" },
 		["squad_drill"] = new[] { "squad", "phase", "elements", "x", "z" },
+		["kit"] = new[] { "peer", "primary", "armour", "magazines", "grenades" },
 	};
 
 	/// <summary>

@@ -141,9 +141,6 @@ public readonly struct BotSituation
 	/// </summary>
 	public readonly bool KeepMoving;
 
-	/// <summary>Press the use key this tick. The pilot releases it on the next, which makes it a tap (<see cref="UseTracker"/>).</summary>
-	public readonly bool Use;
-
 	/// <summary>
 	/// Standing in its spot behind a low wall (docs/COVER.md §5): it does not strafe
 	/// out from behind it, it reloads there whenever the fight is out of its sight, and
@@ -182,7 +179,7 @@ public readonly struct BotSituation
 	public BotSituation(bool alive, float yaw, float pitch, float speed, bool hasTarget, Vector3 aimDirection,
 		float targetDistance, bool targetVisible, int ticksOnTarget, bool hasDestination, Vector3 moveDirection,
 		float destinationDistance, bool stuck, bool needsReload, bool semiAutomatic = false, bool holdFire = false,
-		bool keepMoving = false, bool use = false, bool inCover = false, bool reloading = false,
+		bool keepMoving = false, bool inCover = false, bool reloading = false,
 		Vector3 grenadeAim = default, bool duck = false, int slot = SimConfig.LargeSlot, bool primaryDry = false)
 	{
 		Alive = alive;
@@ -202,7 +199,6 @@ public readonly struct BotSituation
 		SemiAutomatic = semiAutomatic;
 		HoldFire = holdFire;
 		KeepMoving = keepMoving;
-		Use = use;
 		InCover = inCover;
 		Reloading = reloading;
 		GrenadeAim = grenadeAim;
@@ -441,14 +437,8 @@ public static class BotBrain
 			buttons |= InputButtons.Crouch;
 		}
 
-		if (situation.Use)
-		{
-			// A weapon locker's tap: pressed for this tick, released on the next.
-			buttons |= InputButtons.Use;
-		}
-
 		// A dry primary is put away for the pistol, under either AI, and taken out again
-		// once it has rounds — a locker's new weapon, or a resupply (docs/LOADOUT.md
+		// once it has rounds — a locker's new kit, or a resupply (docs/LOADOUT.md
 		// L-D14). The key is edge-triggered, so holding it while the slot is wrong is a
 		// press on the first tick and nothing after.
 		if (situation.Slot == SimConfig.LargeSlot && situation.PrimaryDry)
