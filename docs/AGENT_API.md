@@ -352,6 +352,14 @@ publishes and not by this document, which is the whole reason the schema is fetc
 "reserve fraction" is published as `weapon.unlimited` for the same kind of reason: the game has no
 reserve-ammunition pool, so the float carries whether the magazine is counted at all.
 
+**Beyond the vector, since LOADOUT.md L1:** `self.grenades`, `weapon.reserve` (spare rounds for the
+weapon in the hands, −1 for one that reloads forever) and `weapon.reserve_max` (what the kit's
+pouches hold for it full, −1 for unlimited), in raw units, published as the ground schema's
+`extras` block. Every JSON observation carries them by name; a packed one only when the session's
+`hello` asked (`"extras": true`), after the vector and any planes, with flag bit 3 (8) set. The
+vector — and `gdpyr-agent-obs-3` — are unchanged until LOADOUT.md L8 appends its floats, so a
+client that does not ask reads the frames it always has. The playtest harness asks.
+
 Contacts are the eight nearest the seat has actually acquired, ordered by
 distance, zero-padded. A ray fan is 16 physics queries per seat per decision; at `step_mul` 4 and
 six seats that is 1,440 queries a second, which is small next to the fog's own ray budget
@@ -679,13 +687,13 @@ plumbing. What the game owes is the raw record, because otherwise every trainer 
 from position deltas and gets it slightly wrong.
 
 ```json
-{"kind":"kill","tick":51204,"attacker":2147483641,"victim":3,"weapon":2,"distance":63.4}
+{"kind":"kill","tick":51204,"attacker":2147483641,"victim":3,"weapon":2,"distance":63.4,"rounds_fired":47}
 ```
 
 | Event | Fields beyond `tick` |
 |---|---|
 | `round_start` / `round_end` | seed, outcome, duration, the whole `RoundSummary` |
-| `kill` / `death` | attacker, victim, weapon, distance |
+| `kill` / `death` | attacker, victim, weapon, distance, rounds_fired — the rounds a player victim's large slot fired in the life the kill ended, a locker's swap included; −1 for a unit or a structure ([`LOADOUT.md`](LOADOUT.md) L0) |
 | `damage` | attacker, victim, amount, remaining |
 | `unit_built` / `unit_lost` | unit id, tier, barracks, position — a unit a sniper tower or pillbox trained has `barracks` = −(slot + 1) ([`NETCODE.md`](NETCODE.md) §10.8) |
 | `node_captured` | node, owner, claimant — `claimant` is the side that held it before, `NodeHolder` numbered: 0 neutral, 1 ground force, 2 strategist; x, z |
@@ -780,6 +788,14 @@ of assertions. It is checked into the repo beside the tests.
   ]
 }
 ```
+
+**A ground seat can carry a kit** (LOADOUT.md §9): `"kit": {"primary": "rifle", "magazines": 0,
+"grenades": 0, "armour": "none"}`, any field left out being the default kit's (rifle, five
+magazines, three grenades, no vest). It is checked when the file is read — a primary or vest there
+is none of, more than three grenades, more than nine pouches, or magazines with no primary — and
+sent with the seat's `spawn` op (with no `spawn` entry, a `spawn` that names no `at` and only
+equips), which equips it and makes it the seat's respawn kit; the server refuses one that breaks a
+loadout rule (`invalid`) rather than trimming it. Harness-only, like the rest of `spawn`.
 
 A spawn names exactly one of a `peer` (a seat to place), a `unit` (`infantry`, `technical`,
 `tank`, `builder`, `supply_truck`, `sniper`, `heavy_gunner` or `dropship`) or a `structure` (`pillbox`, `sandbag_wall`, `sniper_tower`, with a `yaw`). A

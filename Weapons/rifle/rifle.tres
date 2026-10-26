@@ -24,3 +24,6 @@ AimMagnification = 1.25
 AimSeconds = 0.18
 AimPosition = Vector3(0, -0.1, -0.5)
 Projectile = ExtResource("2_projectile")
+CarryWeightKg = 3.6
+PouchRounds = 30
+PouchWeightKg = 0.5

@@ -1,0 +1,9 @@
+{
+  "repeat": true,
+  "steps": [
+    { "ticks": 4, "move": [0, 0], "look": { "dyaw": 0, "dpitch": 0 }, "buttons": ["crouch", "weapon3"] },
+    { "ticks": 4, "move": [0, 0], "look": { "dyaw": 0, "dpitch": 0 }, "buttons": ["crouch"] },
+    { "ticks": 8, "move": [0, 0], "look": { "dyaw": 0, "dpitch": 0 }, "buttons": ["crouch", "fire"] },
+    { "ticks": 24, "move": [0, 0], "look": { "dyaw": 0, "dpitch": 0 }, "buttons": ["crouch"] }
+  ]
+}

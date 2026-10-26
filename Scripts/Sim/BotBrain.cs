@@ -169,11 +169,21 @@ public readonly struct BotSituation
 	/// </summary>
 	public readonly bool Duck;
 
+	/// <summary>The slot in its hands: the primary's, until it runs dry.</summary>
+	public readonly int Slot;
+
+	/// <summary>
+	/// Its primary has nothing in the magazine and nothing spare, or it carries none
+	/// (docs/LOADOUT.md L-D14). It fights with the pistol, which reloads forever, until
+	/// the primary has rounds again.
+	/// </summary>
+	public readonly bool PrimaryDry;
+
 	public BotSituation(bool alive, float yaw, float pitch, float speed, bool hasTarget, Vector3 aimDirection,
 		float targetDistance, bool targetVisible, int ticksOnTarget, bool hasDestination, Vector3 moveDirection,
 		float destinationDistance, bool stuck, bool needsReload, bool semiAutomatic = false, bool holdFire = false,
 		bool keepMoving = false, bool use = false, bool inCover = false, bool reloading = false,
-		Vector3 grenadeAim = default, bool duck = false)
+		Vector3 grenadeAim = default, bool duck = false, int slot = SimConfig.LargeSlot, bool primaryDry = false)
 	{
 		Alive = alive;
 		Yaw = yaw;
@@ -197,6 +207,8 @@ public readonly struct BotSituation
 		Reloading = reloading;
 		GrenadeAim = grenadeAim;
 		Duck = duck;
+		Slot = slot;
+		PrimaryDry = primaryDry;
 	}
 }
 
@@ -433,6 +445,19 @@ public static class BotBrain
 		{
 			// A weapon locker's tap: pressed for this tick, released on the next.
 			buttons |= InputButtons.Use;
+		}
+
+		// A dry primary is put away for the pistol, under either AI, and taken out again
+		// once it has rounds — a locker's new weapon, or a resupply (docs/LOADOUT.md
+		// L-D14). The key is edge-triggered, so holding it while the slot is wrong is a
+		// press on the first tick and nothing after.
+		if (situation.Slot == SimConfig.LargeSlot && situation.PrimaryDry)
+		{
+			buttons |= InputButtons.Weapon2;
+		}
+		else if (situation.Slot == SimConfig.SidearmSlot && !situation.PrimaryDry)
+		{
+			buttons |= InputButtons.Weapon3;
 		}
 
 		if (situation.Stuck)

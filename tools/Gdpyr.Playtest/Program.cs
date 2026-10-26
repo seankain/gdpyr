@@ -151,7 +151,8 @@ public static class Program
 					Path.Combine(traceDirectory, $"server-{port}.log"), wanted, wantedAutonomy).ConfigureAwait(false);
 			}
 
-			using GdpyrConnection connection = await GdpyrConnection.ConnectAsync(host, port, token)
+			// The extras, so a scenario can read observation.weapon.reserve (docs/LOADOUT.md §9).
+			using GdpyrConnection connection = await GdpyrConnection.ConnectAsync(host, port, token, extras: true)
 				.ConfigureAwait(false);
 
 			// A claim about one bot AI checked against the other is not a result about

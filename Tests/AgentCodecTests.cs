@@ -224,4 +224,37 @@ public class AgentCodecTests
 		Assert.False(frame.Held(InputButtons.Jump));
 		Assert.InRange(frame.MoveZAxis, -1.01f, -0.99f);
 	}
+
+	// ---- a kit in a request (docs/LOADOUT.md §9) ---------------------------------
+
+	private static System.Text.Json.JsonElement Json(string text) =>
+		System.Text.Json.JsonDocument.Parse(text).RootElement.Clone();
+
+	[Fact]
+	public void AKitLeftOutIsTheDefaultKitField_ByField()
+	{
+		Assert.True(AgentJson.TryReadKit(Json("{}"), out string primary, out int magazines, out int grenades,
+			out string armour, out _));
+		Assert.Equal(("rifle", 5, 3, "none"), (primary, magazines, grenades, armour));
+
+		Assert.True(AgentJson.TryReadKit(Json("""{"magazines":0,"grenades":0}"""), out primary, out magazines,
+			out grenades, out armour, out _));
+		Assert.Equal(("rifle", 0, 0, "none"), (primary, magazines, grenades, armour));
+
+		Assert.True(AgentJson.TryReadKit(Json("""{"primary":"launcher","magazines":3,"grenades":2,"armour":"medium"}"""),
+			out primary, out magazines, out grenades, out armour, out _));
+		Assert.Equal(("launcher", 3, 2, "medium"), (primary, magazines, grenades, armour));
+	}
+
+	[Theory]
+	[InlineData("[]", "object")]
+	[InlineData("""{"primary":3}""", "name")]
+	[InlineData("""{"magazines":"five"}""", "whole number")]
+	[InlineData("""{"grenades":1.5}""", "whole number")]
+	[InlineData("""{"helmet":"yes"}""", "no field")]
+	public void AKitOfTheWrongShapeIsRefusedSayingWhy(string json, string says)
+	{
+		Assert.False(AgentJson.TryReadKit(Json(json), out _, out _, out _, out _, out string error));
+		Assert.Contains(says, error);
+	}
 }

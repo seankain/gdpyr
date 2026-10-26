@@ -52,6 +52,14 @@ public static class AgentJson
 		writer.WriteNumber("range_meters", AgentObservation.RayRangeMeters);
 		writer.WriteEndObject();
 
+		// Beyond the vector, in raw units (docs/LOADOUT.md §9): in every JSON observation,
+		// and after a binary one's vector when the session asked for them at hello.
+		writer.WriteStartObject("extras");
+		writer.WriteNumber("floats", AgentObservation.ExtraFloats);
+		writer.WriteNumber("flag", AgentObservation.ExtrasFlag);
+		WriteFields(writer, AgentObservation.ExtraFields);
+		writer.WriteEndObject();
+
 		writer.WriteStartObject("scales");
 		writer.WriteNumber("position_meters", AgentObservation.PositionScaleMeters);
 		writer.WriteNumber("velocity_meters_per_second", AgentObservation.VelocityScaleMetersPerSecond);
@@ -200,6 +208,62 @@ public static class AgentJson
 	/// <summary>Every order kind a command may name. <c>stop</c> is a command and never a stored state.</summary>
 	public static readonly string[] OrderNames = { "move", "attack", "patrol", "defend", "stop" };
 
+	/// <summary>
+	/// Reads a kit from a request — the <c>spawn</c> op's <c>kit</c>, a scenario seat's —
+	/// as <c>{"primary":"rifle","magazines":0,"grenades":3,"armour":"none"}</c>
+	/// (docs/LOADOUT.md §9). A field left out is the default kit's: rifle, five
+	/// magazines, three grenades, no vest. Only the shapes are checked here; whether
+	/// the kit keeps the loadout's rules is <see cref="Loadout.TryParse"/>'s, which is
+	/// handed what this reads.
+	/// </summary>
+	public static bool TryReadKit(JsonElement kit, out string primary, out int magazines, out int grenades,
+		out string armour, out string error)
+	{
+		primary = "rifle";
+		magazines = Loadout.DefaultMagazines;
+		grenades = Loadout.DefaultGrenades;
+		armour = Loadout.ArmourNames[0];
+		error = null;
+
+		if (kit.ValueKind != JsonValueKind.Object)
+		{
+			error = "'kit' is an object";
+			return false;
+		}
+
+		foreach (JsonProperty field in kit.EnumerateObject())
+		{
+			switch (field.Name)
+			{
+				case "primary" when field.Value.ValueKind == JsonValueKind.String:
+					primary = field.Value.GetString();
+					break;
+				case "armour" when field.Value.ValueKind == JsonValueKind.String:
+					armour = field.Value.GetString();
+					break;
+				case "magazines" when field.Value.ValueKind == JsonValueKind.Number
+					&& field.Value.TryGetInt32(out int count):
+					magazines = count;
+					break;
+				case "grenades" when field.Value.ValueKind == JsonValueKind.Number
+					&& field.Value.TryGetInt32(out int count):
+					grenades = count;
+					break;
+				case "primary" or "armour":
+					error = $"'kit.{field.Name}' is a name";
+					return false;
+				case "magazines" or "grenades":
+					error = $"'kit.{field.Name}' is a whole number";
+					return false;
+				default:
+					error = $"'kit' has no field '{field.Name}'; it takes primary, magazines, grenades and armour";
+					return false;
+			}
+		}
+
+		return true;
+	}
+
 	/// <summary>Writes one event as the object docs/AGENT_API.md §8 shows.</summary>
 	public static void WriteEvent(Utf8JsonWriter writer, in AgentEvent record)
 	{
@@ -228,9 +292,14 @@ public static class AgentJson
 	public static void WriteObservation(Utf8JsonWriter writer, ReadOnlySpan<float> values) =>
 		WriteObservation(writer, AgentObservation.Fields, values);
 
-	/// <summary>Writes an observation in whichever layout its seat's policy kind uses.</summary>
+	/// <summary>
+	/// Writes an observation in whichever layout its seat's policy kind uses, with the
+	/// fields beyond its vector, when the kind has any, in the same object
+	/// (<see cref="AgentObservation.ExtraFields"/>).
+	/// </summary>
 	public static void WriteObservation(Utf8JsonWriter writer, ReadOnlySpan<AgentField> fields,
-		ReadOnlySpan<float> values)
+		ReadOnlySpan<float> values, ReadOnlySpan<AgentField> extraFields = default,
+		ReadOnlySpan<float> extras = default)
 	{
 		writer.WriteStartObject("observation");
 		foreach (AgentField field in fields)
@@ -252,6 +321,15 @@ public static class AgentJson
 				writer.WriteNumberValue(values[field.Offset + i]);
 			}
 			writer.WriteEndArray();
+		}
+
+		// Every extra is one float, so it is named plainly.
+		foreach (AgentField field in extraFields)
+		{
+			if (field.Offset < extras.Length)
+			{
+				writer.WriteNumber(field.Name, extras[field.Offset]);
+			}
 		}
 		writer.WriteEndObject();
 	}

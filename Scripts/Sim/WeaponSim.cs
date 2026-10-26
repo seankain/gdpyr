@@ -115,16 +115,33 @@ public struct WeaponState
 	/// </summary>
 	public uint ShotIndex;
 
+	/// <summary>
+	/// Spare rounds a reload draws from (docs/LOADOUT.md L-D2), or -1 for a weapon
+	/// that reloads forever: the pistol, every unit's weapon and every mounted gun. A
+	/// player's primary is the one weapon with a bottom to its pouches.
+	/// </summary>
+	public short Reserve;
+
 	public readonly bool IsReloading => ReloadEndTick != 0;
 
-	public static WeaponState Ready(byte definitionId, in WeaponStats stats) => new()
+	/// <summary>A slot with nothing in it: the large slot of a kit with no primary.</summary>
+	public readonly bool IsEmpty => DefinitionId == Loadout.NoPrimary;
+
+	public readonly bool HasUnlimitedReserve => Reserve < 0;
+
+	/// <param name="reserve">Spare rounds, or -1 — the default — for unlimited reloads.</param>
+	public static WeaponState Ready(byte definitionId, in WeaponStats stats, int reserve = -1) => new()
 	{
 		DefinitionId = definitionId,
 		Ammo = (short)stats.MagazineSize,
 		NextFireTick = 0,
 		ReloadEndTick = 0,
 		ShotIndex = 0,
+		Reserve = (short)Math.Clamp(reserve, -1, short.MaxValue),
 	};
+
+	/// <summary>Nothing in the slot: it never fires, never reloads and cannot be selected.</summary>
+	public static WeaponState Empty => new() { DefinitionId = Loadout.NoPrimary };
 }
 
 /// <summary>What a weapon did on one tick.</summary>
@@ -162,6 +179,14 @@ public static class WeaponSim
 	/// </summary>
 	public static WeaponAction Step(ref WeaponState state, in WeaponStats stats, in InputContext input, uint tick)
 	{
+		if (state.IsEmpty)
+		{
+			// Belt and braces: the slot cannot be selected (SelectSlot), and an empty
+			// slot's stats are the default ones, which read as a weapon with no magazine
+			// to run dry.
+			return WeaponAction.None;
+		}
+
 		if (state.IsReloading)
 		{
 			if (tick < state.ReloadEndTick)
@@ -169,7 +194,15 @@ public static class WeaponSim
 				return WeaponAction.None;
 			}
 
-			state.Ammo = (short)stats.MagazineSize;
+			// A finite reserve gives what it has, up to a full magazine (L-D2).
+			int moved = stats.MagazineSize - state.Ammo;
+			if (!state.HasUnlimitedReserve)
+			{
+				moved = Math.Min(moved, (int)state.Reserve);
+				state.Reserve -= (short)moved;
+			}
+
+			state.Ammo += (short)moved;
 			state.ReloadEndTick = 0;
 
 			// The round that just finished chambering cannot also be fired this tick;
@@ -220,21 +253,29 @@ public static class WeaponSim
 		Godot.Vector3 aim) =>
 		Spread.Apply(aim, stats.SpreadRadians, Spread.Seed(ownerId, state.DefinitionId, state.ShotIndex));
 
+	/// <summary>Every slot holds something: what <see cref="SelectSlot"/> assumes when not told otherwise.</summary>
+	public const int AllSlots = (1 << SimConfig.WeaponSlots) - 1;
+
 	/// <summary>
 	/// The slot the character has switched to, from the weapon keys. Edge-triggered
 	/// off the recorded frame rather than the device, so a replay picks the same
 	/// weapon the original tick did.
+	///
+	/// <paramref name="occupied"/> has a bit per slot that holds a weapon; a key for an
+	/// empty one does nothing (docs/LOADOUT.md §4.2). The mask comes from the kit,
+	/// which the server and the owning client both know, so both ignore the same key.
 	/// </summary>
-	public static int SelectSlot(int currentSlot, in InputContext input)
+	public static int SelectSlot(int currentSlot, in InputContext input, int occupied = AllSlots)
 	{
-		if (input.JustPressed(InputButtons.Weapon1)) { return 0; }
-		if (input.JustPressed(InputButtons.Weapon2)) { return 1; }
-		if (input.JustPressed(InputButtons.Weapon3)) { return 2; }
+		if (input.JustPressed(InputButtons.Weapon1) && (occupied & 1) != 0) { return 0; }
+		if (input.JustPressed(InputButtons.Weapon2) && (occupied & 2) != 0) { return 1; }
+		if (input.JustPressed(InputButtons.Weapon3) && (occupied & 4) != 0) { return 2; }
 		return currentSlot;
 	}
 
 	private static bool CanReload(in WeaponState state, in WeaponStats stats) =>
-		!stats.HasUnlimitedAmmo && stats.ReloadTicks > 0 && state.Ammo < stats.MagazineSize;
+		!stats.HasUnlimitedAmmo && stats.ReloadTicks > 0 && state.Ammo < stats.MagazineSize
+		&& state.Reserve != 0;
 
 	private static WeaponAction BeginReload(ref WeaponState state, in WeaponStats stats, uint tick)
 	{
@@ -244,17 +285,27 @@ public static class WeaponSim
 }
 
 /// <summary>
-/// A ground-force player's three weapons, as catalog ids. Chosen before a spawn
-/// (docs/IMPLEMENTATION_PLAN.md §M2) — a menu mid-life would make every firefight a
-/// menu. The one exception is the large weapon, which a weapon locker at the spawn
-/// swaps (docs/NETCODE.md §10.6): a walk back, not a keypress, and so not something
-/// done in a firefight.
+/// A ground-force player's kit (docs/LOADOUT.md L-D1): three weapons as catalog ids,
+/// the pouches and the vest. Chosen before a spawn (docs/IMPLEMENTATION_PLAN.md §M2)
+/// — a menu mid-life would make every firefight a menu. The one exception is the
+/// large weapon, which a weapon locker at the spawn swaps (docs/NETCODE.md §10.6): a
+/// walk back, not a keypress, and so not something done in a firefight.
 /// </summary>
-public struct LoadoutSelection
+public struct LoadoutSelection : IEquatable<LoadoutSelection>
 {
 	public byte Melee;
 	public byte Sidearm;
+
+	/// <summary>The primary, or <see cref="Loadout.NoPrimary"/>.</summary>
 	public byte Large;
+
+	/// <summary>Pouches holding a reload of the primary.</summary>
+	public byte Magazines;
+
+	/// <summary>Pouches holding a hand grenade, and so the grenades a life starts with.</summary>
+	public byte Grenades;
+
+	public BodyArmourTier Armour;
 
 	public readonly byte this[int slot] => slot switch
 	{
@@ -262,4 +313,18 @@ public struct LoadoutSelection
 		1 => Sidearm,
 		_ => Large,
 	};
+
+	public readonly bool HasPrimary => Large != Loadout.NoPrimary;
+
+	public readonly bool Equals(LoadoutSelection other) =>
+		Melee == other.Melee && Sidearm == other.Sidearm && Large == other.Large
+		&& Magazines == other.Magazines && Grenades == other.Grenades && Armour == other.Armour;
+
+	public override readonly bool Equals(object obj) => obj is LoadoutSelection other && Equals(other);
+
+	public override readonly int GetHashCode() => HashCode.Combine(Melee, Sidearm, Large, Magazines, Grenades, Armour);
+
+	public static bool operator ==(LoadoutSelection a, LoadoutSelection b) => a.Equals(b);
+
+	public static bool operator !=(LoadoutSelection a, LoadoutSelection b) => !a.Equals(b);
 }

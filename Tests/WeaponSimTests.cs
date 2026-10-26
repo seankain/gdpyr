@@ -397,6 +397,141 @@ public class WeaponSimTests
 		Assert.True(compared > 10, "the weapon never fired, so nothing was compared");
 	}
 
+	// ---- finite primary ammunition (docs/LOADOUT.md §4.2) ----------------------
+
+	/// <summary>Steps a reload through to its end, from a press of the key on <paramref name="tick"/>.</summary>
+	private static WeaponAction ReloadThrough(ref WeaponState state, in WeaponStats stats, uint tick)
+	{
+		Assert.Equal(WeaponAction.ReloadStart, WeaponSim.Step(ref state, stats, Input(InputButtons.Reload), tick));
+		return WeaponSim.Step(ref state, stats, Input(InputButtons.None, InputButtons.Reload),
+			tick + (uint)stats.ReloadTicks);
+	}
+
+	[Fact]
+	public void AReloadTakesItsRoundsFromTheReserve()
+	{
+		WeaponStats stats = Rifle();
+		WeaponState state = WeaponState.Ready(3, stats, reserve: 90);
+		Assert.Equal(10, FireFor(ref state, stats, fromTick: 0, ticks: 60));
+		Assert.Equal(20, state.Ammo);
+
+		Assert.Equal(WeaponAction.ReloadFinish, ReloadThrough(ref state, stats, 100));
+		Assert.Equal(30, state.Ammo);
+		Assert.Equal(80, state.Reserve);
+	}
+
+	[Fact]
+	public void APartialReloadIsWhatTheReserveHas()
+	{
+		WeaponStats stats = Rifle();
+		WeaponState state = WeaponState.Ready(3, stats, reserve: 7);
+		state.Ammo = 0;
+
+		Assert.Equal(WeaponAction.ReloadFinish, ReloadThrough(ref state, stats, 10));
+		Assert.Equal(7, state.Ammo);
+		Assert.Equal(0, state.Reserve);
+	}
+
+	[Fact]
+	public void WithNothingSpareThereIsNoReloadAndTheTriggerDryFires()
+	{
+		WeaponStats stats = Rifle();
+		WeaponState state = WeaponState.Ready(3, stats, reserve: 0);
+		Assert.Equal(30, FireFor(ref state, stats, fromTick: 0, ticks: 600));
+		Assert.Equal(0, state.Ammo);
+
+		// The key does nothing, and the trigger clicks rather than reloading itself.
+		Assert.Equal(WeaponAction.None, WeaponSim.Step(ref state, stats, Input(InputButtons.Reload), 700));
+		Assert.Equal(WeaponAction.DryFire, WeaponSim.Step(ref state, stats, Input(InputButtons.Fire), 701));
+		Assert.False(state.IsReloading);
+
+		// A magazine with rounds in it and nothing spare does not reload either.
+		WeaponState partial = WeaponState.Ready(3, stats, reserve: 0);
+		partial.Ammo = 12;
+		Assert.Equal(WeaponAction.None, WeaponSim.Step(ref partial, stats, Input(InputButtons.Reload), 5));
+	}
+
+	[Fact]
+	public void TheLauncherCyclesOneRoundOfItsReserveEachShot()
+	{
+		WeaponStats stats = Launcher();
+		WeaponState state = WeaponState.Ready(4, stats, reserve: 2);
+		int shots = 0;
+		InputButtons previous = InputButtons.None;
+
+		// Pressed again every tick it can be: fire, cycle, fire, cycle, fire, then a click.
+		for (uint tick = 0; tick < 2000; tick++)
+		{
+			InputButtons held = tick % 2 == 0 ? InputButtons.Fire : InputButtons.None;
+			if (WeaponSim.Step(ref state, stats, Input(held, previous), tick) == WeaponAction.Fire)
+			{
+				shots++;
+			}
+
+			previous = held;
+		}
+
+		Assert.Equal(3, shots);
+		Assert.Equal(0, state.Reserve);
+		Assert.Equal(0, state.Ammo);
+	}
+
+	[Fact]
+	public void AnUnlimitedReserveReloadsForever()
+	{
+		// A unit's weapon, the pistol and every mounted gun: what Ready gives by default.
+		WeaponStats stats = Pistol();
+		WeaponState state = WeaponState.Ready(1, stats);
+		Assert.Equal(-1, state.Reserve);
+		Assert.True(state.HasUnlimitedReserve);
+
+		for (int i = 0; i < 20; i++)
+		{
+			state.Ammo = 0;
+			Assert.Equal(WeaponAction.ReloadFinish, ReloadThrough(ref state, stats, (uint)(1000 * (i + 1))));
+			Assert.Equal(12, state.Ammo);
+			Assert.Equal(-1, state.Reserve);
+		}
+	}
+
+	[Fact]
+	public void AnEmptySlotDoesNothingAndCannotBeSelected()
+	{
+		WeaponState empty = WeaponState.Empty;
+		Assert.True(empty.IsEmpty);
+
+		// Its stats are the default ones, which read as a weapon with nothing to run dry.
+		WeaponStats none = default;
+		Assert.Equal(WeaponAction.None, WeaponSim.Step(ref empty, none, Input(InputButtons.Fire), 1));
+		Assert.Equal(WeaponAction.None, WeaponSim.Step(ref empty, none, Input(InputButtons.Reload), 2));
+
+		const int NoLarge = 0b011;
+		Assert.Equal(1, WeaponSim.SelectSlot(1, Input(InputButtons.Weapon3), NoLarge));
+		Assert.Equal(0, WeaponSim.SelectSlot(1, Input(InputButtons.Weapon1), NoLarge));
+		Assert.Equal(2, WeaponSim.SelectSlot(1, Input(InputButtons.Weapon3)));
+	}
+
+	[Fact]
+	public void AFiniteReserveIsStillAPureFunctionOfItsArguments()
+	{
+		WeaponStats stats = Rifle();
+		WeaponState a = WeaponState.Ready(3, stats, reserve: 45);
+		WeaponState b = WeaponState.Ready(3, stats, reserve: 45);
+		InputButtons previous = InputButtons.None;
+
+		for (uint tick = 0; tick < 1500; tick++)
+		{
+			InputButtons held = tick % 400 == 399 ? InputButtons.Reload : InputButtons.Fire;
+			InputContext input = Input(held, previous);
+			Assert.Equal(WeaponSim.Step(ref a, stats, input, tick), WeaponSim.Step(ref b, stats, input, tick));
+			previous = held;
+		}
+
+		Assert.Equal(a.Ammo, b.Ammo);
+		Assert.Equal(a.Reserve, b.Reserve);
+		Assert.Equal(0, a.Reserve);
+	}
+
 	[Fact]
 	public void AWeaponWithNoConeShootsExactlyWhereItIsPointed()
 	{

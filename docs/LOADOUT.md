@@ -1,8 +1,9 @@
 # Ground-force loadout: the locker panel, body armour and weight — implementation plan
 
-Status: **planned; nothing built.** Planned from the code at `dd579dd`. Phases L0–L8 (§10);
-decisions L-D1 to L-D15 (§3) are the defaults the plan is written against — flag any you disagree
-with before L1 starts.
+Status: **L0 built and measured, L1 built (§10); L2–L8 planned.** Planned from the code at `dd579dd`. Phases
+L0–L8 (§10); decisions L-D1 to L-D15 (§3) are the defaults the plan is written against — flag any
+you disagree with before L1 starts. L0's measurement raised the default kit to five magazines;
+there are nine pouches, so it keeps three grenades (L-D1, L-D3, L-D4, L-D13; §10 L0's result).
 
 The three strands asked for are **L3 (body armour)**, **L4 (weight)** and **L6 (the locker
 panel)**. L1, L2 and L5 are what they stand on: a loadout that can hold more than a large weapon,
@@ -52,10 +53,10 @@ domain, the locker runner); [`DEMOS.md`](DEMOS.md) §5.
 
 | | Decision | Why |
 |---|---|---|
-| L-D1 | **A loadout is a primary, six pouches and a vest.** Primary: none, DMR, rifle or launcher. Each pouch holds one reload of the primary or one hand grenade; at most three grenades. Vest: none, light, medium, heavy. The hammer and the pistol are always carried. | "Slots for extra primary ammunition or grenades" as one shared budget makes the trade the request describes. Three grenades is the snapshot's two bits and today's count. A stripped player still has a pistol, as Counter-Strike keeps the knife and pistol. |
+| L-D1 | **A loadout is a primary, nine pouches and a vest.** Primary: none, DMR, rifle or launcher. Each pouch holds one reload of the primary or one hand grenade; at most three grenades. Vest: none, light, medium, heavy. The hammer and the pistol are always carried. | "Slots for extra primary ammunition or grenades" as one shared budget makes the trade the request describes. Three grenades is the snapshot's two bits and today's count. A stripped player still has a pistol, as Counter-Strike keeps the knife and pistol. Nine rather than the six first planned: the default kit L0 measured (L-D3) takes eight of them with today's three grenades, and leaves one free. |
 | L-D2 | **Primary ammunition is finite.** The large weapon's spare rounds live on its `WeaponState` (`Reserve`). A pouch holds one magazine — rifle 30, DMR 10 — or two launcher grenades. A reload moves `min(missing, Reserve)` rounds; with none spare the weapon does not reload and dry-fires. The pistol, every unit weapon and every mounted gun keep unlimited reloads (`Reserve = -1`). | Spare magazines mean nothing while every reload is free. The sentinel keeps units and the heavy gun byte-for-byte as they are. |
-| L-D3 | **The default kit** — a person who never opens the panel, every bot until L7, every agent seat — is **rifle, 3 magazines, 3 grenades, no armour**. L0 checks it against how much bots fire in a life; if the 95th percentile of rifle rounds per life exceeds 120 (30 + 90), the magazines are raised and §4.1's reference weight with them. | No armour keeps today's lethality, and so every scenario's measured times to kill; three grenades are today's three; L0 makes "the default rarely runs dry" a measurement rather than a hope. |
-| L-D4 | **Speed scale = clamp(1 + 0.02 × (W_ref − W), 0.70, 1.12)**, `W` the loadout's weight in kg and `W_ref` the default kit's, 8.3 kg. Multiplies the carry scale; applies to every movement state's speed; not to jump height. | The default kit moves exactly as today, so bot strafing, slide thresholds and every scenario's timing stand. Stripped: walk 5.6, sprint 9.0 m/s. Heaviest: walk 3.5, sprint 5.6. 2 % a kilogram puts the common kits where Counter-Strike's rifles sit against its knife (≈ 0.86–0.90). |
+| L-D3 | **The default kit** — a person who never opens the panel, every bot until L7, every agent seat — is **rifle, 5 magazines, 3 grenades, no armour**. Planned as 3 magazines, with the rule that if L0 found the 95th percentile of rifle rounds per life above 120 (30 + 90), the magazines are raised and §4.1's reference weight with them. L0 found 170 (§10): five is the fewest that cover it (30 + 150 = 180). | No armour keeps today's lethality, and so every scenario's measured times to kill; three grenades are today's three; L0 made "the default rarely runs dry" a measurement rather than a hope — at five, 4.7 % of HTN rifle lives would have run dry, against 11.0 % at three. |
+| L-D4 | **Speed scale = clamp(1 + 0.02 × (W_ref − W), 0.70, 1.12)**, `W` the loadout's weight in kg and `W_ref` the default kit's, 9.3 kg (8.3 before L0 added two magazines). Multiplies the carry scale; applies to every movement state's speed; not to jump height. | The default kit moves exactly as today, so bot strafing, slide thresholds and every scenario's timing stand. Stripped: walk 5.6, sprint 9.0 m/s. Heaviest: walk 3.5, sprint 5.6. 2 % a kilogram puts the common kits where Counter-Strike's rifles sit against its knife (≈ 0.86–0.90). |
 | L-D5 | **Weight is the kit as taken, not as spent.** It changes at a spawn and at a locker and nowhere else; firing a magazine away does not make anyone faster. | Speed then changes only on server events the record already carries, so the owning client predicts it exactly (§7.1), and a player reads their speed off the panel. |
 | L-D6 | **Body armour is points and a share.** A vest absorbs its share of each bullet or swing — light 35 %, medium 50 %, heavy 65 % — and half that share of a blast, up to its points: 35, 60, 100. What it absorbs comes off its points; at zero it does nothing until resupplied. Weights 3, 6, 10 kg. Named `BodyArmour` in code. | The Counter-Strike model, which a player already understands, and one function to test (§4.3). The name keeps it apart from `Armour` (`Scripts/Sim/Armour.cs`), the `BulletDamageScale` rule for tanks and structures. |
 | L-D7 | **Resupply within 1 m.** A living ground-force player whose feet are within 1.0 m, flat, of a locker's **footprint** (the 1.2 × 0.5 m cabinet, rotated with its node) is topped up to what their kit says: one pouch's rounds every 0.5 s, one grenade every 1 s, 30 armour points a second — and nothing while anything has hurt them in the last 3 s (`Resupply.DamageLockoutTicks`). Health is not resupplied. | The request's metre, measured from the cabinet rather than its origin: the cabinet has no collider and a player can stand in it, and from the origin a metre reaches 0.75 m past the front face but only 0.4 m past either end. Paced and locked out for §10.7's reason: resupply, not invulnerability at the door. |
@@ -64,7 +65,7 @@ domain, the locker runner); [`DEMOS.md`](DEMOS.md) §5.
 | L-D10 | **Taking a kit fills what changed.** A different primary comes with a full magazine and full pouches; a different vest is full. What did not change keeps its state and is left to resupply. | Opening the panel under fire cannot refill a magazine the 3 s lockout would have refused. |
 | L-D11 | **A locker kit is also the next spawn's** (`PendingLoadout`). The death screen edits the same kit in the same panel; `1`/`2`/`3` while dead are retired. | Supersedes §10.6's "it is for this life": with one kit and one editor, a player who built a kit expects to respawn in it. Agent episodes still start alike — `reset` restores each seat's configured kit (§9). |
 | L-D12 | **The panel holds the player still.** While it is open the sampler sends neutral frames (`InputFocus.Menu`, beside `TextEntry`), the mouse is released, and `E`, `Esc` or `Enter` closes it. It closes itself on death, side change, round end, leaving reach, or a refusal. | The only way its keys and pointer can mean panel things without being recorded as input. The spawn is the ground force's own ground. |
-| L-D13 | **The player record goes from 29 to 32 B** (§6.1): spare rounds, armour points, and a kit byte (vest 2 bits · magazine pouches 3 · grenade pouches 2 · spare 1). Zero in the large-weapon bits now means **no primary**. `DemoFormat.Version` 3 → 4; an older demo is refused with its reason. | The owner derives its whole kit — and so its weight and speed — from the record, the one thing a client is never wrong about for long; no new state message. +0.7 KB/s per client at eight players. Redesigned, not squeezed, as TACTICS T-D4 did the unit record. |
+| L-D13 | **The player record goes from 29 to 32 B** (§6.1): spare rounds and armour points in one 16-bit field (9 bits · 7), and a kit byte (vest 2 bits · magazine pouches 4 · grenade pouches 2). Zero in the large-weapon bits now means **no primary**. `DemoFormat.Version` 3 → 4; an older demo is refused with its reason. | The owner derives its whole kit — and so its weight and speed — from the record, the one thing a client is never wrong about for long; no new state message. +0.7 KB/s per client at eight players. Redesigned, not squeezed, as TACTICS T-D4 did the unit record. |
 | L-D14 | **Bots** carry the default kit until L7. Under either AI a bot whose primary is dry switches to its pistol. Under `htn` a dry bot with nothing in sight walks back to the locker (`Rearm`), and the locker runner asks for a launcher kit instead of tapping. Per-role kits for HTN bots are adopted only if the `htn_*` scenarios still pass. Legacy keeps the default. | Legacy is the training baseline (TRAINING.md §3); it changes as little as finite ammunition allows, and is re-measured once in L8. |
 | L-D15 | **Agent API.** JSON observation fields, the `loadout` op, the `kit` event, the `spawn` op's `kit` field, the scripts' `loadout` step, and the `damage` and `kill` events' `absorbed` and `rounds_fired` are additive. The flat ground vector gains five floats at its end, so the schema goes to `gdpyr-agent-obs-4` (L8). | Every old client keeps reading JSON; the vector changes size, which is what the schema version is for (`AgentProtocol.SchemaVersion`, T8's precedent). |
 
@@ -80,7 +81,7 @@ the server and the owning client both run must be.
 aliases: the constant lives in `Scripts/Sim` because the catalog (`Scripts/Core`) loads resources
 and is not compiled into the tests. `Loadout` holds the constants and the pure functions:
 
-- `PouchSlots = 6`; `Sanitize(kit, ReadOnlySpan<byte> largeWeapons)`: an unknown primary is the
+- `PouchSlots = 9`; `Sanitize(kit, ReadOnlySpan<byte> largeWeapons)`: an unknown primary is the
   rifle (as today), `NoPrimary` is kept; `Magazines = 0` with no primary; `Grenades ≤
   SimConfig.MaxGrenades`; `Magazines + Grenades ≤ PouchSlots`, grenades kept first when trimming; an
   unknown vest is none. `WeaponCatalog.Sanitize` calls it with `LargeWeapons`, as `LockerSim` is
@@ -105,13 +106,13 @@ weights are tuned in the `.tres` files and the same numbers load on every proces
 | Kit | kg | Scale | Walk / sprint m/s |
 |---|---|---|---|
 | Pistol only | 2.0 | 1.12 (cap) | 5.6 / 9.0 |
-| Pistol, 3 grenades | 3.2 | 1.10 | 5.5 / 8.8 |
-| **Default:** rifle, 3 mags, 3 grenades | **8.3** | **1.00** | **5.0 / 8.0** |
-| Rifle, 6 mags, light | 11.6 | 0.93 | 4.7 / 7.5 |
-| Rifle, 3 mags, 3 grenades, medium | 14.3 | 0.88 | 4.4 / 7.0 |
-| DMR, 4 mags, 2 grenades, medium | 15.6 | 0.85 | 4.3 / 6.8 |
-| Rifle, 3 mags, 3 grenades, heavy | 18.3 | 0.80 | 4.0 / 6.4 |
-| Launcher, 6 pouches, heavy | 23.4 | 0.70 (floor) | 3.5 / 5.6 |
+| Rifle, no pouches | 5.6 | 1.07 | 5.4 / 8.6 |
+| **Default:** rifle, 5 mags, 3 grenades | **9.3** | **1.00** | **5.0 / 8.0** |
+| Rifle, 9 mags, light | 13.1 | 0.92 | 4.6 / 7.4 |
+| Rifle, 5 mags, 3 grenades, medium | 15.3 | 0.88 | 4.4 / 7.0 |
+| DMR, 5 mags, 3 grenades, medium | 16.6 | 0.85 | 4.3 / 6.8 |
+| Rifle, 5 mags, 3 grenades, heavy | 19.3 | 0.80 | 4.0 / 6.4 |
+| Launcher, 9 pouches, heavy | 26.1 | 0.70 (floor) | 3.5 / 5.6 |
 
 The last kit cannot slide: its sprint never passes the sliding state's 6 m/s. Accepted (§11).
 
@@ -230,9 +231,8 @@ owning client.
 |---|---|---|
 | 0–27 | peer id, position, velocity, yaw, pitch, last input tick, state, buffer depth, health, ammo | unchanged |
 | 28 | weapon: slot 2 · reloading 1 · team 1 · large 2 (0 = not said) · grenades 2 | unchanged bits; large **0 = no primary** |
-| 29 | — | **reserve**: the primary's spare rounds, clamped to 255 (rifle at six pouches: 180) |
-| 30 | — | **armour points** |
-| 31 | — | **kit**: vest 2 · magazine pouches 3 · grenade pouches 2 · spare 1 |
+| 29–30 | — | one little-endian 16-bit field: **reserve**, the primary's spare rounds, in the low 9 bits (0–511; a rifle at nine pouches is 270, past a byte) · **armour points** in the high 7 (0–127; heavy is 100) |
+| 31 | — | **kit**: vest 2 · magazine pouches 4 · grenade pouches 2 |
 
 `PlayerSnapshot`, `SizeBytes`, `SnapshotCodec`, `WeaponFlags` (the zero's meaning), a new
 `KitFlags`, and `PlayerCombat.ApplyAuthoritative` change together. Cost: 3 B × 8 players × 30 Hz ≈
@@ -279,19 +279,19 @@ Built in code, as `CombatHud` is, on `Ui/theme.tres`; a child of `CombatHud`.
 ```
 ┌ WEAPON LOCKER ─────────────────────────────────────────────────────────┐
 │ PRIMARY   [1 none]  [2 rifle 3.6 kg]  [3 DMR 4.4 kg]  [4 launcher 6.0 kg] │
-│ POUCHES   ▣ ▣ ▣ ◆ ◆ ◆    magazines [5 −] 3 [6 +]   grenades [7 −] 3 [8 +] │
+│ POUCHES   ▣▣▣▣▣◆◆◆□  magazines [5 −] 5 [6 +]   grenades [7 −] 3 [8 +]     │
 │ ARMOUR    [none]  [light 3 kg]  [medium 6 kg]  [heavy 10 kg]   [9 −][0 +] │
 │                                                                          │
-│ LOAD 14.3 kg   SPEED 88 %  ██████████████░░   walk 4.4 · sprint 7.0 m/s  │
+│ LOAD 15.3 kg   SPEED 88 %  ██████████████░░   walk 4.4 · sprint 7.0 m/s  │
 │ VEST 60 pts, absorbs 50 %   rifle hits to kill 8 (5 without)             │
-│ AMMO 30 + 90 rifle · 3 grenades                                          │
+│ AMMO 30 + 150 rifle · 3 grenades                                         │
 │                                                                          │
 │ [Enter] take this kit   [Backspace] what I carry   [D] default   [E] close│
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **Choices.** Primary and vest are radio rows. Pouches are two steppers over six cells drawn
-  magazines-first — only the counts mean anything; `+` is disabled at six pouches, grenades at
+- **Choices.** Primary and vest are radio rows. Pouches are two steppers over nine cells drawn
+  magazines-first — only the counts mean anything; `+` is disabled at nine pouches, grenades at
   three, magazines with no primary. Mouse and keys do the same things.
 - **Read-outs** come from §4's functions — weight, scale, speeds, the vest's hits-to-kill against a
   rifle — so the panel cannot disagree with the simulation.
@@ -311,16 +311,16 @@ Built in code, as `CombatHud` is, on `Ui/theme.tres`; a child of `CombatHud`.
 
 ### 7.3 The death screen
 
-`CombatHud` shows the next spawn's kit in one line — `next spawn: rifle · 3 mags · 3 grenades · no
-vest · 8.3 kg · 100 %   [E] edit` — and `E` opens the same panel in next-spawn mode, whose `Enter`
+`CombatHud` shows the next spawn's kit in one line — `next spawn: rifle · 5 mags · 3 grenades · no
+vest · 9.3 kg · 100 %   [E] edit` — and `E` opens the same panel in next-spawn mode, whose `Enter`
 sends `ClientSelectLoadout`. A dead player's look is unaffected until they press it.
 
 ### 7.4 The HUD
 
-- Ammunition corner: `rifle  30 / 90` (magazine / reserve) for the primary; `pistol  12 / ∞`;
+- Ammunition corner: `rifle  30 / 150` (magazine / reserve) for the primary; `pistol  12 / ∞`;
   `rifle  0 / 0  dry` when spent; `—` with no primary.
-- Status: `HP 100   vest 60   grenades 3`, and `load 14.3 kg · 88 %` under it.
-- Prompt while resupplying: `resupplying — 2/3 mags · 40/60 vest`, or `resupply waits: under fire`
+- Status: `HP 100   vest 60   grenades 3`, and `load 15.3 kg · 88 %` under it.
+- Prompt while resupplying: `resupplying — 4/5 mags · 40/60 vest`, or `resupply waits: under fire`
   inside the lockout.
 - Debug HUD (`Scripts/Ui/Debug.cs`): a `kit` row — players by vest tier, mean load, kits taken,
   rounds/grenades/points resupplied this round.
@@ -376,7 +376,7 @@ supply truck's reach is drawn.
 | `magazines_run_dry.json` | L1 | A rifle seat with no pouches holding the trigger at a unit fires 30 rounds and no more: `damage` count ≤ 30, `weapon.reserve` 0, magazine 0 at the end. |
 | `armour_vs_rifleman.json` | L3 | Two lanes, a rifleman 30 m from each still seat, one with no vest and one heavy: the heavy seat takes ≥ 1.6× the `damage` records to die, over seeds; `absorbed` > 0 only in its lane. |
 | `weight_speed.json` | L4 | Three seats, stripped, default and heaviest, sprint the same line for 3 s: distances in the ratio 1.12 : 1.00 : 0.70 within 3 %. |
-| `locker_resupply.json` | L5 | A seat fires 60 rounds 0.5 m from the locker, stops: reserve is back to 90 within 2 s of the last shot. A medium seat shot down to 0 armour walks to the locker: 60 points within 3 s of reaching it, and none while a rifleman keeps hitting it. |
+| `locker_resupply.json` | L5 | A seat fires 60 rounds 0.5 m from the locker, stops: reserve is back to 150 within 2 s of the last shot. A medium seat shot down to 0 armour walks to the locker: 60 points within 3 s of reaching it, and none while a rifleman keeps hitting it. |
 
 ## 10. Phases
 
@@ -394,6 +394,94 @@ through the harness; "listen host" and "dedicated server" need a person at the c
 
 - **Done when:** the p95 of rifle, DMR and launcher rounds per life is written down with its
   sample size, and the default kit is confirmed or raised.
+- **Result — done; the default kit is raised to five magazines, and the pouches to nine.**
+  - **The instrument.** `PlayerCombat.PrimaryRoundsThisLife` counts the rounds the large slot fires,
+    reset by `Equip` — every spawn — and not by a locker's swap. A player's kill carries it as
+    `rounds_fired`, the kill's fifth slot, and a unit's or a structure's as −1
+    (`AgentEventSchema.NoRoundsFired`); the harness's field table and AGENT_API.md §8 name it. The
+    server's kill line ends `| rifle 47 rounds this life`.
+  - `dotnet test`: 2176 passed, 0 failed (2175 before; 1 new in `AgentEventTests`, and the kill's
+    serialization test now pins the field). With the slot's name taken out of the schema, three
+    tests fail. `dotnet build Gdpyr.csproj`: 0 warnings, 0 errors; the harness builds.
+  - **Bot-only rounds** (Godot 4.6 .NET, headless, through the harness, as COVER.md §9 and TACTICS
+    T8): five ground bots and the idle seat holding still at (110, 1, 110) against one computer
+    strategist, 21,600 ticks (6 min) after a 60-tick warm-up, seeds 1–20 under `--bot-ai htn` and
+    1–20 under `legacy`, units' micro-autonomy at its default (on); one server a round, six at a
+    time, each held by the harness's steps, so the load did not change a round. Each round is read
+    from its start to its first `round_end`, else to the run's end; the scenario files are not
+    committed. Beside the committed instrument, a temporary probe, not committed, logged each
+    bot's rounds this life by weapon, and its horizontal displacement every tick. The bots carry
+    what `BotDirector.Equip` gives by roster slot, the seat taking slot 0 and the strategist slot 1:
+    slots 2–6 are launcher, DMR, rifle, launcher, rifle — two rifles, one DMR and two launchers,
+    whence the DMR's smaller samples.
+  - **The instrument agrees with the probe**: all 1,083 player deaths in the windows (834 `htn`,
+    249 `legacy`) carried the `rounds_fired` the probe counted. The seat never died and never fired,
+    and is left out below. 14 of the 20 `htn` rounds ended early, the ground force out of its 50
+    tickets at 213–343 s; no `legacy` round did.
+  - **Rounds fired per life**, by the large weapon carried at the end of the life (in two `htn`
+    lives a locker swap put a second weapon in the slot mid-life, and the counts below are the
+    last weapon's; in every other life they are `rounds_fired`). Percentiles by nearest rank.
+    "Deaths" are the lives a kill ended, which is what `rounds_fired` reports; "all lives" adds the
+    bots alive at the window's end, whose counts are lower bounds. "Dry" is the share of all lives
+    that fired more than the magazine and that many pouches hold (rifle 30 + 30 a pouch, DMR
+    10 + 10, launcher 1 + 2).
+
+    | Weapon · AI | Deaths: n · median · p90 · **p95** · max | All lives: n · p95 | Dry at 3 pouches | … at 5 |
+    |---|---|---|---|---|
+    | Rifle · `htn` | 329 · 30 · 126 · **170** · 310 | 363 · 177 | 11.0 % | 4.7 % |
+    | DMR · `htn` | 176 · 8 · 40 · **57** · 110 | 193 · 51 | 8.8 % | 3.1 % |
+    | Launcher · `htn` | 329 · 3 · 9 · **11** · 17 | 364 · 11 | 11.5 % | 3.3 % |
+    | Rifle · `legacy` | 22 · 10 · 82 · **93** · 94 | 62 · 94 | 0 | 0 |
+    | DMR · `legacy` | 7 · 10 · 26 · **26** · 26 | 27 · 26 | 0 | 0 |
+    | Launcher · `legacy` | 220 · 1 · 3 · **4** · 16 | 260 · 9 | 6.5 % | 4.2 % |
+
+  - **Ground deaths per round by killer**, mean (range) over the 20 rounds; "a ground player" is a
+    blast of the victim's own or a teammate's.
+
+    | Killer | `htn` | `legacy` |
+    |---|---|---|
+    | Infantry | 25.3 (4–38) | 7.0 (0–11) |
+    | Tank | 13.5 (8–23) | 5.2 (3–9) |
+    | Technical | 1.9 (0–10) | 0 |
+    | A ground player | 0.65 (0–3) | 0.3 (0–1) |
+    | Heavy gunner | 0.25 (0–3) | 0 |
+    | Pillbox | 0.2 (0–4) | 0 |
+    | Barracks gun | 0 | 0.05 (0–1) |
+    | **All** | **41.7 (14–50)** | **12.5 (4–17)** |
+
+  - **Ground speed of moving bots**, from each bot's horizontal displacement per tick over 26,300
+    (`htn`) and 35,100 (`legacy`) bot-seconds alive; moving is above 0.5 m/s, and a displacement
+    above 30 m/s (a teleport) is not counted.
+
+    | | `htn` | `legacy` |
+    |---|---|---|
+    | Share of time alive spent moving | 56.9 % | 75.2 % |
+    | **Mean speed while moving** | **4.51 m/s** | **4.51 m/s** |
+    | … of it below 3 m/s · 3–6 · above 6 (sprinting) | 18.3 · 69.8 · 11.9 % | 20.0 · 66.4 · 13.6 % |
+    | Share of time alive with a carry scale below 1 | 0 | 0 |
+
+  - **What that says.** Under `htn`, the default bot AI, the planned default's 120 rifle rounds would
+    have run out in 11 % of rifle lives, and the p95 of rifle rounds per life is 170 (329 deaths;
+    a bootstrap of the p95 puts 90 % of resamples at 149–208, four to six magazines). L-D3's rule
+    applies, and five magazines (180) is the fewest that cover the p95; they cover the all-lives p95
+    of 177 too. Five pouches also bring the DMR and the launcher, under either AI, below the 5 % of
+    lives L7 allows to end dry (§10 L7); at three, every `htn` weapon would fail that. `legacy` fights
+    less — 12.5 ground deaths a round against 41.7 — and fires less: its rifle p95 is 93, inside
+    the planned default, and 88 of its 220 launcher deaths came before the launcher fired. Speed:
+    bots move at a mean 4.51 m/s while moving, under either AI, and never carried a gun or a can in
+    these rounds, so after L4 the kit's scale is the only one a bot's walk has below 1; the default
+    kit's is 1.00 by L-D4's construction, so these numbers stand until a kit differs from it.
+  - **What changed in this plan.** L-D3: the default kit is rifle, five magazines, three grenades,
+    no armour. L-D1: nine pouches rather than six, so that kit keeps today's three grenades, with
+    one pouch to spare; six would have left room for one grenade beside five magazines, taking two
+    from every default kit and every bot, which L-D3 keeps for today's lethality. L-D4: `W_ref`
+    9.3 kg. L-D13 and §6.1: the kit byte's magazine count takes the spare bit (0–9), and the reserve
+    and the armour points share bytes 29–30 (9 bits and 7), because a rifle's nine pouches are 270
+    rounds, past a byte; the record stays 32 B. §4.1's kit table, §7.2–7.4's examples and §9's
+    `locker_resupply` reserve follow.
+  - **Not taken**: L0 has no listen-host or dedicated-server check. The per-weapon, censored-life
+    and speed figures came from the probe, which is not committed; every death, its killer and its
+    `rounds_fired` are also in the committed kill events and kill lines.
 
 ### L1 — Loadout model, finite primary ammunition, the player record v2 (2 days)
 
@@ -418,6 +506,88 @@ through the harness; "listen host" and "dedicated server" need a person at the c
   scenario suite passes as before plus `magazines_run_dry`; in a listen-host round the reserve
   counts down, a reload with none spare does not start, a no-primary kit (set from the console)
   spawns on the pistol and `3` does nothing.
+- **Result — built.** Two pieces of later phases came forward, and the observation fields reach a
+  packed observation by a route the plan did not name; each is said below.
+  - **The kit** (`Scripts/Sim/Loadout.cs`): `BodyArmourTier` (the enum only; what a vest does is
+    L3's), `CarryStats`, `Loadout.NoPrimary` (255) and its alias `WeaponCatalog.None` (whose name is
+    `—`), `PouchSlots` 9, the default kit's five magazines and three grenades, `Sanitize`,
+    `WeightKg`, `SpeedScale`, `ReserveFor`, and `TryParse` for a kit spelt out by name.
+    `SpeedScale(weight, reference)` takes the reference from the catalog —
+    `WeaponCatalog.ReferenceWeightKg`, the default kit weighed with the `.tres` numbers at load —
+    rather than a written-down 9.3, so the default kit is exactly 1 however the weights are tuned;
+    `LoadoutTests` pins 9.3 and §4.1's table. Speed is computed, by the console's `loadout` line,
+    and not yet applied (L4). `LoadoutSelection` gained `Magazines`, `Grenades`, `Armour` and an
+    equality.
+  - **Carry stats**: `CarryWeightKg`, `PouchRounds` and `PouchWeightKg` on `WeaponDefinition`; the
+    rifle 3.6 / 30 / 0.5, the DMR 4.4 / 10 / 0.6, the launcher 6.0 / 2 / 0.9; `WeaponCatalog.CarryFor`.
+  - **Finite primary ammunition**: `WeaponState.Reserve` (−1 unlimited, what `Ready` still gives by
+    default, so every unit, mounted gun and the pistol reload forever), `Empty`, `IsEmpty`; a reload
+    moves `min(missing, reserve)` and needs a reserve that is not 0; an empty slot never fires;
+    `SelectSlot(current, input, occupied)`, the mask from `PlayerCombat.OccupiedSlots`; and
+    `SimConfig.SidearmSlot`.
+  - **Equipping the kit**: `PlayerCombat.Equip` arms the primary with its pouches' rounds spare, the
+    grenades from the kit, and the primary up or — with none — the pistol. Until L2 retires it, the
+    locker's swap gives the new primary full pouches, L-D10's rule for a different primary. Bots keep
+    their slot's primary and take the rest of the default kit.
+  - **The record v2**: 32 B, as §6.1 — bytes 29–30 the reserve (9 bits) and the vest's points (7,
+    written 0 until L3), byte 31 the kit (`KitFlags`); a zero large weapon is no primary. A client's
+    `Loadout` is the record's, and its reserve is applied under the magazine's acknowledgement
+    guard. `DemoFormat.Version` 4; versions 1–3 are refused with their reason.
+  - **HUD**: `rifle 30 / 150`, `pistol 12 / ∞`, `dry`, `—`, as §7.4.
+  - **The observation fields**: `self.grenades`, `weapon.reserve` and `weapon.reserve_max` (−1 for a
+    weapon that reloads forever), in raw units, as the ground schema's `extras` block
+    (`AgentObservation.ExtraFields`). Every JSON observation names them, as planned; but the
+    playtest harness, the .NET client and the Python client all take packed observations, which
+    the plan's JSON-only fields would never reach. So a packed observation carries them too, after
+    the vector and any planes with flag bit 3, when the session's `hello` asks (`"extras": true`).
+    The vector, `gdpyr-agent-obs-3` and every frame a client that does not ask receives are
+    unchanged until L8; the harness asks (AGENT_API.md §6.1).
+  - **The harness**: a seat's `"kit"`, checked when the file is read against limits
+    `ScenarioTests` pins to the game's, and sent with the seat's `spawn`, which equips it and makes
+    it the respawn kit, refusing a kit that breaks a rule (`invalid`); a `spawn` with no `at` only
+    equips. Scenarios `magazines_run_dry.json` and, beyond the plan, `no_primary_pistol.json`.
+  - **From L2: `ClientSelectLoadout` carries the whole kit**, next-spawn only, and a console command
+    `loadout <primary> <magazines> <grenades> [armour]` sets it. Needed here twice over: this phase's
+    check sets a no-primary kit from the console, and the old one-byte request, sanitized under the
+    new rules, would have dropped the kit's pouches whenever `1`/`2`/`3` picked a weapon on the
+    death screen. `RequestLoadout(byte)` now keeps the rest of the pending kit.
+  - **From L7: a dry primary is put away for the pistol, under either AI.** Finite ammunition alone
+    failed `htn_ground_denies_node` in both full suite runs on the first build of this phase — one
+    seed each, the first, with one node captured where the claim wants two — while the build before
+    it passed. A temporary probe (not committed) logging each bot's first dry fire found the cause
+    when that file was run as the suite runs it, after `builder_fortifies`: the rifle bot that had
+    killed the far node's first rifleman at tick 2178 dry-fired from tick 2931, all 180 of its rounds
+    spent, and the DMR bot from 4068, all 60 of its; the second rifleman lived to 5288. Before this
+    phase the same bot, reloading forever, killed it at 3916. Run on its own the file passed 32 of
+    32 seeds and no bot ran dry: the rounds are not reproducible seed for seed (COVER.md §9), and
+    run alone both of the far node's riflemen were dead by tick 2104. `BotSituation` now carries the slot in hand and
+    `PrimaryDry` (nothing in the magazine, nothing spare, or no primary); `BotBrain` presses
+    `Weapon2` with the primary up and dry and `Weapon3` once it has rounds. On that build the file
+    passed in the suite's order four times out of four with the probe, and in the final suite run
+    below — but in none of the probed runs did a bot run dry, so the fallback has been checked by
+    `BotBrainTests` and not yet seen working in a round.
+    `Rearm` and per-role kits stay L7's.
+  - `dotnet test`: 2239 passed, 0 failed (2176 before; 63 new: 26 in `LoadoutTests`, 7 in
+    `WeaponSimTests`, 5 in `SnapshotCodecTests`, 1 in `DemoCodecTests`, 3 in `AgentObservationTests`,
+    6 in `AgentCodecTests`, 12 in `ScenarioTests`, 3 in `BotBrainTests`). `dotnet build
+    Gdpyr.csproj`: 0 warnings, 0 errors; the harness and the .NET client build.
+  - **The tests test something.** One change at a time, each failed tests: a reload that ignored the
+    reserve (4), a reload with nothing spare (1), the slot mask ignored (1), an empty slot that fires
+    (1), grenades trimmed before magazines (3), magazines kept with no primary (2), the kit byte's
+    magazines a bit out of place (1), the speed line's slope at 2.5 % (5). A ten-bit reserve, which
+    overlaps the vest's points, failed nothing until `TheSparesTwoFieldsNeverReachIntoEachOther` was
+    added; it fails that one.
+  - **Scenarios** (Godot 4.6 .NET, headless, through the harness, default `htn`): the full suite on
+    the final build, 32 of 32 over 69 seeds — the 30 before this phase, `magazines_run_dry` (30 hits
+    on a sandbag wall and none after, over both seeds; with two spare magazines the same file
+    records 66 and fails) and `no_primary_pistol` (14 pistol hits, none from the rifle, the pistol
+    up at the end; with a rifle kit the same file fails five of its claims). The build before this
+    phase ran the 30 beside the first run and passed all 30.
+  - **Not taken**: the listen-host round. The headless scenarios cover what its list asks of the
+    simulation — the reserve running out, no reload with none spare, a no-primary kit spawning on the
+    pistol with `3` doing nothing — but through the `spawn` op, not the console; the console
+    command, the HUD's lines and a remote client's prediction of its own reserve have not run in
+    front of anyone.
 
 ### L2 — The kit request: one validator, the use key, the RPC, the agent op (1½ days)
 
@@ -425,7 +595,7 @@ through the harness; "listen host" and "dedicated server" need a person at the c
    prompt removed; the locker's footprint and yaw registered; `LockerReachMeters` 1.0 from the
    footprint (`LockerSupply.FootprintDistance`, §4.4, lands here).
 2. `PlayerCombat.ApplyKit`; `CombatManager.TryApplyLockerKit` (§5.3); `ClientLockerLoadout`,
-   `ServerKitResult`, `ClientSelectLoadout` widened.
+   `ServerKitResult`. (`ClientSelectLoadout` was widened in L1.)
 3. A temporary console command, `kit <primary> <mags> <grenades> <vest>`, calling
    `RequestLockerKit`, so L2–L5 are playable before the panel.
 4. Agent `loadout` op, `reset` restoring kits, the `kit` event; script step `loadout`.
@@ -505,7 +675,7 @@ through the harness; "listen host" and "dedicated server" need a person at the c
 
 ### L7 — Computer players (1½ days)
 
-1. Dry → pistol (§8), both AIs.
+1. Dry → pistol (§8), both AIs — built in L1, which needed it; L7 sees it working in rounds.
 2. `GroundFact.Ammo`, `Rearm`, the locker runner's kit request; the debugger's map.
 3. `BotKits = role` and its kits; a bot's kit in the inspect panel.
 4. Run the `htn_*` scenarios with `BotKits = role`, and ten bot-only rounds each way.

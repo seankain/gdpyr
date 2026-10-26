@@ -69,6 +69,14 @@ public sealed class AgentSession : IDisposable
 	public bool BinaryObservations { get; set; } = true;
 
 	/// <summary>
+	/// A packed ground observation also carries the fields beyond its vector
+	/// (<c>AgentObservation.ExtraFields</c>), after it, when the session asked at
+	/// <c>hello</c>. A JSON one always does. Off by default so a decoder that knows only
+	/// the vector reads the frames it always has (docs/LOADOUT.md §9).
+	/// </summary>
+	public bool ObservationExtras { get; set; }
+
+	/// <summary>
 	/// The optional feature planes ride along with a strategist observation
 	/// (docs/AGENT_API.md §6.3). Off unless asked for: they are 16 KB a decision and
 	/// a scatter over live units, and most policies do not want them.

@@ -966,4 +966,83 @@ public class ScenarioTests
 			Fraction = 0.8d,
 		}.ToString());
 	}
+
+	// ---- a seat's kit (docs/LOADOUT.md §9) ----------------------------------------
+
+	private static Scenario WithKit(string kit) => Scenario.Parse($$"""
+		{
+		  "name": "a kit",
+		  "seed": 1,
+		  "seats": [ { "id": "rifleman", "team": "ground", "policy": "ground", "kit": {{kit}} } ],
+		  "assert": [ { "metric": "events.damage.count", "op": ">=", "value": 0 } ]
+		}
+		""");
+
+	[Fact]
+	public void ASeatsKitIsReadWithTheDefaultKitForWhatItLeavesOut()
+	{
+		Gdpyr.AgentClient.GdpyrKit kit = WithKit("""{ "magazines": 0, "grenades": 0 }""").Seats[0].Kit;
+		Assert.Equal("rifle", kit.Primary);
+		Assert.Equal(0, kit.Magazines);
+		Assert.Equal(0, kit.Grenades);
+		Assert.Equal("none", kit.Armour);
+
+		kit = WithKit("""{ "primary": "none", "magazines": 0, "grenades": 3, "armour": "heavy" }""").Seats[0].Kit;
+		Assert.Equal(("none", 3, "heavy"), (kit.Primary, kit.Grenades, kit.Armour));
+
+		// A seat that names no kit keeps its own: nothing is sent.
+		Scenario plain = Scenario.Parse("""
+			{
+			  "name": "no kit",
+			  "seed": 1,
+			  "seats": [ { "id": "rifleman", "team": "ground", "policy": "ground" } ],
+			  "assert": [ { "metric": "events.damage.count", "op": ">=", "value": 0 } ]
+			}
+			""");
+		Assert.Null(plain.Seats[0].Kit);
+	}
+
+	[Theory]
+	[InlineData("""{ "primary": "shotgun" }""", "primary")]
+	[InlineData("""{ "armour": "plate" }""", "armour")]
+	[InlineData("""{ "grenades": 4 }""", "pouches")]
+	[InlineData("""{ "magazines": 7, "grenades": 3 }""", "pouches")]
+	[InlineData("""{ "magazines": -1 }""", "pouches")]
+	[InlineData("""{ "primary": "none", "magazines": 1, "grenades": 0 }""", "no primary")]
+	[InlineData("""{ "magazines": "lots" }""", "wrong type")]
+	[InlineData("""{ "helmet": true }""", "helmet")]
+	[InlineData("""[1, 2]""", "not an object")]
+	public void AKitThatBreaksARuleFailsAtParseTime(string kit, string says)
+	{
+		ScenarioException error = Assert.Throws<ScenarioException>(() => WithKit(kit));
+		Assert.Contains(says, error.Message);
+	}
+
+	[Fact]
+	public void AStrategistCarriesNoKit()
+	{
+		ScenarioException error = Assert.Throws<ScenarioException>(() => Scenario.Parse("""
+			{
+			  "name": "a kit",
+			  "seed": 1,
+			  "seats": [ { "id": "s", "team": "strategist", "policy": "strategist", "kit": {} } ],
+			  "assert": [ { "metric": "events.damage.count", "op": ">=", "value": 0 } ]
+			}
+			"""));
+		Assert.Contains("strategist", error.Message);
+	}
+
+	[Fact]
+	public void TheHarnessChecksAKitAgainstTheGamesOwnLimits()
+	{
+		Assert.Equal(Gdpyr.Sim.Loadout.PrimaryNames, ScenarioKit.Primaries);
+		Assert.Equal(Gdpyr.Sim.Loadout.ArmourNames, ScenarioKit.Armours);
+		Assert.Equal(Gdpyr.Sim.Loadout.PouchSlots, ScenarioKit.PouchSlots);
+		Assert.Equal(Gdpyr.Sim.SimConfig.MaxGrenades, ScenarioKit.MaxGrenades);
+
+		// The client's default kit is the game's.
+		var kit = new Gdpyr.AgentClient.GdpyrKit();
+		Assert.Equal(Gdpyr.Sim.Loadout.DefaultMagazines, kit.Magazines);
+		Assert.Equal(Gdpyr.Sim.Loadout.DefaultGrenades, kit.Grenades);
+	}
 }

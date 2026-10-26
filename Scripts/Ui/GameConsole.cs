@@ -361,6 +361,11 @@ public partial class GameConsole : CanvasLayer
 		_commands.Register("ai_select", $"ai_select <{AiTargets.Usage}>", "inspect one in the spectator's panel",
 			AiSelect);
 
+		// The next spawn's kit, until the locker panel's death screen edits it
+		// (docs/LOADOUT.md §7.3, L6).
+		_commands.Register("loadout", "loadout [<primary> <magazines> <grenades> [armour]]",
+			"the next spawn's kit: primary none|dmr|rifle|launcher, armour none|light|medium|heavy", Loadout);
+
 		_commands.Register("clear", "clear", "empty the scrollback", _ =>
 		{
 			_lines.Clear();
@@ -379,6 +384,38 @@ public partial class GameConsole : CanvasLayer
 			return ConsoleResult.Done();
 		});
 	}
+
+	private static ConsoleResult Loadout(IReadOnlyList<string> args)
+	{
+		if (Match.CombatManager.Instance is not { Local: { } local } combat)
+		{
+			return ConsoleResult.Failed("no player to equip");
+		}
+
+		if (args.Count == 0)
+		{
+			return ConsoleResult.Say(KitLine(local.PendingLoadout));
+		}
+
+		if (args.Count < 3 || args.Count > 4
+			|| !int.TryParse(args[1], out int magazines) || !int.TryParse(args[2], out int grenades))
+		{
+			return ConsoleResult.Failed("loadout <primary> <magazines> <grenades> [armour]");
+		}
+
+		if (!WeaponCatalog.TryParseKit(args[0], magazines, grenades, args.Count > 3 ? args[3] : null,
+			out Sim.LoadoutSelection kit, out string error))
+		{
+			return ConsoleResult.Failed(error);
+		}
+
+		combat.RequestLoadout(kit);
+		return ConsoleResult.Say(KitLine(local.PendingLoadout));
+	}
+
+	private static string KitLine(in Sim.LoadoutSelection kit) =>
+		$"next spawn: {WeaponCatalog.Describe(kit)} · {WeaponCatalog.WeightOf(kit):0.0} kg"
+		+ $" · {WeaponCatalog.SpeedScaleOf(kit) * 100f:0} %";
 
 	private ConsoleResult Help(IReadOnlyList<string> args)
 	{

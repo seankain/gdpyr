@@ -115,6 +115,8 @@ public sealed partial class AgentServer
 		}
 
 		session.BinaryObservations = Text(root, "observations", "binary") != "json";
+		session.ObservationExtras = root.TryGetProperty("extras", out JsonElement extras)
+			&& extras.ValueKind == JsonValueKind.True;
 		session.Authenticated = true;
 
 		CombatManager combat = CombatManager.Instance;
@@ -127,6 +129,7 @@ public sealed partial class AgentServer
 			writer.WriteNumber("seed", combat?.RoundSeed ?? 0);
 			writer.WriteString("build", Engine.GetVersionInfo()["string"].AsString());
 			writer.WriteString("observations", session.BinaryObservations ? "binary" : "json");
+			writer.WriteBoolean("extras", session.ObservationExtras);
 			writer.WriteString("mode", session.Stepped ? "stepped" : "realtime");
 
 			// Both research flags are stamped into the handshake, so a trace can never
@@ -794,7 +797,14 @@ public sealed partial class AgentServer
 	private bool Encode(AgentSeat seat, uint tick) =>
 		seat.Kind == AgentPolicyKind.Strategist
 			? _strategistView.Encode(seat.PeerId, tick, seat.StepMul, Limits, _strategistObservation)
-			: _groundView.Encode(seat.PeerId, tick, seat.StepMul, Limits, _groundObservation);
+			: _groundView.Encode(seat.PeerId, tick, seat.StepMul, Limits, _groundObservation, _groundExtras);
+
+	/// <summary>
+	/// Whether this frame carries the ground fields beyond the vector: always as JSON,
+	/// and packed only when the session asked (docs/LOADOUT.md §9).
+	/// </summary>
+	private static bool ExtrasFor(AgentSession session, AgentSeat seat) =>
+		seat.Kind != AgentPolicyKind.Strategist && (session.ObservationExtras || !session.BinaryObservations);
 
 	/// <summary>
 	/// Whether this frame carries the feature planes: the session asked for them and
@@ -812,6 +822,7 @@ public sealed partial class AgentServer
 			: AgentObservation.Floats;
 
 		bool planes = PlanesFor(session, seat) && _planes.Fill(seat.PeerId, tick, Limits);
+		bool extras = ExtrasFor(session, seat);
 
 		if (session.BinaryObservations)
 		{
@@ -822,9 +833,11 @@ public sealed partial class AgentServer
 			//
 			// Bit 2 of the flags says the planes follow the vector in the same frame,
 			// so a decoder that asked for them and a server that could not build them
-			// cannot disagree about where the floats end.
+			// cannot disagree about where the floats end. Bit 3 says the extras follow
+			// those, for a session that asked for them (AgentObservation.ExtraFields).
 			int header = 12;
-			int total = floats + (planes ? AgentFeaturePlanes.Floats : 0);
+			int planeFloats = planes ? AgentFeaturePlanes.Floats : 0;
+			int total = floats + planeFloats + (extras ? AgentObservation.ExtraFloats : 0);
 			int size = header + (total * sizeof(float));
 			if (_observationBytes.Length < size)
 			{
@@ -834,7 +847,7 @@ public sealed partial class AgentServer
 			Span<byte> frame = _observationBytes.AsSpan(0, size);
 			BinaryPrimitives.WriteInt32LittleEndian(frame, seat.PeerId);
 			BinaryPrimitives.WriteUInt16LittleEndian(frame[4..], (ushort)((Limits.Omniscient ? 1 : 0)
-				| (Limits.Unbounded ? 2 : 0) | (planes ? 4 : 0)));
+				| (Limits.Unbounded ? 2 : 0) | (planes ? 4 : 0) | (extras ? AgentObservation.ExtrasFlag : 0)));
 			BinaryPrimitives.WriteUInt16LittleEndian(frame[6..], 0);
 			BinaryPrimitives.WriteUInt32LittleEndian(frame[8..], tick);
 
@@ -850,6 +863,15 @@ public sealed partial class AgentServer
 				{
 					BinaryPrimitives.WriteSingleLittleEndian(
 						frame[(header + ((floats + i) * 4))..], grid[i]);
+				}
+			}
+
+			if (extras)
+			{
+				for (int i = 0; i < AgentObservation.ExtraFloats; i++)
+				{
+					BinaryPrimitives.WriteSingleLittleEndian(
+						frame[(header + ((floats + planeFloats + i) * 4))..], _groundExtras[i]);
 				}
 			}
 
@@ -872,7 +894,8 @@ public sealed partial class AgentServer
 			}
 			else
 			{
-				AgentJson.WriteObservation(writer, AgentObservation.Fields, values);
+				AgentJson.WriteObservation(writer, AgentObservation.Fields, values, AgentObservation.ExtraFields,
+					_groundExtras);
 			}
 
 			if (planes)
@@ -1093,19 +1116,64 @@ public sealed partial class AgentServer
 			return;
 		}
 
-		Point(root, "look", out float yaw, out float pitch);
+		// The seat's kit, when the spawn names one (docs/LOADOUT.md §9): equipped now and
+		// taken again at every respawn. Harness-only, like the rest of this op, and
+		// refused whole rather than trimmed, so a scenario says what it means.
+		PlayerCombat player = CombatManager.Instance?.Find(seat.PeerId);
+		LoadoutSelection kit = default;
+		bool kitted = root.TryGetProperty("kit", out JsonElement asked);
+		if (kitted)
+		{
+			if (!AgentJson.TryReadKit(asked, out string primary, out int magazines, out int grenades,
+				out string armour, out string shape))
+			{
+				session.SendError(correlation, "bad_request", shape);
+				return;
+			}
 
-		// Teleport clears the velocity and the visual offset, which is what a
-		// placement is; the second call is only there because the look angles are set
-		// through the same public entry point a remote character's are.
-		character.Teleport(new Transform3D(Basis.Identity, where));
-		character.ApplyRemoteTransform(where, yaw, pitch);
+			if (!WeaponCatalog.TryParseKit(primary, magazines, grenades, armour, out kit, out string broken))
+			{
+				session.SendError(correlation, "invalid", broken);
+				return;
+			}
+
+			if (player == null)
+			{
+				session.SendError(correlation, "no_character", $"seat {peerId} has no combat state to equip");
+				return;
+			}
+
+			player.PendingLoadout = kit;
+			player.Equip(kit);
+			GD.Print($"[agent] seat {seat.PeerId} equipped {WeaponCatalog.Describe(kit)}");
+		}
+
+		// A spawn that names no place only equips; one that does is a placement.
+		if (root.TryGetProperty("at", out JsonElement _))
+		{
+			Point(root, "look", out float yaw, out float pitch);
+
+			// Teleport clears the velocity and the visual offset, which is what a
+			// placement is; the second call is only there because the look angles are set
+			// through the same public entry point a remote character's are.
+			character.Teleport(new Transform3D(Basis.Identity, where));
+			character.ApplyRemoteTransform(where, yaw, pitch);
+		}
 
 		session.SendJson(AgentFrameKind.Response, correlation, writer =>
 		{
 			writer.WriteString("op", "spawned");
 			writer.WriteNumber("seat", seat.PeerId);
 			writer.WriteNumber("tick", tick);
+			if (kitted)
+			{
+				writer.WriteStartObject("kit");
+				writer.WriteString("primary", kit.HasPrimary ? WeaponCatalog.NameOf(kit.Large) : Loadout.PrimaryNames[0]);
+				writer.WriteNumber("magazines", kit.Magazines);
+				writer.WriteNumber("grenades", kit.Grenades);
+				writer.WriteString("armour", Loadout.ArmourNames[(int)kit.Armour]);
+				writer.WriteEndObject();
+			}
 		});
 	}
 

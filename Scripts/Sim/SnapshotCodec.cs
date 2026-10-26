@@ -58,6 +58,8 @@ public static class SnapshotCodec
 			into[offset + 26] = p.Health;
 			into[offset + 27] = p.Ammo;
 			into[offset + 28] = p.WeaponFlags;
+			BinaryPrimitives.WriteUInt16LittleEndian(into[(offset + 29)..], KitFlags.PackSpare(p.Reserve, p.ArmourPoints));
+			into[offset + 31] = p.Kit;
 			offset += PlayerSnapshot.SizeBytes;
 		}
 		return size;
@@ -82,6 +84,7 @@ public static class SnapshotCodec
 		int offset = HeaderBytes;
 		for (int i = 0; i < players; i++)
 		{
+			ushort spare = BinaryPrimitives.ReadUInt16LittleEndian(payload[(offset + 29)..]);
 			into[i] = new PlayerSnapshot
 			{
 				PeerId = BinaryPrimitives.ReadInt32LittleEndian(payload[offset..]),
@@ -95,6 +98,9 @@ public static class SnapshotCodec
 				Health = payload[offset + 26],
 				Ammo = payload[offset + 27],
 				WeaponFlags = payload[offset + 28],
+				Reserve = (ushort)KitFlags.Reserve(spare),
+				ArmourPoints = (byte)KitFlags.ArmourPoints(spare),
+				Kit = payload[offset + 31],
 			};
 			offset += PlayerSnapshot.SizeBytes;
 		}

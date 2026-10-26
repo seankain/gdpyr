@@ -521,4 +521,49 @@ public class BotBrainTests
 		Assert.True(frame.PitchRadians > 0f);
 		Assert.True(frame.PitchRadians <= Steady.TurnRateRadians * SimConfig.TickDelta + 0.001f);
 	}
+
+	// ---- a dry primary (docs/LOADOUT.md L-D14) ------------------------------------
+
+	private static BotSituation Armed(int slot, bool primaryDry, bool hasTarget = true) =>
+		new(true, 0f, 0f, 0f, hasTarget, Vector3.Forward, 30f, hasTarget, 100, false, default, 0f, false, false,
+			slot: slot, primaryDry: primaryDry);
+
+	[Fact]
+	public void ADryPrimaryIsPutAwayForThePistol()
+	{
+		InputFrame frame = BotBrain.Frame(10, 1073741826, Armed(SimConfig.LargeSlot, primaryDry: true), Steady);
+		Assert.True(frame.Held(InputButtons.Weapon2));
+		Assert.False(frame.Held(InputButtons.Weapon3));
+
+		// Out of a fight as well as in one: an empty rifle is no weapon between fights either.
+		frame = BotBrain.Frame(10, 1073741826, Armed(SimConfig.LargeSlot, primaryDry: true, hasTarget: false), Steady);
+		Assert.True(frame.Held(InputButtons.Weapon2));
+	}
+
+	[Fact]
+	public void ThePrimaryComesBackOnceItHasRounds()
+	{
+		InputFrame frame = BotBrain.Frame(10, 1073741826, Armed(SimConfig.SidearmSlot, primaryDry: false), Steady);
+		Assert.True(frame.Held(InputButtons.Weapon3));
+		Assert.False(frame.Held(InputButtons.Weapon2));
+	}
+
+	[Fact]
+	public void ABotWithRoundsOrAlreadyOnThePistolTouchesNoWeaponKey()
+	{
+		foreach (BotSituation situation in new[]
+		{
+			Armed(SimConfig.LargeSlot, primaryDry: false),
+			Armed(SimConfig.SidearmSlot, primaryDry: true),
+		})
+		{
+			InputFrame frame = BotBrain.Frame(10, 1073741826, situation, Steady);
+			Assert.False(frame.Held(InputButtons.Weapon1));
+			Assert.False(frame.Held(InputButtons.Weapon2));
+			Assert.False(frame.Held(InputButtons.Weapon3));
+		}
+
+		// What every existing caller builds: the primary up and not dry.
+		Assert.False(BotBrain.Frame(10, 1073741826, Situation(), Steady).Held(InputButtons.Weapon2));
+	}
 }

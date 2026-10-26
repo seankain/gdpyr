@@ -345,6 +345,10 @@ public sealed class BotPilot
 		bool needsReload = !stats.HasUnlimitedAmmo && !combat.Equipped.IsReloading
 			&& combat.Equipped.Ammo <= stats.MagazineSize / 2;
 
+		// Nothing in the primary's magazine and nothing spare, or no primary at all.
+		ref WeaponState primary = ref combat.Weapons[SimConfig.LargeSlot];
+		bool primaryDry = primary.IsEmpty || (primary.Ammo <= 0 && primary.Reserve == 0 && !primary.IsReloading);
+
 		var situation = new BotSituation(
 			alive: true,
 			yaw: character.Yaw,
@@ -367,7 +371,9 @@ public sealed class BotPilot
 			inCover: inCover,
 			reloading: combat.Equipped.IsReloading,
 			grenadeAim: duck ? Vector3.Zero : grenadeAim,
-			duck: duck);
+			duck: duck,
+			slot: combat.Slot,
+			primaryDry: primaryDry);
 
 		// Standing in its spot behind cover it means to stay put, target or no: a bot that
 		// counted as wanting to move there was "stuck" every half second, and jumped —

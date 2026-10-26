@@ -32,7 +32,9 @@ dedicated-server authoritative.
   boarding and unloading, and a vertical take-off and landing dropship
 - [`docs/LOADOUT.md`](docs/LOADOUT.md) — the ground force's loadout, planned: a locker panel for
   the primary, spare magazines or grenades and body armour, weight that sets movement speed, and
-  resupply at the locker; L0–L8, nothing built yet
+  resupply at the locker; L0–L8, of which L0 and L1 are built — how much bots fire in a life,
+  which raised the default kit to five spare magazines, and the kit itself: finite primary
+  ammunition, no primary at all, and the player record that carries both
 - [`docs/LAN.md`](docs/LAN.md) — hosting a room of machines from a checkout, with a dev build
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — AWS EC2 dedicated-server runbook
 

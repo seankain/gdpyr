@@ -98,8 +98,12 @@ public static class DemoFormat
 	/// 3: the unit record is 14 bytes, its flag byte split into a body byte, with the
 	/// posture, and a flight byte (docs/TACTICS.md §5.8). A version-2 unit record would
 	/// misread from its twelfth byte on, so a version-2 demo is refused with its reason.
+	///
+	/// 4: the player record is 32 bytes, with the primary's spare rounds, the vest's
+	/// points and the kit, and a zero large weapon means no primary rather than "not
+	/// said" (docs/LOADOUT.md §6.1). A version-3 demo's 29-byte records would misread.
 	/// </summary>
-	public const byte Version = 3;
+	public const byte Version = 4;
 
 	/// <summary>
 	/// Ceiling on one recorded payload. Comfortably over the largest thing either

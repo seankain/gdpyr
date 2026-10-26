@@ -139,7 +139,7 @@ public class AgentEventTests
 		var buffer = new ArrayBufferWriter<byte>(256);
 		using (var writer = new Utf8JsonWriter(buffer))
 		{
-			AgentJson.WriteEvent(writer, AgentEvent.Make(AgentEventKind.Kill, 51204, 2147483641, 3, 2, 63.4f));
+			AgentJson.WriteEvent(writer, AgentEvent.Make(AgentEventKind.Kill, 51204, 2147483641, 3, 2, 63.4f, 47f));
 		}
 
 		using JsonDocument document = JsonDocument.Parse(buffer.WrittenMemory);
@@ -151,9 +151,24 @@ public class AgentEventTests
 		Assert.Equal(3, root.GetProperty("victim").GetInt32());
 		Assert.Equal(2, root.GetProperty("weapon").GetInt32());
 		Assert.Equal(63.4f, root.GetProperty("distance").GetSingle(), 3);
+		Assert.Equal(47, root.GetProperty("rounds_fired").GetInt32());
+		Assert.Equal(7, CountProperties(root));
+	}
 
-		// A kill has no fifth slot, and an unnamed slot is not written at all.
-		Assert.Equal(6, CountProperties(root));
+	[Fact]
+	public void AKillOfAUnitSaysItCountedNoRounds()
+	{
+		// A unit or a structure carries no primary to count (docs/LOADOUT.md L0).
+		var buffer = new ArrayBufferWriter<byte>(256);
+		using (var writer = new Utf8JsonWriter(buffer))
+		{
+			AgentJson.WriteEvent(writer, AgentEvent.Make(AgentEventKind.Kill, 900, 3, OwnerId.ForUnit(12), 2, 40f,
+				AgentEventSchema.NoRoundsFired));
+		}
+
+		using JsonDocument document = JsonDocument.Parse(buffer.WrittenMemory);
+		Assert.Equal(-12, document.RootElement.GetProperty("victim").GetInt32());
+		Assert.Equal(-1, document.RootElement.GetProperty("rounds_fired").GetInt32());
 	}
 
 	[Fact]

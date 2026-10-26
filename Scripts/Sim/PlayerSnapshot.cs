@@ -11,8 +11,12 @@ namespace Gdpyr.Sim;
 /// </summary>
 public struct PlayerSnapshot
 {
-	/// <summary>Bytes on the wire: 4 + 6 + 6 + 2 + 2 + 4 + 1 + 1 + 1 + 1 + 1.</summary>
-	public const int SizeBytes = 29;
+	/// <summary>
+	/// Bytes on the wire: 4 + 6 + 6 + 2 + 2 + 4 + 1 + 1 + 1 + 1 + 1, and since the
+	/// loadout's record v2 (docs/LOADOUT.md §6.1) 2 + 1 more: the spare rounds and vest
+	/// points, and the kit.
+	/// </summary>
+	public const int SizeBytes = 32;
 
 	public int PeerId;
 	public Vector3 Position;
@@ -44,6 +48,15 @@ public struct PlayerSnapshot
 
 	/// <summary>Equipped slot and reload state, packed (see <see cref="WeaponFlags"/>).</summary>
 	public byte WeaponFlags;
+
+	/// <summary>The primary's spare rounds, for the owner's HUD and prediction; up to <see cref="KitFlags.MaxReserve"/>.</summary>
+	public ushort Reserve;
+
+	/// <summary>The vest's points left; up to <see cref="KitFlags.MaxArmourPoints"/>. Zero until L3 gives vests points.</summary>
+	public byte ArmourPoints;
+
+	/// <summary>The kit, packed (see <see cref="KitFlags"/>).</summary>
+	public byte Kit;
 
 	public readonly bool IsAlive => Health > 0;
 
