@@ -86,8 +86,10 @@ and one attached policy is, on the wire, a round with seven players.
 The loadout is the bot's, by roster slot: rifle, DMR, launcher, DMR, rifle, launcher
 (`BotDirector.Equip`). A scenario's first seat carries a rifle and its third a launcher — which
 `Tests/Scenarios/armour_small_arms.json` relies on — and a seat that wants something else can walk to
-a weapon locker and tap `use` ([`NETCODE.md`](NETCODE.md) §10.6). What it takes there is for that
-life only, so a `reset` puts the slot's weapon back in its hands.
+a weapon locker and ask for a kit with the `loadout` op (§7.1, [`LOADOUT.md`](LOADOUT.md) §5.3), through
+the validator a person's request goes through. A kit taken there is also the next spawn's, so a
+`reset` gives each attached seat back the kit it was attached with — its `attach`'s `kit`, its last
+`spawn`'s, else its bot's — and episodes start alike.
 
 The same shape on the strategist side: an attached strategist seat skips `BotStrategist.ServerTick`
 and applies the agent's commands through `ServerIssueOrder` / `ServerQueueUnit` instead, so an
@@ -487,13 +489,14 @@ obtained by cheating is not a result about this game.
 | `config` | → | `mode` (realtime/stepped), `step_timeout_ms`, feature planes on/off |
 | `list_seats` | → ← | every roster slot: peer id, team, controller (human/bot/agent), alive |
 | `list_units` | → ← | a strategist seat's army, in the order its observation carries it, **with the ids an order names** (§7.5) |
-| `attach` | → ← | claim a seat by team + policy kind (+ optional `peer_id`, `step_mul`). `policy: "strategist"` implies the team |
+| `attach` | → ← | claim a seat by team + policy kind (+ optional `peer_id`, `step_mul`, and for a ground seat a `kit` it is equipped with and starts every episode in, [`LOADOUT.md`](LOADOUT.md) §9). `policy: "strategist"` implies the team |
 | `detach` | → | release a seat back to its bot |
 | `act` | → | one action for one seat, for one tick |
 | `observe` | → ← | the current observation for one seat |
 | `step` | → ← | stepped mode: advance N ticks, return each attached seat's observation |
-| `reset` | → ← | end the round now and start a fresh one. The `seed` labels the episode and is echoed on `round_start`; it does not determine it (§3.1). Scenarios are M7 |
+| `reset` | → ← | end the round now and start a fresh one. The `seed` labels the episode and is echoed on `round_start`; it does not determine it (§3.1). Every attached ground seat respawns in the kit it was attached with (§2). Scenarios are M7 |
 | `spawn` | → ← | place one of this session's seats, or a unit, where a scenario asked for it (§9.1). M7 |
+| `loadout` | → ← | a kit for one of this session's ground seats: `{"op":"loadout","seat":3,"kit":{"primary":"launcher","magazines":3,"grenades":2,"armour":"medium"},"when":"locker"}`. `locker` (the default) takes it at the weapon locker the seat stands at, through the one validator a person's request and a bot's go through; `spawn` keeps it for the next spawn. The answer is `"applied": true`, or `false` with `refusal` — `dead`, `not_at_locker`, `mounted`, `carrying`, `invalid`, `too_soon` ([`LOADOUT.md`](LOADOUT.md) §5.3, §6.2) — which is an answer, not an error; a kit of the wrong shape is `bad_request`, one that breaks a loadout rule `invalid`, as for `spawn` |
 | `events` | → ← | every event since a tick (§8) |
 | `state_hash` | → ← | a hash of the tick's simulation state, for §3's divergence measurement |
 | `quit` | → | close the session; every seat it holds reverts to a bot |
@@ -693,7 +696,8 @@ from position deltas and gets it slightly wrong.
 | Event | Fields beyond `tick` |
 |---|---|
 | `round_start` / `round_end` | seed, outcome, duration, the whole `RoundSummary` |
-| `kill` / `death` | attacker, victim, weapon, distance, rounds_fired — the rounds a player victim's large slot fired in the life the kill ended, a locker's swap included; −1 for a unit or a structure ([`LOADOUT.md`](LOADOUT.md) L0) |
+| `kill` / `death` | attacker, victim, weapon, distance, rounds_fired — the rounds a player victim's large slot fired in the life the kill ended, a locker's kit included; −1 for a unit or a structure ([`LOADOUT.md`](LOADOUT.md) L0) |
+| `kit` | peer, primary (its catalog id; −1 for none), armour (the vest's tier, 0 none to 3 heavy), magazines, grenades — a player took a kit at a weapon locker: a person's request, a bot's locker run, or a policy's `loadout` op ([`LOADOUT.md`](LOADOUT.md) §5.3). A kit kept for the next spawn is not one |
 | `damage` | attacker, victim, amount, remaining |
 | `unit_built` / `unit_lost` | unit id, tier, barracks, position — a unit a sniper tower or pillbox trained has `barracks` = −(slot + 1) ([`NETCODE.md`](NETCODE.md) §10.8) |
 | `node_captured` | node, owner, claimant — `claimant` is the side that held it before, `NodeHolder` numbered: 0 neutral, 1 ground force, 2 strategist; x, z |
@@ -794,8 +798,17 @@ of assertions. It is checked into the repo beside the tests.
 magazines, three grenades, no vest). It is checked when the file is read — a primary or vest there
 is none of, more than three grenades, more than nine pouches, or magazines with no primary — and
 sent with the seat's `spawn` op (with no `spawn` entry, a `spawn` that names no `at` and only
-equips), which equips it and makes it the seat's respawn kit; the server refuses one that breaks a
-loadout rule (`invalid`) rather than trimming it. Harness-only, like the rest of `spawn`.
+equips), which equips it and makes it the seat's respawn kit, and the kit `reset` gives it back; the
+server refuses one that breaks a loadout rule (`invalid`) rather than trimming it. Harness-only, like
+the rest of `spawn`.
+
+**A ground step can ask for a kit**, as the `loadout` op does (§7.1): `"loadout": {"kit": {...},
+"when": "locker"}`, `when` defaulting to the locker and the kit checked as a seat's is. It is sent
+once, on the step's first tick and before that tick's action, and answered before the tick is
+stepped — not in the warmup, before the seat has been placed. A refusal is a result, not a harness
+failure: `counters.loadouts_applied` and `counters.loadouts_refused` count the answers, and
+`counters.loadouts_refused.<code>` each refusal by its code (`not_at_locker`, `too_soon`, …). The
+trace has every answer.
 
 A spawn names exactly one of a `peer` (a seat to place), a `unit` (`infantry`, `technical`,
 `tank`, `builder`, `supply_truck`, `sniper`, `heavy_gunner` or `dropship`) or a `structure` (`pillbox`, `sandbag_wall`, `sniper_tower`, with a `yaw`). A

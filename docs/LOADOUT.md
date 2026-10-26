@@ -1,6 +1,6 @@
 # Ground-force loadout: the locker panel, body armour and weight — implementation plan
 
-Status: **L0 built and measured, L1 built (§10); L2–L8 planned.** Planned from the code at `dd579dd`. Phases
+Status: **L0 built and measured, L1 and L2 built (§10); L3–L8 planned.** Planned from the code at `dd579dd`. Phases
 L0–L8 (§10); decisions L-D1 to L-D15 (§3) are the defaults the plan is written against — flag any
 you disagree with before L1 starts. L0's measurement raised the default kit to five magazines;
 there are nine pouches, so it keeps three grenades (L-D1, L-D3, L-D4, L-D13; §10 L0's result).
@@ -608,6 +608,96 @@ through the harness; "listen host" and "dedicated server" need a person at the c
 - **Done when:** both locker scenarios pass engine-side over their seeds; the full suite passes; on a
   listen host and a dedicated server, `kit launcher 3 0 none` at the locker swaps the weapon and is
   refused 3 m away, and a remote client sees the new weapon.
+- **Result — built.** The locker runner's kit request came forward from L7, because this phase
+  retires the swap it tapped for; the `kit` event, `reset`'s kit and one scenario differ from the
+  plan's words, and a third scenario had to move. Each is said below.
+  - **The reach** (`Scripts/Sim/LockerSupply.cs`): `FootprintDistance` — flat, to the 1.2 × 0.5 m
+    cabinet turned with its node, 0 inside it — `InReach`, and `StandPoint`, 0.5 m in front of the
+    racks. `SimConfig.LockerReachMeters` is 1.0 from the footprint; guns and cans keep 2.5 m.
+    `WeaponLocker` takes its size from there and its yaw from its basis's +Z, and
+    `EmplacementManager` leaves out a locker a map has scaled or tilted, with an error (§12).
+    `LockerSupply.Step`, the resupply, is L5's.
+  - **The use key**: a tap at a locker is `UseAction.OpenLocker`, which the server resolves and does
+    nothing with — the panel is L6's. `LockerSim`, `WeaponCatalog.LockerSwap`, `SwapWeapon`,
+    `PlayerCombat.SwapLarge` and `LockerSwaps` are gone; `LockerSim.IndexOf` is `Loadout.IndexOf`.
+    The prompt names the console command until the panel: `weapon locker   [~] kit <primary>
+    <magazines> <grenades> <vest>`.
+  - **One validator** (`Scripts/Sim/KitRequest.cs`, `CombatManager.TryApplyLockerKit`): §5.3's rule
+    as `KitRequest.Check` over a `KitSituation`, refusing in the order invalid, dead (which a
+    strategist is), mounted, carrying, not at the locker (1.0 m + 0.5 m slack), too soon (a
+    quarter-second after the last kit taken; refusals do not count). `Loadout.IsValid` is
+    "`Sanitize` would change nothing the asker chose". On success `PlayerCombat.ApplyKit` — L-D10 as
+    `Loadout.RefitPrimary` and `RefitGrenades`: a different primary full, the same one keeping its
+    magazine and its spare rounds up to the new pouches, grenades up to theirs, added pouches empty
+    — `PendingLoadout` (L-D11), the `kit` event and a `[locker]` log line; the round-over line
+    counts kits taken.
+  - **The wire**: `ClientLockerLoadout` (four bytes, not sanitized before the validator, so a kit
+    the client did not mean is refused rather than trimmed) and `ServerKitResult` (the refusal
+    byte) to the requester, which prints it on the console until the panel shows it. The record
+    already carries everything a kit changes, so nothing else is sent. A console command, `kit
+    <primary> <magazines> <grenades> <armour>`, asks through `RequestLockerKit`, applied directly on
+    the authority as `RequestLoadout` is.
+  - **The agent API**: the `loadout` op, `when` `locker` (through the validator) or `spawn` (the
+    pending kit). A refusal is an answer — `"applied": false` and §6.2's code — not an error frame;
+    a kit of the wrong shape is `bad_request` and one that breaks a rule `invalid`, as for `spawn`.
+    `attach` takes a `kit` too. **`reset` restores** each attached ground seat's kit: its
+    `attach`'s, else its last `spawn`'s, else — where §9 says "the default" — the kit its bot
+    carried when it was attached, which is the default kit but for a roster slot's primary, so a
+    seat on a DMR bot's slot keeps the DMR it has had since L1. The .NET client has `LoadoutAsync`
+    and a `kit` on `AttachGroundAsync`; the Python client `loadout()` and a `kit` argument.
+  - **The `kit` event** has five slots, as every event does — peer, primary (−1 for none), armour,
+    magazines, grenades — and §9's sixth value, `locker` or `spawn`, would not fit. It is emitted
+    for a kit taken at a locker, by a person, a bot or a policy; a kit kept for the next spawn
+    changes nothing in the round until that spawn, and emits nothing.
+  - **The harness**: a ground step's `"loadout": {"kit": {...}, "when": "locker"}`, sent once on the
+    step's first tick and answered before the tick is stepped; `counters.loadouts_applied`,
+    `counters.loadouts_refused` and `counters.loadouts_refused.<code>`, the codes pinned to the
+    game's by `ScenarioTests`; every answer in the trace.
+  - **From L7: the locker runner asks for a kit.** With the swap gone, an HTN runner that tapped at
+    the locker would have given up every trip. It walks to `StandPoint`, is there 0.8 m from the
+    footprint (`GroundPlanTraits.LockerArriveMeters`, measured from it now, not 2 m from the
+    origin), and the pilot asks the validator for its own kit with a launcher; a refusal sets
+    `GroundContext.KitRefused`, and `UseLocker` gives the trip up as a timeout does
+    (`FailedLockerTrips`). `GroundIntent.UseLocker` is `TakeLauncher`; `BotSituation.Use`,
+    `UseTapIntervalTicks` and the pilot's tap are gone. **The launcher is for that life**: the
+    first probe of it found a runner whose kit became its next spawn's (L-D11) respawning with the
+    launcher after `reset`, so that in seeds 2 and 3 two launchers were already in hand and no
+    runner was sent. L-D14 keeps bots in their roster kit until L7, so the pilot puts its
+    `PendingLoadout` back after the kit is taken.
+  - **Scenarios.** `locker_launcher_vs_tank.json`: the seat at (8, 1, 10.0), 0.75 m from the
+    footprint, and its script's tap a `loadout` step for a launcher with three pouches; it now also
+    claims one kit taken, a launcher with three magazines. `locker_kit_refused.json` (new): 3 m out,
+    refused `not_at_locker`, no `kit` event, every `damage` record the rifle's, and the kit still a
+    rifle's (`weapon.reserve_max` 150). **`technical_wreck_ejects.json`**, not in the plan, tapped the locker
+    from (8, 1, 9.5), 1.25 m from the footprint and outside the new reach: its grenadier now takes
+    a launcher kit with three pouches as a seat `kit`, and its script, the tap an idle step of the
+    same length, is `scripts/six_rounds.json`. **`htn_locker_runner_kit.json`** (new, beyond the
+    plan): a roster of three — the scenario's seat, idle far off, an HTN DMR bot and a launcher bot —
+    and a tank 45 m from the spawn; the DMR bot is sent to the locker and takes a launcher kit, in
+    every seed.
+  - `dotnet test`: 2285 passed, 0 failed (2239 before; 46 more: 12 in `KitRequestTests`, 12 in
+    `LockerSupplyTests`, 11 in `LoadoutTests`, 10 in `ScenarioTests`, 3 in `GroundHtnTests`, 2 in
+    `AgentEventTests`, 1 in `AgentCodecTests`, and 5 fewer in `EmplacementTests`, whose locker-cycle
+    tests went with `LockerSim`). `dotnet build Gdpyr.csproj`: 0 warnings, 0 errors; the harness and
+    the .NET client build.
+  - **The tests test something.** One change at a time, each failed tests: no latency slack (1), no
+    quarter-second (1), a footprint not turned with its yaw (1), the same primary refilled (2),
+    grenade pouches refilled (1), the vest left out of `IsValid` (1), the runner ignoring a refusal
+    (1), a tap at a locker doing nothing (2), the runner's arrival measured from the origin (1).
+  - **Scenarios** (Godot 4.6 .NET, headless, through the harness, default `htn`): the full suite on
+    the final build, 34 of 34 over 74 seeds — the 32 before this phase and the two new ones — in
+    two runs, 30 files and then the last four, because the container restarted between them.
+    `locker_launcher_vs_tank`: one kit taken, a launcher with three magazines, and four launcher
+    hits on the tank in each seed, as before the phase. `locker_kit_refused`: refused
+    `not_at_locker` and 60 rifle hits on the wall in each seed. `technical_wreck_ejects`: all four
+    riders out alive. `htn_locker_runner_kit`: five kits taken over three seeds, each a launcher by
+    the DMR bot, which in a run of the same file on the same build never respawned with one (its
+    server log); on the build before the runner's next spawn was
+    put back, the same file took one kit, in seed 1, and failed seeds 2 and 3.
+  - **Not taken**: the listen-host and dedicated-server checks. The headless scenarios cover the
+    validator from the agent op and the bot — a kit taken at 0.75 m, refused at 3 m, the new
+    primary's rounds and blasts in the record and the events — but not the RPC from a client, the
+    console command, the prompt, or a remote client's view of the new weapon.
 
 ### L3 — Body armour (1 day)
 
