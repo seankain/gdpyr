@@ -1,0 +1,30 @@
+{
+  "name": "a kit with no primary spawns on the pistol, and the large-weapon key does nothing",
+  "seeds": [6],
+  "duration_ticks": 720,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 0 },
+
+  "seats": [
+    {
+      "id": "pistolero", "team": "ground", "policy": "ground", "step_mul": 4,
+      "script": "scripts/crouch_weapon3_and_pulse.json",
+      "kit": { "primary": "none", "magazines": 0, "grenades": 3, "armour": "none" }
+    }
+  ],
+
+  "spawns": [
+    { "structure": "sandbag_wall", "team": "strategist", "at": [-60, 0.5, 50], "yaw": 0 },
+    { "peer": "pistolero", "at": [-60, 1, 60], "look": [0, 0] }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.damage[weapon=1].count", "op": ">=", "value": 3 },
+    { "metric": "events.damage[weapon=3].count", "op": "==", "value": 0 },
+    { "metric": "observation.weapon.slot.1.last", "op": "==", "value": 1 },
+    { "metric": "observation.weapon.slot.2.last", "op": "==", "value": 0 },
+    { "metric": "observation.weapon.reserve.last", "op": "==", "value": -1 },
+    { "metric": "observation.self.grenades.last", "op": "==", "value": 3 }
+  ]
+}

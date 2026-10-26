@@ -136,6 +136,23 @@ public class SnapshotCodecTests
 	}
 
 	[Fact]
+	public void TheSparesTwoFieldsNeverReachIntoEachOther()
+	{
+		// Nine bits and seven, filling the word: every pair at the fields' edges comes
+		// back as it went in.
+		Assert.Equal(16, 9 + 7);
+		foreach (int reserve in new[] { 0, 1, 255, 256, 270, KitFlags.MaxReserve })
+		{
+			foreach (int armour in new[] { 0, 1, 35, 60, 100, KitFlags.MaxArmourPoints })
+			{
+				ushort spare = KitFlags.PackSpare(reserve, armour);
+				Assert.Equal(reserve, KitFlags.Reserve(spare));
+				Assert.Equal(armour, KitFlags.ArmourPoints(spare));
+			}
+		}
+	}
+
+	[Fact]
 	public void AZeroLargeWeaponIsNoPrimary()
 	{
 		// Since record v2 the large bits' zero means no primary rather than "not said".
