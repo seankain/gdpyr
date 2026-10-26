@@ -1,6 +1,6 @@
 # Ground-force loadout: the locker panel, body armour and weight — implementation plan
 
-Status: **L0 built and measured (§10); L1–L8 planned.** Planned from the code at `dd579dd`. Phases
+Status: **L0 built and measured, L1 built (§10); L2–L8 planned.** Planned from the code at `dd579dd`. Phases
 L0–L8 (§10); decisions L-D1 to L-D15 (§3) are the defaults the plan is written against — flag any
 you disagree with before L1 starts. L0's measurement raised the default kit to five magazines;
 there are nine pouches, so it keeps three grenades (L-D1, L-D3, L-D4, L-D13; §10 L0's result).
@@ -506,6 +506,88 @@ through the harness; "listen host" and "dedicated server" need a person at the c
   scenario suite passes as before plus `magazines_run_dry`; in a listen-host round the reserve
   counts down, a reload with none spare does not start, a no-primary kit (set from the console)
   spawns on the pistol and `3` does nothing.
+- **Result — built.** Two pieces of later phases came forward, and the observation fields reach a
+  packed observation by a route the plan did not name; each is said below.
+  - **The kit** (`Scripts/Sim/Loadout.cs`): `BodyArmourTier` (the enum only; what a vest does is
+    L3's), `CarryStats`, `Loadout.NoPrimary` (255) and its alias `WeaponCatalog.None` (whose name is
+    `—`), `PouchSlots` 9, the default kit's five magazines and three grenades, `Sanitize`,
+    `WeightKg`, `SpeedScale`, `ReserveFor`, and `TryParse` for a kit spelt out by name.
+    `SpeedScale(weight, reference)` takes the reference from the catalog —
+    `WeaponCatalog.ReferenceWeightKg`, the default kit weighed with the `.tres` numbers at load —
+    rather than a written-down 9.3, so the default kit is exactly 1 however the weights are tuned;
+    `LoadoutTests` pins 9.3 and §4.1's table. Speed is computed, by the console's `loadout` line,
+    and not yet applied (L4). `LoadoutSelection` gained `Magazines`, `Grenades`, `Armour` and an
+    equality.
+  - **Carry stats**: `CarryWeightKg`, `PouchRounds` and `PouchWeightKg` on `WeaponDefinition`; the
+    rifle 3.6 / 30 / 0.5, the DMR 4.4 / 10 / 0.6, the launcher 6.0 / 2 / 0.9; `WeaponCatalog.CarryFor`.
+  - **Finite primary ammunition**: `WeaponState.Reserve` (−1 unlimited, what `Ready` still gives by
+    default, so every unit, mounted gun and the pistol reload forever), `Empty`, `IsEmpty`; a reload
+    moves `min(missing, reserve)` and needs a reserve that is not 0; an empty slot never fires;
+    `SelectSlot(current, input, occupied)`, the mask from `PlayerCombat.OccupiedSlots`; and
+    `SimConfig.SidearmSlot`.
+  - **Equipping the kit**: `PlayerCombat.Equip` arms the primary with its pouches' rounds spare, the
+    grenades from the kit, and the primary up or — with none — the pistol. Until L2 retires it, the
+    locker's swap gives the new primary full pouches, L-D10's rule for a different primary. Bots keep
+    their slot's primary and take the rest of the default kit.
+  - **The record v2**: 32 B, as §6.1 — bytes 29–30 the reserve (9 bits) and the vest's points (7,
+    written 0 until L3), byte 31 the kit (`KitFlags`); a zero large weapon is no primary. A client's
+    `Loadout` is the record's, and its reserve is applied under the magazine's acknowledgement
+    guard. `DemoFormat.Version` 4; versions 1–3 are refused with their reason.
+  - **HUD**: `rifle 30 / 150`, `pistol 12 / ∞`, `dry`, `—`, as §7.4.
+  - **The observation fields**: `self.grenades`, `weapon.reserve` and `weapon.reserve_max` (−1 for a
+    weapon that reloads forever), in raw units, as the ground schema's `extras` block
+    (`AgentObservation.ExtraFields`). Every JSON observation names them, as planned; but the
+    playtest harness, the .NET client and the Python client all take packed observations, which
+    the plan's JSON-only fields would never reach. So a packed observation carries them too, after
+    the vector and any planes with flag bit 3, when the session's `hello` asks (`"extras": true`).
+    The vector, `gdpyr-agent-obs-3` and every frame a client that does not ask receives are
+    unchanged until L8; the harness asks (AGENT_API.md §6.1).
+  - **The harness**: a seat's `"kit"`, checked when the file is read against limits
+    `ScenarioTests` pins to the game's, and sent with the seat's `spawn`, which equips it and makes
+    it the respawn kit, refusing a kit that breaks a rule (`invalid`); a `spawn` with no `at` only
+    equips. Scenarios `magazines_run_dry.json` and, beyond the plan, `no_primary_pistol.json`.
+  - **From L2: `ClientSelectLoadout` carries the whole kit**, next-spawn only, and a console command
+    `loadout <primary> <magazines> <grenades> [armour]` sets it. Needed here twice over: this phase's
+    check sets a no-primary kit from the console, and the old one-byte request, sanitized under the
+    new rules, would have dropped the kit's pouches whenever `1`/`2`/`3` picked a weapon on the
+    death screen. `RequestLoadout(byte)` now keeps the rest of the pending kit.
+  - **From L7: a dry primary is put away for the pistol, under either AI.** Finite ammunition alone
+    failed `htn_ground_denies_node` in both full suite runs on the first build of this phase — one
+    seed each, the first, with one node captured where the claim wants two — while the build before
+    it passed. A temporary probe (not committed) logging each bot's first dry fire found the cause
+    when that file was run as the suite runs it, after `builder_fortifies`: the rifle bot that had
+    killed the far node's first rifleman at tick 2178 dry-fired from tick 2931, all 180 of its rounds
+    spent, and the DMR bot from 4068, all 60 of its; the second rifleman lived to 5288. Before this
+    phase the same bot, reloading forever, killed it at 3916. Run on its own the file passed 32 of
+    32 seeds and no bot ran dry: the rounds are not reproducible seed for seed (COVER.md §9), and
+    run alone both of the far node's riflemen were dead by tick 2104. `BotSituation` now carries the slot in hand and
+    `PrimaryDry` (nothing in the magazine, nothing spare, or no primary); `BotBrain` presses
+    `Weapon2` with the primary up and dry and `Weapon3` once it has rounds. On that build the file
+    passed in the suite's order four times out of four with the probe, and in the final suite run
+    below — but in none of the probed runs did a bot run dry, so the fallback has been checked by
+    `BotBrainTests` and not yet seen working in a round.
+    `Rearm` and per-role kits stay L7's.
+  - `dotnet test`: 2239 passed, 0 failed (2176 before; 63 new: 26 in `LoadoutTests`, 7 in
+    `WeaponSimTests`, 5 in `SnapshotCodecTests`, 1 in `DemoCodecTests`, 3 in `AgentObservationTests`,
+    6 in `AgentCodecTests`, 12 in `ScenarioTests`, 3 in `BotBrainTests`). `dotnet build
+    Gdpyr.csproj`: 0 warnings, 0 errors; the harness and the .NET client build.
+  - **The tests test something.** One change at a time, each failed tests: a reload that ignored the
+    reserve (4), a reload with nothing spare (1), the slot mask ignored (1), an empty slot that fires
+    (1), grenades trimmed before magazines (3), magazines kept with no primary (2), the kit byte's
+    magazines a bit out of place (1), the speed line's slope at 2.5 % (5). A ten-bit reserve, which
+    overlaps the vest's points, failed nothing until `TheSparesTwoFieldsNeverReachIntoEachOther` was
+    added; it fails that one.
+  - **Scenarios** (Godot 4.6 .NET, headless, through the harness, default `htn`): the full suite on
+    the final build, 32 of 32 over 69 seeds — the 30 before this phase, `magazines_run_dry` (30 hits
+    on a sandbag wall and none after, over both seeds; with two spare magazines the same file
+    records 66 and fails) and `no_primary_pistol` (14 pistol hits, none from the rifle, the pistol
+    up at the end; with a rifle kit the same file fails five of its claims). The build before this
+    phase ran the 30 beside the first run and passed all 30.
+  - **Not taken**: the listen-host round. The headless scenarios cover what its list asks of the
+    simulation — the reserve running out, no reload with none spare, a no-primary kit spawning on the
+    pistol with `3` doing nothing — but through the `spawn` op, not the console; the console
+    command, the HUD's lines and a remote client's prediction of its own reserve have not run in
+    front of anyone.
 
 ### L2 — The kit request: one validator, the use key, the RPC, the agent op (1½ days)
 
@@ -513,7 +595,7 @@ through the harness; "listen host" and "dedicated server" need a person at the c
    prompt removed; the locker's footprint and yaw registered; `LockerReachMeters` 1.0 from the
    footprint (`LockerSupply.FootprintDistance`, §4.4, lands here).
 2. `PlayerCombat.ApplyKit`; `CombatManager.TryApplyLockerKit` (§5.3); `ClientLockerLoadout`,
-   `ServerKitResult`, `ClientSelectLoadout` widened.
+   `ServerKitResult`. (`ClientSelectLoadout` was widened in L1.)
 3. A temporary console command, `kit <primary> <mags> <grenades> <vest>`, calling
    `RequestLockerKit`, so L2–L5 are playable before the panel.
 4. Agent `loadout` op, `reset` restoring kits, the `kit` event; script step `loadout`.
@@ -593,7 +675,7 @@ through the harness; "listen host" and "dedicated server" need a person at the c
 
 ### L7 — Computer players (1½ days)
 
-1. Dry → pistol (§8), both AIs.
+1. Dry → pistol (§8), both AIs — built in L1, which needed it; L7 sees it working in rounds.
 2. `GroundFact.Ammo`, `Rearm`, the locker runner's kit request; the debugger's map.
 3. `BotKits = role` and its kits; a bot's kit in the inspect panel.
 4. Run the `htn_*` scenarios with `BotKits = role`, and ten bot-only rounds each way.
