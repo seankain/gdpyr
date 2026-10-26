@@ -15,8 +15,9 @@ public sealed class ScenarioException : Exception
 
 /// <summary>
 /// One step of a scripted seat: what to do, and for how many ticks. A ground seat's
-/// step is input — a move, a look, buttons — held for its ticks; a strategist seat's is
-/// <see cref="Commands"/>, sent once, on the step's first tick (docs/VEHICLES.md §11).
+/// step is input — a move, a look, buttons — held for its ticks, and may ask for a kit
+/// (<see cref="Loadout"/>); a strategist seat's is <see cref="Commands"/>. A kit and
+/// commands are sent once, on the step's first tick (docs/VEHICLES.md §11).
 /// </summary>
 public struct ScriptStep
 {
@@ -37,6 +38,16 @@ public struct ScriptStep
 
 	/// <summary>A strategist seat's commands, naming units by spawn label. Null for a ground seat's step.</summary>
 	public ScriptCommand[] Commands;
+
+	/// <summary>
+	/// A ground seat's kit, asked for once, on the step's first tick (docs/LOADOUT.md §9):
+	/// at the locker it stands at, or for its next spawn, by <see cref="LoadoutWhen"/>.
+	/// Null for none.
+	/// </summary>
+	public GdpyrKit Loadout;
+
+	/// <summary><c>locker</c> or <c>spawn</c>, as the <c>loadout</c> op takes it.</summary>
+	public string LoadoutWhen;
 }
 
 /// <summary>
@@ -218,6 +229,15 @@ public static class ScenarioKit
 	public static readonly string[] Primaries = { "none", "dmr", "rifle", "launcher" };
 
 	public static readonly string[] Armours = { "none", "light", "medium", "heavy" };
+
+	/// <summary>Where a script step's <c>loadout</c> takes its kit: at a locker, or for the next spawn.</summary>
+	public static readonly string[] Whens = { "locker", "spawn" };
+
+	/// <summary>
+	/// What the server may answer a <c>loadout</c> with instead of taking it
+	/// (docs/LOADOUT.md §6.2): each is a counter, <c>counters.loadouts_refused.&lt;code&gt;</c>.
+	/// </summary>
+	public static readonly string[] Refusals = { "dead", "not_at_locker", "mounted", "carrying", "invalid", "too_soon" };
 
 	public const int PouchSlots = 9;
 
@@ -519,14 +539,23 @@ public sealed class Scenario
 		}
 
 		string where = $"'{scenario.Name}': seat '{seat.Id}'";
-		if (kit.ValueKind != JsonValueKind.Object)
-		{
-			throw new ScenarioException($"{where} has a 'kit' that is not an object");
-		}
-
 		if (seat.Policy != "ground")
 		{
 			throw new ScenarioException($"{where} is a strategist, and a strategist carries no kit");
+		}
+
+		return ReadKitObject(where, kit);
+	}
+
+	/// <summary>
+	/// A kit object, a seat's or a step's <c>loadout</c>'s, checked against the game's
+	/// limits (<see cref="ScenarioKit"/>); <paramref name="where"/> says whose, for the error.
+	/// </summary>
+	private static GdpyrKit ReadKitObject(string where, JsonElement kit)
+	{
+		if (kit.ValueKind != JsonValueKind.Object)
+		{
+			throw new ScenarioException($"{where} has a 'kit' that is not an object");
 		}
 
 		var read = new GdpyrKit();
@@ -657,6 +686,8 @@ public sealed class Scenario
 				Commands = ReadCommands(scenario, step),
 			};
 
+			ReadLoadout(scenario, step, ref parsed);
+
 			if (step.TryGetProperty("move", out JsonElement move) && move.ValueKind == JsonValueKind.Array
 				&& move.GetArrayLength() >= 2)
 			{
@@ -689,6 +720,40 @@ public sealed class Scenario
 		}
 
 		return new ScenarioScript(read, repeat);
+	}
+
+	/// <summary>
+	/// A ground step's <c>loadout</c>, as the op takes it (docs/LOADOUT.md §9):
+	/// <c>{"kit": {...}, "when": "locker"}</c>, <c>when</c> defaulting to the locker.
+	/// </summary>
+	private static void ReadLoadout(Scenario scenario, JsonElement step, ref ScriptStep parsed)
+	{
+		if (!step.TryGetProperty("loadout", out JsonElement loadout))
+		{
+			return;
+		}
+
+		string where = $"'{scenario.Name}': a step's 'loadout'";
+		if (loadout.ValueKind != JsonValueKind.Object || !loadout.TryGetProperty("kit", out JsonElement kit))
+		{
+			throw new ScenarioException($"{where} is an object naming its 'kit', and 'when' it is taken");
+		}
+
+		foreach (JsonProperty field in loadout.EnumerateObject())
+		{
+			if (field.Name is not ("kit" or "when"))
+			{
+				throw new ScenarioException($"{where} has no field '{field.Name}'; it takes 'kit' and 'when'");
+			}
+		}
+
+		parsed.Loadout = ReadKitObject(where, kit);
+		parsed.LoadoutWhen = Text(loadout, "when", ScenarioKit.Whens[0]);
+		if (Array.IndexOf(ScenarioKit.Whens, parsed.LoadoutWhen) < 0)
+		{
+			throw new ScenarioException($"{where}: 'when' is one of {string.Join(", ", ScenarioKit.Whens)},"
+				+ $" not '{parsed.LoadoutWhen}'");
+		}
 	}
 
 	/// <summary>A strategist step's <c>commands</c>, each checked for what its kind needs; null when the step has none.</summary>
@@ -794,11 +859,11 @@ public sealed class Scenario
 		bool strategist = seat.Policy == "strategist";
 		foreach (ScriptStep step in seat.Script.Steps)
 		{
-			if (strategist && step.HasInput)
+			if (strategist && (step.HasInput || step.Loadout != null))
 			{
 				throw new ScenarioException(
 					$"'{scenario.Name}': seat '{seat.Id}' is a strategist; its script's steps carry 'commands',"
-					+ " not 'move', 'look' or 'buttons'");
+					+ " not 'move', 'look', 'buttons' or 'loadout'");
 			}
 
 			if (!strategist && step.Commands != null)

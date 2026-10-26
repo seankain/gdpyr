@@ -1045,4 +1045,83 @@ public class ScenarioTests
 		Assert.Equal(Gdpyr.Sim.Loadout.DefaultMagazines, kit.Magazines);
 		Assert.Equal(Gdpyr.Sim.Loadout.DefaultGrenades, kit.Grenades);
 	}
+
+	// ---- a script step's loadout (docs/LOADOUT.md §9) ------------------------------
+
+	private static Scenario WithLoadout(string loadout, string policy = "ground", string then = """{ "ticks": 8, "buttons": ["fire"] }""") =>
+		Scenario.Parse($$"""
+		{
+		  "name": "a loadout",
+		  "seed": 1,
+		  "seats": [ { "id": "seat", "team": "{{policy}}", "policy": "{{policy}}",
+		    "script": [ { "ticks": 8, "loadout": {{loadout}} }, {{then}} ] } ],
+		  "assert": [ { "metric": "events.damage.count", "op": ">=", "value": 0 } ]
+		}
+		""");
+
+	[Fact]
+	public void AStepsLoadoutIsReadWithTheLockerForWhenItLeavesOut()
+	{
+		ScriptStep step = WithLoadout("""{ "kit": { "primary": "launcher", "magazines": 3, "grenades": 0 } }""")
+			.Seats[0].Script.Steps[0];
+
+		Assert.Equal("launcher", step.Loadout.Primary);
+		Assert.Equal(3, step.Loadout.Magazines);
+		Assert.Equal(0, step.Loadout.Grenades);
+		Assert.Equal("none", step.Loadout.Armour);
+		Assert.Equal("locker", step.LoadoutWhen);
+
+		// A step with only a kit is not input: the seat holds still while it asks.
+		Assert.False(step.HasInput);
+
+		step = WithLoadout("""{ "kit": { "primary": "none", "magazines": 0 }, "when": "spawn" }""").Seats[0].Script.Steps[0];
+		Assert.Equal("spawn", step.LoadoutWhen);
+	}
+
+	[Fact]
+	public void AStepWithNoLoadoutAsksForNothing()
+	{
+		ScriptStep step = WithLoadout("""{ "kit": {} }""").Seats[0].Script.Steps[1];
+		Assert.Null(step.Loadout);
+	}
+
+	[Theory]
+	[InlineData("""{ "kit": { "primary": "shotgun" } }""", "primary")]
+	[InlineData("""{ "kit": { "magazines": 7, "grenades": 3 } }""", "pouches")]
+	[InlineData("""{ "kit": {}, "when": "later" }""", "when")]
+	[InlineData("""{ "kit": {}, "at": "locker" }""", "'at'")]
+	[InlineData("""{ "primary": "launcher" }""", "'kit'")]
+	[InlineData("""[1]""", "'kit'")]
+	public void ALoadoutThatIsNotOneFailsAtParseTime(string loadout, string says)
+	{
+		ScenarioException error = Assert.Throws<ScenarioException>(() => WithLoadout(loadout));
+		Assert.Contains(says, error.Message);
+	}
+
+	[Fact]
+	public void AStrategistsStepCarriesNoLoadout()
+	{
+		// Its other step is a strategist's own, so the kit is the only thing wrong.
+		ScenarioException error = Assert.Throws<ScenarioException>(() =>
+			WithLoadout("""{ "kit": {} }""", policy: "strategist", then: """{ "ticks": 8, "commands": [] }"""));
+		Assert.Contains("loadout", error.Message);
+
+		Scenario fine = WithLoadout("""{ "kit": {} }""", then: """{ "ticks": 8 }""");
+		Assert.NotNull(fine.Seats[0].Script.Steps[0].Loadout);
+	}
+
+	[Fact]
+	public void TheHarnessCountsEveryRefusalTheGameCanAnswer()
+	{
+		// counters.loadouts_refused.<code> exists for each of these, so a scenario that
+		// claims one names a code the server can actually send (docs/LOADOUT.md §6.2).
+		var codes = new List<string>();
+		for (byte value = 1; Gdpyr.Sim.KitRequest.TryRead(value, out Gdpyr.Sim.KitRefusal refusal); value++)
+		{
+			codes.Add(Gdpyr.Sim.KitRequest.CodeOf(refusal));
+		}
+
+		Assert.Equal(codes, ScenarioKit.Refusals);
+		Assert.Equal(new[] { "locker", "spawn" }, ScenarioKit.Whens);
+	}
 }

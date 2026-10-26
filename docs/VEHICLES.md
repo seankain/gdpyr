@@ -708,7 +708,7 @@ metric:
 |---|---|---|
 | `technical_boards_squad` | a technical and six riflemen beside it; scripted embark of all six | `unit_embarked.count == 4` |
 | `technical_carries_squad` | a technical with four aboard; scripted move 60 m, then unload | `unit_disembarked[x>…].count == 4`; `unit_lost.count == 0` |
-| `technical_wreck_ejects` | a technical with four aboard on open ground at `(8, -42.5)`, 52 m from a scripted grenadier on `scripts/locker_then_six_rounds.json` (`locker_launcher_vs_tank`'s pattern, since a scenario cannot arm a bot) — outside the technical's 50 m engage range, inside its 70 m sensor, so it cannot kill the grenadier first, and 108.5 m from the barracks, outside its 107.1 m resupply reach, so it does not heal between rounds; a stepped strategist seat for the `aboard` spawn | in every seed: `unit_lost[tier=1].count == 1`, `unit_disembarked.count == 4`, `unit_lost.count == 1`, `observation.grenadier.self.alive.min == 1` (a direct 40 mm hit does its impact's 40 of the technical's 220 — the unit struck is left out of its own blast — so the sixth round wrecks it, and the script fires no seventh) |
+| `technical_wreck_ejects` | a technical with four aboard on open ground at `(8, -42.5)`, 52 m from a scripted grenadier with a launcher kit (three spare pouches, seven rounds) on `scripts/six_rounds.json` — until LOADOUT L2 it tapped the weapon locker for one, `locker_launcher_vs_tank`'s pattern, since a scenario could not arm a seat — outside the technical's 50 m engage range, inside its 70 m sensor, so it cannot kill the grenadier first, and 108.5 m from the barracks, outside its 107.1 m resupply reach, so it does not heal between rounds; a stepped strategist seat for the `aboard` spawn | in every seed: `unit_lost[tier=1].count == 1`, `unit_disembarked.count == 4`, `unit_lost.count == 1`, `observation.grenadier.self.alive.min == 1` (a direct 40 mm hit does its impact's 40 of the technical's 220 — the unit struck is left out of its own blast — so the sixth round wrecks it, and the script fires no seventh) |
 | `dropship_lands_to_unload` | a dropship with eight aboard; scripted move, then unload | `dropship_landed.count >= 1`; `unit_disembarked.count == 8` |
 
 **The baseline.** The last measured suite is 18 of 19 at `fcf2a5d`, with
@@ -1038,7 +1038,8 @@ scenario rested on two premises that the game does not bear out:
 Corrected, and no game code changed: the truck is moved 3 m towards the grenadier, to
 `(8, -42.5)` — 108.5 m from the barracks, 52 m from the grenadier, still past the technical's 50 m
 engage range, and the same 0.032 rad pitch hits it every time; a new script,
-`scripts/locker_then_six_rounds.json`, fires six rounds and stops, because a seventh lands among
+`scripts/locker_then_six_rounds.json` (since LOADOUT L2 `scripts/six_rounds.json`, the seat's launcher a kit
+rather than a locker's swap), fires six rounds and stops, because a seventh lands among
 riders standing at half health by the wreck and kills three (seen in a longer run); the scenario
 runs 1,560 ticks; and `unit_lost.count == 1` is asserted, the "alive" in its name.
 

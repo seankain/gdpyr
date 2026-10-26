@@ -357,7 +357,7 @@ public sealed class BotDirector
 
 		Vector3 spawn = PlayerManager.Instance?.SpawnCentroid ?? Vector3.Zero;
 		Vector3 locker = Vector3.Zero;
-		bool hasLocker = EmplacementManager.Instance?.TryNearestLocker(spawn, out locker) ?? false;
+		bool hasLocker = EmplacementManager.Instance?.TryNearestLocker(spawn, out locker, out _) ?? false;
 
 		_coordinator.Assign(tick, _members.AsSpan(0, count), _nodes.AsSpan(0, nodes), GroundContacts, spawn,
 			hasLocker, locker, _orders);

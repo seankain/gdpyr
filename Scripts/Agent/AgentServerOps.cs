@@ -86,6 +86,7 @@ public sealed partial class AgentServer
 				case "step": Step(session, correlation, root, tick); break;
 				case "reset": Reset(session, correlation, root, tick); break;
 				case "spawn": Spawn(session, correlation, root, tick); break;
+				case "loadout": TakeLoadout(session, correlation, root, tick); break;
 				case "events": Events(session, correlation, root); break;
 				case "state_hash": StateHash(session, correlation, tick); break;
 				case "quit": session.Close(); break;
@@ -382,6 +383,15 @@ public sealed partial class AgentServer
 		int requested = Int(root, "peer_id", 0);
 		int stepMul = Int(root, "step_mul", AgentSeatBook.DefaultStepMul(policy));
 
+		// The kit the seat starts every episode with (docs/LOADOUT.md §9), when the
+		// attach names one: checked before the seat is taken, so a refusal takes nothing.
+		LoadoutSelection kit = default;
+		bool kitted = root.TryGetProperty("kit", out JsonElement asked);
+		if (kitted && !ReadKit(session, correlation, asked, team, out kit))
+		{
+			return;
+		}
+
 		int peerId = requested != 0 ? requested : FreeBotSeat(bots, team);
 		if (peerId == 0)
 		{
@@ -408,6 +418,19 @@ public sealed partial class AgentServer
 		session.HoldSeat(peerId);
 		_events.Emit(AgentEvent.Make(AgentEventKind.SeatAttached, tick, peerId, (int)policy, seat.StepMul));
 
+		PlayerCombat player = CombatManager.Instance?.Find(peerId);
+		if (kitted && player != null)
+		{
+			player.PendingLoadout = kit;
+			player.Equip(kit);
+			GD.Print($"[agent] seat {peerId} equipped {WeaponCatalog.Describe(kit)}");
+		}
+
+		if (team == Team.GroundForce && player != null)
+		{
+			seat.Kit = player.PendingLoadout;
+		}
+
 		session.SendJson(AgentFrameKind.Response, correlation, writer =>
 		{
 			writer.WriteString("op", "attached");
@@ -416,6 +439,10 @@ public sealed partial class AgentServer
 			writer.WriteString("team", team == Team.Strategist ? "strategist" : "ground");
 			writer.WriteNumber("step_mul", seat.StepMul);
 			writer.WriteNumber("attached_tick", tick);
+			if (seat.Kit is { } carried)
+			{
+				WriteKit(writer, carried);
+			}
 		});
 
 		GD.Print($"[agent] session {session.Id} attached to {BotRoster.NameOf(peerId)}"
@@ -992,6 +1019,18 @@ public sealed partial class AgentServer
 		}
 
 		combat.RoundSeed = Int(root, "seed", combat.RoundSeed);
+
+		// Every attached ground seat starts the episode in its own kit, not in one it
+		// took at a locker last episode, which is also its next spawn's (docs/LOADOUT.md
+		// §9, L-D11): episodes start alike (docs/AGENT_API.md §7.1).
+		foreach (AgentSeat seat in _book.Seats)
+		{
+			if (seat.Kit is { } kit && combat.Find(seat.PeerId) is { } player)
+			{
+				player.PendingLoadout = kit;
+			}
+		}
+
 		combat.ServerResetRound(tick);
 
 		// The passability plane is the map's and is probed once; a reset is the one
@@ -1124,16 +1163,8 @@ public sealed partial class AgentServer
 		bool kitted = root.TryGetProperty("kit", out JsonElement asked);
 		if (kitted)
 		{
-			if (!AgentJson.TryReadKit(asked, out string primary, out int magazines, out int grenades,
-				out string armour, out string shape))
+			if (!ReadKit(session, correlation, asked, player?.Team ?? Team.GroundForce, out kit))
 			{
-				session.SendError(correlation, "bad_request", shape);
-				return;
-			}
-
-			if (!WeaponCatalog.TryParseKit(primary, magazines, grenades, armour, out kit, out string broken))
-			{
-				session.SendError(correlation, "invalid", broken);
 				return;
 			}
 
@@ -1145,6 +1176,7 @@ public sealed partial class AgentServer
 
 			player.PendingLoadout = kit;
 			player.Equip(kit);
+			seat.Kit = kit;
 			GD.Print($"[agent] seat {seat.PeerId} equipped {WeaponCatalog.Describe(kit)}");
 		}
 
@@ -1167,14 +1199,121 @@ public sealed partial class AgentServer
 			writer.WriteNumber("tick", tick);
 			if (kitted)
 			{
-				writer.WriteStartObject("kit");
-				writer.WriteString("primary", kit.HasPrimary ? WeaponCatalog.NameOf(kit.Large) : Loadout.PrimaryNames[0]);
-				writer.WriteNumber("magazines", kit.Magazines);
-				writer.WriteNumber("grenades", kit.Grenades);
-				writer.WriteString("armour", Loadout.ArmourNames[(int)kit.Armour]);
-				writer.WriteEndObject();
+				WriteKit(writer, kit);
 			}
 		});
+	}
+
+	/// <summary>
+	/// A kit for one of this session's ground seats (docs/LOADOUT.md §9): taken at the
+	/// locker it is standing at — <c>"when": "locker"</c>, the default — through the
+	/// validator a person's request and a bot's go through (§5.3), or kept for its next
+	/// spawn (<c>"spawn"</c>). Whether it was taken is the answer, not an error: a
+	/// refusal comes back as <c>"applied": false</c> with §6.2's code, as a person's
+	/// panel would show it. A kit that is not one — the wrong shape, a rule broken — is
+	/// refused before anything is asked, with why.
+	/// </summary>
+	private void TakeLoadout(AgentSession session, uint correlation, JsonElement root, uint tick)
+	{
+		int peerId = Int(root, "seat", 0);
+		if (!_book.TryGet(peerId, out AgentSeat seat) || seat.SessionId != session.Id)
+		{
+			session.SendError(correlation, "not_attached", $"this session does not hold seat {peerId}");
+			return;
+		}
+
+		string when = Text(root, "when", "locker");
+		if (when is not ("locker" or "spawn"))
+		{
+			session.SendError(correlation, "bad_request", $"'when' is \"locker\" or \"spawn\", not '{when}'");
+			return;
+		}
+
+		if (!root.TryGetProperty("kit", out JsonElement asked))
+		{
+			session.SendError(correlation, "bad_request", "'loadout' names its 'kit'");
+			return;
+		}
+
+		CombatManager combat = CombatManager.Instance;
+		PlayerCombat player = combat?.Find(peerId);
+		if (!ReadKit(session, correlation, asked, player?.Team ?? Team.GroundForce, out LoadoutSelection kit))
+		{
+			return;
+		}
+
+		if (player == null)
+		{
+			session.SendError(correlation, "no_character", $"seat {peerId} has no combat state to equip");
+			return;
+		}
+
+		KitRefusal refusal = KitRefusal.None;
+		if (when == "spawn")
+		{
+			player.PendingLoadout = kit;
+		}
+		else
+		{
+			combat.TryApplyLockerKit(player, kit, tick, out refusal);
+		}
+
+		session.SendJson(AgentFrameKind.Response, correlation, writer =>
+		{
+			writer.WriteString("op", "loadout");
+			writer.WriteNumber("seat", peerId);
+			writer.WriteNumber("tick", tick);
+			writer.WriteString("when", when);
+			writer.WriteBoolean("applied", refusal == KitRefusal.None);
+			if (refusal != KitRefusal.None)
+			{
+				writer.WriteString("refusal", KitRequest.CodeOf(refusal));
+			}
+
+			WriteKit(writer, kit);
+		});
+	}
+
+	/// <summary>
+	/// A kit spelt out in a request, read and checked against the loadout's rules: a
+	/// shape that is not a kit is <c>bad_request</c>, a rule broken is <c>invalid</c>
+	/// with which, and a strategist has none to carry. False when an error was sent.
+	/// </summary>
+	private static bool ReadKit(AgentSession session, uint correlation, JsonElement asked, Team team,
+		out LoadoutSelection kit)
+	{
+		kit = default;
+		if (team != Team.GroundForce)
+		{
+			session.SendError(correlation, "bad_request", "a strategist carries no kit");
+			return false;
+		}
+
+		if (!AgentJson.TryReadKit(asked, out string primary, out int magazines, out int grenades,
+			out string armour, out string shape))
+		{
+			session.SendError(correlation, "bad_request", shape);
+			return false;
+		}
+
+		if (!WeaponCatalog.TryParseKit(primary, magazines, grenades, armour, out kit, out string broken))
+		{
+			session.SendError(correlation, "invalid", broken);
+			return false;
+		}
+
+		return true;
+	}
+
+	/// <summary>A kit as a request spells one: names for the primary and the vest, counts for the pouches.</summary>
+	private static void WriteKit(Utf8JsonWriter writer, in LoadoutSelection kit)
+	{
+		writer.WriteStartObject("kit");
+		writer.WriteString("primary", kit.HasPrimary ? WeaponCatalog.NameOf(kit.Large) : Loadout.PrimaryNames[0]);
+		writer.WriteNumber("magazines", kit.Magazines);
+		writer.WriteNumber("grenades", kit.Grenades);
+		writer.WriteString("armour", Loadout.ArmourNames[(int)kit.Armour]);
+		writer.WriteEndObject();
 	}
 
 	/// <summary>A unit tier by name, or by catalog index when a scenario wrote a number.</summary>

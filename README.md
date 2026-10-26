@@ -32,9 +32,10 @@ dedicated-server authoritative.
   boarding and unloading, and a vertical take-off and landing dropship
 - [`docs/LOADOUT.md`](docs/LOADOUT.md) — the ground force's loadout, planned: a locker panel for
   the primary, spare magazines or grenades and body armour, weight that sets movement speed, and
-  resupply at the locker; L0–L8, of which L0 and L1 are built — how much bots fire in a life,
-  which raised the default kit to five spare magazines, and the kit itself: finite primary
-  ammunition, no primary at all, and the player record that carries both
+  resupply at the locker; L0–L8, of which L0, L1 and L2 are built — how much bots fire in a life,
+  which raised the default kit to five spare magazines; the kit itself: finite primary
+  ammunition, no primary at all, and the player record that carries both; and taking a kit at the
+  locker, one validator for a person, a bot and an agent
 - [`docs/LAN.md`](docs/LAN.md) — hosting a room of machines from a checkout, with a dev build
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — AWS EC2 dedicated-server runbook
 
@@ -274,10 +275,12 @@ recorded input frame the rest of the simulation runs on, and nothing about them 
 pistol and heavy-gun rounds stop against them and do nothing, and only the launcher's grenade — by its
 impact or its blast — hurts them properly; a hand grenade does a quarter of its blast. The dropship
 is not armour, but its airframe takes half of what a bullet does. The answer when one turns up is the **weapon locker** at the spawn:
-stand at it and tap `E` to swap the large weapon in your hands for the next one, with a full
-magazine — rifle, launcher, DMR, and round again. The swap is for that life; what you spawn with is
-still the loadout menu's (`1`/`2`/`3` while dead). A hit on armour that did nothing shows no hit
-marker ([`docs/NETCODE.md`](docs/NETCODE.md) §10.6).
+stand within a metre of the cabinet and take a kit — `kit launcher 3 0 none` on the `~` console,
+until the locker's own panel opens on `E` ([`docs/LOADOUT.md`](docs/LOADOUT.md) L6). A different
+primary comes with a full magazine and its pouches full; what you already carried keeps what is
+left in it. The kit is also the next spawn's (`loadout` on the console sets that alone; `1`/`2`/`3`
+while dead still pick the primary). A hit on armour that did nothing shows no hit marker
+([`docs/NETCODE.md`](docs/NETCODE.md) §10.6).
 
 ## Playing on your own
 

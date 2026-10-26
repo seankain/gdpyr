@@ -1329,7 +1329,7 @@ public partial class CombatManager : Node
 				UnitManager.Instance?.UnitsLost ?? 0, _summary.Minutes,
 				UnitManager.Instance?.UnitsProduced ?? 0);
 			GD.Print($"[match] round over: {Match.Outcome} | winner {Match.Winner?.ToString() ?? "nobody"}"
-				+ $" | tickets {Match.GroundTickets} | deaths {Match.GroundDeaths}"
+				+ $" | tickets {Match.GroundTickets} | deaths {Match.GroundDeaths} | kits taken {KitsTaken}"
 				+ $" | next round in {_gameMode.IntermissionSeconds:0}s");
 			return;
 		}
@@ -1355,6 +1355,7 @@ public partial class CombatManager : Node
 	{
 		_intermissionArmed = false;
 		_scoreCount = 0;
+		KitsTaken = 0;
 		Match.Reset();
 		_projectiles.Clear();
 		Visibility.Clear();
@@ -2108,6 +2109,136 @@ public partial class CombatManager : Node
 			Armour = (BodyArmourTier)armour,
 		});
 	}
+
+	/// <summary>Kits taken at a weapon locker this round, for the round-over log. Server-side.</summary>
+	public int KitsTaken { get; private set; }
+
+	/// <summary>
+	/// The one way a kit is taken at a weapon locker (docs/LOADOUT.md L-D9, §5.3): a
+	/// living ground-force player, not behind a gun and carrying nothing, whose feet are
+	/// within the locker's reach of its footprint plus <see cref="KitRequest.SlackMeters"/>,
+	/// asking for a kit <see cref="Loadout.Sanitize"/> would leave as it is, and not
+	/// within a quarter-second of the last one. A person's request
+	/// (<see cref="ClientLockerLoadout"/>), a bot's locker run and a policy's
+	/// <c>loadout</c> op all come here, and are refused alike.
+	///
+	/// On success the kit is taken — only what changed is re-equipped (L-D10) — and is
+	/// also the next spawn's (L-D11). No message: the player record carries the kit,
+	/// the reserve and the grenades to every client, the owner's prediction included.
+	/// Server-side; a client is refused as if it were dead, having no say.
+	/// </summary>
+	public bool TryApplyLockerKit(PlayerCombat combat, LoadoutSelection kit, uint tick, out KitRefusal refusal)
+	{
+		refusal = KitRefusal.Dead;
+		if (combat?.Character == null || NetworkManager.Instance is { IsClient: true })
+		{
+			return false;
+		}
+
+		EmplacementManager emplacements = EmplacementManager.Instance;
+		var situation = new KitSituation(
+			combat.IsAlive,
+			emplacements != null && emplacements.TryMounted(combat.PeerId, out _),
+			emplacements?.CarryOf(combat.PeerId) ?? CarryKind.None,
+			emplacements?.LockerDistance(combat.Character.SimPosition) ?? float.PositiveInfinity,
+			WeaponCatalog.IsValidKit(kit),
+			tick,
+			combat.LastKitTick);
+
+		refusal = KitRequest.Check(situation);
+		if (refusal != KitRefusal.None)
+		{
+			return false;
+		}
+
+		LoadoutSelection taken = WeaponCatalog.Sanitize(kit);
+		combat.ApplyKit(taken);
+		combat.PendingLoadout = taken;
+
+		// Zero is "never" to the pace check, so a kit on tick 0 is recorded as tick 1.
+		combat.LastKitTick = Math.Max(tick, 1u);
+		KitsTaken++;
+
+		AgentEventBus.Emit(AgentEventKind.Kit, tick, combat.PeerId,
+			taken.HasPrimary ? taken.Large : AgentEventSchema.NoPrimary, (int)taken.Armour, taken.Magazines,
+			taken.Grenades);
+		GD.Print($"[locker] peer {combat.PeerId} took {WeaponCatalog.Describe(taken)}");
+		return true;
+	}
+
+	/// <summary>
+	/// Asks the server for a kit at the weapon locker the local player is standing at
+	/// (docs/LOADOUT.md §5.3). Applied directly when this process is the authority, as
+	/// <see cref="RequestLoadout(LoadoutSelection)"/> is; the answer comes back as a
+	/// line on the console until the locker's panel shows it (L6).
+	/// </summary>
+	public void RequestLockerKit(LoadoutSelection kit)
+	{
+		if (Local == null)
+		{
+			return;
+		}
+
+		NetworkManager net = NetworkManager.Instance;
+		if (net != null && net.IsClient)
+		{
+			RpcId(1, MethodName.ClientLockerLoadout, kit.Large, kit.Magazines, kit.Grenades, (byte)kit.Armour);
+			return;
+		}
+
+		TryApplyLockerKit(Local, kit, net?.Tick ?? 0, out KitRefusal refusal);
+		ReportKitResult(refusal);
+	}
+
+	/// <summary>
+	/// Client -> server, reliable: a kit asked for at a locker. Not sanitized before the
+	/// validator sees it: a kit the client did not mean is refused, not trimmed into one
+	/// it did not ask for (docs/NETCODE.md §1).
+	/// </summary>
+	[Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false,
+		TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+	private void ClientLockerLoadout(byte largeWeaponId, byte magazines, byte grenades, byte armour)
+	{
+		if (NetworkManager.Instance is not { IsServer: true } net)
+		{
+			return;
+		}
+
+		int sender = Multiplayer.GetRemoteSenderId();
+		PlayerCombat combat = Find(sender);
+		if (combat == null)
+		{
+			return;
+		}
+
+		TryApplyLockerKit(combat, new LoadoutSelection
+		{
+			Large = largeWeaponId,
+			Magazines = magazines,
+			Grenades = grenades,
+			Armour = (BodyArmourTier)armour,
+		}, net.Tick, out KitRefusal refusal);
+
+		RpcId(sender, MethodName.ServerKitResult, (byte)refusal);
+	}
+
+	/// <summary>Server -> the requester alone: whether its kit was taken, and if not, why (§6.2).</summary>
+	[Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
+		TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+	private void ServerKitResult(byte refusal)
+	{
+		if (NetworkManager.Instance is not { IsClient: true })
+		{
+			return;
+		}
+
+		ReportKitResult(KitRequest.TryRead(refusal, out KitRefusal read) ? read : KitRefusal.Invalid);
+	}
+
+	private static void ReportKitResult(KitRefusal refusal) =>
+		GameConsole.Print(refusal == KitRefusal.None
+			? "locker: kit taken"
+			: $"locker: kit refused, {KitRequest.CodeOf(refusal)}");
 
 	// ---- replication -------------------------------------------------------
 

@@ -107,7 +107,7 @@ public static class Loadout
 	/// </summary>
 	public static LoadoutSelection Sanitize(LoadoutSelection kit, ReadOnlySpan<byte> largeWeapons, byte unknownLarge)
 	{
-		if (kit.Large != NoPrimary && LockerSim.IndexOf(kit.Large, largeWeapons) < 0)
+		if (kit.Large != NoPrimary && IndexOf(kit.Large, largeWeapons) < 0)
 		{
 			kit.Large = unknownLarge;
 		}
@@ -124,6 +124,70 @@ public static class Loadout
 
 		return kit;
 	}
+
+	/// <summary>
+	/// Whether <see cref="Sanitize"/> would leave a kit's choices as they are — the
+	/// primary, the pouches and the vest — which is what a locker asks of a request
+	/// rather than trimming it (docs/LOADOUT.md §5.3): a kit the asker did not mean is
+	/// worse than a refusal that says why. The melee and sidearm slots are not the
+	/// asker's to choose and are not compared.
+	/// </summary>
+	public static bool IsValid(in LoadoutSelection kit, ReadOnlySpan<byte> largeWeapons)
+	{
+		// An unknown primary is sanitized to none here, never to itself, so it is unequal.
+		LoadoutSelection sane = Sanitize(kit, largeWeapons, NoPrimary);
+		return sane.Large == kit.Large && sane.Magazines == kit.Magazines && sane.Grenades == kit.Grenades
+			&& sane.Armour == kit.Armour;
+	}
+
+	/// <summary>Where <paramref name="id"/> is in <paramref name="largeWeapons"/>, or -1.</summary>
+	public static int IndexOf(byte id, ReadOnlySpan<byte> largeWeapons)
+	{
+		for (int i = 0; i < largeWeapons.Length; i++)
+		{
+			if (largeWeapons[i] == id)
+			{
+				return i;
+			}
+		}
+
+		return -1;
+	}
+
+	/// <summary>
+	/// What a kit taken at a locker leaves in the large slot (L-D10): a different
+	/// primary comes with a full magazine and full pouches, as at a spawn; the same one
+	/// keeps its magazine and its spare rounds — fewer pouches lose what no longer
+	/// fits, and more come empty, left to the locker's resupply. Opening the panel under
+	/// fire then cannot refill what the resupply's lockout would have refused.
+	/// </summary>
+	public static WeaponState RefitPrimary(in WeaponState carried, in LoadoutSelection kit, in WeaponStats stats,
+		in CarryStats carry)
+	{
+		if (!kit.HasPrimary)
+		{
+			return WeaponState.Empty;
+		}
+
+		if (carried.DefinitionId != kit.Large)
+		{
+			return WeaponState.Ready(kit.Large, stats, ReserveFor(kit, carry));
+		}
+
+		WeaponState kept = carried;
+		if (!kept.HasUnlimitedReserve)
+		{
+			kept.Reserve = (short)Math.Min((int)kept.Reserve, ReserveFor(kit, carry));
+		}
+
+		return kept;
+	}
+
+	/// <summary>
+	/// The grenades a kit taken at a locker leaves: those carried, up to its grenade
+	/// pouches. A pouch added is empty until resupplied, as a magazine's is (L-D10).
+	/// </summary>
+	public static byte RefitGrenades(byte carried, in LoadoutSelection kit) => Math.Min(carried, kit.Grenades);
 
 	/// <summary>
 	/// What a kit weighs [kg]: the base kit, the primary and its pouches, the grenades

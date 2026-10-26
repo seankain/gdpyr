@@ -19,6 +19,9 @@ namespace Gdpyr.Tests;
 public class GroundHtnTests
 {
 	private static readonly Vector3 Locker = new(8f, 0.5f, 11f);
+
+	/// <summary>The Test map's locker is turned 180°: its racks face −Z, towards the spawn.</summary>
+	private const float LockerYaw = MathF.PI;
 	private static readonly Vector3 Node = new(-30f, 0.5f, -15f);
 	private static readonly Vector3 CoverSpot = new(4f, 0.5f, -44f);
 
@@ -46,6 +49,7 @@ public class GroundHtnTests
 			C.Tick = 1000;
 			C.HasLocker = true;
 			C.LockerPoint = Locker;
+			C.LockerYaw = LockerYaw;
 			C.Position = new Vector3(0f, 0.5f, -40f);
 
 			// A spot the pilot found; the Cover fact says whether it is in play.
@@ -144,7 +148,9 @@ public class GroundHtnTests
 		Assert.Equal("[PathToLocker, UseLocker, EngageArmour]", bot.LastPlan);
 		Assert.Equal(GroundGoal.PathToLocker, bot.Goal);
 		Assert.Equal(GroundMove.Run, bot.C.Intent.Move);
-		Assert.Equal(Locker, bot.C.Intent.Point);
+
+		// In front of its racks, not inside it.
+		Assert.Equal(LockerSupply.StandPoint(Locker, LockerYaw), bot.C.Intent.Point);
 	}
 
 	[Fact]
@@ -160,25 +166,26 @@ public class GroundHtnTests
 	}
 
 	[Fact]
-	public void TheLockerTrip_WalksThere_TapsUntilALauncherIsInHand_ThenEngages()
+	public void TheLockerTrip_WalksThere_AsksUntilALauncherIsInHand_ThenEngages()
 	{
 		Bot bot = Seeing(Threat.Armour);
 		bot.Sense(GroundFact.Role, GroundRole.LockerRunner);
 		bot.Tick(5);
 		Assert.Equal(GroundGoal.PathToLocker, bot.Goal);
 
+		// Off one end of the cabinet: 0.4 m from its footprint.
 		bot.C.Position = Locker + new Vector3(1f, 0f, 0f);
 		bot.Tick(2);
 		Assert.Equal(GroundGoal.UseLocker, bot.Goal);
-		Assert.True(bot.C.Intent.UseLocker);
+		Assert.True(bot.C.Intent.TakeLauncher);
 		Assert.Equal(GroundMove.Point, bot.C.Intent.Move);
 
-		// The swap lands: what is in hand is a launcher.
+		// The kit is taken: what is in hand is a launcher.
 		bot.C.Explosive = true;
 		bot.Tick(2);
 
 		Assert.Equal(GroundGoal.EngageArmour, bot.Goal);
-		Assert.False(bot.C.Intent.UseLocker);
+		Assert.False(bot.C.Intent.TakeLauncher);
 		Assert.Equal((byte)Arms.Explosive, bot.C.Get(GroundFact.Armed));
 		Assert.Equal(0, bot.C.FailedLockerTrips);
 	}
@@ -201,6 +208,58 @@ public class GroundHtnTests
 		// the same method wins again, which is what it goes on doing here.
 		Assert.Equal(1, bot.C.FailedLockerTrips);
 		Assert.Equal(GroundGoal.UseLocker, bot.Goal);
+	}
+
+	[Fact]
+	public void AtTheLockerIsMeasuredFromItsFootprint_InsideTheReachAKitIsTakenFrom()
+	{
+		Assert.True(GroundPlanTraits.Default.LockerArriveMeters < SimConfig.LockerReachMeters);
+
+		Bot bot = Seeing(Threat.Armour);
+		bot.Sense(GroundFact.Role, GroundRole.LockerRunner);
+
+		// 0.9 m in front of the racks (z 10.75): in the reach, not yet arrived.
+		bot.C.Position = new Vector3(8f, 0.5f, 10.75f - 0.9f);
+		bot.Tick(3);
+		Assert.Equal(GroundGoal.PathToLocker, bot.Goal);
+
+		bot.C.Position = new Vector3(8f, 0.5f, 10.75f - 0.7f);
+		bot.Tick(2);
+		Assert.Equal(GroundGoal.UseLocker, bot.Goal);
+	}
+
+	[Fact]
+	public void ARefusedKit_GivesTheTripUpAtOnce()
+	{
+		Bot bot = Seeing(Threat.Armour);
+		bot.Sense(GroundFact.Role, GroundRole.LockerRunner);
+		bot.C.Position = Locker;
+		bot.Tick(2);
+		Assert.Equal(GroundGoal.UseLocker, bot.Goal);
+
+		// The pilot asked, and the locker said no (docs/LOADOUT.md §8): counted as a
+		// timeout is, and long before one.
+		bot.C.KitRefused = true;
+		bot.Tick();
+
+		Assert.Equal(1, bot.C.FailedLockerTrips);
+		Assert.False(bot.C.KitRefused);
+	}
+
+	[Fact]
+	public void ARefusalFromAnEarlierTrip_IsNotThisOnes()
+	{
+		Bot bot = Seeing(Threat.Armour);
+		bot.Sense(GroundFact.Role, GroundRole.LockerRunner);
+		bot.C.KitRefused = true;
+		bot.Tick(3);
+		Assert.Equal(GroundGoal.PathToLocker, bot.Goal);
+
+		bot.C.Position = Locker;
+		bot.Tick(3);
+
+		Assert.Equal(GroundGoal.UseLocker, bot.Goal);
+		Assert.Equal(0, bot.C.FailedLockerTrips);
 	}
 
 	[Fact]

@@ -115,7 +115,6 @@ public sealed class BotPilot
 	private int _zone = -1;
 	private int _sweepZone = -1;
 
-	private uint _nextUseTick;
 	private bool _planWasAlive;
 	private Vector3 _lastPlannedPosition;
 	private bool _rescan;
@@ -313,13 +312,13 @@ public sealed class BotPilot
 		Vector3 goal;
 		bool hasGoal;
 		bool keepMoving = false;
-		bool use = false;
+		bool takeLauncher = false;
 		bool inCover = false;
 		bool duck = false;
 		if (_plan != null)
 		{
 			hasGoal = Planned(character, explosive, tick, hasTarget, targetGround, combat.LastFiredUponTick, out goal,
-				out keepMoving, out use, out inCover, out duck);
+				out keepMoving, out takeLauncher, out inCover, out duck);
 		}
 		else if (hasTarget)
 		{
@@ -329,6 +328,11 @@ public sealed class BotPilot
 		else
 		{
 			hasGoal = Objective(tick, character, out goal);
+		}
+
+		if (takeLauncher)
+		{
+			AskForLauncher(combat, tick);
 		}
 
 		if (hasGoal)
@@ -367,7 +371,6 @@ public sealed class BotPilot
 			semiAutomatic: stats.Mode != FireMode.Auto,
 			holdFire: holdFire,
 			keepMoving: keepMoving,
-			use: use,
 			inCover: inCover,
 			reloading: combat.Equipped.IsReloading,
 			grenadeAim: duck ? Vector3.Zero : grenadeAim,
@@ -631,11 +634,12 @@ public sealed class BotPilot
 	/// <summary>
 	/// One tick of the ground domain (docs/HTN_BOTS.md §5.1): the bot's position and
 	/// hands into the context, the planner ticked, and the intent it leaves turned
-	/// into where to walk, whether to keep walking, whether to tap use, and whether to
-	/// stay down behind its wall under fire (docs/TACTICS.md §5.7).
+	/// into where to walk, whether to keep walking, whether to ask the locker for a
+	/// launcher, and whether to stay down behind its wall under fire (docs/TACTICS.md §5.7).
 	/// </summary>
 	private bool Planned(fps_controller character, bool explosive, uint tick, bool hasTarget, Vector3 targetPosition,
-		uint lastFiredUponTick, out Vector3 goal, out bool keepMoving, out bool use, out bool inCover, out bool duck)
+		uint lastFiredUponTick, out Vector3 goal, out bool keepMoving, out bool takeLauncher, out bool inCover,
+		out bool duck)
 	{
 		GroundContext plan = _plan;
 		plan.Tick = tick;
@@ -663,14 +667,9 @@ public sealed class BotPilot
 		inCover = false;
 		duck = false;
 
-		// A tap is a press and a release. Pressed on one tick and a quarter-second
-		// apart, which is long enough for the swap to be in hand before the next
-		// press is decided — so a bot never cycles past the launcher.
-		use = intent.UseLocker && !explosive && tick >= _nextUseTick;
-		if (use)
-		{
-			_nextUseTick = tick + (uint)plan.Traits.UseTapIntervalTicks;
-		}
+		// Asked of the locker outside the input frame, as a person's panel asks
+		// (docs/LOADOUT.md L-D9): no key to tap, and nothing for a tap to cycle past.
+		takeLauncher = intent.TakeLauncher && !explosive;
 
 		goal = intent.Point;
 		switch (intent.Move)
@@ -713,6 +712,38 @@ public sealed class BotPilot
 
 				return Objective(tick, character, out goal);
 		}
+	}
+
+	/// <summary>
+	/// The locker runner's request (docs/LOADOUT.md §8): its own kit with a launcher for
+	/// a primary, through the validator a person's panel and a policy's <c>loadout</c>
+	/// op go through. A refusal ends the trip, as a timeout does. Nothing is asked when
+	/// the launcher is already its primary and only the pistol is in its hands: the
+	/// brain raises the launcher, and a second kit a tick after the first would be
+	/// refused as too soon.
+	///
+	/// The launcher is for this life. A person's locker kit is also their next spawn's
+	/// (L-D11), but a bot spawns in its roster slot's kit until per-role kits (L-D14,
+	/// L7): one that kept the launcher would leave the team with one more every trip, and
+	/// no runner to send once two were in hand.
+	/// </summary>
+	private void AskForLauncher(PlayerCombat combat, uint tick)
+	{
+		if (combat.Weapons[SimConfig.LargeSlot].DefinitionId == WeaponCatalog.Launcher)
+		{
+			return;
+		}
+
+		LoadoutSelection kit = combat.Loadout;
+		kit.Large = WeaponCatalog.Launcher;
+		LoadoutSelection rosterKit = combat.PendingLoadout;
+		if (CombatManager.Instance is not { } manager || !manager.TryApplyLockerKit(combat, kit, tick, out _))
+		{
+			_plan.KitRefused = true;
+			return;
+		}
+
+		combat.PendingLoadout = rosterKit;
 	}
 
 	/// <summary>
@@ -824,10 +855,12 @@ public sealed class BotPilot
 
 		sense.AtZone = _zone >= 0 && CombatManager.Instance?.Economy.NodeAt(_zone) is { } node && node.Covers(at);
 
-		if (EmplacementManager.Instance is { } emplacements && emplacements.TryNearestLocker(at, out Vector3 locker))
+		if (EmplacementManager.Instance is { } emplacements
+			&& emplacements.TryNearestLocker(at, out Vector3 locker, out float lockerYaw))
 		{
 			plan.HasLocker = true;
 			plan.LockerPoint = locker;
+			plan.LockerYaw = lockerYaw;
 		}
 		else
 		{

@@ -2,7 +2,8 @@
   "repeat": false,
   "steps": [
     { "ticks": 60, "move": [0, 0], "look": { "dyaw": 0, "dpitch": 0 }, "buttons": [] },
-    { "ticks": 8, "move": [0, 0], "look": { "dyaw": 0, "dpitch": 0 }, "buttons": ["use"] },
+    { "ticks": 8, "move": [0, 0], "look": { "dyaw": 0, "dpitch": 0 }, "buttons": [],
+      "loadout": { "kit": { "primary": "launcher", "magazines": 3, "grenades": 0, "armour": "none" }, "when": "locker" } },
     { "ticks": 32, "move": [0, 0], "look": { "dyaw": 0, "dpitch": 0 }, "buttons": [] },
     { "ticks": 8, "move": [0, 0], "look": { "dyaw": 0, "dpitch": 0 }, "buttons": ["fire"] },
     { "ticks": 24, "move": [0, 0], "look": { "dyaw": 0, "dpitch": 0 }, "buttons": [] },

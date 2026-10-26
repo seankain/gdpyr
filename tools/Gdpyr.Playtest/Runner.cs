@@ -79,6 +79,10 @@ public sealed class Runner
 	/// </summary>
 	private readonly Dictionary<string, int> _labels = new(StringComparer.Ordinal);
 
+	/// <summary>A script step's kits this episode that the server took, and that it refused (docs/LOADOUT.md §9).</summary>
+	private int _loadoutsApplied;
+	private readonly Dictionary<string, int> _loadoutsRefused = new(StringComparer.Ordinal);
+
 	public Runner(GdpyrConnection connection, string traceDirectory)
 	{
 		_connection = connection;
@@ -190,6 +194,8 @@ public sealed class Runner
 		});
 
 		await _connection.ResetAsync(seed, cancel).ConfigureAwait(false);
+		_loadoutsApplied = 0;
+		_loadoutsRefused.Clear();
 
 		// The backfill settles before the clock starts, so the first seed does not
 		// play alone while the rest play against a full roster.
@@ -221,6 +227,21 @@ public sealed class Runner
 		metrics.Counter("pilot_fallbacks", fallbacks);
 		metrics.Counter("seeds", scenario.Seeds.Length);
 
+		// What a script's kit requests came to: a refusal is an answer a scenario can
+		// claim, not a harness failure (docs/LOADOUT.md §9).
+		metrics.Counter("loadouts_applied", _loadoutsApplied);
+		int refused = 0;
+		foreach (int count in _loadoutsRefused.Values)
+		{
+			refused += count;
+		}
+
+		metrics.Counter("loadouts_refused", refused);
+		foreach (string code in ScenarioKit.Refusals)
+		{
+			metrics.Counter($"loadouts_refused.{code}", _loadoutsRefused.GetValueOrDefault(code));
+		}
+
 		trace.Flush();
 		return metrics;
 	}
@@ -245,6 +266,7 @@ public sealed class Runner
 			int elapsed = from + i;
 			foreach (ScenarioSeat seat in scenario.Seats)
 			{
+				await LoadoutAsync(seat, elapsed, commanding, trace, cancel).ConfigureAwait(false);
 				Act(seat, elapsed, commanding, trace);
 			}
 
@@ -304,6 +326,41 @@ public sealed class Runner
 			writer.WriteNumber("dyaw", step.DeltaYaw);
 			writer.WriteNumber("dpitch", step.DeltaPitch);
 			writer.WriteNumber("buttons", (ushort)action.Buttons);
+		});
+	}
+
+	/// <summary>
+	/// A scripted ground seat's kit (docs/LOADOUT.md §9): on the first tick of a step that
+	/// names one, asked for once, before that tick's action, and answered before the
+	/// tick is stepped — so the kit is in hand on the tick the step starts. Not in the
+	/// warmup, before the seat has been put where the scenario wants it.
+	/// </summary>
+	private async Task LoadoutAsync(ScenarioSeat seat, int elapsed, bool commanding, StreamWriter trace,
+		CancellationToken cancel)
+	{
+		if (!commanding || seat.PeerId == 0 || seat.Script == null || seat.Policy != "ground"
+			|| !seat.Script.TryEnter(elapsed, out ScriptStep step) || step.Loadout == null)
+		{
+			return;
+		}
+
+		string answer = await _connection.LoadoutAsync(seat.PeerId, step.Loadout, step.LoadoutWhen, cancel)
+			.ConfigureAwait(false);
+		if (answer == "applied")
+		{
+			_loadoutsApplied++;
+		}
+		else
+		{
+			_loadoutsRefused[answer] = _loadoutsRefused.GetValueOrDefault(answer) + 1;
+		}
+
+		Trace(trace, _connection.Tick, "loadout", writer =>
+		{
+			writer.WriteNumber("seat", seat.PeerId);
+			writer.WriteString("when", step.LoadoutWhen);
+			writer.WriteString("kit", step.Loadout.ToString());
+			writer.WriteString("answer", answer);
 		});
 	}
 

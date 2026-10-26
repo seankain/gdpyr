@@ -10,7 +10,7 @@ namespace Gdpyr.Fps;
 /// <summary>
 /// Fifth autoload: the ground force's heavy guns and the cans that feed them
 /// (docs/IMPLEMENTATION_PLAN.md §M5), and the weapon lockers at their spawn
-/// (docs/NETCODE.md §10.6) — everything the use key does.
+/// (docs/LOADOUT.md L-D8) — everything the use key does.
 ///
 /// The guns and the cans are map nodes; this owns what is happening to them. The
 /// server is the only authority, as everywhere else: it reads the use bit out of
@@ -62,29 +62,46 @@ public partial class EmplacementManager : Node
 	public int LockerCount => _lockers.Count;
 
 	/// <summary>
-	/// The weapon locker nearest <paramref name="at"/>, for a ground bot sent to fetch
-	/// a launcher (docs/HTN_BOTS.md §5.1). False on a map without one.
+	/// The weapon locker whose footprint is nearest <paramref name="at"/>, for a ground
+	/// bot sent to fetch a launcher (docs/HTN_BOTS.md §5.1): its origin and which way its
+	/// racks face (<see cref="LockerSupply"/>). False on a map without one.
 	/// </summary>
-	public bool TryNearestLocker(Vector3 at, out Vector3 position)
+	public bool TryNearestLocker(Vector3 at, out Vector3 position, out float yaw)
 	{
 		position = Vector3.Zero;
-		float best = float.MaxValue;
+		yaw = 0f;
+		float best = float.PositiveInfinity;
 		for (int i = 0; i < _lockers.Count; i++)
 		{
-			Vector3 locker = _lockers[i].GlobalPosition;
-			float d = at.DistanceSquaredTo(locker);
+			WeaponLocker locker = _lockers[i];
+			float d = LockerSupply.FootprintDistance(at, locker.GlobalPosition, locker.Yaw);
 			if (d < best)
 			{
 				best = d;
-				position = locker;
+				position = locker.GlobalPosition;
+				yaw = locker.Yaw;
 			}
 		}
 
 		return _lockers.Count > 0;
 	}
 
-	/// <summary>Large weapons swapped at a locker this round. For the log and M8's CSV.</summary>
-	public int LockerSwaps { get; private set; }
+	/// <summary>
+	/// Flat distance from <paramref name="at"/> to the nearest locker's footprint
+	/// (docs/LOADOUT.md §4.4), what a kit request is measured by; infinite on a map
+	/// without one.
+	/// </summary>
+	public float LockerDistance(Vector3 at)
+	{
+		EnsureStarted();
+		float best = float.PositiveInfinity;
+		for (int i = 0; i < _lockers.Count; i++)
+		{
+			best = Mathf.Min(best, LockerSupply.FootprintDistance(at, _lockers[i].GlobalPosition, _lockers[i].Yaw));
+		}
+
+		return best;
+	}
 
 	/// <summary>Guns with somebody behind them right now.</summary>
 	public int MountedGuns => _mounted.Count;
@@ -253,32 +270,13 @@ public partial class EmplacementManager : Node
 				Resupply(combat.PeerId, gunIndex, tick);
 				break;
 
-			case UseAction.SwapWeapon:
-				SwapWeapon(combat);
+			case UseAction.OpenLocker:
+				// Nothing for the server to do: the panel is the owning client's, opened
+				// from its own prediction of this press (docs/LOADOUT.md §7.2), and the kit
+				// chosen in it arrives as a request (CombatManager.TryApplyLockerKit). The
+				// press is still resolved here, so that at a locker it is not a can or a gun.
 				break;
 		}
-	}
-
-	/// <summary>
-	/// Swaps the large weapon in this player's hands for the next one the locker
-	/// holds (docs/NETCODE.md §10.6). For this life only: what a player spawns with
-	/// is still the loadout menu's to say, which is up while they are dead. Carrying
-	/// a locker's weapon into the next life would make a round's starting loadout
-	/// depend on how the last one went — including for an agent seat, whose episodes
-	/// are meant to start alike (docs/AGENT_API.md §7.1).
-	///
-	/// No message: the snapshot's weapon byte names the large weapon, so every
-	/// client — the owner's prediction included — learns about it from the packet it
-	/// was going to get anyway.
-	/// </summary>
-	private void SwapWeapon(PlayerCombat combat)
-	{
-		byte was = combat.Loadout.Large;
-		combat.SwapLarge(WeaponCatalog.LockerSwap(was));
-
-		LockerSwaps++;
-		GD.Print($"[locker] peer {combat.PeerId} swapped the {WeaponCatalog.NameOf(was)}"
-			+ $" for the {WeaponCatalog.NameOf(combat.Loadout.Large)}");
 	}
 
 	// ---- transitions -------------------------------------------------------
@@ -542,9 +540,8 @@ public partial class EmplacementManager : Node
 
 		if (LockerInReach(at, Mathf.Min(gunDistance, canDistance)))
 		{
-			byte large = combat.Loadout.Large;
-			return $"[E] weapon locker: swap the {WeaponCatalog.NameOf(large)}"
-				+ $" for the {WeaponCatalog.NameOf(WeaponCatalog.LockerSwap(large))}";
+			// Until the panel (docs/LOADOUT.md L6), the console is what takes a kit here.
+			return "weapon locker   [~] kit <primary> <magazines> <grenades> <vest>";
 		}
 
 		if (can >= 0 && (gun < 0 || canDistance <= gunDistance))
@@ -593,13 +590,24 @@ public partial class EmplacementManager : Node
 
 		// A locker is never named on the wire, so it needs neither the sort nor the
 		// cap; sorted anyway, so a tie between two is broken the same way on every
-		// peer and the prompt agrees with the server.
+		// peer and the prompt agrees with the server. Its reach is measured from its
+		// footprint, so one a map has scaled or tilted is refused rather than measured
+		// wrong (docs/LOADOUT.md §12).
 		foreach (Node node in GetTree().GetNodesInGroup(WeaponLocker.Group))
 		{
-			if (node is WeaponLocker locker)
+			if (node is not WeaponLocker locker)
 			{
-				_lockers.Add(locker);
+				continue;
 			}
+
+			if (!locker.IsUpright)
+			{
+				GD.PushError($"[emplacements] weapon locker {locker.Name} is scaled or tilted;"
+					+ " its reach is measured from an upright 1.2 x 0.5 m footprint, so it is left out");
+				continue;
+			}
+
+			_lockers.Add(locker);
 		}
 
 		_guns.Sort((a, b) => string.CompareOrdinal(a.Name, b.Name));
@@ -629,7 +637,6 @@ public partial class EmplacementManager : Node
 		_mounted.Clear();
 		CansSpent = 0;
 		RoundsResupplied = 0;
-		LockerSwaps = 0;
 
 		for (int i = 0; i < _guns.Count; i++)
 		{
@@ -697,16 +704,17 @@ public partial class EmplacementManager : Node
 	}
 
 	/// <summary>
-	/// Whether a weapon locker is within reach of <paramref name="at"/> and nearer
-	/// than <paramref name="nearestOther"/>, the nearest gun or can in reach — so a
-	/// can set down beside a locker is still picked up by walking up to the can.
+	/// Whether a weapon locker's footprint is within reach of <paramref name="at"/>
+	/// (docs/LOADOUT.md L-D8) and nearer than <paramref name="nearestOther"/>, the
+	/// nearest gun or can in reach — so a can set down beside a locker is still picked
+	/// up by walking up to the can.
 	/// </summary>
 	private bool LockerInReach(Vector3 at, float nearestOther)
 	{
 		for (int i = 0; i < _lockers.Count; i++)
 		{
-			float d = at.DistanceTo(_lockers[i].GlobalPosition);
-			if (d <= SimConfig.LockerReachMeters && d < nearestOther)
+			float d = LockerSupply.FootprintDistance(at, _lockers[i].GlobalPosition, _lockers[i].Yaw);
+			if (LockerSupply.InReach(d) && d < nearestOther)
 			{
 				return true;
 			}

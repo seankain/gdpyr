@@ -356,11 +356,13 @@ public static class SimConfig
 	public const float EmplacementReachMeters = 2.5f;
 
 	/// <summary>
-	/// How close a player has to be to a weapon locker to swap their large weapon
-	/// at it (docs/NETCODE.md §10.6). The use key's reach, as for a gun: one key,
-	/// one distance.
+	/// How close a player's feet have to be to a weapon locker's footprint, flat, for
+	/// the use key to open it and for a kit to be taken at it (docs/LOADOUT.md L-D8,
+	/// <see cref="LockerSupply.FootprintDistance"/>) — and from L5, to be resupplied
+	/// there: one locker, one distance. Shorter than a gun's reach, which is measured
+	/// from a point.
 	/// </summary>
-	public const float LockerReachMeters = EmplacementReachMeters;
+	public const float LockerReachMeters = 1f;
 
 	/// <summary>
 	/// What carrying a heavy gun does to a player's speed. Every movement state

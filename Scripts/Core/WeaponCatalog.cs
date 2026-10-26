@@ -252,6 +252,9 @@ public static class WeaponCatalog
 		return true;
 	}
 
+	/// <summary>Whether a kit's choices are already ones this build can spawn (<see cref="Loadout.IsValid"/>).</summary>
+	public static bool IsValidKit(in LoadoutSelection kit) => Loadout.IsValid(kit, LargeWeapons);
+
 	/// <summary>What a kit weighs [kg], from the catalog's carry stats.</summary>
 	public static float WeightOf(in LoadoutSelection kit) => Loadout.WeightKg(kit, Carry);
 
@@ -271,7 +274,7 @@ public static class WeaponCatalog
 	public static bool IsLargeWeapon(byte id) => LargeChoiceOf(id) >= 0;
 
 	/// <summary>Where a large weapon is in <see cref="LargeWeapons"/>, or -1 for anything else.</summary>
-	public static int LargeChoiceOf(byte id) => LockerSim.IndexOf(id, LargeWeapons);
+	public static int LargeChoiceOf(byte id) => Loadout.IndexOf(id, LargeWeapons);
 
 	/// <summary>
 	/// The large weapon at an index in <see cref="LargeWeapons"/>, as a snapshot
@@ -283,9 +286,6 @@ public static class WeaponCatalog
 		id = known ? LargeWeapons[choice] : Rifle;
 		return known;
 	}
-
-	/// <summary>What a weapon locker swaps <paramref name="current"/> for: the next large weapon, wrapping.</summary>
-	public static byte LockerSwap(byte current) => LockerSim.Next(current, LargeWeapons);
 
 	/// <summary>
 	/// The kit a player who has not chosen one spawns with, every bot's but for its

@@ -67,6 +67,12 @@ public enum AgentEventKind : byte
 	/// two units or more whose micro-autonomy is on, under <c>--bot-ai htn</c>.
 	/// </summary>
 	SquadDrill = 20,
+
+	/// <summary>
+	/// A player took a kit at a weapon locker (docs/LOADOUT.md §5.3): a person's request,
+	/// a bot's locker run or a policy's <c>loadout</c> op, through the one validator.
+	/// </summary>
+	Kit = 21,
 }
 
 /// <summary>
@@ -109,6 +115,9 @@ public static class AgentEventSchema
 	/// carries no primary for it to count.
 	/// </summary>
 	public const float NoRoundsFired = -1f;
+
+	/// <summary>A <c>kit</c> record's <c>primary</c> for a kit with none.</summary>
+	public const int NoPrimary = -1;
 
 	private static readonly string[][] Names =
 	{
@@ -162,6 +171,9 @@ public static class AgentEventSchema
 		// point, 3 go to ground, 4 set the base, 5 bound, 6 grenades, 7 rush, 0 no drill —
 		// how many of its units take part, and its threat point, else where its order goes.
 		new[] { "squad", "phase", "elements", "x", "z" },                                      // SquadDrill
+		// The player; the primary's catalog id, -1 for none; the vest's tier, 0 none to 3
+		// heavy; and the pouches: magazines and grenades (docs/LOADOUT.md §5.3).
+		new[] { "peer", "primary", "armour", "magazines", "grenades" },                        // Kit
 	};
 
 	private static readonly string[] Kinds =
@@ -169,7 +181,7 @@ public static class AgentEventSchema
 		"round_start", "round_end", "kill", "damage", "unit_built", "unit_lost", "node_captured",
 		"seat_attached", "seat_released", "structure_placed", "structure_built", "structure_lost",
 		"squad_task", "contact_spotted", "node_contested", "unit_embarked", "unit_disembarked", "dropship_landed",
-		"grenade_thrown", "unit_task", "squad_drill",
+		"grenade_thrown", "unit_task", "squad_drill", "kit",
 	};
 
 	/// <summary>The highest kind there is. Everything from 0 to this has a name and a slate of fields.</summary>

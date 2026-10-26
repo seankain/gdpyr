@@ -6,7 +6,8 @@
   "roster": { "ground": 1, "strategists": 1 },
 
   "seats": [
-    { "id": "grenadier", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/locker_then_six_rounds.json" },
+    { "id": "grenadier", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/six_rounds.json",
+      "kit": { "primary": "launcher", "magazines": 3, "grenades": 0, "armour": "none" } },
     { "id": "chair", "team": "strategist", "policy": "strategist", "step_mul": 6,
       "script": { "repeat": false, "steps": [ { "ticks": 1560, "commands": [] } ] } }
   ],

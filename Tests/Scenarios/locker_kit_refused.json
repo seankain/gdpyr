@@ -1,0 +1,29 @@
+{
+  "name": "a rifleman 3 m from the weapon locker asks it for a launcher kit, is refused, and fights on with the rifle",
+  "seeds": [6, 7],
+  "duration_ticks": 720,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 0 },
+
+  "seats": [
+    { "id": "rifleman", "team": "ground", "policy": "ground", "step_mul": 4,
+      "script": "scripts/launcher_kit_then_crouch_fire.json" }
+  ],
+
+  "spawns": [
+    { "structure": "sandbag_wall", "team": "strategist", "at": [8, 0.5, -2.25], "yaw": 0 },
+    { "peer": "rifleman", "at": [8, 1, 7.75], "look": [0, 0] }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "counters.loadouts_applied", "op": "==", "value": 0 },
+    { "metric": "counters.loadouts_refused", "op": "==", "value": 1 },
+    { "metric": "counters.loadouts_refused.not_at_locker", "op": "==", "value": 1 },
+    { "metric": "events.kit.count", "op": "==", "value": 0 },
+    { "metric": "events.damage.count", "op": ">=", "value": 5 },
+    { "metric": "events.damage.weapon.min", "op": "==", "value": 3 },
+    { "metric": "events.damage.weapon.max", "op": "==", "value": 3 },
+    { "metric": "observation.rifleman.weapon.reserve_max.last", "op": "==", "value": 150 }
+  ]
+}
