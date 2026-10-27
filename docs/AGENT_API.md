@@ -817,6 +817,16 @@ failure: `counters.loadouts_applied` and `counters.loadouts_refused` count the a
 `counters.loadouts_refused.<code>` each refusal by its code (`not_at_locker`, `too_soon`, …). The
 trace has every answer.
 
+**A window that waits on ground bots walking is sized for the slowest one.** Since LOADOUT.md L4 a
+player moves at its kit's speed, and no kit is slower than 0.70 of the authored speeds (L-D4); a
+bot carries its roster slot's primary — a DMR bot moves at 0.974, a launcher bot at 0.912 — and
+per-role kits (L7) may load one more. So a scenario whose claims need ground bots to get somewhere
+counts their time in metres rather than seconds: its `duration_ticks` is the window bots at the
+default kit's speed would be given, divided by 0.70 and rounded up to a whole second.
+`htn_ground_denies_node`, `htn_squad_retreats` and `tactics_move_to_node` run 7,740 ticks for that
+reason, and `htn_locker_runner_kit` and `tactics_sniper_overwatch` 5,160. A scripted seat is not a
+bot: it moves at its own kit's speed, which a scenario that moves one states with `kit`.
+
 A spawn names exactly one of a `peer` (a seat to place), a `unit` (`infantry`, `technical`,
 `tank`, `builder`, `supply_truck`, `sniper`, `heavy_gunner` or `dropship`) or a `structure` (`pillbox`, `sandbag_wall`, `sniper_tower`, with a `yaw`). A
 structure is put up finished and free, and the server refuses one that does not fit where it was put

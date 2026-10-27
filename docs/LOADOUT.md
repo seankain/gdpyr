@@ -862,6 +862,21 @@ through the harness; "listen host" and "dedicated server" need a person at the c
     (`BotDirector.Equip`), and the HTN locker runner for the rest of the life it takes its launcher.
     L-D4's "every scenario's timing stands" holds for the default kit and not for those bots.
     Per-role kits, which would move them again, are L7's.
+  - **The scenarios give bots their time in metres.** Kept, not exempted: a bot moves at its kit's
+    speed like anyone, and a scenario whose claims wait on ground bots walking is sized for the
+    slowest a bot could be — the speed floor, 0.70, below today's slowest bot (0.912) and L7's
+    heaviest planned role kit (17.9 kg, 0.828), so neither needs the windows revisited. Its window
+    is the one default-speed bots had, divided by 0.70 and rounded up to a whole second
+    (AGENT_API.md §9.1). The five scenarios with ground bots whose claims need them to move:
+    `htn_ground_denies_node`, `htn_squad_retreats` and `tactics_move_to_node` 5,400 → 7,740 ticks
+    (the last one's strategist step with it, 5,340 → 7,680), and `htn_locker_runner_kit` and
+    `tactics_sniper_overwatch` 3,600 → 5,160. Each of their claims is a count at or above a floor,
+    or the runner's launcher, so a longer window cannot fail one that a shorter one passed;
+    `strategist_economy`'s two ground bots are not what it claims about, and every other
+    scenario's ground players are seats. That is 17.8 % more ticks across the suite. The bots
+    themselves needed nothing for it: at the floor a walk from rest covers 1.25 m in the pilot's
+    half-second stuck window, which wants 0.6; its 1.5 m/s sprint threshold is under the slowest
+    walk; and the locker trip's 30 s is 105 m at the slowest walk.
   - `dotnet test`: 2332 passed, 0 failed (2324 before; 8 new: 5 in `MovementTests`, 3 in
     `ScenarioTests`; `AgentObservationTests`' extras widened). `dotnet build Gdpyr.csproj`: 0
     warnings, 0 errors; the harness and the .NET client build.
@@ -872,8 +887,8 @@ through the harness; "listen host" and "dedicated server" need a person at the c
   - **Not taken**: every engine-side check. No Godot binary was available in this session: the
     environment's network policy refused the engine's downloads, and its permission policy refused
     building the engine from source. So `weight_speed` has not run over its seeds; the existing
-    suite has not run against this build — the `htn_*` and `tactics_*` scenarios whose launcher and
-    DMR bots now walk slower are where it could differ; the default kit's 8.0 m/s sprint has not
+    suite has not run against this build — the five scenarios whose windows were widened for slow
+    bots are where it could differ; the default kit's 8.0 m/s sprint has not
     been seen in a round (`weight_speed` claims it); and the debug HUD's mispredictions per second
     on a listen host and over a 100 ms `tc netem` link have not been measured, so §12's "L4
     measures it" is still open. The HUD's load line, demo playback's scale and the replay's have
