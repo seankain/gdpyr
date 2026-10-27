@@ -2,7 +2,7 @@
   "name": "an HTN bot sent to the weapon locker for armour takes a launcher kit there, and spawns again in its own",
   "bot_ai": "htn",
   "seeds": [1, 2, 3],
-  "duration_ticks": 3600,
+  "duration_ticks": 5160,
   "warmup_ticks": 60,
   "roster": { "ground": 3, "strategists": 0 },
 

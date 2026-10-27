@@ -3,7 +3,7 @@
   "bot_ai": "htn",
   "unit_autonomy": "on",
   "seeds": [1, 2, 3],
-  "duration_ticks": 5400,
+  "duration_ticks": 7740,
   "warmup_ticks": 60,
   "roster": { "ground": 4, "strategists": 1 },
 
@@ -11,7 +11,7 @@
     { "id": "idle", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json" },
     { "id": "chair", "team": "strategist", "policy": "strategist", "step_mul": 6,
       "script": { "repeat": false, "steps": [
-        { "ticks": 5340, "commands": [
+        { "ticks": 7680, "commands": [
           { "cmd": "order", "kind": "move", "units": ["g1", "r1", "r2", "r3", "r4", "r5", "r6"], "target": [-30, -15] }
         ] }
       ] } }

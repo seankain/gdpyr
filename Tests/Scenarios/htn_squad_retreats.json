@@ -2,7 +2,7 @@
   "name": "an HTN squad that is losing its fight falls back: the scout, or an assault squad in a strike",
   "bot_ai": "htn",
   "seeds": [1, 2, 3, 4],
-  "duration_ticks": 5400,
+  "duration_ticks": 7740,
   "warmup_ticks": 60,
   "roster": { "ground": 6, "strategists": 1 },
 

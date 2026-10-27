@@ -104,6 +104,8 @@ public sealed class AgentGroundView
 		Armour = player.Vest.Points,
 		ArmourMax = BodyArmour.MaxPoints(player.Vest.Tier),
 		ArmourTier = (int)player.Vest.Tier,
+		LoadKg = player.LoadKg,
+		LoadScale = player.LoadScale,
 	};
 
 	private static AgentWeaponView Weapon(PlayerCombat player, fps_controller character, uint tick)

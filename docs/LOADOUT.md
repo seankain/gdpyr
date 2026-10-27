@@ -1,6 +1,6 @@
 # Ground-force loadout: the locker panel, body armour and weight — implementation plan
 
-Status: **L0 built and measured, L1–L3 built (§10; L3's engine-side checks not yet taken); L4–L8 planned.** Planned from the code at `dd579dd`. Phases
+Status: **L0 built and measured, L1–L4 built (§10; L3's and L4's engine-side checks not yet taken); L5–L8 planned.** Planned from the code at `dd579dd`. Phases
 L0–L8 (§10); decisions L-D1 to L-D15 (§3) are the defaults the plan is written against — flag any
 you disagree with before L1 starts. L0's measurement raised the default kit to five magazines;
 there are nine pouches, so it keeps three grenades (L-D1, L-D3, L-D4, L-D13; §10 L0's result).
@@ -803,6 +803,96 @@ through the harness; "listen host" and "dedicated server" need a person at the c
   and over a 100 ms `tc netem` link (DEPLOYMENT.md §4) are no higher in a heavy kit than in the
   default, except in the half-second after a kit is taken; the default kit's sprint measures 8.0 m/s
   as before.
+- **Result — built; nothing engine-side run.** The scenario is written and parses, but has not run,
+  and neither has the suite against this build nor either misprediction check; that is said last.
+  One harness feature came with the scenario, and the replay takes a new kit's speed at once; each
+  is said below. The plan's "the agent `move_speed_scale` stays as it is" is read as the field: it
+  now carries the kit's factor too, clamped as before.
+  - **Speed** (`PlayerManager.MoveScaleOf`): the carry's scale times the kit's, set before every
+    simulated tick, on the server and the owning client alike, as §5.5 says. The kit's is
+    `PlayerCombat.LoadScale`, beside `LoadKg`, both recomputed wherever `Loadout` is set — `Equip`
+    at every spawn, `ApplyKit` at a locker, and on a client `ApplyAuthoritative` from every
+    snapshot — from the catalog's weights against the default kit's (`ReferenceWeightKg`, L1), so
+    the default kit is exactly 1. Mounted is still 0 whatever the kit. A jump sets its upward
+    velocity whole and is as high in any kit; the jumping and falling states' steering speed is
+    scaled, as every movement state's is.
+  - **Beyond the plan: the replay takes the kit at once.** `Reconcile` sets the scale before it
+    replays, so the first snapshot that carries a new kit replays the inputs the server has not yet
+    seen at the speed the server will simulate them at: one correction for a kit change rather than
+    a second one a round trip later. §7.1's "the replay uses the current scale" still holds; the
+    current scale now includes the record that just arrived.
+  - **The record's kit, in one place**: `WeaponCatalog.RecordedKit(weaponFlags, kit)` — the primary
+    from the weapon byte, the pouches and the vest from the kit byte — which `ApplyAuthoritative`
+    and demo playback both read.
+  - **Demos**: journal playback sets each character's `MoveSpeedScale` from its keyframe's kit
+    (§6.3); what anyone carried in their arms stays unrecorded, as before.
+  - **HUD**: `load 15.3 kg · 88 %` on the status corner's second line, under `HP … grenades …`; the
+    corner starts a line higher for it.
+  - **The observation**: `self.load_kg` (clamped to 0–40 kg, `AgentObservation.MaxLoadKg`, past
+    the heaviest kit's 26.1) and `self.load_scale` (0.70–1.12), extras 6 and 7 after L3's. The
+    vector's `move_speed_scale` is `fps_controller.MoveSpeedScale`, now the product, still clamped
+    to 1: the default kit reads 1 there as before, and so does any lighter kit, whose factor is
+    `self.load_scale`'s to say. The vector and `gdpyr-agent-obs-3` are unchanged.
+  - **Beyond the plan: a claim relative to another metric.** §9's claim is a ratio of two seats'
+    distances, and the harness could only compare one metric with a constant. An assertion's
+    `relative_to` names a second metric; the claim is then about the first divided by the second,
+    in the same episode, and a reference that is missing or came to 0 fails (AGENT_API.md §9.1).
+    The JSON summary names it.
+  - **How distance is measured.** A seat's position is sampled during the warmup too, at the
+    roster's spawn, before the scenario's `spawn` puts it in its lane, so the position's minimum or
+    maximum would include that teleport. Its velocity there is 0: the episode's sum of a seat's z
+    velocity samples, one a tick at `step_mul` 1, is minus its distance times 60 / 16 (the vector divides
+    velocity by 16 m/s), and the ratio of two seats' sums is the ratio of their distances.
+  - **Scenario `weight_speed.json`**: three lanes 10 m apart at x = −90, −80 and −70, from z = 80
+    towards −z, which nothing on the Test map stands in; a seat in each at `step_mul` 1 — stripped
+    (no primary and nothing else, 2.0 kg), default (9.3 kg) and heaviest (a launcher, nine pouches
+    and a heavy vest, 26.1 kg). Its script, `scripts/walk_then_sprint.json`: 60 ticks still, 4
+    walking — the sprinting state is entered from walking on a press of sprint, not from idle — and
+    180 sprinting; the episode ends on the sprint's last tick, because a stop's distance goes with
+    the square of the speed and would not keep the ratio. Claims, over seeds 6 and 7: each seat's
+    `load_kg` and `load_scale`; each reached the sprinting state; top speeds 8.96, 8.0 and 5.6 m/s
+    to 1 % (`velocity.2.min`); and the stripped and heaviest seats' summed z velocity relative to the
+    default's, 1.12 and 0.70 within 3 %. The movement step puts the distances at 25.9, 23.1 and
+    16.2 m (`MovementTests.ApplyMove_DistanceIsLinearInTheScale` pins the ratios).
+  - **Who now moves at another speed**: every kit but the default. Every kitted seat in the
+    scenarios before this one holds still (each script's `move` is `[0, 0]`). **Bots do not all
+    carry the default kit**: since L1 a bot carries its roster slot's primary and the rest of the
+    default kit, so a rifle bot moves as before, a DMR bot's 10.6 kg is 0.974 (sprint 7.8 m/s) and a
+    launcher bot's 13.7 kg is 0.912 (walk 4.6, sprint 7.3) — a launcher in every third slot
+    (`BotDirector.Equip`), and the HTN locker runner for the rest of the life it takes its launcher.
+    L-D4's "every scenario's timing stands" holds for the default kit and not for those bots.
+    Per-role kits, which would move them again, are L7's.
+  - **The scenarios give bots their time in metres.** Kept, not exempted: a bot moves at its kit's
+    speed like anyone, and a scenario whose claims wait on ground bots walking is sized for the
+    slowest a bot could be — the speed floor, 0.70, below today's slowest bot (0.912) and L7's
+    heaviest planned role kit (17.9 kg, 0.828), so neither needs the windows revisited. Its window
+    is the one default-speed bots had, divided by 0.70 and rounded up to a whole second
+    (AGENT_API.md §9.1). The five scenarios with ground bots whose claims need them to move:
+    `htn_ground_denies_node`, `htn_squad_retreats` and `tactics_move_to_node` 5,400 → 7,740 ticks
+    (the last one's strategist step with it, 5,340 → 7,680), and `htn_locker_runner_kit` and
+    `tactics_sniper_overwatch` 3,600 → 5,160. Each of their claims is a count at or above a floor,
+    or the runner's launcher, so a longer window cannot fail one that a shorter one passed;
+    `strategist_economy`'s two ground bots are not what it claims about, and every other
+    scenario's ground players are seats. That is 17.8 % more ticks across the suite. The bots
+    themselves needed nothing for it: at the floor a walk from rest covers 1.25 m in the pilot's
+    half-second stuck window, which wants 0.6; its 1.5 m/s sprint threshold is under the slowest
+    walk; and the locker trip's 30 s is 105 m at the slowest walk.
+  - `dotnet test`: 2332 passed, 0 failed (2324 before; 8 new: 5 in `MovementTests`, 3 in
+    `ScenarioTests`; `AgentObservationTests`' extras widened). `dotnet build Gdpyr.csproj`: 0
+    warnings, 0 errors; the harness and the .NET client build.
+  - **The tests test something.** One change at a time, each failed tests: `load_scale` clamped to
+    [0, 1] (1), `load_kg` not written (1), the ratio not taken (1), a reference of 0 divided by (1),
+    `relative_to` dropped when the file is read (1), the reference read from another seed's episode
+    (1), the movement step's target capped at 8 m/s (2).
+  - **Not taken**: every engine-side check. No Godot binary was available in this session: the
+    environment's network policy refused the engine's downloads, and its permission policy refused
+    building the engine from source. So `weight_speed` has not run over its seeds; the existing
+    suite has not run against this build — the five scenarios whose windows were widened for slow
+    bots are where it could differ; the default kit's 8.0 m/s sprint has not
+    been seen in a round (`weight_speed` claims it); and the debug HUD's mispredictions per second
+    on a listen host and over a 100 ms `tc netem` link have not been measured, so §12's "L4
+    measures it" is still open. The HUD's load line, demo playback's scale and the replay's have
+    compiled and not run.
 
 ### L5 — Resupply within 1 m (1 day)
 

@@ -3,7 +3,7 @@
   "bot_ai": "htn",
   "unit_autonomy": "on",
   "seeds": [1, 2, 3],
-  "duration_ticks": 3600,
+  "duration_ticks": 5160,
   "warmup_ticks": 60,
   "roster": { "ground": 3, "strategists": 0 },
 

@@ -363,7 +363,11 @@ vector — and `gdpyr-agent-obs-3` — are unchanged until LOADOUT.md L8 appends
 client that does not ask reads the frames it always has. The playtest harness asks. Since L3,
 three more after those, appended so the first three keep their offsets: `self.armour` (the vest's
 points left), `self.armour_max` (its tier's points when full) and `self.armour_tier` (0 none, 1
-light, 2 medium, 3 heavy) — all 0 with no vest.
+light, 2 medium, 3 heavy) — all 0 with no vest. Since L4, two more: `self.load_kg`, what the kit
+weighs, and `self.load_scale`, the share of its speeds the kit leaves the seat (1 for the default
+kit, 0.70 to 1.12 for any, LOADOUT.md L-D4). The vector's `move_speed_scale` is now the carry's scale
+times `self.load_scale`, still clamped to 1, so a kit lighter than the default reads 1 there and
+`self.load_scale` says by how much.
 
 Contacts are the eight nearest the seat has actually acquired, ordered by
 distance, zero-padded. A ray fan is 16 physics queries per seat per decision; at `step_mul` 4 and
@@ -813,6 +817,16 @@ failure: `counters.loadouts_applied` and `counters.loadouts_refused` count the a
 `counters.loadouts_refused.<code>` each refusal by its code (`not_at_locker`, `too_soon`, …). The
 trace has every answer.
 
+**A window that waits on ground bots walking is sized for the slowest one.** Since LOADOUT.md L4 a
+player moves at its kit's speed, and no kit is slower than 0.70 of the authored speeds (L-D4); a
+bot carries its roster slot's primary — a DMR bot moves at 0.974, a launcher bot at 0.912 — and
+per-role kits (L7) may load one more. So a scenario whose claims need ground bots to get somewhere
+counts their time in metres rather than seconds: its `duration_ticks` is the window bots at the
+default kit's speed would be given, divided by 0.70 and rounded up to a whole second.
+`htn_ground_denies_node`, `htn_squad_retreats` and `tactics_move_to_node` run 7,740 ticks for that
+reason, and `htn_locker_runner_kit` and `tactics_sniper_overwatch` 5,160. A scripted seat is not a
+bot: it moves at its own kit's speed, which a scenario that moves one states with `kit`.
+
 A spawn names exactly one of a `peer` (a seat to place), a `unit` (`infantry`, `technical`,
 `tank`, `builder`, `supply_truck`, `sniper`, `heavy_gunner` or `dropship`) or a `structure` (`pillbox`, `sandbag_wall`, `sniper_tower`, with a `yaw`). A
 structure is put up finished and free, and the server refuses one that does not fit where it was put
@@ -920,6 +934,14 @@ passes `--agent-api` (§4.1).
 An observation field that answers to nothing **fails** rather than reading zero: the harness samples
 every field the schema publishes, so a name it does not know is a typo, and a typo that read as zero
 would be an assertion that passes for the wrong reason.
+
+**A claim relative to another metric** names it in `relative_to`, and is then about the first
+metric divided by the second, in the same episode: `{"metric":
+"observation.stripped.self.velocity.2.sum", "op": "between", "value": [1.0864, 1.1536],
+"relative_to": "observation.default.self.velocity.2.sum"}` is one seat going 1.12 times as far as
+another, within 3 %, whatever the distance itself came to (LOADOUT.md §9, `weight_speed.json`). A
+reference that answers to nothing fails as a metric does, and one that came to 0 fails rather than
+dividing by it.
 
 **What a scalar claim means across a seed sweep** is stated once, in
 `tools/Gdpyr.Playtest/Assertions.cs`: a comparison and `between` are **per-episode invariants** and

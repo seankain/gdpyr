@@ -79,9 +79,34 @@ public sealed class PlayerCombat
 	/// a weapon locker since (docs/LOADOUT.md §5.3). The next life starts from
 	/// <see cref="PendingLoadout"/>, which a locker's kit also sets (L-D11). On a
 	/// client it is the server's word, read off the player record (docs/LOADOUT.md
-	/// §6.1), which is what its reserve — and from L4 its speed — are derived from.
+	/// §6.1), which is what its reserve and its speed are derived from.
 	/// </summary>
-	public LoadoutSelection Loadout { get; private set; }
+	public LoadoutSelection Loadout
+	{
+		get => _loadout;
+		private set
+		{
+			_loadout = value;
+			LoadKg = WeaponCatalog.WeightOf(value);
+			LoadScale = Sim.Loadout.SpeedScale(LoadKg, WeaponCatalog.ReferenceWeightKg);
+		}
+	}
+
+	private LoadoutSelection _loadout;
+
+	/// <summary>
+	/// What <see cref="Loadout"/> weighs [kg]: the kit as taken, not as spent (L-D5), so
+	/// it changes where the kit does — a spawn, a locker, and on a client the record —
+	/// and nowhere else.
+	/// </summary>
+	public float LoadKg { get; private set; }
+
+	/// <summary>
+	/// The share of their movement states' speeds this kit lets the player keep (L-D4),
+	/// 1 for the default kit; multiplied by the carry's scale before every simulated
+	/// tick, on the server and the owning client alike (docs/LOADOUT.md §5.5).
+	/// </summary>
+	public float LoadScale { get; private set; } = 1f;
 
 	/// <summary>The loadout the next spawn will use, as the player has asked for it.</summary>
 	public LoadoutSelection PendingLoadout { get; set; }
@@ -348,20 +373,12 @@ public sealed class PlayerCombat
 
 		// The kit is the server's to say, and it is said in every snapshot, so a kit
 		// taken at a locker — or a respawn with a different choice — reaches the owner's
-		// prediction however many packets were lost on the way. The large weapon is the
+		// prediction however many packets were lost on the way — and with it the speed
+		// the owner predicts its walk at (docs/LOADOUT.md §7.1). The large weapon is the
 		// weapon byte's, zero for none; the pouches and the vest are the kit byte's.
 		// Applied before the ammunition below, so the count lands in the weapon it
 		// belongs to.
-		byte large = WeaponCatalog.TryLargeWeaponAt(WeaponFlags.LargeChoice(flags), out byte id)
-			? id
-			: WeaponCatalog.None;
-		LoadoutSelection recorded = WeaponCatalog.Sanitize(new LoadoutSelection
-		{
-			Large = large,
-			Magazines = (byte)KitFlags.Magazines(kit),
-			Grenades = (byte)KitFlags.Grenades(kit),
-			Armour = KitFlags.Vest(kit),
-		});
+		LoadoutSelection recorded = WeaponCatalog.RecordedKit(flags, kit);
 
 		bool swapped = Weapons[SimConfig.LargeSlot].DefinitionId != recorded.Large;
 		Loadout = recorded;

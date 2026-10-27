@@ -32,11 +32,11 @@ dedicated-server authoritative.
   boarding and unloading, and a vertical take-off and landing dropship
 - [`docs/LOADOUT.md`](docs/LOADOUT.md) — the ground force's loadout, planned: a locker panel for
   the primary, spare magazines or grenades and body armour, weight that sets movement speed, and
-  resupply at the locker; L0–L8, of which L0–L3 are built — how much bots fire in a life,
+  resupply at the locker; L0–L8, of which L0–L4 are built — how much bots fire in a life,
   which raised the default kit to five spare magazines; the kit itself: finite primary
   ammunition, no primary at all, and the player record that carries both; taking a kit at the
-  locker, one validator for a person, a bot and an agent; and body armour, a vest that takes a
-  share of each hit until its points run out
+  locker, one validator for a person, a bot and an agent; body armour, a vest that takes a
+  share of each hit until its points run out; and weight, which sets how fast a kit moves
 - [`docs/LAN.md`](docs/LAN.md) — hosting a room of machines from a checkout, with a dev build
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — AWS EC2 dedicated-server runbook
 
@@ -289,6 +289,15 @@ A kit's last word is **body armour**, for players: a light, medium or heavy vest
 health (`HP 100   vest 60   grenades 3`), other players wear theirs as a band round the chest, light
 to heavy from khaki to charcoal, and asking a locker for the vest you already wear does not
 refill it ([`docs/LOADOUT.md`](docs/LOADOUT.md) §4.3).
+
+Everything in a kit **weighs** something, and the weight sets how fast its carrier moves: the
+default kit — a rifle, five spare magazines, three grenades, no vest, 9.3 kg — walks at 5 and
+sprints at 8 m/s, as every player always has; each kilogram over it costs 2 % of every movement
+speed and each one under it gains 2 %, from a pistol alone at 112 % (sprinting at 9.0 m/s) down to
+70 % for a launcher, nine pouches and a heavy vest, whose 5.6 m/s sprint is too slow to slide. A
+jump is as high in any kit, and weight is the kit as taken, not as spent: firing a magazine away
+makes nobody faster. The HUD's second line reads `load 15.3 kg · 88 %`
+([`docs/LOADOUT.md`](docs/LOADOUT.md) §4.1).
 
 ## Playing on your own
 

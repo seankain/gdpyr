@@ -931,11 +931,11 @@ public class AgentObservationTests
 	[Fact]
 	public void TheVectorIsUnchangedAndTheKitRidesBesideIt()
 	{
-		// L1's and L3's fields are extras, so obs-3's vector — what every trained policy
-		// reads — is still 145 floats until L8 appends its own.
+		// L1's, L3's and L4's fields are extras, so obs-3's vector — what every trained
+		// policy reads — is still 145 floats until L8 appends its own.
 		Assert.Equal(145, AgentObservation.Floats);
 		Assert.Equal("gdpyr-agent-obs-3", AgentProtocol.SchemaVersion);
-		Assert.Equal(6, AgentObservation.ExtraFloats);
+		Assert.Equal(8, AgentObservation.ExtraFloats);
 
 		var names = new System.Collections.Generic.List<string>();
 		foreach (AgentField field in AgentObservation.ExtraFields)
@@ -950,26 +950,36 @@ public class AgentObservationTests
 		Assert.Equal(new[]
 		{
 			"self.grenades", "weapon.reserve", "weapon.reserve_max", "self.armour", "self.armour_max",
-			"self.armour_tier",
+			"self.armour_tier", "self.load_kg", "self.load_scale",
 		}, names);
 	}
 
 	[Fact]
 	public void TheExtrasAreInRawUnits()
 	{
-		var self = new AgentSelfView { Grenades = 2, Armour = 47, ArmourMax = 60, ArmourTier = 2 };
+		var self = new AgentSelfView
+		{
+			Grenades = 2, Armour = 47, ArmourMax = 60, ArmourTier = 2, LoadKg = 15.3f, LoadScale = 0.88f,
+		};
 		var weapon = new AgentWeaponView { Reserve = 120, ReserveMax = 150 };
 		var into = new float[AgentObservation.ExtraFloats];
 		Assert.Equal(AgentObservation.ExtraFloats, AgentObservation.EncodeExtras(self, weapon, into));
-		Assert.Equal(new[] { 2f, 120f, 150f, 47f, 60f, 2f }, into);
+		Assert.Equal(new[] { 2f, 120f, 150f, 47f, 60f, 2f, 15.3f, 0.88f }, into);
 
 		// No vest is nothing at all, not a vest with no points left.
 		AgentObservation.EncodeExtras(new AgentSelfView { Grenades = 2 }, weapon, into);
-		Assert.Equal(new[] { 0f, 0f, 0f }, into[3..]);
+		Assert.Equal(new[] { 0f, 0f, 0f }, into[3..6]);
 
 		// The vest's fields are held to what the record can say, as the reserve's are.
 		AgentObservation.EncodeExtras(new AgentSelfView { Armour = 900, ArmourMax = 900, ArmourTier = 9 }, weapon, into);
-		Assert.Equal(new[] { 127f, 127f, 3f }, into[3..]);
+		Assert.Equal(new[] { 127f, 127f, 3f }, into[3..6]);
+
+		// The load's scale is held to L-D4's cap and floor, where the speed line is; its
+		// weight to the schema's bound.
+		AgentObservation.EncodeExtras(new AgentSelfView { LoadKg = 900f, LoadScale = 5f }, weapon, into);
+		Assert.Equal(new[] { AgentObservation.MaxLoadKg, 1.12f }, into[6..]);
+		AgentObservation.EncodeExtras(new AgentSelfView { LoadKg = -1f, LoadScale = 0f }, weapon, into);
+		Assert.Equal(new[] { 0f, 0.70f }, into[6..]);
 
 		// The pistol reloads forever, and says so.
 		weapon = new AgentWeaponView { Reserve = -1, ReserveMax = -1 };
@@ -977,14 +987,14 @@ public class AgentObservationTests
 		Assert.Equal(-1f, into[1]);
 		Assert.Equal(-1f, into[2]);
 
-		Assert.Equal(0, AgentObservation.EncodeExtras(self, weapon, new float[5]));
+		Assert.Equal(0, AgentObservation.EncodeExtras(self, weapon, new float[AgentObservation.ExtraFloats - 1]));
 	}
 
 	[Fact]
 	public void AJsonObservationNamesTheExtrasAndTheSchemaPublishesThem()
 	{
 		var values = new float[AgentObservation.Floats];
-		float[] extras = { 3f, 0f, 150f, 35f, 100f, 3f };
+		float[] extras = { 3f, 0f, 150f, 35f, 100f, 3f, 26.1f, 0.70f };
 
 		var buffer = new ArrayBufferWriter<byte>(16384);
 		using (var writer = new Utf8JsonWriter(buffer))
@@ -1003,6 +1013,8 @@ public class AgentObservationTests
 			Assert.Equal(35f, observation.GetProperty("self.armour").GetSingle());
 			Assert.Equal(100f, observation.GetProperty("self.armour_max").GetSingle());
 			Assert.Equal(3f, observation.GetProperty("self.armour_tier").GetSingle());
+			Assert.Equal(26.1f, observation.GetProperty("self.load_kg").GetSingle());
+			Assert.Equal(0.70f, observation.GetProperty("self.load_scale").GetSingle());
 			Assert.True(observation.TryGetProperty("weapon.magazine", out _));
 		}
 
@@ -1021,5 +1033,11 @@ public class AgentObservationTests
 		Assert.Equal(AgentObservation.ExtrasFlag, block.GetProperty("flag").GetInt32());
 		Assert.Equal("weapon.reserve", block.GetProperty("fields")[1].GetProperty("name").GetString());
 		Assert.Equal(1, block.GetProperty("fields")[1].GetProperty("offset").GetInt32());
+
+		// The load's scale publishes L-D4's floor and cap as its range.
+		JsonElement load = block.GetProperty("fields")[7];
+		Assert.Equal("self.load_scale", load.GetProperty("name").GetString());
+		Assert.Equal(0.70f, load.GetProperty("min").GetSingle());
+		Assert.Equal(1.12f, load.GetProperty("max").GetSingle());
 	}
 }

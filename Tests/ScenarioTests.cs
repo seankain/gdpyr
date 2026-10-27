@@ -186,10 +186,13 @@ public class ScenarioTests
 
 			foreach (Assertion assertion in scenario.Assertions)
 			{
-				if (assertion.Metric.StartsWith("events.", StringComparison.Ordinal))
+				foreach (string metric in new[] { assertion.Metric, assertion.RelativeTo })
 				{
-					Assert.True(empty.TryValue(assertion.Metric, out _, out _),
-						$"{System.IO.Path.GetFileName(file)}: {assertion.Metric}");
+					if (metric != null && metric.StartsWith("events.", StringComparison.Ordinal))
+					{
+						Assert.True(empty.TryValue(metric, out _, out _),
+							$"{System.IO.Path.GetFileName(file)}: {metric}");
+					}
 				}
 			}
 		}
@@ -970,6 +973,85 @@ public class ScenarioTests
 
 		Assert.False(result.Passed);
 		Assert.Equal("no episodes ran", result.Error);
+	}
+
+	// ---- a claim relative to another metric (docs/LOADOUT.md §9, weight_speed.json) --
+
+	private static EpisodeMetrics Sprinted(int seed, double light, double baseline)
+	{
+		// Two seats' summed velocities, as the harness samples them: one sample a tick.
+		var metrics = new EpisodeMetrics(seed) { StartTick = 0, EndTick = 300 };
+		for (uint tick = 1; tick <= 3; tick++)
+		{
+			metrics.Sample("light.self.velocity.2", tick * 100, light / 3d);
+			metrics.Sample("default.self.velocity.2", tick * 100 - 50, baseline / 3d);
+		}
+
+		return metrics;
+	}
+
+	[Fact]
+	public void ARelativeClaimIsTheRatioOfTwoMetricsInTheSameEpisode()
+	{
+		Scenario scenario = Scenario.Parse("""
+			{ "assert": [ { "metric": "observation.light.self.velocity.2.sum", "op": "between",
+			                "value": [1.0864, 1.1536],
+			                "relative_to": "observation.default.self.velocity.2.sum" } ] }
+			""");
+
+		Assertion assertion = scenario.Assertions[0];
+		Assert.Equal("observation.default.self.velocity.2.sum", assertion.RelativeTo);
+		Assert.Equal("observation.light.self.velocity.2.sum / observation.default.self.velocity.2.sum"
+			+ " in [1.086,1.154]", assertion.ToString());
+
+		// Each episode's own ratio, whatever the distances themselves came to: 1.12 of
+		// a short run and of a long one both hold, and 1.2 fails on its seed.
+		AssertionResult held = Check(assertion, Sprinted(1, -0.56, -0.5), Sprinted(2, -11.2, -10));
+		Assert.True(held.Passed, held.Observed);
+		Assert.Equal("1.12..1.12 over 2 seeds", held.Observed);
+
+		AssertionResult failed = Check(assertion, Sprinted(1, -0.56, -0.5), Sprinted(2, -12, -10));
+		Assert.False(failed.Passed);
+		Assert.Equal(2, failed.Seed);
+		Assert.Equal("1.2", failed.Observed);
+		Assert.Equal(300u, failed.Tick);
+	}
+
+	[Fact]
+	public void ARelativeClaimFailsOnAReferenceThatIsMissingOrZero()
+	{
+		var assertion = new Assertion
+		{
+			Metric = "observation.light.self.velocity.2.sum",
+			RelativeTo = "observation.defualt.self.velocity.2.sum",
+			Op = AssertionOp.Greater,
+			Value = 1d,
+		};
+
+		AssertionResult typo = Check(assertion, Sprinted(1, -0.56, -0.5));
+		Assert.False(typo.Passed);
+		Assert.Contains("no metric called 'observation.defualt", typo.Error);
+
+		// A seat that never moved is not one another seat went infinitely farther than.
+		assertion.RelativeTo = "observation.default.self.velocity.2.sum";
+		AssertionResult zero = Check(assertion, Sprinted(1, -0.56, 0));
+		Assert.False(zero.Passed);
+		Assert.Contains("came to 0", zero.Error);
+	}
+
+	[Fact]
+	public void ARelativeToMustNameAMetric()
+	{
+		ScenarioException error = Assert.Throws<ScenarioException>(() => Scenario.Parse("""
+			{ "assert": [ { "metric": "round.ticks", "op": ">", "value": 1, "relative_to": "" } ] }
+			"""));
+		Assert.Contains("'relative_to' that names no metric", error.Message);
+
+		Assert.Throws<ScenarioException>(() => Scenario.Parse("""
+			{ "assert": [ { "metric": "round.ticks", "op": ">", "value": 1, "relative_to": 3 } ] }
+			"""));
+
+		Assert.Null(Scenario.Parse(Minimal).Assertions[0].RelativeTo);
 	}
 
 	[Fact]

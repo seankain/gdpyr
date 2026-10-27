@@ -2,7 +2,7 @@
   "name": "HTN ground bots deny the strategist its nodes: they take two, and the far one it holds",
   "bot_ai": "htn",
   "seeds": [1, 2, 3, 4],
-  "duration_ticks": 5400,
+  "duration_ticks": 7740,
   "warmup_ticks": 60,
   "roster": { "ground": 6, "strategists": 0 },
 

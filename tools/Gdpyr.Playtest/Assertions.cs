@@ -38,6 +38,14 @@ public sealed class Assertion
 	/// <summary>The metric name: <c>events.kill.count</c>, <c>observation.self.health</c>, <c>round.ticks</c>.</summary>
 	public string Metric = string.Empty;
 
+	/// <summary>
+	/// A second metric the first is divided by, in the same episode, before the claim
+	/// applies; null for a plain claim. What makes "one seat went 1.12 times as far as
+	/// another" a claim that holds whatever the distance itself came to
+	/// (docs/LOADOUT.md §9, <c>weight_speed.json</c>).
+	/// </summary>
+	public string RelativeTo;
+
 	public AssertionOp Op = AssertionOp.GreaterOrEqual;
 
 	/// <summary>The right-hand side for a scalar comparison.</summary>
@@ -71,13 +79,16 @@ public sealed class Assertion
 
 	public override string ToString() => Op switch
 	{
-		AssertionOp.Between => $"{Metric} in [{Format(Range is { Length: > 0 } ? Range[0] : 0d)},"
+		AssertionOp.Between => $"{Subject} in [{Format(Range is { Length: > 0 } ? Range[0] : 0d)},"
 			+ $"{Format(Range is { Length: > 1 } ? Range[1] : 0d)}]",
-		AssertionOp.Percentile => $"p{Format(Percentile)}({Metric}) {Symbol(Comparison)} {Format(Value)}",
-		AssertionOp.OverSeeds => $"{Metric} {Symbol(Comparison)} {Format(Value)}"
+		AssertionOp.Percentile => $"p{Format(Percentile)}({Subject}) {Symbol(Comparison)} {Format(Value)}",
+		AssertionOp.OverSeeds => $"{Subject} {Symbol(Comparison)} {Format(Value)}"
 			+ $" over {Format(Fraction * 100d)}% of seeds",
-		_ => $"{Metric} {Symbol(Op)} {Format(Value)}",
+		_ => $"{Subject} {Symbol(Op)} {Format(Value)}",
 	};
+
+	/// <summary>What the claim is about: the metric, or the metric over <see cref="RelativeTo"/>.</summary>
+	private string Subject => RelativeTo == null ? Metric : $"{Metric} / {RelativeTo}";
 
 	internal static string Symbol(AssertionOp op) => op switch
 	{
@@ -153,6 +164,32 @@ public static class AssertionEvaluator
 				result.Error = $"no metric called '{assertion.Metric}'";
 				return result;
 			}
+
+			if (assertion.RelativeTo == null)
+			{
+				continue;
+			}
+
+			// The same episode's, so a ratio is never of two seeds' different luck.
+			if (!episodes[i].TryValue(assertion.RelativeTo, out double reference, out uint referenceTick))
+			{
+				result.Passed = false;
+				result.Seed = episodes[i].Seed;
+				result.Error = $"no metric called '{assertion.RelativeTo}'";
+				return result;
+			}
+
+			if (reference == 0d)
+			{
+				result.Passed = false;
+				result.Seed = episodes[i].Seed;
+				result.Tick = referenceTick;
+				result.Error = $"'{assertion.RelativeTo}' came to 0, and nothing is relative to 0";
+				return result;
+			}
+
+			values[i] /= reference;
+			ticks[i] = Math.Max(ticks[i], referenceTick);
 		}
 
 		switch (assertion.Op)

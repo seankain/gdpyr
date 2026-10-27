@@ -752,6 +752,13 @@ public partial class PlayerManager : Node
 			if (playback.Simulated)
 			{
 				player.Character.RestoreState(snapshot.ToCharacterState());
+
+				// The journal re-simulates the walk until the next keyframe, at the speed
+				// this one's kit allows, or a heavy player would be dragged back at every
+				// keyframe (docs/LOADOUT.md §6.3). What anyone carried in their arms is
+				// not recorded, and is left out as before.
+				player.Character.MoveSpeedScale =
+					WeaponCatalog.SpeedScaleOf(WeaponCatalog.RecordedKit(snapshot.WeaponFlags, snapshot.Kit));
 			}
 			else
 			{
@@ -871,7 +878,7 @@ public partial class PlayerManager : Node
 		// place before the step rather than after it — on the server and on the
 		// owning client alike, which is what keeps the two predicting the same walk
 		// (docs/IMPLEMENTATION_PLAN.md §M5).
-		player.Character.MoveSpeedScale = EmplacementManager.Instance?.MoveScaleOf(player.PeerId) ?? 1f;
+		player.Character.MoveSpeedScale = MoveScaleOf(player.PeerId);
 
 		player.Character.Simulate(frame);
 
@@ -884,6 +891,16 @@ public partial class PlayerManager : Node
 			combat?.ClientSimulateLocal(context, tick);
 		}
 	}
+
+	/// <summary>
+	/// The share of its movement states' speeds a character keeps this tick: what it
+	/// carries in its arms — a gun, a can, or a mounted gun's 0 — times what its kit
+	/// weighs (docs/LOADOUT.md §5.5). Both factors come from state the server and the
+	/// owning client both hold, so the two predict the same walk.
+	/// </summary>
+	private static float MoveScaleOf(int peerId) =>
+		(EmplacementManager.Instance?.MoveScaleOf(peerId) ?? 1f)
+		* (CombatManager.Instance?.Find(peerId)?.LoadScale ?? 1f);
 
 	/// <summary>
 	/// Sends every peer the roster it is allowed to have
@@ -1250,6 +1267,12 @@ public partial class PlayerManager : Node
 
 		Vector3 renderPositionBefore = character.GlobalPosition;
 		character.RestoreState(snapshot.ToCharacterState());
+
+		// At the scale in force now, which takes in a kit the record has only just said:
+		// every input being replayed reaches the server after it took that kit, so this
+		// replay is the server's walk rather than one more correction behind it
+		// (docs/LOADOUT.md §7.1).
+		character.MoveSpeedScale = MoveScaleOf(_local.PeerId);
 
 		for (uint tick = decision.FromTick; tick <= decision.ToTick; tick++)
 		{
