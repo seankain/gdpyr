@@ -171,6 +171,11 @@ public sealed class Runner
 			Unbounded = _connection.Unbounded,
 		};
 
+		foreach (ScenarioSeat seat in scenario.Seats)
+		{
+			metrics.Seat(seat.Id, seat.PeerId);
+		}
+
 		Directory.CreateDirectory(_traceDirectory);
 		string tracePath = Path.Combine(_traceDirectory,
 			$"trace-{Sanitize(scenario.Name)}-{seed}.jsonl");

@@ -746,6 +746,9 @@ public partial class PlayerManager : Node
 			player.DemoDead = !snapshot.IsAlive;
 			player.Character.SetDeadPresentation(player.DemoDead);
 
+			// A demo has no combat state, but the kit byte says the vest (docs/LOADOUT.md §7.5).
+			player.Character.SetVestPresentation(KitFlags.Vest(snapshot.Kit));
+
 			if (playback.Simulated)
 			{
 				player.Character.RestoreState(snapshot.ToCharacterState());
@@ -992,9 +995,7 @@ public partial class PlayerManager : Node
 				Ammo = combat?.SnapshotAmmo ?? (byte)0,
 				WeaponFlags = combat?.SnapshotFlags ?? (byte)0,
 				Reserve = combat?.SnapshotReserve ?? (ushort)0,
-
-				// A vest's points are L3's; until then every record says none.
-				ArmourPoints = 0,
+				ArmourPoints = combat?.SnapshotArmour ?? (byte)0,
 				Kit = combat?.SnapshotKit ?? (byte)0,
 			};
 		}

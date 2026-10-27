@@ -340,4 +340,26 @@ public class LoadoutTests
 	{
 		Assert.Equal(kept, Loadout.RefitGrenades((byte)carried, Kit(Rifle, 0, pouches)));
 	}
+
+	[Fact]
+	public void TheSameVestKeepsWhatItHasLeft()
+	{
+		// Asking for the vest already worn refills nothing: that is the resupply's (L5).
+		var worn = new BodyArmourState(BodyArmourTier.Medium, 12);
+		Assert.Equal(worn, Loadout.RefitVest(worn, Kit(Rifle, 5, 3, BodyArmourTier.Medium)));
+
+		var spent = new BodyArmourState(BodyArmourTier.Heavy, 0);
+		Assert.Equal(spent, Loadout.RefitVest(spent, Kit(Rifle, 5, 3, BodyArmourTier.Heavy)));
+	}
+
+	[Theory]
+	[InlineData(BodyArmourTier.Medium, BodyArmourTier.Heavy)]
+	[InlineData(BodyArmourTier.Heavy, BodyArmourTier.Light)]
+	[InlineData(BodyArmourTier.None, BodyArmourTier.Light)]
+	[InlineData(BodyArmourTier.Light, BodyArmourTier.None)]
+	public void ADifferentVestComesFull(BodyArmourTier worn, BodyArmourTier taken)
+	{
+		var vest = new BodyArmourState(worn, 1);
+		Assert.Equal(BodyArmourState.Full(taken), Loadout.RefitVest(vest, Kit(Rifle, 5, 3, taken)));
+	}
 }

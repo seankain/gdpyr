@@ -272,13 +272,14 @@ public static class AgentJson
 		writer.WriteNumber("tick", record.Tick);
 
 		ReadOnlySpan<string> fields = AgentEventSchema.FieldsOf(record.Kind);
-		if (fields.Length == 5)
+		if (fields.Length == 6)
 		{
 			WriteSlot(writer, fields[0], record.A);
 			WriteSlot(writer, fields[1], record.B);
 			WriteSlot(writer, fields[2], record.C);
 			WriteSlot(writer, fields[3], record.X);
 			WriteSlot(writer, fields[4], record.Y);
+			WriteSlot(writer, fields[5], record.Z);
 		}
 
 		writer.WriteEndObject();

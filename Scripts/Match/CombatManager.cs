@@ -582,7 +582,7 @@ public partial class CombatManager : Node
 		HitFlags flags = HitFlags.Melee;
 		if (victim != null)
 		{
-			flags |= Damage(victim, stats.Damage, attacker, OwnerId.ForPeer(attacker.PeerId),
+			flags |= Damage(victim, stats.Damage, explosive: false, attacker, OwnerId.ForPeer(attacker.PeerId),
 				attacker.EquippedDefinitionId, tick);
 		}
 		else if (unitVictim != null)
@@ -669,7 +669,7 @@ public partial class CombatManager : Node
 
 		if (victim != null)
 		{
-			flags |= Damage(victim, stats.Damage, attacker, ownerId, weapon, tick);
+			flags |= Damage(victim, stats.Damage, stats.IsExplosive, attacker, ownerId, weapon, tick);
 		}
 		else if (unitVictim != null)
 		{
@@ -919,7 +919,7 @@ public partial class CombatManager : Node
 			float damage = stats.SplashDamageAt(distance);
 			if (damage > 0f)
 			{
-				flags |= Damage(target, damage, attacker, attackerOwnerId, weapon, tick);
+				flags |= Damage(target, damage, explosive: true, attacker, attackerOwnerId, weapon, tick);
 			}
 		}
 
@@ -1151,31 +1151,40 @@ public partial class CombatManager : Node
 	/// <summary>
 	/// Applies damage and, if that killed the victim, spends a ticket for it.
 	///
+	/// The victim's vest takes its share first (docs/LOADOUT.md §4.3): of a bullet or a
+	/// swing, or half that of anything <paramref name="explosive"/> — a round that
+	/// explodes, on contact or by its blast — and what is left reaches health.
+	///
 	/// <paramref name="attackerOwnerId"/> is carried alongside
 	/// <paramref name="attacker"/> because a unit has no <see cref="PlayerCombat"/>:
 	/// it is null for every round a unit fires, and a kill log that called all of
 	/// those "the world" would make the one record M8 derives its per-round CSV from
 	/// useless the moment the strategist starts winning.
 	/// </summary>
-	private HitFlags Damage(PlayerCombat victim, float amount, PlayerCombat attacker, int attackerOwnerId,
-		byte weapon, uint tick)
+	private HitFlags Damage(PlayerCombat victim, float amount, bool explosive, PlayerCombat attacker,
+		int attackerOwnerId, byte weapon, uint tick)
 	{
 		if (victim == null || !victim.IsAlive || amount <= 0f)
 		{
 			return HitFlags.None;
 		}
 
-		bool killed = victim.ApplyDamage(amount);
+		float lost = BodyArmour.Absorb(ref victim.Vest, amount, explosive);
+		victim.LastDamagedTick = tick;
+		bool killed = victim.ApplyDamage(lost);
+
+		// Confirmed even when the vest took all of it: the shooter did something.
 		ConfirmHit(attacker, victim, killed);
 
 		// The event stream is what a trainer derives its own reward from, and what
 		// M8's per-round CSV is written out of (docs/AGENT_API.md §8). It costs a
-		// null check on a round nobody has attached to.
+		// null check on a round nobody has attached to. The amount is health lost,
+		// which is what a reward reads; the vest's share is beside it.
 		if (AgentEventBus.Active != null)
 		{
 			float range = Separation(attacker, victim);
 			AgentEventBus.Emit(AgentEventKind.Damage, tick, attackerOwnerId, victim.PeerId, weapon,
-				amount, victim.Health);
+				lost, victim.Health, amount - lost);
 			if (killed)
 			{
 				AgentEventBus.Emit(AgentEventKind.Kill, tick, attackerOwnerId, victim.PeerId, weapon, range,
@@ -1881,8 +1890,8 @@ public partial class CombatManager : Node
 		}
 
 		bool wasAlive = combat.IsAlive;
-		combat.ApplyAuthoritative(snapshot.Health, snapshot.Ammo, snapshot.WeaponFlags, snapshot.Reserve, snapshot.Kit,
-			snapshot.LastInputTick, combat == Local);
+		combat.ApplyAuthoritative(snapshot.Health, snapshot.Ammo, snapshot.WeaponFlags, snapshot.Reserve,
+			snapshot.ArmourPoints, snapshot.Kit, snapshot.LastInputTick, combat == Local);
 
 		// A player the server has put back on the field is a player it has stopped
 		// waiting on, whatever became of the answer this client sent. Belt and braces:
@@ -2614,6 +2623,7 @@ public partial class CombatManager : Node
 	{
 		SyncLocalRole();
 		Economy.Refresh();
+		PresentVests();
 		_view?.Render(_projectiles);
 		_hud?.Refresh(Local, Match, tick, LocalAwaitingRole);
 		_strategist?.Refresh(tick);
@@ -2623,6 +2633,28 @@ public partial class CombatManager : Node
 		// it down: closing this panel hands the mouse to whichever of the two games
 		// the player has just chosen.
 		_roleSelect?.Refresh(LocalAwaitingRole, Local?.Team ?? Team.GroundForce);
+	}
+
+	/// <summary>
+	/// Every other player's vest, as their kit says (docs/LOADOUT.md §7.5): on a client
+	/// the kit is the record's, on the authority its own, so the one pass draws both.
+	/// Unchanged tiers cost a comparison each.
+	/// </summary>
+	private void PresentVests()
+	{
+		if (Bootstrap.IsDedicatedServer)
+		{
+			return;
+		}
+
+		for (int i = 0; i < _ordered.Count; i++)
+		{
+			PlayerCombat combat = _ordered[i];
+			if (combat != Local)
+			{
+				combat.Character?.SetVestPresentation(combat.Loadout.Armour);
+			}
+		}
 	}
 
 	/// <summary>

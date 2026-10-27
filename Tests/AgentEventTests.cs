@@ -93,7 +93,7 @@ public class AgentEventTests
 		{
 			var value = (AgentEventKind)kind;
 			Assert.NotEqual("unknown", AgentEventSchema.NameOf(value));
-			Assert.Equal(5, AgentEventSchema.FieldsOf(value).Length);
+			Assert.Equal(6, AgentEventSchema.FieldsOf(value).Length);
 		}
 	}
 
@@ -153,6 +153,43 @@ public class AgentEventTests
 		Assert.Equal(63.4f, root.GetProperty("distance").GetSingle(), 3);
 		Assert.Equal(47, root.GetProperty("rounds_fired").GetInt32());
 		Assert.Equal(7, CountProperties(root));
+	}
+
+	[Fact]
+	public void ADamageRecordSaysWhatTheVestTookBesideTheHealthLost()
+	{
+		// docs/LOADOUT.md §5.2: amount stays health lost, which every reward reads, and
+		// absorbed is added beside it — a rifle round on a full heavy vest.
+		var buffer = new ArrayBufferWriter<byte>(256);
+		using (var writer = new Utf8JsonWriter(buffer))
+		{
+			AgentJson.WriteEvent(writer, AgentEvent.Make(AgentEventKind.Damage, 700, OwnerId.ForUnit(4), 3, 3, 7f, 93f,
+				13f));
+		}
+
+		using JsonDocument document = JsonDocument.Parse(buffer.WrittenMemory);
+		JsonElement root = document.RootElement;
+		Assert.Equal("damage", root.GetProperty("kind").GetString());
+		Assert.Equal(7f, root.GetProperty("amount").GetSingle());
+		Assert.Equal(93f, root.GetProperty("remaining").GetSingle());
+		Assert.Equal(13f, root.GetProperty("absorbed").GetSingle());
+		Assert.Equal(8, CountProperties(root));
+		Assert.Equal("absorbed", AgentEventSchema.FieldsOf(AgentEventKind.Damage)[5]);
+	}
+
+	[Fact]
+	public void TheSixthSlotIsWrittenOnlyForTheKindThatNamesIt()
+	{
+		// A kill has five fields; whatever is in its sixth slot is not one of them.
+		var buffer = new ArrayBufferWriter<byte>(256);
+		using (var writer = new Utf8JsonWriter(buffer))
+		{
+			AgentJson.WriteEvent(writer, AgentEvent.Make(AgentEventKind.Kill, 51204, 2, 3, 2, 63.4f, 47f, 99f));
+		}
+
+		using JsonDocument document = JsonDocument.Parse(buffer.WrittenMemory);
+		Assert.Equal(7, CountProperties(document.RootElement));
+		Assert.Equal(99f, AgentEvent.Make(AgentEventKind.Kill, 1, z: 99f).Z);
 	}
 
 	[Fact]
@@ -248,7 +285,7 @@ public class AgentEventTests
 		// docs/TACTICS.md §5.4: after dropship_landed, so every recorded trace keeps its numbers.
 		Assert.Equal(18, (int)AgentEventKind.GrenadeThrown);
 		Assert.Equal("grenade_thrown", AgentEventSchema.NameOf(AgentEventKind.GrenadeThrown));
-		Assert.Equal(new[] { "thrower", "tier", "hidden", "x", "z" },
+		Assert.Equal(new[] { "thrower", "tier", "hidden", "x", "z", "" },
 			AgentEventSchema.FieldsOf(AgentEventKind.GrenadeThrown).ToArray());
 	}
 
@@ -258,7 +295,7 @@ public class AgentEventTests
 		// docs/TACTICS.md §5.1: the goal is the UnitGoal's number, and a scenario names it.
 		Assert.Equal(19, (int)AgentEventKind.UnitTask);
 		Assert.Equal("unit_task", AgentEventSchema.NameOf(AgentEventKind.UnitTask));
-		Assert.Equal(new[] { "unit", "tier", "goal", "x", "z" }, AgentEventSchema.FieldsOf(AgentEventKind.UnitTask).ToArray());
+		Assert.Equal(new[] { "unit", "tier", "goal", "x", "z", "" }, AgentEventSchema.FieldsOf(AgentEventKind.UnitTask).ToArray());
 		Assert.Equal(18, (int)UnitGoal.TakeCoverFromFire);
 		Assert.Equal(19, (int)UnitGoal.ReturnFire);
 		Assert.Equal(20, (int)UnitGoal.ThrowGrenade);
@@ -292,7 +329,7 @@ public class AgentEventTests
 		// docs/TACTICS.md §5.5: the phase is the DrillPhase's number, and a scenario names it.
 		Assert.Equal(20, (int)AgentEventKind.SquadDrill);
 		Assert.Equal("squad_drill", AgentEventSchema.NameOf(AgentEventKind.SquadDrill));
-		Assert.Equal(new[] { "squad", "phase", "elements", "x", "z" },
+		Assert.Equal(new[] { "squad", "phase", "elements", "x", "z", "" },
 			AgentEventSchema.FieldsOf(AgentEventKind.SquadDrill).ToArray());
 		Assert.Equal(5, (int)DrillPhase.Bound);
 		Assert.Equal(7, (int)DrillPhase.Rush);
@@ -306,7 +343,7 @@ public class AgentEventTests
 		Assert.Equal(21, (int)AgentEventKind.Kit);
 		Assert.Equal(AgentEventKind.Kit, AgentEventSchema.Last);
 		Assert.Equal("kit", AgentEventSchema.NameOf(AgentEventKind.Kit));
-		Assert.Equal(new[] { "peer", "primary", "armour", "magazines", "grenades" },
+		Assert.Equal(new[] { "peer", "primary", "armour", "magazines", "grenades", "" },
 			AgentEventSchema.FieldsOf(AgentEventKind.Kit).ToArray());
 		Assert.Equal(-1, AgentEventSchema.NoPrimary);
 	}

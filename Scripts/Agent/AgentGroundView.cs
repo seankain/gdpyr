@@ -101,6 +101,9 @@ public sealed class AgentGroundView
 		Alive = player.IsAlive,
 		MoveSpeedScale = character.MoveSpeedScale,
 		Grenades = player.Grenades.Count,
+		Armour = player.Vest.Points,
+		ArmourMax = BodyArmour.MaxPoints(player.Vest.Tier),
+		ArmourTier = (int)player.Vest.Tier,
 	};
 
 	private static AgentWeaponView Weapon(PlayerCombat player, fps_controller character, uint tick)
