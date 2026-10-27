@@ -7,7 +7,7 @@ namespace Gdpyr.Sim;
 /// last byte (docs/LOADOUT.md §6.1): vest 2 bits · magazine pouches 4 · grenade
 /// pouches 2. With the large weapon the weapon byte already names, it is the whole
 /// kit, and so what the owning client derives its reserve, its grenade ceiling and
-/// — from L4 — its speed from, without a message of its own (L-D13).
+/// its speed from, without a message of its own (L-D13).
 ///
 /// Beside it, bytes 29–30 carry the primary's spare rounds and the vest's points as
 /// one 16-bit word, 9 bits and 7: a rifle's nine pouches are 270 rounds, past a byte,

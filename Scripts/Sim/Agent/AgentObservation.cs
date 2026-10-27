@@ -35,6 +35,12 @@ public struct AgentSelfView
 
 	public int Health;
 	public bool Alive;
+
+	/// <summary>
+	/// The carry's scale times the kit's (docs/LOADOUT.md §5.5). Clamped to 1 in the
+	/// vector as it always was, so a kit lighter than the default reads 1 there;
+	/// <see cref="LoadScale"/> says by how much.
+	/// </summary>
 	public float MoveSpeedScale;
 
 	/// <summary>Hand grenades left (docs/LOADOUT.md §9). One of the extras, not the vector.</summary>
@@ -48,6 +54,16 @@ public struct AgentSelfView
 
 	/// <summary>The vest, <see cref="BodyArmourTier"/>: 0 none to 3 heavy. An extra.</summary>
 	public int ArmourTier;
+
+	/// <summary>What the kit weighs [kg] (docs/LOADOUT.md §4.1). An extra.</summary>
+	public float LoadKg;
+
+	/// <summary>
+	/// The share of its speeds the kit leaves the seat (L-D4): 1 for the default kit,
+	/// 0.70 to 1.12 for any. The kit's factor alone, where <see cref="MoveSpeedScale"/> is
+	/// the product with the carry's. An extra.
+	/// </summary>
+	public float LoadScale;
 }
 
 /// <summary>What the seat is holding.</summary>
@@ -188,6 +204,12 @@ public static class AgentObservation
 
 	public const float ClosingSpeedScaleMetersPerSecond = 24f;
 
+	/// <summary>
+	/// Where <c>self.load_kg</c> is clamped [kg]: past the heaviest kit §4.1's weights
+	/// make, 26.1 kg, with room for the <c>.tres</c> files to be tuned.
+	/// </summary>
+	public const float MaxLoadKg = 40f;
+
 	private static readonly AgentField[] Table = Build();
 
 	/// <summary>Floats in one ground observation.</summary>
@@ -207,6 +229,8 @@ public static class AgentObservation
 		new("self.armour", 3, 1, 0f, KitFlags.MaxArmourPoints),
 		new("self.armour_max", 4, 1, 0f, KitFlags.MaxArmourPoints),
 		new("self.armour_tier", 5, 1, 0f, (float)BodyArmourTier.Heavy),
+		new("self.load_kg", 6, 1, 0f, MaxLoadKg),
+		new("self.load_scale", 7, 1, Loadout.MinSpeedScale, Loadout.MaxSpeedScale),
 	};
 
 	/// <summary>
@@ -239,6 +263,8 @@ public static class AgentObservation
 		into[3] = Math.Clamp(self.Armour, 0, KitFlags.MaxArmourPoints);
 		into[4] = Math.Clamp(self.ArmourMax, 0, KitFlags.MaxArmourPoints);
 		into[5] = Math.Clamp(self.ArmourTier, 0, (int)BodyArmourTier.Heavy);
+		into[6] = Math.Clamp(self.LoadKg, 0f, MaxLoadKg);
+		into[7] = Math.Clamp(self.LoadScale, Loadout.MinSpeedScale, Loadout.MaxSpeedScale);
 		return ExtraFloats;
 	}
 

@@ -1131,6 +1131,18 @@ public sealed class Scenario
 			Tolerance = Number(element, "tolerance", 1e-4d),
 		};
 
+		if (element.TryGetProperty("relative_to", out JsonElement relative))
+		{
+			string reference = relative.ValueKind == JsonValueKind.String ? relative.GetString() : null;
+			if (string.IsNullOrWhiteSpace(reference))
+			{
+				throw new ScenarioException(
+					$"'{scenario.Name}': '{metric}' has a 'relative_to' that names no metric");
+			}
+
+			assertion.RelativeTo = reference;
+		}
+
 		if (element.TryGetProperty("cmp", out JsonElement cmp) && cmp.ValueKind == JsonValueKind.String)
 		{
 			AssertionOp? comparison = AssertionEvaluator.ParseOp(cmp.GetString());

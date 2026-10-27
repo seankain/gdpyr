@@ -45,7 +45,9 @@ public partial class CombatHud : CanvasLayer
 		};
 		AddChild(root);
 
-		_status = NewLabel(root, HorizontalAlignment.Left, new Vector2(24f, -80f), anchorTop: 1f);
+		// Three lines — health, vest and grenades; the load; the score — so it starts a
+		// line higher than the ammunition corner's two.
+		_status = NewLabel(root, HorizontalAlignment.Left, new Vector2(24f, -104f), anchorTop: 1f);
 		_ammo = NewLabel(root, HorizontalAlignment.Right, new Vector2(-260f, -80f), anchorLeft: 1f, anchorTop: 1f);
 		_round = NewLabel(root, HorizontalAlignment.Center, new Vector2(-160f, 16f), anchorLeft: 0.5f);
 		_notice = NewLabel(root, HorizontalAlignment.Center, new Vector2(-260f, 120f), anchorLeft: 0.5f);
@@ -56,6 +58,7 @@ public partial class CombatHud : CanvasLayer
 			anchorTop: 0.5f);
 		_prompt.Size = new Vector2(520f, 32f);
 
+		_status.Size = new Vector2(240f, 80f);
 		_ammo.Size = new Vector2(236f, 56f);
 		_round.Size = new Vector2(320f, 48f);
 		_notice.Size = new Vector2(520f, 72f);
@@ -142,7 +145,8 @@ public partial class CombatHud : CanvasLayer
 		Emplacement gun = null;
 		bool mounted = emplacements != null && emplacements.TryMounted(combat.PeerId, out gun);
 
-		_status.Text = $"{StatusLine(combat.Health, combat.Vest, combat.Grenades.Count)}\nK {combat.Kills}  D {combat.Deaths}";
+		_status.Text = $"{StatusLine(combat.Health, combat.Vest, combat.Grenades.Count)}\n"
+			+ $"{LoadLine(combat.LoadKg, combat.LoadScale)}\nK {combat.Kills}  D {combat.Deaths}";
 		_ammo.Text = mounted
 			? $"{WeaponCatalog.NameOf(gun.WeaponDefinitionId)}\n{gun.Weapon.Ammo} / {gun.Stats.MagazineSize}"
 			: AmmoLine(combat.EquippedDefinitionId, combat.Equipped, combat.EquippedStats);
@@ -170,6 +174,13 @@ public partial class CombatHud : CanvasLayer
 		vest.Tier == BodyArmourTier.None
 			? $"HP {health}   grenades {grenades}"
 			: $"HP {health}   vest {vest.Points}   grenades {grenades}";
+
+	/// <summary>
+	/// What the kit weighs and the share of their speed it leaves the player
+	/// (docs/LOADOUT.md §7.4): <c>load 15.3 kg · 88 %</c>. The kit as taken, not as
+	/// spent (L-D5), so it moves at a spawn or a locker and nowhere else.
+	/// </summary>
+	private static string LoadLine(float kg, float scale) => $"load {kg:0.0} kg · {scale * 100f:0} %";
 
 	/// <summary>
 	/// The ammunition corner for a weapon in the hands (docs/LOADOUT.md §7.4): magazine

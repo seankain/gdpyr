@@ -1,3 +1,4 @@
+using System;
 using Gdpyr.Sim;
 using Godot;
 using Xunit;
@@ -114,6 +115,73 @@ public class MovementTests
 		Vector3 wire = Movement.ApplyMove(Vector3.Zero, new Vector2(0f, -1f), quantized, Walk);
 
 		Assert.True((raw - wire).Length() < 1e-3f);
+	}
+
+	// ---- weight (docs/LOADOUT.md L-D4) --------------------------------------
+
+	/// <summary>The sprint as Scenes/fps_controller.tscn authors it.</summary>
+	private static readonly MoveParams Sprint = new(speed: 8f, acceleration: 0.1f, deceleration: 0.25f);
+
+	/// <summary>A state's params at a speed scale, as <c>fps_controller.ApplyMove</c> builds them.</summary>
+	private static MoveParams Scaled(in MoveParams p, float scale) => new(p.Speed * scale, p.Acceleration, p.Deceleration);
+
+	private static float TopSpeed(in MoveParams p, float scale)
+	{
+		Vector3 velocity = Vector3.Zero;
+		for (int tick = 0; tick < 600; tick++)
+		{
+			velocity = Movement.ApplyMove(velocity, new Vector2(0f, -1f), 0f, Scaled(p, scale));
+		}
+
+		return new Vector2(velocity.X, velocity.Z).Length();
+	}
+
+	[Theory]
+	// §4.1's kit table: the stripped kit at the cap, the default kit, the heaviest at the floor.
+	[InlineData(Loadout.MaxSpeedScale, 5.6f, 9.0f)]
+	[InlineData(1f, 5.0f, 8.0f)]
+	[InlineData(Loadout.MinSpeedScale, 3.5f, 5.6f)]
+	public void ApplyMove_ReachesTheKitsWalkAndSprint(float scale, float walk, float sprint)
+	{
+		Assert.Equal(5f * scale, TopSpeed(Walk, scale), precision: 3);
+		Assert.Equal(8f * scale, TopSpeed(Sprint, scale), precision: 3);
+		Assert.Equal(walk, MathF.Round(TopSpeed(Walk, scale), 1), precision: 3);
+		Assert.Equal(sprint, MathF.Round(TopSpeed(Sprint, scale), 1), precision: 3);
+	}
+
+	[Fact]
+	public void ApplyMove_TheHeaviestKitsSprintCannotSlide()
+	{
+		// The sliding state wants more than 6 m/s (PlayerSprintingState); the floor's
+		// sprint never reaches it, and the default's does (docs/LOADOUT.md §11).
+		Assert.True(TopSpeed(Sprint, Loadout.MinSpeedScale) < 6f);
+		Assert.True(TopSpeed(Sprint, 1f) > 6f);
+	}
+
+	[Fact]
+	public void ApplyMove_DistanceIsLinearInTheScale()
+	{
+		// What weight_speed.json measures: from rest, a few ticks' walk and then a sprint
+		// cover distances in the ratio of their scales, because every velocity on the way
+		// is the default's times the scale — the lerp is linear in its target.
+		float Distance(float scale)
+		{
+			Vector3 velocity = Vector3.Zero;
+			float metres = 0f;
+			for (int tick = 0; tick < 185; tick++)
+			{
+				velocity = Movement.ApplyMove(velocity, new Vector2(0f, -1f), 0f,
+					Scaled(tick < 5 ? Walk : Sprint, scale));
+				metres += -velocity.Z * SimConfig.TickDelta;
+			}
+
+			return metres;
+		}
+
+		float baseline = Distance(1f);
+		Assert.InRange(baseline, 20f, 25f);
+		Assert.Equal(Loadout.MaxSpeedScale, Distance(Loadout.MaxSpeedScale) / baseline, precision: 4);
+		Assert.Equal(Loadout.MinSpeedScale, Distance(Loadout.MinSpeedScale) / baseline, precision: 4);
 	}
 
 	[Fact]

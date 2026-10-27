@@ -259,10 +259,25 @@ public static class WeaponCatalog
 	public static float WeightOf(in LoadoutSelection kit) => Loadout.WeightKg(kit, Carry);
 
 	/// <summary>
-	/// The speed a kit allows, against the default kit's (L-D4). Computed from L1 and
-	/// applied to movement from L4.
+	/// The speed a kit allows, against the default kit's (L-D4): the factor every
+	/// movement state's speed is multiplied by, beside what the player carries in
+	/// their arms (docs/LOADOUT.md §5.5).
 	/// </summary>
 	public static float SpeedScaleOf(in LoadoutSelection kit) => Loadout.SpeedScale(WeightOf(kit), ReferenceWeightKg);
+
+	/// <summary>
+	/// The kit a player record says (docs/LOADOUT.md §6.1): the primary from the weapon
+	/// byte's large bits, zero for none, and the pouches and the vest from the kit byte.
+	/// What a client's prediction and a demo's playback both weigh, so neither needs
+	/// more than the record.
+	/// </summary>
+	public static LoadoutSelection RecordedKit(byte weaponFlags, byte kit) => Sanitize(new LoadoutSelection
+	{
+		Large = TryLargeWeaponAt(WeaponFlags.LargeChoice(weaponFlags), out byte id) ? id : None,
+		Magazines = (byte)KitFlags.Magazines(kit),
+		Grenades = (byte)KitFlags.Grenades(kit),
+		Armour = KitFlags.Vest(kit),
+	});
 
 	/// <summary>A kit in one line, for a log, the console or a death screen: <c>rifle · 5 mags · 3 grenades · no vest</c>.</summary>
 	public static string Describe(in LoadoutSelection kit) =>

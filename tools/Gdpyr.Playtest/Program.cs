@@ -277,6 +277,11 @@ public static class Program
 					writer.WriteStartObject();
 					writer.WriteString("claim", assertion.Assertion.ToString());
 					writer.WriteString("metric", assertion.Assertion.Metric);
+					if (assertion.Assertion.RelativeTo != null)
+					{
+						writer.WriteString("relative_to", assertion.Assertion.RelativeTo);
+					}
+
 					writer.WriteString("op", Assertion.Symbol(assertion.Assertion.Op));
 					writer.WriteBoolean("passed", assertion.Passed);
 					writer.WriteString("observed", assertion.Observed);

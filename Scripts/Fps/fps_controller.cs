@@ -62,16 +62,19 @@ public partial class fps_controller : CharacterBody3D
 
 	/// <summary>
 	/// How much of each movement state's authored speed this character keeps
-	/// (docs/IMPLEMENTATION_PLAN.md §M5). 1 normally; less while carrying a heavy
-	/// gun or an ammunition can; 0 while mounted behind a gun.
+	/// (docs/IMPLEMENTATION_PLAN.md §M5). Less while carrying a heavy gun or an
+	/// ammunition can; 0 while mounted behind a gun; and times what the kit weighs,
+	/// 1 for the default kit, between 0.70 and 1.12 for any other
+	/// (docs/LOADOUT.md L-D4). Not jump height: a jump sets its upward velocity whole.
 	///
 	/// Set by <see cref="Net.PlayerManager"/> from
-	/// <see cref="EmplacementManager.MoveScaleOf"/> immediately before each
-	/// simulated tick, on the server and on the owning client alike — which is what
-	/// keeps the two predicting the same walk. A replay uses the *current* scale
-	/// rather than the one in force on the tick being replayed; a carry changes
-	/// state a handful of times a round and a correction of a few centimetres is
-	/// what reconciliation is for (docs/NETCODE.md §3.2).
+	/// <see cref="EmplacementManager.MoveScaleOf"/> and
+	/// <see cref="PlayerCombat.LoadScale"/> immediately before each simulated tick,
+	/// on the server and on the owning client alike — which is what keeps the two
+	/// predicting the same walk. A replay uses the *current* scale rather than the
+	/// one in force on the tick being replayed; a carry or a kit changes a handful of
+	/// times a round and a correction of a few centimetres is what reconciliation is
+	/// for (docs/NETCODE.md §3.2).
 	/// </summary>
 	public float MoveSpeedScale { get; set; } = 1f;
 

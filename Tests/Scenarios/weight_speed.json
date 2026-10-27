@@ -1,0 +1,42 @@
+{
+  "name": "a stripped, a default and the heaviest kit sprint 1.12, 1.00 and 0.70 as far as each other",
+  "seeds": [6, 7],
+  "duration_ticks": 244,
+  "warmup_ticks": 60,
+  "roster": { "ground": 3, "strategists": 0 },
+
+  "seats": [
+    { "id": "stripped", "team": "ground", "policy": "ground", "step_mul": 1, "script": "scripts/walk_then_sprint.json",
+      "kit": { "primary": "none", "magazines": 0, "grenades": 0, "armour": "none" } },
+    { "id": "default", "team": "ground", "policy": "ground", "step_mul": 1, "script": "scripts/walk_then_sprint.json",
+      "kit": { "primary": "rifle", "magazines": 5, "grenades": 3, "armour": "none" } },
+    { "id": "heaviest", "team": "ground", "policy": "ground", "step_mul": 1, "script": "scripts/walk_then_sprint.json",
+      "kit": { "primary": "launcher", "magazines": 9, "grenades": 0, "armour": "heavy" } }
+  ],
+
+  "spawns": [
+    { "peer": "stripped", "at": [-90, 1, 80], "look": [0, 0] },
+    { "peer": "default", "at": [-80, 1, 80], "look": [0, 0] },
+    { "peer": "heaviest", "at": [-70, 1, 80], "look": [0, 0] }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "observation.stripped.self.load_kg.last", "op": "==", "value": 2.0, "tolerance": 0.01 },
+    { "metric": "observation.default.self.load_kg.last", "op": "==", "value": 9.3, "tolerance": 0.01 },
+    { "metric": "observation.heaviest.self.load_kg.last", "op": "==", "value": 26.1, "tolerance": 0.01 },
+    { "metric": "observation.stripped.self.load_scale.last", "op": "==", "value": 1.12, "tolerance": 0.001 },
+    { "metric": "observation.default.self.load_scale.last", "op": "==", "value": 1, "tolerance": 0.001 },
+    { "metric": "observation.heaviest.self.load_scale.last", "op": "==", "value": 0.70, "tolerance": 0.001 },
+    { "metric": "observation.stripped.self.movement_state.2.max", "op": "==", "value": 1 },
+    { "metric": "observation.default.self.movement_state.2.max", "op": "==", "value": 1 },
+    { "metric": "observation.heaviest.self.movement_state.2.max", "op": "==", "value": 1 },
+    { "metric": "observation.default.self.velocity.2.min", "op": "between", "value": [-0.505, -0.495] },
+    { "metric": "observation.stripped.self.velocity.2.min", "op": "between", "value": [-0.5656, -0.5544] },
+    { "metric": "observation.heaviest.self.velocity.2.min", "op": "between", "value": [-0.3535, -0.3465] },
+    { "metric": "observation.stripped.self.velocity.2.sum", "op": "between", "value": [1.0864, 1.1536],
+      "relative_to": "observation.default.self.velocity.2.sum" },
+    { "metric": "observation.heaviest.self.velocity.2.sum", "op": "between", "value": [0.679, 0.721],
+      "relative_to": "observation.default.self.velocity.2.sum" }
+  ]
+}
