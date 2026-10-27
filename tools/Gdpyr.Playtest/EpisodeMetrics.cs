@@ -57,6 +57,9 @@ public sealed class EpisodeMetrics
 	private readonly Dictionary<string, Series> _series = new(StringComparer.Ordinal);
 	private readonly Dictionary<string, int> _counters = new(StringComparer.Ordinal);
 
+	/// <summary>Each seat's peer id by the seat's id, for a condition that names a seat (<c>victim=@heavy</c>).</summary>
+	private readonly Dictionary<string, int> _seats = new(StringComparer.Ordinal);
+
 	/// <summary>How many of each event kind arrived, and when the last one did.</summary>
 	private readonly Dictionary<string, (int Count, uint LastTick)> _events = new(StringComparer.Ordinal);
 
@@ -160,6 +163,18 @@ public sealed class EpisodeMetrics
 
 	/// <summary>Records a harness counter: pilot fallbacks, rejected orders, and the like.</summary>
 	public void Counter(string name, int value) => _counters[name] = value;
+
+	/// <summary>
+	/// Names a seat's peer id, so an event filter can say <c>victim=@heavy</c> rather
+	/// than a number the server chose when the seat attached.
+	/// </summary>
+	public void Seat(string id, int peerId)
+	{
+		if (!string.IsNullOrEmpty(id))
+		{
+			_seats[id] = peerId;
+		}
+	}
 
 	/// <summary>
 	/// Resolves a metric name to a number and the tick it last moved on. False when
@@ -310,7 +325,7 @@ public sealed class EpisodeMetrics
 		["round_start"] = new[] { "seed", "ground_tickets", "strategist_points", "duration_minutes" },
 		["round_end"] = new[] { "outcome", "ground_tickets", "units_lost", "duration_minutes", "units_built" },
 		["kill"] = new[] { "attacker", "victim", "weapon", "distance", "rounds_fired" },
-		["damage"] = new[] { "attacker", "victim", "weapon", "amount", "remaining" },
+		["damage"] = new[] { "attacker", "victim", "weapon", "amount", "remaining", "absorbed" },
 		["unit_built"] = new[] { "unit", "tier", "barracks", "x", "z" },
 		["unit_lost"] = new[] { "unit", "tier", "killer", "x", "z" },
 		["node_captured"] = new[] { "node", "owner", "claimant", "x", "z" },
@@ -336,11 +351,13 @@ public sealed class EpisodeMetrics
 	/// brackets: <c>events.node_captured[owner=1,claimant=2].count</c> is how many
 	/// strategist nodes the ground force took, <c>events.unit_lost[tier=2].count</c>
 	/// how many tanks died. A condition is a field, one of <c>=</c> <c>!=</c>
-	/// <c>&lt;</c> <c>&lt;=</c> <c>&gt;</c> <c>&gt;=</c>, and a number; what follows
+	/// <c>&lt;</c> <c>&lt;=</c> <c>&gt;</c> <c>&gt;=</c>, and a number — or
+	/// <c>@</c> and a seat's id, which is that seat's peer id:
+	/// <c>events.damage[victim=@heavy].count</c> is the hits one seat took. What follows
 	/// the brackets is what follows a kind anywhere else — <c>count</c>, an
 	/// aggregate of the kind's own field, or a field and an aggregate. Nothing
-	/// matching reads zero, as a kind that never fired does; a kind, a field or an
-	/// operator nothing answers to fails.
+	/// matching reads zero, as a kind that never fired does; a kind, a field, a seat
+	/// or an operator nothing answers to fails.
 	/// </summary>
 	private bool TryFiltered(string metric, out double value, out uint tick)
 	{
@@ -447,7 +464,7 @@ public sealed class EpisodeMetrics
 		return true;
 	}
 
-	private static bool TryCondition(string term, string[] known, out (string Field, string Op, double Value) condition)
+	private bool TryCondition(string term, string[] known, out (string Field, string Op, double Value) condition)
 	{
 		condition = default;
 		int at = term.IndexOfAny(new[] { '=', '!', '<', '>' });
@@ -459,9 +476,24 @@ public sealed class EpisodeMetrics
 		int length = at + 1 < term.Length && term[at + 1] == '=' ? 2 : 1;
 		string op = term.Substring(at, length);
 		string field = term[..at].Trim();
-		if (op is not ("=" or "!=" or "<" or "<=" or ">" or ">=") || Array.IndexOf(known, field) < 0
-			|| !double.TryParse(term[(at + length)..].Trim(), System.Globalization.NumberStyles.Float,
-				System.Globalization.CultureInfo.InvariantCulture, out double wanted))
+		string operand = term[(at + length)..].Trim();
+		if (op is not ("=" or "!=" or "<" or "<=" or ">" or ">=") || Array.IndexOf(known, field) < 0)
+		{
+			return false;
+		}
+
+		double wanted;
+		if (operand.StartsWith('@'))
+		{
+			if (!_seats.TryGetValue(operand[1..], out int peer))
+			{
+				return false;
+			}
+
+			wanted = peer;
+		}
+		else if (!double.TryParse(operand, System.Globalization.NumberStyles.Float,
+			System.Globalization.CultureInfo.InvariantCulture, out wanted))
 		{
 			return false;
 		}

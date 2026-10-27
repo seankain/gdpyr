@@ -32,10 +32,11 @@ dedicated-server authoritative.
   boarding and unloading, and a vertical take-off and landing dropship
 - [`docs/LOADOUT.md`](docs/LOADOUT.md) — the ground force's loadout, planned: a locker panel for
   the primary, spare magazines or grenades and body armour, weight that sets movement speed, and
-  resupply at the locker; L0–L8, of which L0, L1 and L2 are built — how much bots fire in a life,
+  resupply at the locker; L0–L8, of which L0–L3 are built — how much bots fire in a life,
   which raised the default kit to five spare magazines; the kit itself: finite primary
-  ammunition, no primary at all, and the player record that carries both; and taking a kit at the
-  locker, one validator for a person, a bot and an agent
+  ammunition, no primary at all, and the player record that carries both; taking a kit at the
+  locker, one validator for a person, a bot and an agent; and body armour, a vest that takes a
+  share of each hit until its points run out
 - [`docs/LAN.md`](docs/LAN.md) — hosting a room of machines from a checkout, with a dev build
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — AWS EC2 dedicated-server runbook
 
@@ -281,6 +282,13 @@ primary comes with a full magazine and its pouches full; what you already carrie
 left in it. The kit is also the next spawn's (`loadout` on the console sets that alone; `1`/`2`/`3`
 while dead still pick the primary). A hit on armour that did nothing shows no hit marker
 ([`docs/NETCODE.md`](docs/NETCODE.md) §10.6).
+
+A kit's last word is **body armour**, for players: a light, medium or heavy vest takes 35, 50 or
+65 % of each bullet or swing, and half that of a blast, until its 35, 60 or 100 points are spent
+— a heavy vest stands ten rifle hits where no vest stands five. The HUD shows what is left beside
+health (`HP 100   vest 60   grenades 3`), other players wear theirs as a band round the chest, light
+to heavy from khaki to charcoal, and asking a locker for the vest you already wear does not
+refill it ([`docs/LOADOUT.md`](docs/LOADOUT.md) §4.3).
 
 ## Playing on your own
 

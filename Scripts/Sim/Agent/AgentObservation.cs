@@ -39,6 +39,15 @@ public struct AgentSelfView
 
 	/// <summary>Hand grenades left (docs/LOADOUT.md §9). One of the extras, not the vector.</summary>
 	public int Grenades;
+
+	/// <summary>The vest's points left (docs/LOADOUT.md §4.3), 0 with none. An extra.</summary>
+	public int Armour;
+
+	/// <summary>What the vest has when full: its tier's points, 0 with none. An extra.</summary>
+	public int ArmourMax;
+
+	/// <summary>The vest, <see cref="BodyArmourTier"/>: 0 none to 3 heavy. An extra.</summary>
+	public int ArmourTier;
 }
 
 /// <summary>What the seat is holding.</summary>
@@ -195,6 +204,9 @@ public static class AgentObservation
 		new("self.grenades", 0, 1, 0f, SimConfig.MaxGrenades),
 		new("weapon.reserve", 1, 1, -1f, KitFlags.MaxReserve),
 		new("weapon.reserve_max", 2, 1, -1f, KitFlags.MaxReserve),
+		new("self.armour", 3, 1, 0f, KitFlags.MaxArmourPoints),
+		new("self.armour_max", 4, 1, 0f, KitFlags.MaxArmourPoints),
+		new("self.armour_tier", 5, 1, 0f, (float)BodyArmourTier.Heavy),
 	};
 
 	/// <summary>
@@ -224,6 +236,9 @@ public static class AgentObservation
 		into[0] = Math.Clamp(self.Grenades, 0, SimConfig.MaxGrenades);
 		into[1] = Math.Clamp(weapon.Reserve, -1, KitFlags.MaxReserve);
 		into[2] = Math.Clamp(weapon.ReserveMax, -1, KitFlags.MaxReserve);
+		into[3] = Math.Clamp(self.Armour, 0, KitFlags.MaxArmourPoints);
+		into[4] = Math.Clamp(self.ArmourMax, 0, KitFlags.MaxArmourPoints);
+		into[5] = Math.Clamp(self.ArmourTier, 0, (int)BodyArmourTier.Heavy);
 		return ExtraFloats;
 	}
 

@@ -360,7 +360,10 @@ pouches hold for it full, −1 for unlimited), in raw units, published as the gr
 `extras` block. Every JSON observation carries them by name; a packed one only when the session's
 `hello` asked (`"extras": true`), after the vector and any planes, with flag bit 3 (8) set. The
 vector — and `gdpyr-agent-obs-3` — are unchanged until LOADOUT.md L8 appends its floats, so a
-client that does not ask reads the frames it always has. The playtest harness asks.
+client that does not ask reads the frames it always has. The playtest harness asks. Since L3,
+three more after those, appended so the first three keep their offsets: `self.armour` (the vest's
+points left), `self.armour_max` (its tier's points when full) and `self.armour_tier` (0 none, 1
+light, 2 medium, 3 heavy) — all 0 with no vest.
 
 Contacts are the eight nearest the seat has actually acquired, ordered by
 distance, zero-padded. A ray fan is 16 physics queries per seat per decision; at `step_mul` 4 and
@@ -698,7 +701,7 @@ from position deltas and gets it slightly wrong.
 | `round_start` / `round_end` | seed, outcome, duration, the whole `RoundSummary` |
 | `kill` / `death` | attacker, victim, weapon, distance, rounds_fired — the rounds a player victim's large slot fired in the life the kill ended, a locker's kit included; −1 for a unit or a structure ([`LOADOUT.md`](LOADOUT.md) L0) |
 | `kit` | peer, primary (its catalog id; −1 for none), armour (the vest's tier, 0 none to 3 heavy), magazines, grenades — a player took a kit at a weapon locker: a person's request, a bot's locker run, or a policy's `loadout` op ([`LOADOUT.md`](LOADOUT.md) §5.3). A kit kept for the next spawn is not one |
-| `damage` | attacker, victim, amount, remaining |
+| `damage` | attacker, victim, weapon, amount, remaining, absorbed — `amount` is the health lost, `absorbed` what a player victim's vest took on top of it ([`LOADOUT.md`](LOADOUT.md) §4.3); 0 with no vest, and for a unit or a structure. The sixth field any event has |
 | `unit_built` / `unit_lost` | unit id, tier, barracks, position — a unit a sniper tower or pillbox trained has `barracks` = −(slot + 1) ([`NETCODE.md`](NETCODE.md) §10.8) |
 | `node_captured` | node, owner, claimant — `claimant` is the side that held it before, `NodeHolder` numbered: 0 neutral, 1 ground force, 2 strategist; x, z |
 | `seat_attached` / `seat_released` | seat, policy, and `step_mul` or a reason |
@@ -906,7 +909,7 @@ passes `--agent-api` (§4.1).
 | `events.<kind>.count` | how many of that event fired. A kind that never fired reads **zero**; a kind that does not exist **fails** |
 | `events.<kind>.<field>.<agg>` | an aggregate over one event field — `sum`, `mean`, `min`, `max`, `last`, `count` |
 | `events.<kind>.<agg>` | shorthand for that kind's own field (`damage` → `amount`, `kill` → `distance`, `squad_task` → `goal`) |
-| `events.<kind>[<cond>,…].<rest>` | any of the three above, over only the events matching every condition: a field, one of `=` `!=` `<` `<=` `>` `>=`, and a number. `events.unit_lost[tier=2].count` is tanks lost; `events.node_captured[owner=1,claimant=2].count` strategist nodes the ground force took. Nothing matching reads zero; a field the kind does not have fails |
+| `events.<kind>[<cond>,…].<rest>` | any of the three above, over only the events matching every condition: a field, one of `=` `!=` `<` `<=` `>` `>=`, and a number — or `@` and a seat's id, which is that seat's peer id. `events.unit_lost[tier=2].count` is tanks lost; `events.node_captured[owner=1,claimant=2].count` strategist nodes the ground force took; `events.damage[victim=@heavy].count` the hits the seat `heavy` took. Nothing matching reads zero; a field the kind does not have, or a seat the scenario does not, fails |
 | `observation.<field>` | an observation field by its published name, for the scenario's first seat |
 | `observation.<field>.<n>` | element *n* of a field that is a run — `observation.contacts.6` is the nearest contact's distance |
 | `observation.<seat id>.<field>` | the same, for a named seat, when a scenario holds more than one |

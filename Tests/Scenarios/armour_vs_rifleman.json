@@ -1,0 +1,38 @@
+{
+  "name": "a heavy vest takes twice the rifle hits to die that no vest does, and only it absorbs any",
+  "seeds": [6, 7],
+  "duration_ticks": 1200,
+  "warmup_ticks": 60,
+  "roster": { "ground": 2, "strategists": 0 },
+
+  "seats": [
+    { "id": "bare", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json",
+      "kit": { "primary": "rifle", "magazines": 5, "grenades": 3, "armour": "none" } },
+    { "id": "heavy", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json",
+      "kit": { "primary": "rifle", "magazines": 5, "grenades": 3, "armour": "heavy" } }
+  ],
+
+  "spawns": [
+    { "unit": "infantry", "team": "strategist", "at": [-90, 1, 50], "order": "none" },
+    { "unit": "infantry", "team": "strategist", "at": [-40, 1, 50], "order": "none" },
+    { "peer": "bare", "at": [-90, 1, 80], "look": [0, 0] },
+    { "peer": "heavy", "at": [-40, 1, 80], "look": [0, 0] }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.kill[victim=@bare].count", "op": "==", "value": 1 },
+    { "metric": "events.kill[victim=@heavy].count", "op": "==", "value": 1 },
+    { "metric": "events.damage[victim=@bare].count", "op": "==", "value": 5 },
+    { "metric": "events.damage[victim=@heavy].count", "op": "between", "value": [8, 10] },
+    { "metric": "events.damage[victim=@bare].absorbed.max", "op": "==", "value": 0 },
+    { "metric": "events.damage[victim=@heavy].absorbed.max", "op": ">", "value": 0 },
+    { "metric": "events.damage[victim=@heavy].absorbed.sum", "op": "==", "value": 100 },
+    { "metric": "observation.bare.self.armour_max.max", "op": "==", "value": 0 },
+    { "metric": "observation.heavy.self.armour_max.min", "op": "==", "value": 100 },
+    { "metric": "observation.heavy.self.armour_tier.min", "op": "==", "value": 3 },
+    { "metric": "observation.heavy.self.armour.min", "op": "==", "value": 0 },
+    { "metric": "observation.bare.self.alive.min", "op": "==", "value": 0 },
+    { "metric": "observation.heavy.self.alive.min", "op": "==", "value": 0 }
+  ]
+}

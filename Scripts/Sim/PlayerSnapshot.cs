@@ -52,7 +52,7 @@ public struct PlayerSnapshot
 	/// <summary>The primary's spare rounds, for the owner's HUD and prediction; up to <see cref="KitFlags.MaxReserve"/>.</summary>
 	public ushort Reserve;
 
-	/// <summary>The vest's points left; up to <see cref="KitFlags.MaxArmourPoints"/>. Zero until L3 gives vests points.</summary>
+	/// <summary>The vest's points left (docs/LOADOUT.md §4.3); up to <see cref="KitFlags.MaxArmourPoints"/>. Zero with no vest.</summary>
 	public byte ArmourPoints;
 
 	/// <summary>The kit, packed (see <see cref="KitFlags"/>).</summary>

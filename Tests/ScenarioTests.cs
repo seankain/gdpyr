@@ -169,16 +169,21 @@ public class ScenarioTests
 	{
 		// A typo in a checked-in scenario's filter would otherwise surface as a failed
 		// playtest, a Godot install later. An event metric resolves on an episode with
-		// nothing in it — to zero — exactly when it names a kind, a field and an
-		// aggregate that exist (§9.1).
+		// nothing in it — to zero — exactly when it names a kind, a field, an
+		// aggregate and any seat that exist (§9.1).
 		string directory = ScenarioDirectory();
 		string[] files = System.IO.Directory.GetFiles(directory, "*.json");
 		Assert.NotEmpty(files);
 
-		var empty = new EpisodeMetrics(0);
 		foreach (string file in files)
 		{
 			Scenario scenario = Scenario.Load(file);
+			var empty = new EpisodeMetrics(0);
+			foreach (ScenarioSeat seat in scenario.Seats)
+			{
+				empty.Seat(seat.Id, 0);
+			}
+
 			foreach (Assertion assertion in scenario.Assertions)
 			{
 				if (assertion.Metric.StartsWith("events.", StringComparison.Ordinal))
@@ -722,6 +727,33 @@ public class ScenarioTests
 
 		// A kind with no shorthand needs its field named.
 		Assert.False(metrics.TryValue("events.seat_attached[policy=0].max", out _, out _));
+	}
+
+	[Fact]
+	public void AConditionCanNameASeatByItsId()
+	{
+		// The armour scenario's two lanes (docs/LOADOUT.md §9): which seat a hit was on
+		// is a peer id the server chose at attach, so a filter names the seat instead.
+		var metrics = new EpisodeMetrics(6) { StartTick = 0, EndTick = 1800 };
+		metrics.Seat("bare", 2147483646);
+		metrics.Seat("heavy", 2147483645);
+		metrics.Event("damage", 300, Fields(("victim", 2147483646), ("amount", 20), ("absorbed", 0)));
+		metrics.Event("damage", 310, Fields(("victim", 2147483645), ("amount", 7), ("absorbed", 13)));
+		metrics.Event("damage", 320, Fields(("victim", 2147483645), ("amount", 7), ("absorbed", 13)));
+
+		Assert.True(metrics.TryValue("events.damage[victim=@bare].count", out double bare, out _));
+		Assert.Equal(1d, bare);
+		Assert.True(metrics.TryValue("events.damage[victim=@heavy].count", out double heavy, out uint tick));
+		Assert.Equal(2d, heavy);
+		Assert.Equal(320u, tick);
+		Assert.True(metrics.TryValue("events.damage[victim=@heavy].absorbed.sum", out double absorbed, out _));
+		Assert.Equal(26d, absorbed);
+		Assert.True(metrics.TryValue("events.damage[victim!=@heavy].absorbed.max", out double none, out _));
+		Assert.Equal(0d, none);
+
+		// A seat the scenario does not have is a typo, as a field is.
+		Assert.False(metrics.TryValue("events.damage[victim=@medium].count", out _, out _));
+		Assert.False(metrics.TryValue("events.damage[victim=@].count", out _, out _));
 	}
 
 	[Fact]

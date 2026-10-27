@@ -190,6 +190,15 @@ public static class Loadout
 	public static byte RefitGrenades(byte carried, in LoadoutSelection kit) => Math.Min(carried, kit.Grenades);
 
 	/// <summary>
+	/// The vest a kit taken at a locker leaves (L-D10): a different one full, as at a
+	/// spawn; the same one with the points it has left, which only the resupply puts
+	/// back (L5). Taking off a vest and putting it back on is two kits and two tiers,
+	/// and so a full vest — as walking away from the locker and back is not.
+	/// </summary>
+	public static BodyArmourState RefitVest(in BodyArmourState worn, in LoadoutSelection kit) =>
+		worn.Tier == kit.Armour ? new BodyArmourState(worn.Tier, worn.Points) : BodyArmourState.Full(kit.Armour);
+
+	/// <summary>
 	/// What a kit weighs [kg]: the base kit, the primary and its pouches, the grenades
 	/// and the vest. <paramref name="carry"/> is indexed by weapon id, as the catalog is.
 	/// </summary>

@@ -142,7 +142,7 @@ public partial class CombatHud : CanvasLayer
 		Emplacement gun = null;
 		bool mounted = emplacements != null && emplacements.TryMounted(combat.PeerId, out gun);
 
-		_status.Text = $"HP {combat.Health}   grenades {combat.Grenades.Count}\nK {combat.Kills}  D {combat.Deaths}";
+		_status.Text = $"{StatusLine(combat.Health, combat.Vest, combat.Grenades.Count)}\nK {combat.Kills}  D {combat.Deaths}";
 		_ammo.Text = mounted
 			? $"{WeaponCatalog.NameOf(gun.WeaponDefinitionId)}\n{gun.Weapon.Ammo} / {gun.Stats.MagazineSize}"
 			: AmmoLine(combat.EquippedDefinitionId, combat.Equipped, combat.EquippedStats);
@@ -160,6 +160,16 @@ public partial class CombatHud : CanvasLayer
 		_loadout.Refresh(!awaitingRole && (dead || match.Phase == RoundPhase.Ended),
 			combat.PendingLoadout.Large);
 	}
+
+	/// <summary>
+	/// Health, the vest's points and grenades (docs/LOADOUT.md §7.4): <c>HP 100   vest 60
+	/// grenades 3</c>. No vest says nothing about one; a spent vest says 0, because it is
+	/// still worn, still weighs what it weighs, and the locker can fill it.
+	/// </summary>
+	private static string StatusLine(int health, in BodyArmourState vest, int grenades) =>
+		vest.Tier == BodyArmourTier.None
+			? $"HP {health}   grenades {grenades}"
+			: $"HP {health}   vest {vest.Points}   grenades {grenades}";
 
 	/// <summary>
 	/// The ammunition corner for a weapon in the hands (docs/LOADOUT.md §7.4): magazine

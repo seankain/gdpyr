@@ -424,7 +424,7 @@ public class SquadDrillTests
 
 		Assert.Equal(20, (int)AgentEventKind.SquadDrill);
 		Assert.Equal("squad_drill", AgentEventSchema.NameOf(AgentEventKind.SquadDrill));
-		Assert.Equal(new[] { "squad", "phase", "elements", "x", "z" },
+		Assert.Equal(new[] { "squad", "phase", "elements", "x", "z", "" },
 			AgentEventSchema.FieldsOf(AgentEventKind.SquadDrill).ToArray());
 
 		Assert.Equal((int)DrillFact.Count, HtnSchema.Drill.FactCount);

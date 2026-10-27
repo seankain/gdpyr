@@ -97,6 +97,15 @@ public sealed class PlayerCombat
 	public GrenadeState Grenades;
 
 	/// <summary>
+	/// The vest this life is wearing and the points it has left (docs/LOADOUT.md §4.3):
+	/// full at every spawn and when a locker gives a different one, worn down by the
+	/// hits it takes (<see cref="BodyArmour.Absorb"/>). Server-side it is the authority;
+	/// a client's is the record's, which carries the points whole (§6.1) — nothing on a
+	/// client predicts damage.
+	/// </summary>
+	public BodyArmourState Vest;
+
+	/// <summary>
 	/// How far up this player's sights are (<see cref="Ads"/>). Advanced by the same
 	/// pure step on the server and on the owning client, from the same recorded
 	/// frames, so it needs no room in the snapshot: nobody but the player behind them
@@ -145,6 +154,13 @@ public sealed class PlayerCombat
 	public uint LastKitTick { get; set; }
 
 	/// <summary>
+	/// Server-side: the tick anything last hurt this player, a hit the vest took whole
+	/// included; 0 for never this life. What the locker's resupply waits out
+	/// (docs/LOADOUT.md L-D7, <see cref="Resupply.DamageLockoutTicks"/>). Never replicated.
+	/// </summary>
+	public uint LastDamagedTick { get; set; }
+
+	/// <summary>
 	/// Server-side: a ground bot that plans, which perceives the strategist's fire
 	/// (docs/TACTICS.md §5.7). Set by the bot director; false for a person, who is
 	/// suppressed by rounds and nothing else, and for a legacy bot, which plans nothing.
@@ -191,8 +207,8 @@ public sealed class PlayerCombat
 
 	/// <summary>
 	/// Arms every slot from a kit (docs/LOADOUT.md §5.1): the primary with a full
-	/// magazine and its pouches' rounds spare, the grenades the kit's pouches hold,
-	/// and the primary up — or the pistol, when the kit has none.
+	/// magazine and its pouches' rounds spare, the grenades the kit's pouches hold, the
+	/// vest full, and the primary up — or the pistol, when the kit has none.
 	/// </summary>
 	public void Equip(LoadoutSelection loadout)
 	{
@@ -210,6 +226,7 @@ public sealed class PlayerCombat
 
 		// A life starts with its grenade pouches full, as it does with full magazines.
 		Grenades = GrenadeState.Full(Loadout.Grenades);
+		Vest = BodyArmourState.Full(Loadout.Armour);
 		PrimaryRoundsThisLife = 0;
 
 		// Spawning with the large weapon up is what a player wants every time; the
@@ -221,9 +238,10 @@ public sealed class PlayerCombat
 	/// Takes a kit at a weapon locker (docs/LOADOUT.md L-D10): only what changed is
 	/// re-equipped. A different primary comes with a full magazine and full pouches;
 	/// the same one keeps its magazine and spare rounds, losing what fewer pouches no
-	/// longer hold; grenades are kept up to the kit's grenade pouches. A pouch added
+	/// longer hold; grenades are kept up to the kit's grenade pouches; a different
+	/// vest is full, and the same one keeps the points it has left. A pouch added
 	/// is empty until the locker's resupply fills it (L5), so asking under fire
-	/// refills nothing. The hammer, the pistol, and which slot is in the player's hands
+	/// refills nothing — and asking for the vest already worn refills nothing either. The hammer, the pistol, and which slot is in the player's hands
 	/// are left alone — a player who walked up with the pistol out is still holding
 	/// it — unless the primary in them is given up, when the pistol comes up.
 	///
@@ -238,6 +256,7 @@ public sealed class PlayerCombat
 		Weapons[SimConfig.LargeSlot] = Sim.Loadout.RefitPrimary(Weapons[SimConfig.LargeSlot], Loadout,
 			WeaponCatalog.StatsFor(id), WeaponCatalog.CarryFor(id));
 		Grenades.Count = Sim.Loadout.RefitGrenades(Grenades.Count, Loadout);
+		Vest = Sim.Loadout.RefitVest(Vest, Loadout);
 
 		if (changed)
 		{
@@ -311,16 +330,18 @@ public sealed class PlayerCombat
 	{
 		Health = SimConfig.MaxHealth;
 		LastFiredUponTick = 0;
+		LastDamagedTick = 0;
 		Equip(PendingLoadout);
 	}
 
 	/// <summary>
-	/// Client-side: takes the server's word for health, ammunition, side, the kit and
-	/// grenades. <paramref name="reserve"/> is the primary's spare rounds and
-	/// <paramref name="kit"/> the record's kit byte (docs/LOADOUT.md §6.1).
+	/// Client-side: takes the server's word for health, ammunition, side, the kit,
+	/// grenades and the vest. <paramref name="reserve"/> is the primary's spare rounds,
+	/// <paramref name="armourPoints"/> the vest's points and <paramref name="kit"/> the
+	/// record's kit byte (docs/LOADOUT.md §6.1).
 	/// </summary>
-	public void ApplyAuthoritative(byte health, byte ammo, byte flags, ushort reserve, byte kit, uint ackTick,
-		bool isLocal)
+	public void ApplyAuthoritative(byte health, byte ammo, byte flags, ushort reserve, byte armourPoints, byte kit,
+		uint ackTick, bool isLocal)
 	{
 		Health = health;
 		Team = WeaponFlags.TeamOf(flags);
@@ -348,6 +369,10 @@ public sealed class PlayerCombat
 		{
 			ArmLarge();
 		}
+
+		// Whole, every snapshot, for everyone: only the server applies damage, so there
+		// is no prediction for the vest's points to wait on, as health has none.
+		Vest = new BodyArmourState(recorded.Armour, armourPoints);
 
 		int slot = WeaponFlags.Slot(flags);
 
@@ -393,6 +418,9 @@ public sealed class PlayerCombat
 
 	/// <summary>The primary's spare rounds for the record: none with no primary.</summary>
 	public ushort SnapshotReserve => (ushort)Mathf.Clamp(Weapons[SimConfig.LargeSlot].Reserve, 0, KitFlags.MaxReserve);
+
+	/// <summary>The vest's points for the record: none with no vest.</summary>
+	public byte SnapshotArmour => (byte)Mathf.Clamp(Vest.Points, 0, KitFlags.MaxArmourPoints);
 
 	/// <summary>The kit for the record (<see cref="KitFlags"/>).</summary>
 	public byte SnapshotKit => KitFlags.Pack(Loadout);

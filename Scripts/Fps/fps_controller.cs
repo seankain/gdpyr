@@ -130,6 +130,8 @@ public partial class fps_controller : CharacterBody3D
 	private ushort _previousButtons;
 	private bool _deadPresentation;
 	private bool _fogHidden;
+	private BodyArmourTier _vestTier;
+	private MeshInstance3D _vestBand;
 
 	public override void _Ready()
 	{
@@ -249,6 +251,49 @@ public partial class fps_controller : CharacterBody3D
 		_fogHidden = hidden;
 		ApplyPresentation();
 	}
+
+	/// <summary>
+	/// Draws the vest another player is wearing (docs/LOADOUT.md §7.5): a greybox band
+	/// round the chest in its tier's colour, and nothing with no vest. From the kit,
+	/// which the record carries to every client, so each draws the vest the server
+	/// says. Presentation only: never on the character a process looks out of, whose
+	/// chest is not in its view, nor on a dedicated server, which draws nothing.
+	///
+	/// A child of the collision shape, as the placeholder body is, so it crouches and
+	/// slides with it; and of the character, so a dead or fogged one hides it too.
+	/// </summary>
+	public void SetVestPresentation(BodyArmourTier tier)
+	{
+		if (tier == _vestTier || IsLocalPlayer || Bootstrap.IsDedicatedServer || _collisionShape == null)
+		{
+			return;
+		}
+
+		_vestTier = tier;
+		if (_vestBand == null)
+		{
+			_vestBand = new MeshInstance3D
+			{
+				Name = "VestBand",
+				Mesh = new CylinderMesh { TopRadius = 0.53f, BottomRadius = 0.53f, Height = 0.4f },
+				MaterialOverride = new StandardMaterial3D(),
+				Position = new Vector3(0f, 0.3f, 0f),
+				CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+			};
+			_collisionShape.AddChild(_vestBand);
+		}
+
+		_vestBand.Visible = tier != BodyArmourTier.None;
+		((StandardMaterial3D)_vestBand.MaterialOverride).AlbedoColor = VestColour(tier);
+	}
+
+	/// <summary>Light khaki, medium olive, heavy charcoal: heavier is darker, read at a glance.</summary>
+	private static Color VestColour(BodyArmourTier tier) => tier switch
+	{
+		BodyArmourTier.Light => new Color(0.76f, 0.69f, 0.5f),
+		BodyArmourTier.Medium => new Color(0.42f, 0.47f, 0.28f),
+		_ => new Color(0.18f, 0.2f, 0.22f),
+	};
 
 	/// <summary>
 	/// The one place <see cref="Node3D.Visible"/> is decided. Two reasons to hide a
