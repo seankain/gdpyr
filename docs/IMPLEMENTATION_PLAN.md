@@ -585,7 +585,7 @@ when its card's **Unload** is pressed. A vertical take-off and landing **dropshi
 from the air. The design, decisions and milestones (V1–V7) are [`VEHICLES.md`](VEHICLES.md); it
 lifts the "Dropships and troop carriers" cut in §5.
 
-### M11 — Ground-force loadout: the locker panel, body armour and weight (~12 days) *L0–L2 built; L3–L8 planned*
+### M11 — Ground-force loadout: the locker panel, body armour and weight (~12 days) *L0–L3 built; L4–L8 planned*
 
 `E` at the weapon locker opens a loadout panel instead of cycling the large weapon: a primary (or
 none), nine pouches that each hold a spare magazine or a grenade, and no, light, medium or heavy body

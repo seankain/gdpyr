@@ -1,6 +1,6 @@
 # Ground-force loadout: the locker panel, body armour and weight — implementation plan
 
-Status: **L0 built and measured, L1 and L2 built (§10); L3–L8 planned.** Planned from the code at `dd579dd`. Phases
+Status: **L0 built and measured, L1–L3 built (§10; L3's engine-side checks not yet taken); L4–L8 planned.** Planned from the code at `dd579dd`. Phases
 L0–L8 (§10); decisions L-D1 to L-D15 (§3) are the defaults the plan is written against — flag any
 you disagree with before L1 starts. L0's measurement raised the default kit to five magazines;
 there are nine pouches, so it keeps three grenades (L-D1, L-D3, L-D4, L-D13; §10 L0's result).
@@ -713,6 +713,81 @@ through the harness; "listen host" and "dedicated server" need a person at the c
 - **Done when:** the armour scenario passes over its seeds; every pre-existing scenario still passes
   (no bot and no default seat wears a vest); on a listen host a player in a heavy vest standing in
   front of a pillbox takes 5 of its rounds to kill, as §4.3 says, where an unarmoured one takes 3.
+- **Result — built; nothing engine-side run.** The scenario is written and parses, but has not run,
+  and neither has the suite against this build nor the listen host; that is said last. One harness
+  feature came with the scenario, and the vest is drawn in a demo too; each is said below.
+  - **The rule** (`Scripts/Sim/BodyArmour.cs`): `BodyArmourState` (tier and points, `Full`), and
+    `BodyArmour.Share`, `MaxPoints` and `Absorb`, §4.3's function: the share, halved for an
+    explosive, of the hit, rounded to a whole point — a half point to the vest
+    (`MidpointRounding.AwayFromZero`; .NET's default, to even, would give a medium vest 22 of a
+    45-point round's 22.5, and the table holds either way) — and no more than the points left.
+    `HitsToKill` steps a full vest and full health through `Absorb`, rounding each remainder as
+    `PlayerCombat.ApplyDamage` does: the panel's read-out (§7.2), and what `BodyArmourTests` pins
+    §4.3's table with, its rounds' damage read from their `.tres` files.
+  - **The vest on the player**: `PlayerCombat.Vest`, full at every spawn. `ApplyKit` refits it with
+    `Loadout.RefitVest`, L-D10's rule beside `RefitPrimary` and `RefitGrenades`: a different tier
+    comes full, the same keeps its points — so asking a locker for the vest you wear refills
+    nothing, which L5's resupply will. `LastDamagedTick` is set on every hit to a living player, a
+    hit the vest took whole included, and cleared at a respawn, for L5's lockout; nothing reads it
+    yet.
+  - **Damage**: `CombatManager.Damage(…, explosive, …)` runs `Absorb` before `ApplyDamage` — the swing
+    `false`, a round's contact `stats.IsExplosive` (the launcher's impact, as for `Armour`), a blast
+    `true` — and a hit the vest took whole is still confirmed. With no vest `Absorb` returns the hit
+    unchanged, so an unarmoured player's health, kills and events are what they were.
+  - **The `damage` event**: `amount` is now the health lost — the hit, as before, for anyone without
+    a vest — and `absorbed` is beside it. The event's five slots were all spoken for, so
+    `AgentEvent` gained a sixth, `Z`, and every kind's slate six names, the sixth empty for every
+    kind but `damage`; `WriteEvent` writes six. JSON-only and additive: a client that does not know
+    `absorbed` never reads it. The harness's field table names it. The `kit` event's sixth stays
+    unnamed: it is still emitted only for a locker's kit, so §9's `locker` or `spawn` would say
+    one thing (L2).
+  - **The record**: the high seven bits of bytes 29–30 carry the vest's points
+    (`PlayerCombat.SnapshotArmour`); L1 already wrote the kit byte's vest bits. A client's
+    `ApplyAuthoritative` takes the points whole in every snapshot, for every player: nothing on a
+    client predicts damage, so there is no acknowledgement to wait on.
+  - **HUD**: `HP 100   vest 60   grenades 3`; no vest says nothing about one, a spent one says 0.
+  - **The observation**: `self.armour`, `self.armour_max` and `self.armour_tier` (0 none to 3 heavy),
+    three more extras appended after L1's, so their offsets are 3–5 and L1's stay 0–2. The vector
+    and `gdpyr-agent-obs-3` are unchanged.
+  - **The chest band** (`fps_controller.SetVestPresentation`): a 0.4 m cylinder of radius 0.53 m
+    round the 0.5 m placeholder capsule, khaki, olive or charcoal from light to heavy, hidden with
+    no vest; a child of the collision shape, as the placeholder is, so it crouches and slides with
+    it. Never on the character a process looks out of, nor on a dedicated server. Set every tick
+    for every other player from `CombatManager.UpdateHud` — the record's kit on a client, the
+    authority's own on a listen host — and, beyond the plan, from a demo's keyframes
+    (`KitFlags.Vest` of the kit byte), since playback keeps no combat state.
+  - **Beyond the plan: a filter may name a seat.** The scenario compares two seats' hits, and a
+    seat's peer id is chosen by the server when it attaches; without a name for it, the two lanes'
+    `damage` records could be told apart only by what the vest did to them, which is what the
+    scenario measures. In an event filter, `@` and a seat's id is that seat's peer id —
+    `events.damage[victim=@heavy].count` (AGENT_API.md §9). A seat the scenario does not have
+    fails, as a field it does not have does; the test that parses every checked-in scenario
+    registers each file's seats, so such a typo fails `dotnet test`.
+  - **Scenario `armour_vs_rifleman.json`**: two lanes 50 m apart — no vest at x = −90, heavy at
+    x = −40 — each a seat holding still at z = 80 in the default kit, and an infantry rifleman with
+    no order 30 m south of it. Each rifleman is 58 m from the other lane's seat and at least 58 m
+    from the ground spawns, past an infantry's 45 m sensor, so neither lane's records are the
+    other's and a respawned seat is not shot again. Claims, over seeds 6 and 7: each seat killed
+    once; 5 `damage` records on the bare seat and 8–10 on the heavy one (the plan's 1.6×, and §4.3's
+    10); `absorbed` 0 throughout the bare lane, and above 0 and summing to the heavy vest's 100
+    points in its own; the observation's vest fields, the heavy one worn to 0.
+  - `dotnet test`: 2324 passed, 0 failed (2285 before; 39 new: 31 in `BodyArmourTests`, 5 in
+    `LoadoutTests`, 2 in `AgentEventTests`, 1 in `ScenarioTests`; `AgentObservationTests`' extras
+    and five tests that spell out an event's slate widened). `dotnet build Gdpyr.csproj`: 0
+    warnings, 0 errors; the harness and the .NET client build.
+  - **The tests test something.** One change at a time, each failed tests: a blast at the full share
+    (2), no cap at the vest's points (6), a half point rounded to health (1), points never worn
+    (12), the same vest refilled at the locker (1), the sixth slot not written (1), the vest's
+    points not in their extra (1), a seat's name not resolved (1). The first build of `HitsToKill`
+    bounded its loop by the health it was lowering; `AHeavierVestNeverDiesSooner` failed on it
+    (a light vest against 20-point blasts read 0 hits).
+  - **Not taken**: every engine-side check. Godot was not run in this session, so
+    `armour_vs_rifleman` has not run over its seeds, the existing suite has not been run against
+    this build, and the pillbox check on a listen host has not been made. Nothing an unarmoured
+    player meets has changed — `Absorb` with no vest is the identity, and no bot or default seat
+    wears one — but the only other change every scenario sees, an `absorbed: 0` on each `damage`
+    record, has not been run either. The scenario's numbers come from §4.3's rule, which
+    `BodyArmourTests` pins, and from its geometry; none has been seen in a round.
 
 ### L4 — Weight and movement speed (1 day)
 
