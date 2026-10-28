@@ -999,6 +999,18 @@ through the harness; "listen host" and "dedicated server" need a person at the c
     and the four records came at it and 30, 60 and 120 ticks later; the first run's hold ended 18
     ticks after the last, and was lengthened by 28; `locker_resupply_under_fire` passed seeds 1–8, 1–4 hits
     on the seat, 10–40 points absorbed, the first armour back exactly 180 ticks after the last hit.
+    **The full suite**, twice, one server a file and two runs side by side on separate ports: on the
+    build before this phase (`81f0cdd`), 35 of 36 files over 78 seeds, the one failure
+    `armour_vs_rifleman`'s two warmup claims above; on this phase's build, 38 of 38 over 88 seeds —
+    the 36 and the two new files.
+  - **L3's and L4's scenarios, run for the first time** (both runs above). `armour_vs_rifleman` as
+    said. `weight_speed` passes seeds 6 and 7: top sprints of 8.96, 8.0 and 5.6 m/s
+    (`velocity.2.min` −0.56, −0.5 and −0.35 of 16 m/s), and the stripped and heaviest seats' summed
+    z velocity 1.12–1.123 and 0.70 of the default's — so the default kit's sprint is 8.0 m/s as before
+    L4. The five scenarios whose windows L4 widened for slow bots (`htn_ground_denies_node`,
+    `htn_squad_retreats`, `tactics_move_to_node`, `htn_locker_runner_kit`,
+    `tactics_sniper_overwatch`) pass in both runs. L4's misprediction measurements on a listen host
+    and over `tc netem` are still not taken, nor is L3's pillbox check.
   - **Not taken**: the listen host, so a person has not seen the paced refill, the HUD's two prompts,
     the debug rows, the label or the ring, and no remote client's view of its own resupply (the
     reserve arriving under the acknowledgement guard) has been watched. The HUD, the debug rows and
