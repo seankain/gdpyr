@@ -1247,9 +1247,10 @@ through the harness; "listen host" and "dedicated server" need a person at the c
   - **Scenarios** (Godot 4.6 .NET, headless, through the harness, default `htn`): the seven
     `htn_*` files with `--bot-kits default` and again with `--bot-kits role`, each 7 of 7 over 21
     seeds, on the build before a seat stopped taking its bot's role kit — whose seats hold still far
-    from the fight. The full suite on the final build — the 38 files before this phase
-    and `bot_kits_role_seat_default`, in the role kits now the default, and the seven `htn_*` files
-    with `--bot-kits default` — was running when this was written, and is recorded when it ends.
+    from the fight. On the final build, in three runs side by side and a fourth beside
+    them: the full suite in the role kits, now the default, 39 of 39 files over 90 seeds — the 38
+    before this phase and `bot_kits_role_seat_default` — and the seven `htn_*` files again with
+    `--bot-kits default`, 7 of 7 over 21 seeds.
   - **Bot-only rounds**, as L0's: five ground bots and the idle seat holding still at (110, 1, 110)
     against one computer strategist, 21,600 ticks (6 min) after a 60-tick warm-up, seeds 1–10 in
     each kit setting, four servers at a time on separate ports; each round read from its start to its
