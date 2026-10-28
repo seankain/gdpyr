@@ -102,6 +102,20 @@ public class HtnDebugTests
 		Assert.False(map.IsAncestorOf(engage, 0));
 	}
 
+	[Fact]
+	public void TheDebuggersGroundMap_HasTheRearm_UnderResupply_AfterTheReload()
+	{
+		// docs/LOADOUT.md §8: a spectator's build numbers the new branch as the server does.
+		HtnDomainMap map = HtnDomains.Ground;
+		int rearm = IndexOfPrimitive(map, "Rearm");
+		int reload = IndexOfPrimitive(map, "Reload");
+
+		Assert.Equal("ground › resupply › rearm › Rearm", map.PathOf(rearm));
+		Assert.True(reload < rearm);
+		Assert.Contains(map.Conditions, c => c.Name == "can rearm");
+		Assert.Contains(map.Conditions, c => c.Name == "Ammo=Dry");
+	}
+
 	// ---- traces ------------------------------------------------------------
 
 	[Fact]

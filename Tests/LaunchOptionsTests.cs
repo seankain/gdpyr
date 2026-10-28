@@ -386,6 +386,63 @@ public class LaunchOptionsTests
 		Assert.Contains($"--unit-autonomy {MicroAutonomyNames.On}|{MicroAutonomyNames.Off}", LaunchOptions.Usage);
 	}
 
+	// ---- bot kits (docs/LOADOUT.md §8) --------------------------------------
+
+	[Fact]
+	public void NoBotKitsFlag_LeavesItToTheGameMode()
+	{
+		var options = LaunchOptions.Parse(new[] { "--server" });
+
+		Assert.Null(options.Error);
+		Assert.Null(options.BotKits);
+	}
+
+	[Theory]
+	[InlineData("default", BotKits.Default)]
+	[InlineData("role", BotKits.Role)]
+	[InlineData("Role", BotKits.Role)]
+	public void BotKits_ParsesEitherChoice(string value, BotKits expected)
+	{
+		var options = LaunchOptions.Parse(new[] { "--server", "--bot-ai", "htn", "--bot-kits", value });
+
+		Assert.Null(options.Error);
+		Assert.Equal(expected, options.BotKits);
+		Assert.Equal(BotAi.Htn, options.BotAi);
+		Assert.Contains($"bot kits {BotKitNames.Name(expected)}", options.ToString());
+	}
+
+	[Fact]
+	public void BotKits_OtherThanDefaultOrRole_WithoutAValue_OrTwice_Fails()
+	{
+		Assert.Contains("is not default or role", LaunchOptions.Parse(new[] { "--bot-kits", "heavy" }).Error);
+		Assert.NotNull(LaunchOptions.Parse(new[] { "--bot-kits" }).Error);
+		Assert.NotNull(LaunchOptions.Parse(new[] { "--bot-kits", "--listen" }).Error);
+		Assert.Contains("twice", LaunchOptions.Parse(new[] { "--bot-kits", "role", "--bot-kits", "default" }).Error);
+	}
+
+	[Fact]
+	public void TheDefaultBotKitsIsDefault_AndTheFlagThenTheGameModeOverrideIt()
+	{
+		Assert.Equal(BotKits.Default, BotKitNames.Fallback);
+		Assert.Equal(BotKits.Default, BotKitNames.Resolve(null, null));
+		Assert.Equal(BotKits.Role, BotKitNames.Resolve(null, BotKits.Role));
+		Assert.Equal(BotKits.Default, BotKitNames.Resolve(BotKits.Default, BotKits.Role));
+		Assert.Equal(BotKits.Role, BotKitNames.Resolve(BotKits.Role, BotKits.Default));
+
+		// The numbers a game mode resource stores it as.
+		Assert.Equal(0, (int)BotKits.Default);
+		Assert.Equal(1, (int)BotKits.Role);
+
+		foreach (BotKits kits in System.Enum.GetValues<BotKits>())
+		{
+			Assert.True(BotKitNames.TryParse(BotKitNames.Name(kits), out BotKits parsed));
+			Assert.Equal(kits, parsed);
+		}
+
+		Assert.False(BotKitNames.TryParse(null, out _));
+		Assert.Contains($"--bot-kits {BotKitNames.Default}|{BotKitNames.Role}", LaunchOptions.Usage);
+	}
+
 	// ---- the agent channel (docs/AGENT_API.md §4.1) ------------------------
 
 	[Fact]

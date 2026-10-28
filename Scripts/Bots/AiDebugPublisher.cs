@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Gdpyr.Core;
 using Gdpyr.Fps;
 using Gdpyr.Match;
 using Gdpyr.Rts;
@@ -265,6 +266,10 @@ public sealed class AiDebugPublisher
 		var inspect = new AiInspect { Ref = AiEntityRef.Player(peerId) };
 		inspect.Add(AiValueKey.Health, combat.Health);
 		inspect.Add(AiValueKey.Team, (int)combat.Team);
+		if (combat.Team == Team.GroundForce)
+		{
+			AddKit(inspect, combat);
+		}
 
 		BotPilot pilot = _bots.PilotOf(peerId);
 		GroundContext plan = pilot?.Plan;
@@ -293,7 +298,7 @@ public sealed class AiDebugPublisher
 
 		inspect.Add(AiMarkerKey.Fallback, plan.FallbackPoint);
 
-		if (plan.HasLocker && plan.Role == GroundRole.LockerRunner)
+		if (plan.HasLocker && (plan.Role == GroundRole.LockerRunner || intent.Goal == GroundGoal.Rearm))
 		{
 			inspect.Add(AiMarkerKey.Locker, plan.LockerPoint);
 		}
@@ -328,7 +333,27 @@ public sealed class AiDebugPublisher
 		inspect.Add(AiValueKey.Target, pilot.TargetOwnerId);
 		inspect.Add(AiValueKey.Focus, plan.FocusOwnerId);
 		inspect.Add(AiValueKey.FailedTrips, plan.FailedLockerTrips);
+		inspect.Add(AiValueKey.FailedRearms, plan.FailedRearms);
 		return inspect;
+	}
+
+	/// <summary>
+	/// A ground player's kit, and what is left of it: the primary, its magazine and spare
+	/// rounds, the grenades and the vest (docs/LOADOUT.md §8). For a person and a legacy
+	/// bot too, whose kits run out the same way.
+	/// </summary>
+	private static void AddKit(AiInspect inspect, PlayerCombat combat)
+	{
+		LoadoutSelection kit = combat.Loadout;
+		WeaponState primary = combat.Weapons[SimConfig.LargeSlot];
+		inspect.Add(AiValueKey.KitPrimary, kit.HasPrimary ? WeaponCatalog.LargeChoiceOf(kit.Large) + 1 : 0);
+		inspect.Add(AiValueKey.KitMagazines, kit.Magazines);
+		inspect.Add(AiValueKey.KitGrenades, kit.Grenades);
+		inspect.Add(AiValueKey.KitVest, (int)kit.Armour);
+		inspect.Add(AiValueKey.Magazine, primary.IsEmpty ? 0 : primary.Ammo);
+		inspect.Add(AiValueKey.Reserve, primary.IsEmpty ? 0 : primary.Reserve);
+		inspect.Add(AiValueKey.Grenades, combat.Grenades.Count);
+		inspect.Add(AiValueKey.VestPoints, combat.Vest.Points);
 	}
 
 	private AiInspect InspectUnit(ushort unitId)

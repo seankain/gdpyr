@@ -124,6 +124,7 @@ Four more flags change the computer players the authority keeps around, and how 
 | `--bots <n>:<m>` | ...and the strategists to `m` |
 | `--no-bots` | no computer players at all |
 | `--bot-ai legacy\|htn` | what they decide with: the HTN planners of [`docs/HTN_BOTS.md`](docs/HTN_BOTS.md), the default, or the code from before them |
+| `--bot-kits default\|role` | what HTN ground bots carry besides their roster slot's primary ([`docs/LOADOUT.md`](docs/LOADOUT.md) §8): the default kit, or one for the primary's role — rifle 4 magazines, 2 grenades, light vest; DMR 5, 1, none; launcher 3 pouches, 3 grenades, medium vest. Legacy bots carry the default kit either way |
 | `--unit-autonomy on\|off` | whether the strategist side's new units use tactics on their own ([`docs/TACTICS.md`](docs/TACTICS.md) §5.9); on by default since T8, and a strategist changes it in game; `off` is how units fought before the tactics |
 
 None is needed to get bots: the numbers default to `BotGroundForce` and `BotStrategists` in

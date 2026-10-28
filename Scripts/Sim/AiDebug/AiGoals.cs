@@ -39,7 +39,8 @@ public static class AiGoals
 		HtnDomainKind.Ground => (GroundGoal)goal switch
 		{
 			GroundGoal.LeaveDefences or GroundGoal.FallBack => AiTaskFamily.Retreat,
-			GroundGoal.Reload or GroundGoal.PathToLocker or GroundGoal.UseLocker => AiTaskFamily.Resupply,
+			GroundGoal.Reload or GroundGoal.PathToLocker or GroundGoal.UseLocker
+				or GroundGoal.Rearm => AiTaskFamily.Resupply,
 			GroundGoal.EngageArmour or GroundGoal.TakeFocusTarget or GroundGoal.AdvanceWithBuddy
 				or GroundGoal.Engage or GroundGoal.InvestigateGhost or GroundGoal.TakeCover
 				or GroundGoal.HoldCover => AiTaskFamily.Attack,

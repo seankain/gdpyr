@@ -416,6 +416,13 @@ public sealed class GdpyrConnection : IDisposable
 	/// </summary>
 	public string UnitAutonomy { get; private set; } = "off";
 
+	/// <summary>
+	/// What the server's ground bots carry besides their primary, <c>default</c> or
+	/// <c>role</c> (docs/LOADOUT.md §8). A server that does not say predates the role
+	/// kits, and its bots carried the default kit.
+	/// </summary>
+	public string BotKits { get; private set; } = "default";
+
 	public uint Tick { get; private set; }
 
 	/// <summary>What the last <c>step</c> reported about the seats this session holds.</summary>
@@ -468,6 +475,9 @@ public sealed class GdpyrConnection : IDisposable
 			&& autonomy.ValueKind == JsonValueKind.String
 				? autonomy.GetString()
 				: "off";
+		BotKits = welcome.TryGetProperty("bot_kits", out JsonElement kits) && kits.ValueKind == JsonValueKind.String
+			? kits.GetString()
+			: "default";
 		Tick = welcome.TryGetProperty("tick", out JsonElement tick) ? tick.GetUInt32() : 0;
 
 		Schema = ReadSchema(welcome);

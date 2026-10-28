@@ -70,9 +70,13 @@ public sealed class BotDirector
 		StrategistTarget = Math.Clamp(strategists, 0, TeamService.MaxStrategists);
 		Ai = BotAiNames.Resolve(options?.BotAi, gameMode?.BotAi);
 
+		// Role kits are the planners' (docs/LOADOUT.md L-D14): legacy is the training
+		// baseline, and keeps the default kit whatever is asked.
+		Kits = Ai == BotAi.Htn ? BotKitNames.Resolve(options?.BotKits, gameMode?.BotKits) : BotKits.Default;
+
 		GD.Print(Enabled
 			? $"[bots] backfilling to {GroundTarget} ground force and {StrategistTarget} strategist(s)"
-				+ $" while anyone is connected, bot ai {BotAiNames.Name(Ai)}"
+				+ $" while anyone is connected, bot ai {BotAiNames.Name(Ai)}, bot kits {BotKitNames.Name(Kits)}"
 			: "[bots] disabled");
 
 		if (Ai == BotAi.Htn)
@@ -101,6 +105,12 @@ public sealed class BotDirector
 	/// (docs/HTN_BOTS.md §6).
 	/// </summary>
 	public BotAi Ai { get; }
+
+	/// <summary>
+	/// What ground bots carry besides their roster slot's primary: <c>--bot-kits</c>, else
+	/// the game mode's, under htn; the default kit under legacy (docs/LOADOUT.md §8).
+	/// </summary>
+	public BotKits Kits { get; }
 
 	public bool Enabled => GroundTarget > 0 || StrategistTarget > 0;
 
@@ -380,7 +390,7 @@ public sealed class BotDirector
 			return string.Empty;
 		}
 
-		Span<int> goals = stackalloc int[(int)GroundGoal.HoldCover + 1];
+		Span<int> goals = stackalloc int[(int)GroundGoal.Rearm + 1];
 		int deniers = 0;
 		int runners = 0;
 		int sweepers = 0;
@@ -735,7 +745,7 @@ public sealed class BotDirector
 
 	/// <summary>
 	/// Arms a fresh bot: a rifle, a DMR or a launcher, by roster slot, so six bots
-	/// carry two of each.
+	/// carry two of each, and the rest of the kit as <see cref="Kits"/> says.
 	///
 	/// Launchers were left out until armour arrived: the blast damages players on
 	/// both sides (<c>CombatManager.Explode</c>, which spares friendly *units* and
@@ -746,7 +756,7 @@ public sealed class BotDirector
 	/// pilot: it holds a launcher's fire while a teammate, or the bot itself, is
 	/// inside the blast (<c>BotPilot.BlastEndangersFriends</c>).
 	/// </summary>
-	private static void Equip(CombatManager combat, int peerId)
+	private void Equip(CombatManager combat, int peerId)
 	{
 		PlayerCombat player = combat.Find(peerId);
 		if (player == null)
@@ -760,10 +770,10 @@ public sealed class BotDirector
 			: WeaponCatalog.Dmr;
 
 		// The primary by slot, and the rest the default kit's — five magazines, three
-		// grenades, no vest — until per-role kits (docs/LOADOUT.md L-D14).
+		// grenades, no vest — or the primary's role's (docs/LOADOUT.md §8).
 		LoadoutSelection kit = WeaponCatalog.DefaultLoadout;
 		kit.Large = large;
-		player.PendingLoadout = kit;
+		player.PendingLoadout = BotKitNames.KitFor(Kits, kit, WeaponCatalog.LargeWeapons);
 		player.Equip(player.PendingLoadout);
 	}
 }
