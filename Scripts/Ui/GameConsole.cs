@@ -361,16 +361,11 @@ public partial class GameConsole : CanvasLayer
 		_commands.Register("ai_select", $"ai_select <{AiTargets.Usage}>", "inspect one in the spectator's panel",
 			AiSelect);
 
-		// The next spawn's kit, until the locker panel's death screen edits it
-		// (docs/LOADOUT.md §7.3, L6).
+		// The next spawn's kit, as the death screen's panel sets it (docs/LOADOUT.md
+		// §7.3), for a kit spelt out rather than clicked. A kit at the locker is the
+		// locker panel's, on E: the console's `kit` went with L6.
 		_commands.Register("loadout", "loadout [<primary> <magazines> <grenades> [armour]]",
 			"the next spawn's kit: primary none|dmr|rifle|launcher, armour none|light|medium|heavy", Loadout);
-
-		// A kit taken at the weapon locker you are standing at, until its panel
-		// (docs/LOADOUT.md L2, L6): through the same validator the panel will use.
-		_commands.Register("kit", "kit <primary> <magazines> <grenades> <armour>",
-			"take a kit at the weapon locker: primary none|dmr|rifle|launcher, armour none|light|medium|heavy",
-			Kit);
 
 		_commands.Register("clear", "clear", "empty the scrollback", _ =>
 		{
@@ -419,32 +414,7 @@ public partial class GameConsole : CanvasLayer
 		return ConsoleResult.Say(KitLine(local.PendingLoadout));
 	}
 
-	private static ConsoleResult Kit(IReadOnlyList<string> args)
-	{
-		if (Match.CombatManager.Instance is not { Local: not null } combat)
-		{
-			return ConsoleResult.Failed("no player to equip");
-		}
-
-		if (args.Count != 4 || !int.TryParse(args[1], out int magazines) || !int.TryParse(args[2], out int grenades))
-		{
-			return ConsoleResult.Failed("kit <primary> <magazines> <grenades> <armour>");
-		}
-
-		if (!WeaponCatalog.TryParseKit(args[0], magazines, grenades, args[3], out Sim.LoadoutSelection kit,
-			out string error))
-		{
-			return ConsoleResult.Failed(error);
-		}
-
-		// The answer is the server's, and arrives as a line of its own.
-		combat.RequestLockerKit(kit);
-		return ConsoleResult.Say($"asked the locker for {WeaponCatalog.Describe(kit)}");
-	}
-
-	private static string KitLine(in Sim.LoadoutSelection kit) =>
-		$"next spawn: {WeaponCatalog.Describe(kit)} · {WeaponCatalog.WeightOf(kit):0.0} kg"
-		+ $" · {WeaponCatalog.SpeedScaleOf(kit) * 100f:0} %";
+	private static string KitLine(in Sim.LoadoutSelection kit) => $"next spawn: {WeaponCatalog.DescribeWithLoad(kit)}";
 
 	private ConsoleResult Help(IReadOnlyList<string> args)
 	{

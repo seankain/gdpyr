@@ -1,6 +1,6 @@
 # Ground-force loadout: the locker panel, body armour and weight — implementation plan
 
-Status: **L0 built and measured, L1–L5 built (§10; their listen-host and dedicated-server checks not yet taken); L6–L8 planned.** Planned from the code at `dd579dd`. Phases
+Status: **L0 built and measured, L1–L6 built (§10; L1–L5's listen-host and dedicated-server checks not yet taken, L6's taken headless by a probe and not yet by a person); L7–L8 planned.** Planned from the code at `dd579dd`. Phases
 L0–L8 (§10); decisions L-D1 to L-D15 (§3) are the defaults the plan is written against — flag any
 you disagree with before L1 starts. L0's measurement raised the default kit to five magazines;
 there are nine pouches, so it keeps three grenades (L-D1, L-D3, L-D4, L-D13; §10 L0's result).
@@ -1036,6 +1036,113 @@ through the harness; "listen host" and "dedicated server" need a person at the c
   closes; `Esc` closes the panel and not the game; the console still types; dying with it open
   closes it and takes nothing; the death screen's `E` edits the next spawn's kit and the next spawn
   has it; a second client sees the vest band and the weapon change.
+- **Result — built; every check in the list taken headless by a probe, none yet by a person.**
+  Two things came with the panel that the plan did not name — a latch on keys held through it,
+  and the round's end closing the death screen's panel — and the panel stays up on a refusal, as
+  §6.2 and §7.2 say and L-D12 does not; each is said below.
+  - **The model** (`Scripts/Sim/LoadoutDraft.cs`): `LoadoutDraft`, the kit being edited, over a
+    `DraftCatalog` of the weapon catalog's numbers handed in (`WeaponCatalog.DraftCatalogFor`, the
+    walk and sprint read off the character's own states, `fps_controller.AuthoredSpeed`). The key
+    table (`ActionOf`), what each action does (`Apply`, `ChoosePrimary`, `ChooseVest`), what is
+    greyed out (`IsEnabled`: `+` at nine pouches, grenades at three, magazines with no primary,
+    `−` at none, the vest at either end, Enter while an answer is on its way, Backspace and `D`
+    when they would change nothing), what an answer does (`Answer`), when the panel is no longer
+    wanted (`StillWanted` over a `DraftSituation`) and every read-out line, from §4's functions:
+    `LOAD 15.3 kg   SPEED 88 %   walk 4.4 · sprint 7.0 m/s`, `VEST 60 pts, absorbs 50 %   rifle hits
+    to kill 8 (5 without)`, `AMMO 30 + 150 rifle · 3 grenades` (`AMMO pistol only` with no primary),
+    the pouches `▣▣▣▣▣◆◆◆□`. Every kit it holds is one `Loadout.IsValid` accepts, so the panel never
+    asks for a kit the validator would refuse as `invalid`. The primaries are in the mock's order,
+    keys 1–4: none, rifle, DMR, launcher (`WeaponCatalog.PanelPrimaries`); a request still names them
+    by `LargeWeapons`.
+  - **The widget** (`Scripts/Ui/LoadoutPanel.cs`, a child of `CombatHud`; `LoadoutMenu.cs` deleted):
+    built in code on `Ui/theme.tres` — the radio rows, the steppers, the read-outs and a speed bar
+    from 0.70 to 1.12, a status line, and the four keys as buttons at the foot. It draws the draft
+    and does what the draft says. Its buttons take no keyboard focus: the keys are the draft's
+    table, and a focused button would take Space too.
+  - **Holding the player still** (L-D12): `InputFocus.Menu`, beside `TextEntry`; the sampler sends
+    neutral frames under either; the pointer is freed on opening and `EnterFirstPerson` recaptures it
+    on closing, unless the player has left the ground — the role menu or the strategist's camera has
+    it then — or the console is typing, which hands back the pointer it found. The panel takes its
+    keys in `_Input` and marks them handled — only keys it has a meaning for, and none while the
+    console is open — so Escape never reaches `PauseMenu`, which also ignores Escape while
+    `InputFocus.Menu` is set.
+  - **Beyond the plan: a key held through the panel is not a press** (`Scripts/Sim/ButtonLatch.cs`).
+    The use tracker reads a tap on the key's release (`UseTracker`), and the `E` that closes the
+    panel is still down on the first tick the sampler listens again: its release would be a tap,
+    and at a locker the tap opens the panel again, every time. The sampler now keeps a button that
+    is down when it goes back to listening out of the frames until it is let go — after the pause
+    menu and the console too, so a trigger or a key held while either closes is theirs until it is
+    let go. The panel's buttons act on release, so a click leaves nothing held. The mask is applied
+    where device state becomes a frame, so the server, the owner's prediction and a demo all see the
+    frames it leaves.
+  - **Opening** (§7.2): `EmplacementManager.ServerUse` now returns what a press meant; its resolution
+    is `Resolve`, which `PredictUse` shares — the owning client's reading of its own press from
+    `ClientSimulateLocal`, over the same tracker and the same predicted frames, at the point the
+    server reads it (after the death check, before the gun). `PlayerCombat.Use` is stepped by the
+    owner's process for its own player and by the authority for everyone else's, never by both. On
+    a listen host `ServerSimulate` opens the host's own panel from the authority's own resolution.
+    The prompt reads `[E] weapon locker`.
+  - **Taking** (§7.2): Enter sends `RequestLockerKit`; the answer — `ServerKitResult`, or on the
+    authority the validator's on the spot — reaches the draft through `CombatHud.AnswerKit`. A kit
+    taken closes the panel. **A refusal is shown and leaves the panel open**, as §6.2 and §7.2 say:
+    `refused (too_soon): one kit a quarter-second; take it again`, the kit as asked, Enter enabled
+    again. L-D12 lists "a refusal" among what closes the panel; the two detailed sections were
+    followed. The console's `locker: kit taken` lines went with the panel.
+  - **Closing itself**: `CombatHud.Refresh` asks `StillWanted` every tick — at a locker while the
+    player is alive on the ground and within 1.0 m of the footprint (`LockerSupply.InReach`, without
+    the validator's slack); from the death screen while they are dead; neither through the role
+    menu, a strategist's chair or spectating. **Beyond the plan: the end of the round closes the
+    death screen's panel too**, not only the locker's, because the round-over scoreboard is drawn
+    above the HUD in the middle of the screen, where the panel is; the death screen's `[E] edit` is
+    not offered then. The prompt and the resupply line under the reticle are hidden while the panel
+    is up, as the panel covers them.
+  - **The death screen** (§7.3): under `down — respawning`, `next spawn: rifle · 5 mags · 3 grenades ·
+    no vest · 9.3 kg · 100 %   [E] edit`; the `use` key, read by `CombatHud._UnhandledInput` while the
+    player is down, opens the panel on the pending kit, whose Enter sends `ClientSelectLoadout`
+    (`RequestLoadout`) and closes and whose Backspace goes back to the next spawn's kit as it was.
+    `1`/`2`/`3` while dead are retired with `LoadoutMenu`, and `RequestLoadout(byte)` with them.
+  - **The console**: `kit` is removed; `loadout`, the next spawn's kit spelt out, stays.
+  - **README**: the locker paragraph rewritten for the panel, and the panel's keys as a table.
+  - `dotnet test`: 2427 passed, 0 failed (2354 before; 73 new: 67 in `LoadoutDraftTests`, 6 in
+    `ButtonLatchTests`). `dotnet build Gdpyr.csproj`: 0 warnings, 0 errors; the harness builds.
+  - **The tests test something.** One change at a time, each failed tests: magazines past nine
+    pouches (3), grenades past three (2), Enter while an answer is on its way (1), a kit taken that
+    does not close (1), a refusal that closes (6), an answer to nothing taken (1), the reach ignored
+    (1), the round's end ignored (2), the death screen's panel kept past the spawn (1), the next
+    spawn's Enter leaving the panel open (1), `5` and `6` swapped (2), Backspace always enabled (2),
+    an edit keeping the refusal's footer (6), the hammer not forced (1), grenades drawn first (1),
+    the vest left out of hits-to-kill (4), a latched button never released (3), a latch that masks
+    nothing (4).
+  - **Engine-side, by a probe** (Godot 4.6 .NET, headless; a temporary autoload in a copy of the
+    project, not committed, that injects key events and mouse clicks into the viewport and the
+    actions' state into `Input`, as a device would). **On a listen host**, 63 checks, all passed: at
+    0.75 m from the footprint the prompt reads `[E] weapon locker` and a tap of `E` opens the panel on
+    the kit carried; W and sprint held for a second with it up move the character 0.000 m; `4`, `6`,
+    `7` and `0` edit the kit; clicks choose the DMR, leave a chosen primary chosen and drawn pressed,
+    choose a heavy vest and do nothing on a greyed-out `0 +`; Enter takes the kit — the launcher in
+    the large slot, a full vest of the tier asked, the kit also the next spawn's — closes the panel,
+    and nothing is fired; `E` closes it and letting go of that `E` does not open it again; Escape
+    closes it without pausing, and pauses as before once it is closed; with the console open over it,
+    `1` and `D` edit nothing, and closing the console leaves the panel up; moved 3 m away it closes
+    itself and took nothing; a second kit inside a quarter-second is refused with the footer above
+    and the panel up, and taken a moment later; dying with it open closes it and takes nothing; the
+    death screen's `E` opens it on the next spawn's kit, Enter keeps an edited kit for the next spawn
+    without re-equipping the life just ended, and the respawn carries it; a respawn with the death
+    screen's panel open closes it; going up to the strategist's chair closes it. **Against a
+    dedicated server with two clients**, 42 checks, all passed: the first client, put at the locker
+    by the server, opens the panel from its own prediction of the tap, and every check above up to
+    the console's passes there too, Enter closing the panel on `ServerKitResult` and the record
+    bringing back the launcher and a full medium vest (the server logged `[locker] peer … took
+    launcher · 6 mags · 2 grenades · medium vest`); the second client's record of the first names the
+    launcher and the medium vest, and it draws that player's vest band.
+  - **Not taken**: anything a person sees. Headless Godot draws nothing, so nobody has looked at the
+    panel's layout, its legibility at a real resolution, the death screen's line or the speed bar;
+    and the dummy display server reports the pointer as visible whatever is asked of it, so the
+    pointer's release on opening and its recapture on closing are untested. The probe's clicks were
+    injected at the buttons' own rectangles, which says the buttons work and not that they can be
+    found. The probe ran on a 1280 × 720 root window.
+  - **Scenarios**: the full suite was running headless against this build when it was committed;
+    its result is not recorded here yet.
 
 ### L7 — Computer players (1½ days)
 

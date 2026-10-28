@@ -111,6 +111,13 @@ public static class WeaponCatalog
 	/// </summary>
 	public static readonly byte[] LargeWeapons = { Dmr, Rifle, Launcher };
 
+	/// <summary>
+	/// The primaries in the loadout panel's order, keys 1 to 4 (docs/LOADOUT.md §7.2):
+	/// none, then the default kit's rifle, then the rest. Presentation only; what a
+	/// record or a request names a primary by is <see cref="LargeWeapons"/>.
+	/// </summary>
+	public static readonly byte[] PanelPrimaries = { None, Rifle, Dmr, Launcher };
+
 	public static WeaponDefinition[] Definitions { get; private set; } = System.Array.Empty<WeaponDefinition>();
 
 	/// <summary>The simulation's view of each weapon, parallel to <see cref="Definitions"/>.</summary>
@@ -279,12 +286,43 @@ public static class WeaponCatalog
 		Armour = KitFlags.Vest(kit),
 	});
 
+	/// <summary>
+	/// The numbers the loadout panel reads off (<see cref="LoadoutDraft"/>), from this
+	/// catalog: the same weights, pouches and magazines the simulation arms a kit with,
+	/// and the rifle's round for a vest's hits-to-kill (§7.2). The authored walk and
+	/// sprint are the character's (<c>fps_controller.AuthoredSpeed</c>).
+	/// </summary>
+	public static DraftCatalog DraftCatalogFor(float walkSpeed, float sprintSpeed)
+	{
+		var magazines = new int[Stats.Length];
+		var names = new string[Definitions.Length];
+		for (int i = 0; i < Stats.Length; i++)
+		{
+			magazines[i] = Stats[i].MagazineSize;
+		}
+
+		for (int i = 0; i < Definitions.Length; i++)
+		{
+			names[i] = NameOf((byte)i);
+		}
+
+		return new DraftCatalog(PanelPrimaries, LargeWeapons, Carry, magazines, names, DefaultLoadout,
+			ReferenceWeightKg, walkSpeed, sprintSpeed, NameOf(Rifle), RoundFor(Rifle).Damage);
+	}
+
 	/// <summary>A kit in one line, for a log, the console or a death screen: <c>rifle · 5 mags · 3 grenades · no vest</c>.</summary>
 	public static string Describe(in LoadoutSelection kit) =>
 		$"{(kit.HasPrimary ? NameOf(kit.Large) : "no primary")}"
 		+ (kit.HasPrimary ? $" · {kit.Magazines} mag{(kit.Magazines == 1 ? string.Empty : "s")}" : string.Empty)
 		+ $" · {kit.Grenades} grenade{(kit.Grenades == 1 ? string.Empty : "s")}"
 		+ $" · {(kit.Armour == BodyArmourTier.None ? "no vest" : $"{Loadout.ArmourNames[(int)kit.Armour]} vest")}";
+
+	/// <summary>
+	/// A kit, what it weighs and the speed it leaves, for the console and the death
+	/// screen (docs/LOADOUT.md §7.3): <c>rifle · 5 mags · 3 grenades · no vest · 9.3 kg · 100 %</c>.
+	/// </summary>
+	public static string DescribeWithLoad(in LoadoutSelection kit) =>
+		$"{Describe(kit)} · {WeightOf(kit):0.0} kg · {SpeedScaleOf(kit) * 100f:0} %";
 
 	public static bool IsLargeWeapon(byte id) => LargeChoiceOf(id) >= 0;
 

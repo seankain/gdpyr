@@ -143,10 +143,13 @@ public sealed class PlayerCombat
 	public readonly HitboxHistory History = new();
 
 	/// <summary>
-	/// The use key, as a tap or a hold (docs/IMPLEMENTATION_PLAN.md §M5).
-	/// Server-side: emplacement transitions are the one player action here that is
-	/// not predicted, so only the authority reads this
-	/// (<see cref="EmplacementManager"/>).
+	/// The use key, as a tap or a hold (docs/IMPLEMENTATION_PLAN.md §M5). On the
+	/// authority it decides emplacement transitions, the one player action here that is
+	/// not predicted (<see cref="EmplacementManager.ServerUse"/>). On the owning client
+	/// it is stepped over the same predicted frames for one thing only: a tap at a
+	/// weapon locker opens its panel there (<see cref="EmplacementManager.PredictUse"/>,
+	/// docs/LOADOUT.md §7.2). A process steps one player's tracker one way or the other,
+	/// never both.
 	/// </summary>
 	public UseTracker Use;
 

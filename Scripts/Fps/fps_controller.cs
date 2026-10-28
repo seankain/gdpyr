@@ -84,6 +84,15 @@ public partial class fps_controller : CharacterBody3D
 	/// </summary>
 	public Vector3 SimPosition => _simPosition;
 
+	/// <summary>
+	/// A movement state's authored speed [m/s], before <see cref="MoveSpeedScale"/>
+	/// (Scenes/fps_controller.tscn): what the loadout panel scales by a kit's weight to
+	/// say how fast it walks and sprints (docs/LOADOUT.md §7.2). 0 for a state this
+	/// character does not have.
+	/// </summary>
+	public float AuthoredSpeed(string state) =>
+		GetNodeOrNull<State>($"PlayerStateMachine/{state}")?.StatePlayerMoveSpeed ?? 0f;
+
 	public byte StateId => _stateMachine?.CurrentStateId ?? (byte)0;
 
 	public string StateName => _stateMachine?.CurrentState?.Name ?? string.Empty;
