@@ -12,4 +12,5 @@ IntermissionSeconds = 10.0
 BotGroundForce = 6
 BotStrategists = 1
 BotAi = 1
+BotKits = 1
 UnitAutonomy = 1

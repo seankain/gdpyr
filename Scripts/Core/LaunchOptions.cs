@@ -53,7 +53,7 @@ public sealed class LaunchOptions
 		"  --bots <n>[:<m>]        fill each side to n ground and m strategists with bots\n" +
 		"  --no-bots               no computer players, whatever the game mode says\n" +
 		"  --bot-ai legacy|htn     what computer players decide with; htn by default (docs/HTN_BOTS.md)\n" +
-		"  --bot-kits default|role what htn ground bots carry: the default kit, or one for their role (docs/LOADOUT.md)\n" +
+		"  --bot-kits default|role what htn ground bots carry: one for their role, by default, or the default kit (docs/LOADOUT.md)\n" +
 		"  --unit-autonomy on|off  whether new units use tactics on their own; on by default (docs/TACTICS.md)\n" +
 		"  --name <text>           what this server calls itself in the browser (default: the hostname)\n" +
 		"  --no-advertise          do not answer LAN discovery; the address still works\n" +

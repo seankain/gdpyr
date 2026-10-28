@@ -421,10 +421,13 @@ public class LaunchOptionsTests
 	}
 
 	[Fact]
-	public void TheDefaultBotKitsIsDefault_AndTheFlagThenTheGameModeOverrideIt()
+	public void TheDefaultBotKitsIsRole_AndTheFlagThenTheGameModeOverrideIt()
 	{
-		Assert.Equal(BotKits.Default, BotKitNames.Fallback);
-		Assert.Equal(BotKits.Default, BotKitNames.Resolve(null, null));
+		// Role since L7 measured it (docs/LOADOUT.md §10 L7); default is the kit every bot
+		// carried before.
+		Assert.Equal(BotKits.Role, BotKitNames.Fallback);
+		Assert.Equal(BotKits.Role, BotKitNames.Resolve(null, null));
+		Assert.Equal(BotKits.Default, BotKitNames.Resolve(null, BotKits.Default));
 		Assert.Equal(BotKits.Role, BotKitNames.Resolve(null, BotKits.Role));
 		Assert.Equal(BotKits.Default, BotKitNames.Resolve(BotKits.Default, BotKits.Role));
 		Assert.Equal(BotKits.Role, BotKitNames.Resolve(BotKits.Role, BotKits.Default));

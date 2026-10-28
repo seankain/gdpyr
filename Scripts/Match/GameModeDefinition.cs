@@ -70,8 +70,8 @@ public partial class GameModeDefinition : Resource
 
 	/// <summary>
 	/// What ground bots carry besides their roster slot's primary (docs/LOADOUT.md §8):
-	/// the default kit's pouches and no vest, or a kit for the primary's role. Under
-	/// <c>htn</c> only; <c>--bot-kits</c> overrides it.
+	/// the default kit's pouches and no vest, or a kit for the primary's role — the
+	/// default since L7. Under <c>htn</c> only; <c>--bot-kits</c> overrides it.
 	/// </summary>
 	[Export]
 	public BotKits BotKits = BotKitNames.Fallback;

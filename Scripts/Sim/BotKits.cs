@@ -24,11 +24,12 @@ public static class BotKitNames
 	public const string Role = "role";
 
 	/// <summary>
-	/// What bots carry when neither <c>--bot-kits</c> nor the game mode says. The role
-	/// kits become it only if bot-only rounds in them leave the ground force's tickets
-	/// lost per minute within the spread L0 measured (docs/LOADOUT.md §10 L7).
+	/// What bots carry when neither <c>--bot-kits</c> nor the game mode says: the role
+	/// kits, since L7's bot-only rounds in them lost the ground force's tickets at 7.9 a
+	/// minute against the default kit's 8.0, inside the spread L0 measured, with every
+	/// <c>htn_*</c> scenario passing in either (docs/LOADOUT.md §10 L7).
 	/// </summary>
-	public const BotKits Fallback = BotKits.Default;
+	public const BotKits Fallback = BotKits.Role;
 
 	/// <summary><c>--bot-kits</c>, else the game mode's, else <see cref="Fallback"/>.</summary>
 	public static BotKits Resolve(BotKits? option, BotKits? gameMode) => option ?? gameMode ?? Fallback;
