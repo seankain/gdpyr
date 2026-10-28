@@ -1,6 +1,6 @@
 # Ground-force loadout: the locker panel, body armour and weight — implementation plan
 
-Status: **L0 built and measured, L1–L6 built (§10; L1–L5's listen-host and dedicated-server checks not yet taken, L6's taken headless by a probe and not yet by a person); L7–L8 planned.** Planned from the code at `dd579dd`. Phases
+Status: **L0 built and measured, L1–L7 built (§10; L1–L5's listen-host and dedicated-server checks not yet taken, L6's taken headless by a probe and not yet by a person; L7 measured in bot-only rounds, and its bots' dry share is over the 5 % it aimed for); L8 planned.** Planned from the code at `dd579dd`. Phases
 L0–L8 (§10); decisions L-D1 to L-D15 (§3) are the defaults the plan is written against — flag any
 you disagree with before L1 starts. L0's measurement raised the default kit to five magazines;
 there are nine pouches, so it keeps three grenades (L-D1, L-D3, L-D4, L-D13; §10 L0's result).
@@ -1166,6 +1166,134 @@ through the harness; "listen host" and "dedicated server" need a person at the c
   bot-only rounds within the run-to-run spread L0 measured, otherwise it stays opt-in and the
   numbers are recorded here; the share of bot lives that end with the primary dry
   (`rounds_fired` against the kit's rounds) is recorded, and is under 5 % with the default kit.
+- **Result — built; `role` is the default, by the rule above; the default kit's dry share is 6.6 %,
+  over the 5 % asked for.** Every `htn_*` scenario passes in both kits, and twenty bot-only rounds
+  put the role kits' tickets lost a minute inside L0's spread and beside the default kit's, so the
+  game mode's `BotKits` is `role`. What the rule does not weigh is said with the rounds below: the
+  role kits run dry twice as often. One thing beyond the plan — a seat is not a role — and where the
+  rearm sits in the domain differ from §8's words; each is said below.
+  - **Dry → pistol, seen in rounds** (built in L1). In the twenty rounds below, bots hit 137 times
+    with the pistol in the default kits and 233 in the role kits, in 22 and 34 of the 50 bot-rounds
+    of each; no scenario had seen it before.
+  - **The fact** (`Scripts/Sim/Htn/GroundDomain.cs`): `GroundFact.Ammo`, an `AmmoBand` — `Dry` with
+    nothing in the magazine, nothing spare and no reload under way (the test the brain puts the
+    primary away on), `Low` under one magazine spare, else `Ok`; no primary, and a weapon that
+    reloads forever, are `Ok`, having nothing a locker can give them (`AmmoBands.Band`). On the
+    scan. Beside it, `MagazineLow` no longer holds for a magazine with nothing spare to fill it from:
+    a dry primary still in hand planned `Reload`, which cannot start, until the brain's pistol
+    switch changed the weapon the fact is read from.
+  - **`Rearm`**: a goal in the `resupply` branch, after `reload`: dry, no contact in sight, not
+    suppressed, a locker, and a kit with spare rounds to put back (`GroundContext.CanRearm`;
+    `KitHoldsSpares`, on the scan — a kit with no magazine pouches has nothing to rearm). It runs to
+    `LockerSupply.StandPoint`, is at the locker 0.8 m from the footprint as the runner is, and stays
+    — asking for nothing: the resupply pass fills whoever is in its reach (L5) — until the kit is
+    full (`KitFull`, every tick, `LockerSupply.NeedsAnything`) or six seconds after it arrived
+    (`RearmStayTicks`); being shoved off its spot does not start the stay again. A bot still dry
+    after six seconds — everything locked out — plans the stay again. A contact coming into sight,
+    or being suppressed, ends it (its executing conditions); a ghost does not, or with the team
+    remembering something most of the time a dry bot would hardly ever go. A walk that takes the
+    runner's 30 s is given up on (`FailedRearms`) and no rearm is planned for 30 s
+    (`RearmRetryTicks`); that wait is no fact, so the scan that sees it end marks the context dirty,
+    or a bot standing off with nothing changing around it would never look again. **Where it sits:**
+    §8 put it "after fighting a contact in sight and before advancing"; in the `resupply` branch,
+    which comes before `attack`, its conditions put it after every fight in sight and before a
+    ghost's investigation, a node and the standoff — and before fighting from cover a contact out of
+    sight, which a dry bot leaves for the locker.
+  - **The locker runner's kit request** came forward in L2 and is as it was: under the role kits it
+    asks for its own kit with a launcher for a primary — a rifleman's, say, a launcher with four
+    pouches, two grenades and its light vest — and its next spawn is its role's again.
+  - **The debugger's map**: the schema names the fact and its values (`HtnSchema.Ground`), the goal
+    is a `Resupply` task (`AiGoals`), the server's map and a spectator's fresh build share a
+    signature (`HtnDebugTests`), and the locker is marked while a bot rearms as while it runs.
+    The debug HUD's goal counts include `Rearm`.
+  - **The role kits** (`Scripts/Sim/BotKits.cs`): `BotKits` `default` or `role`, the game mode's
+    `BotKits` (`Match/default_gamemode.tres`), `--bot-kits`; `BotKitNames.KitFor`, by the primary's
+    place in `WeaponCatalog.LargeWeapons` — DMR 5 magazines, 1 grenade, no vest (9.8 kg, 0.99);
+    rifle 4, 2, light (11.4 kg, 0.958); launcher 3 pouches (6 rounds), 3 grenades, medium (17.9 kg,
+    0.828), each a kit the validator takes as it is (`BotKitsTests`). `BotDirector.Kits` is the
+    setting under `htn` and `default` under `legacy`, whatever is asked; the server's `[bots]` line
+    says which. The `welcome` names it (`bot_kits`), and the harness takes `--bot-kits` and a
+    scenario's `bot_kits`, a server naming other kits being a harness error, as for `bot_ai`
+    (AGENT_API.md §7.1, §9.1).
+  - **Beyond the plan: a seat is not a role.** L2's `reset` gives a seat attached without a kit
+    "the kit its bot carried when it was attached", which under the role kits is its slot's role
+    kit: the first round below put the idle seat in a light vest. A policy's body would then depend
+    on how the server's bots are kitted, against L-D3 (every agent seat carries the default kit) and
+    §9's "else the default". Such a seat now takes the default kit with its bot's primary — under the
+    default kits the kit it took before — at attach, for its next spawn and every `reset`
+    (`AgentServerOps`, AGENT_API.md §2). Scenario **`bot_kits_role_seat_default.json`** (new): with
+    the bots in role kits, a seat on the rifle bot's slot ends each episode with 150 rounds spare,
+    3 grenades, no vest and a load scale of 1.
+  - **The inspect panel** shows any ground player's kit and what is left of it, on a line of its
+    own, a person's and a legacy bot's too: `kit rifle · 4 mags · 2 grenades · light vest · rounds
+    0 + 0 dry · grenades 1 · vest 12` (`AiValueKey.KitPrimary` to `VestPoints`, nine values
+    appended); a planning bot's goal line counts its rearms given up on.
+  - **An instrument**: the server's kill line ends `, dry` when the victim's primary had nothing in
+    the magazine and nothing spare. Over the rounds below it agreed with the event stream's count
+    (`rounds_fired` against the kit's rounds and what the resupply gave) in every death but one,
+    a life the event count leaves out because a locker kit changed its primary.
+  - `dotnet test`: 2468 passed, 0 failed (2427 before; 41 new: 20 in `GroundHtnTests`, 10 in
+    `BotKitsTests`, 6 in `LaunchOptionsTests`, 3 in `AiDebugTextTests`, 1 in `HtnDebugTests`, 1 in
+    `ScenarioTests`). `dotnet build Gdpyr.csproj`: 0 warnings, 0 errors; the harness and the .NET
+    client build. `GroundHtnTests`' shared-domain traces gained the dry situation, and planning
+    every ground bot still allocates nothing on the tick.
+  - **The tests test something.** One change at a time, each failed tests: no `Contact≠Visible`
+    condition (2), no executing condition for a contact in sight (1), no suppressed condition (1),
+    the wait's end not marking the context dirty (1), no wait after a give-up (1), the arrival not
+    held (1), a full kit ignored (1), no six-second limit (1), spares not required (1), a reload
+    under way read as dry (1), low at one magazine spare (1), the rifle's and the DMR's role kits
+    swapped (3), role kits under `default` (3), `bot_kits` not read (1), the kit line for planning
+    bots only (2), `dry` not said (1), `--bot-kits` dropped (4).
+  - **Scenarios** (Godot 4.6 .NET, headless, through the harness, default `htn`): the seven
+    `htn_*` files with `--bot-kits default` and again with `--bot-kits role`, each 7 of 7 over 21
+    seeds, on the build before a seat stopped taking its bot's role kit — whose seats hold still far
+    from the fight. The full suite on the final build — the 38 files before this phase
+    and `bot_kits_role_seat_default`, in the role kits now the default, and the seven `htn_*` files
+    with `--bot-kits default` — was running when this was written, and is recorded when it ends.
+  - **Bot-only rounds**, as L0's: five ground bots and the idle seat holding still at (110, 1, 110)
+    against one computer strategist, 21,600 ticks (6 min) after a 60-tick warm-up, seeds 1–10 in
+    each kit setting, four servers at a time on separate ports; each round read from its start to its
+    first `round_end`, else to the run's end. The scenario files and the script that reads the traces
+    are not committed. The rounds ran on the build before the seat's kit was fixed, so in the role
+    rounds the idle seat wore its slot's rifle kit and light vest: it died 5 times in the default
+    rounds and once in the role ones, of 381 and 382 ground deaths.
+
+    | | Default kits | Role kits |
+    |---|---|---|
+    | **Tickets lost a minute**: mean · range · sd | **8.04** · 1.83–14.83 · 4.09 | **7.91** · 1.99–14.66 · 4.22 |
+    | Ground deaths a round: mean · range | 38.1 · 11–50 | 38.2 · 12–50 |
+    | Rounds the ground force lost (out of tickets) · won (strategist eliminated) | 6 · 1 | 5 · 0 |
+    | **Bot deaths with the primary dry** | **25 / 376 = 6.6 %** | **53 / 380 = 13.9 %** |
+    | … rifle · DMR · launcher | 12/160 · 1/64 · 12/152 | 16/167 · 2/62 · 35/151 |
+    | Pistol hits by bots | 137 | 233 |
+    | Resupply records giving bots rounds · rounds given | 20 · 180 | 51 · 740 |
+
+  - **The rule.** L0 wrote down its rounds' ground deaths (14–50 under `htn`) and when the 14 that
+    ended early ended (213–343 s), not their rate; read from those, its spread was 2.33 tickets a
+    minute (14 deaths over the whole 6 min) to 14.08 (50 in 213 s). The role kits' mean, 7.91, is
+    inside it, 0.13 from the default kits' 8.04 with a round-to-round deviation of about 4.1 in
+    either; each setting has one round below L0's least and one above its most. With every `htn_*`
+    scenario passing in both, the role kits are the default (`BotKitNames.Fallback`, the game
+    mode's `BotKits`); `--bot-kits default` keeps the kit every bot carried before.
+  - **The dry share is over 5 %, in either kit.** In the default kits 6.6 % of bot deaths came with
+    the primary dry, against L0's estimate of 4.7 % (rifle), 3.1 % (DMR) and 3.3 % (launcher) at
+    five pouches: here 7.5 %, 1.6 % and 7.9 %. L0's figures were the lives that fired more than five
+    pouches' worth while reloading forever; these are lives that ran out, with the rearm putting
+    some back — 20 resupply records in ten rounds gave the bots 180 rounds. A dry bot with a fight in
+    sight fights it with the pistol, as L-D14 asks; what each was doing when it died was not
+    recorded. In the role kits 13.9 % ended dry, a launcher's 3 pouches (7 rounds) in 23 % of launcher deaths, and
+    the rearm gave 740 rounds. The rule above weighs tickets, and they did not move; a dry launcher
+    is one that cannot hurt armour, which the tickets lost a minute do not show. Five or more
+    pouches for the launcher, or the default kits, are one constant away (`BotKitNames`).
+  - **Two quiet rounds.** Default-kit seed 6 went 12,750 ticks (3.5 min), to the end of its window,
+    without a hit, a kill or a contact spotted, and seed 7 8,379 ticks; every other round's longest
+    such stretch was 2,669–4,557 ticks. Neither had a resupply record in it, so no bot had reached the
+    locker to rearm; what the bots were doing then was not recorded. Both are in the default kits;
+    L0 did not look for such stretches, so whether they are new is not known.
+  - **Not taken**: anything a person sees — the inspect panel's kit line has been written and read
+    back by tests, and not drawn; a listen host and a dedicated server; L0's twenty rounds a setting
+    (ten here). Legacy bots were not run: they change only as finite ammunition and the pistol
+    switch, both L1's, change them, and L8 re-measures them.
 
 ### L8 — Agent schema obs-4, measure, document (1½ days)
 
