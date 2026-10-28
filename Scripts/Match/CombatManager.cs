@@ -359,7 +359,8 @@ public partial class CombatManager : Node
 
 	/// <summary>
 	/// Closes the server's tick: records where everyone was, flies the projectiles,
-	/// resolves what they hit, brings the dead back and runs the round's clock.
+	/// resolves what they hit, brings the dead back, resupplies whoever is at a weapon
+	/// locker and runs the round's clock.
 	/// </summary>
 	public void ServerPostTick(uint tick)
 	{
@@ -375,6 +376,10 @@ public partial class CombatManager : Node
 		// where they landed.
 		ResolveWrecks(tick);
 		ServerRespawns(tick);
+
+		// After every hit of the tick, so a hit on this tick locks this tick's resupply
+		// out, and after the respawns, whose kits are full anyway (docs/LOADOUT.md §5.4).
+		ServerResupply(tick);
 
 		// Before the round is judged, not after: the strategist's defeat condition
 		// reads both the balance the nodes have just paid into and which nodes are
@@ -1170,7 +1175,9 @@ public partial class CombatManager : Node
 		}
 
 		float lost = BodyArmour.Absorb(ref victim.Vest, amount, explosive);
-		victim.LastDamagedTick = tick;
+
+		// Zero is "never" to the resupply's lockout, so a hit on tick 0 is recorded as tick 1.
+		victim.LastDamagedTick = Math.Max(tick, 1u);
 		bool killed = victim.ApplyDamage(lost);
 
 		// Confirmed even when the vest took all of it: the shooter did something.
@@ -1285,6 +1292,47 @@ public partial class CombatManager : Node
 		}
 	}
 
+	/// <summary>
+	/// The weapon lockers' resupply (docs/LOADOUT.md L-D7, §5.4): every living
+	/// ground-force player whose feet are within a metre of a locker's footprint is
+	/// topped up to their kit at <see cref="LockerSupply.Step"/>'s pace — rounds, grenades
+	/// and the vest, not health — and given nothing while anything has hurt them in the
+	/// last three seconds. A rule of the game, not of the use key: a person, a bot and a
+	/// policy standing there are resupplied alike. What it gave reaches every client in
+	/// the player record, so nothing is sent for it.
+	/// </summary>
+	private void ServerResupply(uint tick)
+	{
+		EmplacementManager lockers = EmplacementManager.Instance;
+		if (lockers == null || lockers.LockerCount == 0)
+		{
+			return;
+		}
+
+		for (int i = 0; i < _ordered.Count; i++)
+		{
+			PlayerCombat combat = _ordered[i];
+			if (!combat.IsAlive || combat.Character == null
+				|| !LockerSupply.InReach(lockers.LockerDistance(combat.Character.SimPosition)))
+			{
+				continue;
+			}
+
+			SupplyGiven given = combat.TakeResupply(tick);
+			if (!given.Any)
+			{
+				continue;
+			}
+
+			_resupplied.Add(combat.PeerId);
+			RoundsResupplied += given.Rounds;
+			GrenadesResupplied += given.Grenades;
+			ArmourResupplied += given.ArmourPoints;
+			AgentEventBus.Emit(AgentEventKind.Resupply, tick, combat.PeerId, given.Rounds, given.Grenades,
+				given.ArmourPoints, LockerSupply.TicksSinceHurt(tick, combat.LastDamagedTick));
+		}
+	}
+
 	private void Respawn(PlayerCombat combat, uint tick)
 	{
 		if (combat.Team == Team.Strategist)
@@ -1339,6 +1387,8 @@ public partial class CombatManager : Node
 				UnitManager.Instance?.UnitsProduced ?? 0);
 			GD.Print($"[match] round over: {Match.Outcome} | winner {Match.Winner?.ToString() ?? "nobody"}"
 				+ $" | tickets {Match.GroundTickets} | deaths {Match.GroundDeaths} | kits taken {KitsTaken}"
+				+ $" | resupplied {PlayersResupplied} players: {RoundsResupplied} rounds, {GrenadesResupplied} grenades,"
+				+ $" {ArmourResupplied} armour"
 				+ $" | next round in {_gameMode.IntermissionSeconds:0}s");
 			return;
 		}
@@ -1365,6 +1415,10 @@ public partial class CombatManager : Node
 		_intermissionArmed = false;
 		_scoreCount = 0;
 		KitsTaken = 0;
+		_resupplied.Clear();
+		RoundsResupplied = 0;
+		GrenadesResupplied = 0;
+		ArmourResupplied = 0;
 		Match.Reset();
 		_projectiles.Clear();
 		Visibility.Clear();
@@ -1890,8 +1944,19 @@ public partial class CombatManager : Node
 		}
 
 		bool wasAlive = combat.IsAlive;
+		int health = combat.Health;
+		BodyArmourState vest = combat.Vest;
 		combat.ApplyAuthoritative(snapshot.Health, snapshot.Ammo, snapshot.WeaponFlags, snapshot.Reserve,
 			snapshot.ArmourPoints, snapshot.Kit, snapshot.LastInputTick, combat == Local);
+
+		// A hit, as the owner can tell one: health or the same vest's points fell in a
+		// life that goes on. Only for the HUD's "resupply waits" — the server's lockout is
+		// its own — and so late by a one-way trip, which ends the prompt a little late.
+		if (combat == Local && wasAlive && combat.IsAlive
+			&& (combat.Health < health || (combat.Vest.Tier == vest.Tier && combat.Vest.Points < vest.Points)))
+		{
+			combat.LastDamagedTick = Math.Max(NetworkManager.Instance?.Tick ?? 1u, 1u);
+		}
 
 		// A player the server has put back on the field is a player it has stopped
 		// waiting on, whatever became of the answer this client sent. Belt and braces:
@@ -1914,6 +1979,7 @@ public partial class CombatManager : Node
 		if (combat == Local && !wasAlive && combat.IsAlive)
 		{
 			combat.Equip(combat.Loadout);
+			combat.LastDamagedTick = 0;
 		}
 	}
 
@@ -2121,6 +2187,20 @@ public partial class CombatManager : Node
 
 	/// <summary>Kits taken at a weapon locker this round, for the round-over log. Server-side.</summary>
 	public int KitsTaken { get; private set; }
+
+	private readonly HashSet<int> _resupplied = new();
+
+	/// <summary>Players a weapon locker has given anything this round (docs/LOADOUT.md §5.4). Server-side.</summary>
+	public int PlayersResupplied => _resupplied.Count;
+
+	/// <summary>Primary rounds the lockers' resupply gave this round. Server-side.</summary>
+	public int RoundsResupplied { get; private set; }
+
+	/// <summary>Hand grenades the lockers' resupply gave this round. Server-side.</summary>
+	public int GrenadesResupplied { get; private set; }
+
+	/// <summary>Armour points the lockers' resupply gave this round. Server-side.</summary>
+	public int ArmourResupplied { get; private set; }
 
 	/// <summary>
 	/// The one way a kit is taken at a weapon locker (docs/LOADOUT.md L-D9, §5.3): a

@@ -1,0 +1,16 @@
+{
+  "repeat": false,
+  "steps": [
+    { "ticks": 60, "move": [0, 0], "look": { "dyaw": 0, "dpitch": 0 }, "buttons": ["crouch"] },
+    { "ticks": 804, "move": [0, 0], "look": { "dyaw": 0, "dpitch": 0 }, "buttons": ["crouch", "fire"] },
+    { "ticks": 4, "move": [0, 0], "look": { "dyaw": 0, "dpitch": 0 }, "buttons": ["crouch", "grenade"] },
+    { "ticks": 60, "move": [0, 0], "look": { "dyaw": 0, "dpitch": 0 }, "buttons": ["crouch"] },
+    { "ticks": 4, "move": [0, 0], "look": { "dyaw": 0, "dpitch": 0 }, "buttons": ["crouch", "grenade"] },
+    { "ticks": 60, "move": [0, 0], "look": { "dyaw": 0, "dpitch": 0 }, "buttons": ["crouch"] },
+    { "ticks": 4, "move": [0, 0], "look": { "dyaw": 0, "dpitch": 0 }, "buttons": ["crouch", "grenade"] },
+    { "ticks": 60, "move": [0, 0], "look": { "dyaw": 0, "dpitch": 0 }, "buttons": ["crouch"] },
+    { "ticks": 8, "move": [0, 0], "look": { "dyaw": 0, "dpitch": 0 }, "buttons": [] },
+    { "ticks": 36, "move": [0, 1], "look": { "dyaw": 0, "dpitch": 0 }, "buttons": [] },
+    { "ticks": 180, "move": [0, 0], "look": { "dyaw": 0, "dpitch": 0 }, "buttons": [] }
+  ]
+}

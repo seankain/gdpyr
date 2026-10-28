@@ -1108,8 +1108,10 @@ quarter of that to a vehicle or a structure.
 **Throwing.** `G` (`throw_grenade`, `InputButtons.Grenade` — bit 11 of the frame, which was spare,
 so the frame is still twelve bytes). It is the off hand's: it throws whatever slot is up, while
 reloading, and without lowering the sights, and a trigger pulled on the same tick fires too. A
-mounted gunner cannot throw. One throw per press, at most one a second, three a life; a respawn
-refills them and a weapon locker does not. The grenade leaves the eye 10° above where the player is
+mounted gunner cannot throw. One throw per press, at most one a second, and no more carried than
+the kit's grenade pouches, three at most ([`LOADOUT.md`](LOADOUT.md) L-D1); a respawn refills them,
+and so does a weapon locker's resupply, one a second to a player within a metre of it and not hurt
+in the last three seconds ([`LOADOUT.md`](LOADOUT.md) L-D7). The grenade leaves the eye 10° above where the player is
 looking (`GrenadeSim.ThrowDirection`): from a standing eye on flat ground, looking level puts it 17 m
 off a second later, and looking 35° up puts it 33 m off with 0.3 s of fuse to spare; much higher
 than that and it goes off in the air. It is lag-compensated as a shot is (§4.3).

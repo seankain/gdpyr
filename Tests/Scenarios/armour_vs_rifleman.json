@@ -29,8 +29,8 @@
     { "metric": "events.damage[victim=@heavy].absorbed.max", "op": ">", "value": 0 },
     { "metric": "events.damage[victim=@heavy].absorbed.sum", "op": "==", "value": 100 },
     { "metric": "observation.bare.self.armour_max.max", "op": "==", "value": 0 },
-    { "metric": "observation.heavy.self.armour_max.min", "op": "==", "value": 100 },
-    { "metric": "observation.heavy.self.armour_tier.min", "op": "==", "value": 3 },
+    { "metric": "observation.heavy.self.armour_max.last", "op": "==", "value": 100 },
+    { "metric": "observation.heavy.self.armour_tier.last", "op": "==", "value": 3 },
     { "metric": "observation.heavy.self.armour.min", "op": "==", "value": 0 },
     { "metric": "observation.bare.self.alive.min", "op": "==", "value": 0 },
     { "metric": "observation.heavy.self.alive.min", "op": "==", "value": 0 }

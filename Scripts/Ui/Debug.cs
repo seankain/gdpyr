@@ -49,6 +49,7 @@ public partial class Debug : PanelContainer
 		FillBoards();
 		FillEconomy();
 		FillEmplacements();
+		FillKits();
 	}
 
 	public override void _Input(InputEvent @event)
@@ -338,6 +339,51 @@ public partial class Debug : PanelContainer
 		SetProperty("guns", $"{emplacements.MountedGuns}/{emplacements.GunCount} manned"
 			+ $"  {emplacements.CarriedItems} carried"
 			+ $"  {emplacements.CansSpent} cans spent  {emplacements.RoundsResupplied} rounds");
+	}
+
+	/// <summary>
+	/// What the ground force carries (docs/LOADOUT.md §7.4): the living by vest, and
+	/// their mean load, from the kits every peer's records carry; and on the authority
+	/// what the weapon lockers did this round — kits taken, and what their resupply gave.
+	/// "0 rounds" at a locker everybody walks past is how its reach being wrong shows.
+	/// </summary>
+	private void FillKits()
+	{
+		if (CombatManager.Instance is not { } combat)
+		{
+			return;
+		}
+
+		int none = 0, light = 0, medium = 0, heavy = 0;
+		float load = 0f;
+		for (int i = 0; i < combat.PlayerCount; i++)
+		{
+			PlayerCombat player = combat.PlayerAt(i);
+			if (player is not { IsAlive: true })
+			{
+				continue;
+			}
+
+			load += player.LoadKg;
+			switch (player.Loadout.Armour)
+			{
+				case BodyArmourTier.Light: light++; break;
+				case BodyArmourTier.Medium: medium++; break;
+				case BodyArmourTier.Heavy: heavy++; break;
+				default: none++; break;
+			}
+		}
+
+		int alive = none + light + medium + heavy;
+		SetProperty("kit", $"vests {none} none  {light} light  {medium} medium  {heavy} heavy"
+			+ $"  mean load {(alive > 0 ? load / alive : 0f):0.0} kg");
+
+		if (NetworkManager.Instance is { IsServer: true })
+		{
+			SetProperty("locker", $"{combat.KitsTaken} kits taken  resupplied {combat.PlayersResupplied} players"
+				+ $"  {combat.RoundsResupplied} rounds  {combat.GrenadesResupplied} grenades"
+				+ $"  {combat.ArmourResupplied} armour");
+		}
 	}
 
 	private void FillClientContacts(CombatManager combat)

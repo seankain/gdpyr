@@ -29,7 +29,8 @@ public struct BodyArmourState
 /// What a vest does to a hit on a ground-force player (docs/LOADOUT.md L-D6, §4.3):
 /// it takes its share of each bullet or swing — light 35 %, medium 50 %, heavy 65 % —
 /// and half that share of a blast, up to the points it has left, and what it takes
-/// comes off those points. At zero it does nothing until it is resupplied (L5).
+/// comes off those points. At zero it does nothing until a weapon locker resupplies
+/// it (<see cref="LockerSupply.Step"/>).
 ///
 /// The Counter-Strike model, which a player already understands. Named apart from
 /// <see cref="Armour"/>, the rule for tanks and structures, which scales what bullets

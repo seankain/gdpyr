@@ -192,7 +192,7 @@ public static class Loadout
 	/// <summary>
 	/// The vest a kit taken at a locker leaves (L-D10): a different one full, as at a
 	/// spawn; the same one with the points it has left, which only the resupply puts
-	/// back (L5). Taking off a vest and putting it back on is two kits and two tiers,
+	/// back (<see cref="LockerSupply.Step"/>). Taking off a vest and putting it back on is two kits and two tiers,
 	/// and so a full vest — as walking away from the locker and back is not.
 	/// </summary>
 	public static BodyArmourState RefitVest(in BodyArmourState worn, in LoadoutSelection kit) =>

@@ -1,0 +1,34 @@
+{
+  "name": "a rifleman who empties three magazines and throws three grenades 3 m from the weapon locker gets nothing back there, and every pouch back within 3 s of walking up to it",
+  "seeds": [6, 7],
+  "duration_ticks": 1280,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 0 },
+
+  "seats": [
+    { "id": "gunner", "team": "ground", "policy": "ground", "step_mul": 4,
+      "script": "scripts/fire_throw_then_back_to_locker.json" }
+  ],
+
+  "spawns": [
+    { "peer": "gunner", "at": [8, 1, 7.75], "look": [0, 0] }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.damage.count", "op": "==", "value": 0 },
+    { "metric": "events.grenade_thrown.count", "op": "==", "value": 3 },
+    { "metric": "observation.weapon.reserve.min", "op": "==", "value": 90 },
+    { "metric": "observation.self.grenades.min", "op": "==", "value": 0 },
+    { "metric": "observation.weapon.reserve.last", "op": "==", "value": 150 },
+    { "metric": "observation.self.grenades.last", "op": "==", "value": 3 },
+    { "metric": "observation.weapon.magazine.last", "op": "==", "value": 0 },
+    { "metric": "events.resupply[peer=@gunner].rounds.sum", "op": "==", "value": 60 },
+    { "metric": "events.resupply[peer=@gunner].rounds.max", "op": "==", "value": 30 },
+    { "metric": "events.resupply[peer=@gunner].grenades.sum", "op": "==", "value": 3 },
+    { "metric": "events.resupply[peer=@gunner].armour.sum", "op": "==", "value": 0 },
+    { "metric": "events.resupply[peer=@gunner].count", "op": "==", "value": 4 },
+    { "metric": "events.resupply.since_hurt.max", "op": "==", "value": -1 },
+    { "metric": "observation.self.alive.min", "op": "==", "value": 1 }
+  ]
+}
