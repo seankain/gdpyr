@@ -1141,8 +1141,15 @@ through the harness; "listen host" and "dedicated server" need a person at the c
     pointer's release on opening and its recapture on closing are untested. The probe's clicks were
     injected at the buttons' own rectangles, which says the buttons work and not that they can be
     found. The probe ran on a 1280 × 720 root window.
-  - **Scenarios**: the full suite was running headless against this build when it was committed;
-    its result is not recorded here yet.
+  - **Scenarios** (Godot 4.6 .NET, headless, through the harness, default `htn`): the full suite,
+    38 of 38 files over 88 seeds, in two runs side by side on separate ports — the same 38 files
+    and seeds L5 ran. The game assembly they loaded was built before four changes that no
+    dedicated server executes, since it has no local player and builds no panel: a line in
+    `LoadoutDraft` that repeated what `Sanitize` does, an unused HUD property, the console's and
+    the death screen's kit line moved into `WeaponCatalog.DescribeWithLoad`, and comments. The
+    probe above ran on the final build. The SDK was .NET 8.0.132 from Ubuntu's archive, Microsoft's
+    download host being refused by this environment's network policy; Godot 4.6 stable .NET was
+    downloaded from its GitHub release and checked against the release's SHA-512 sums.
 
 ### L7 — Computer players (1½ days)
 
