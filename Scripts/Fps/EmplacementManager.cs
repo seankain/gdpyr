@@ -199,31 +199,59 @@ public partial class EmplacementManager : Node
 	/// <summary>
 	/// Reads the use bit out of one player's input frame and does what it meant.
 	/// Called by <see cref="CombatManager.ServerSimulate"/>, with the same frame the
-	/// character was simulated from.
+	/// character was simulated from. Returns what the press meant, which for
+	/// <see cref="UseAction.OpenLocker"/> is the caller's to act on: the panel is the
+	/// player's own process's, and on a listen host that is this one.
 	/// </summary>
-	public void ServerUse(PlayerCombat combat, in InputContext input, uint tick)
+	public UseAction ServerUse(PlayerCombat combat, in InputContext input, uint tick)
 	{
 		if (NetworkManager.Instance is { IsClient: true } || combat?.Character == null)
 		{
-			return;
+			return UseAction.None;
 		}
 
-		UseIntent intent = combat.Use.Sample(input);
-		if (intent == UseIntent.None)
+		UseAction action = Resolve(combat, combat.Use.Sample(input), out int gunIndex, out int canIndex);
+		Act(combat, action, gunIndex, canIndex, tick);
+		return action;
+	}
+
+	/// <summary>
+	/// The owning client's reading of its own use press (docs/LOADOUT.md §7.2): the same
+	/// tracker over the same predicted frames, resolved by the same rule against the
+	/// guns, cans and lockers this client knows — what <see cref="PromptFor"/> already
+	/// computes. Nothing is done with it but what is the client's to do, which is to open
+	/// the locker's panel; every other action is the server's, a round trip later.
+	/// Client-side, from <see cref="CombatManager.ClientSimulateLocal"/>, once per
+	/// predicted tick and never on a replay.
+	/// </summary>
+	public UseAction PredictUse(PlayerCombat combat, in InputContext input)
+	{
+		if (combat?.Character == null)
 		{
-			return;
+			return UseAction.None;
 		}
 
-		// Sampled above whether or not they are alive, so the tracker stays in step
-		// with the frames; a press from a corpse simply does nothing.
-		if (!combat.IsAlive)
+		EnsureStarted();
+		return Resolve(combat, combat.Use.Sample(input), out _, out _);
+	}
+
+	/// <summary>
+	/// What one press means where this player is standing. The tracker is sampled by the
+	/// caller whether or not they are alive, so it stays in step with the frames; a press
+	/// from a corpse simply means nothing.
+	/// </summary>
+	private UseAction Resolve(PlayerCombat combat, UseIntent intent, out int gunIndex, out int canIndex)
+	{
+		gunIndex = -1;
+		canIndex = -1;
+		if (intent == UseIntent.None || !combat.IsAlive)
 		{
-			return;
+			return UseAction.None;
 		}
 
 		Vector3 at = combat.Character.SimPosition;
-		int gunIndex = NearestGun(at, combat.PeerId, out float gunDistance);
-		int canIndex = NearestCan(at, out float canDistance);
+		gunIndex = NearestGun(at, combat.PeerId, out float gunDistance);
+		canIndex = NearestCan(at, out float canDistance);
 
 		var situation = new UseSituation(
 			intent,
@@ -234,7 +262,7 @@ public partial class EmplacementManager : Node
 			combat.Character.IsOnFloor(),
 			LockerInReach(at, Mathf.Min(gunDistance, canDistance)));
 
-		Act(combat, EmplacementSim.Resolve(situation), gunIndex, canIndex, tick);
+		return EmplacementSim.Resolve(situation);
 	}
 
 	/// <summary>Carries out a decision. Server-side; each branch is one reliable message.</summary>
@@ -272,7 +300,8 @@ public partial class EmplacementManager : Node
 
 			case UseAction.OpenLocker:
 				// Nothing for the server to do: the panel is the owning client's, opened
-				// from its own prediction of this press (docs/LOADOUT.md §7.2), and the kit
+				// from its own prediction of this press (PredictUse, docs/LOADOUT.md §7.2) —
+				// or on a listen host by the caller, for the host's own player — and the kit
 				// chosen in it arrives as a request (CombatManager.TryApplyLockerKit). The
 				// press is still resolved here, so that at a locker it is not a can or a gun.
 				break;
@@ -540,8 +569,7 @@ public partial class EmplacementManager : Node
 
 		if (LockerInReach(at, Mathf.Min(gunDistance, canDistance)))
 		{
-			// Until the panel (docs/LOADOUT.md L6), the console is what takes a kit here.
-			return "weapon locker   [~] kit <primary> <magazines> <grenades> <vest>";
+			return "[E] weapon locker";
 		}
 
 		if (can >= 0 && (gun < 0 || canDistance <= gunDistance))

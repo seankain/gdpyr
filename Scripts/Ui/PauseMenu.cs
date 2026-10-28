@@ -26,8 +26,11 @@ public partial class PauseMenu : Control
 
 	public override void _UnhandledInput(InputEvent @event)
 	{
+		// Escape closes the loadout panel, not the game (docs/LOADOUT.md §7.2). The panel
+		// takes it in _Input and marks it handled; this is for an Escape that arrives
+		// while the panel is up by any other road.
 		if (@event is InputEventKey eventKey && eventKey.Pressed && !eventKey.Echo
-			&& eventKey.Keycode == Key.Escape)
+			&& eventKey.Keycode == Key.Escape && !Gdpyr.Core.InputFocus.Menu)
 		{
 			Toggle();
 			GetViewport().SetInputAsHandled();

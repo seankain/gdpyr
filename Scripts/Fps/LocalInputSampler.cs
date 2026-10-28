@@ -38,6 +38,12 @@ public partial class LocalInputSampler : Node
 	/// <summary>Mouse motion accumulated since the last sample, in pixels.</summary>
 	private Vector2 _mouseDelta;
 
+	/// <summary>
+	/// Buttons still down from while the game was not listening — the key that closed a
+	/// panel — kept out of the frames until they are let go.
+	/// </summary>
+	private ButtonLatch _latch;
+
 	private bool _enabled;
 
 	public override void _Ready()
@@ -73,10 +79,12 @@ public partial class LocalInputSampler : Node
 		// simulating either way, and a missing frame reads to it as packet loss. The
 		// console counts as paused for the same reason it counts as anything: the
 		// keys are being typed at a text box, and Input.IsActionPressed cannot tell
-		// (Scripts/Core/InputFocus.cs).
-		if (!_enabled || GetTree().Paused || InputFocus.TextEntry)
+		// (Scripts/Core/InputFocus.cs). The loadout panel counts too: it holds the
+		// player still while its keys mean panel things (docs/LOADOUT.md L-D12).
+		if (!_enabled || GetTree().Paused || InputFocus.TextEntry || InputFocus.Menu)
 		{
 			_mouseDelta = Vector2.Zero;
+			_latch.Away();
 			return InputFrame.Create(tick, 0f, 0f, Yaw, Pitch, InputButtons.None);
 		}
 
@@ -108,6 +116,11 @@ public partial class LocalInputSampler : Node
 		if (Input.IsActionPressed("weapon_sidearm")) { buttons |= InputButtons.Weapon2; }
 		if (Input.IsActionPressed("weapon_large")) { buttons |= InputButtons.Weapon3; }
 		if (Input.IsActionPressed("throw_grenade")) { buttons |= InputButtons.Grenade; }
+
+		// What was pressed for the menu that just closed stays the menu's until it is
+		// let go: otherwise the E that closed the locker's panel would be a use tap that
+		// opens it again.
+		buttons = _latch.Filter(buttons);
 
 		InputFrame frame = InputFrame.Create(tick, axes.X, axes.Y, Yaw, Pitch, buttons);
 

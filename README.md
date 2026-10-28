@@ -32,12 +32,13 @@ dedicated-server authoritative.
   boarding and unloading, and a vertical take-off and landing dropship
 - [`docs/LOADOUT.md`](docs/LOADOUT.md) — the ground force's loadout, planned: a locker panel for
   the primary, spare magazines or grenades and body armour, weight that sets movement speed, and
-  resupply at the locker; L0–L8, of which L0–L5 are built — how much bots fire in a life,
+  resupply at the locker; L0–L8, of which L0–L6 are built — how much bots fire in a life,
   which raised the default kit to five spare magazines; the kit itself: finite primary
   ammunition, no primary at all, and the player record that carries both; taking a kit at the
   locker, one validator for a person, a bot and an agent; body armour, a vest that takes a
-  share of each hit until its points run out; weight, which sets how fast a kit moves; and
-  resupply within a metre of the locker, paced, and not under fire
+  share of each hit until its points run out; weight, which sets how fast a kit moves;
+  resupply within a metre of the locker, paced, and not under fire; and the locker's panel on
+  `E`, which is also the death screen's editor of the next spawn's kit
 - [`docs/LAN.md`](docs/LAN.md) — hosting a room of machines from a checkout, with a dev build
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — AWS EC2 dedicated-server runbook
 
@@ -277,12 +278,31 @@ recorded input frame the rest of the simulation runs on, and nothing about them 
 pistol and heavy-gun rounds stop against them and do nothing, and only the launcher's grenade — by its
 impact or its blast — hurts them properly; a hand grenade does a quarter of its blast. The dropship
 is not armour, but its airframe takes half of what a bullet does. The answer when one turns up is the **weapon locker** at the spawn:
-stand within a metre of the cabinet and take a kit — `kit launcher 3 0 none` on the `~` console,
-until the locker's own panel opens on `E` ([`docs/LOADOUT.md`](docs/LOADOUT.md) L6). A different
-primary comes with a full magazine and its pouches full; what you already carried keeps what is
-left in it. The kit is also the next spawn's (`loadout` on the console sets that alone; `1`/`2`/`3`
-while dead still pick the primary). A hit on armour that did nothing shows no hit marker
-([`docs/NETCODE.md`](docs/NETCODE.md) §10.6).
+stand within a metre of the cabinet and press `E` (the prompt reads `[E] weapon locker`), and its
+panel opens: the primary — none, rifle, DMR or launcher — nine pouches shared between spare
+magazines and up to three grenades, and no vest or a light, medium or heavy one, with what the kit
+weighs, how fast it walks and sprints, what a full one carries and how many rifle hits it stands.
+You stand still and the mouse is free while it is up. A different primary comes with a full
+magazine and its pouches full; what you already carried keeps what is left in it, and a pouch
+added is filled by standing there. The kit is also the next spawn's. On the death screen, under
+`down — respawning`, a line says what the next spawn carries, and `E` opens the same panel for
+that kit alone (`loadout` on the `~` console sets it too). A hit on armour that did nothing shows
+no hit marker ([`docs/NETCODE.md`](docs/NETCODE.md) §10.6).
+
+| In the locker's panel | |
+|---|---|
+| `1` `2` `3` `4` | no primary, rifle, DMR, launcher |
+| `5` `6` · `7` `8` | a magazine fewer or more · a grenade fewer or more |
+| `9` `0` | a lighter or a heavier vest |
+| Enter | take the kit — on the death screen, keep it for the next spawn |
+| Backspace · `D` | back to what you carry · the default kit |
+| `E`, Escape | close, taking nothing; Escape does not open the pause menu while the panel is up |
+
+The mouse does the same on the panel's buttons, and the console still opens and types over it.
+A kit the server refuses says why at the panel's foot (`refused (not_at_locker): too far from the
+locker`) and leaves it open; a kit taken closes it, and so do dying, changing side, the role menu,
+the end of the round and leaving the locker's reach
+([`docs/LOADOUT.md`](docs/LOADOUT.md) §7.2).
 
 A kit's last word is **body armour**, for players: a light, medium or heavy vest takes 35, 50 or
 65 % of each bullet or swing, and half that of a blast, until its 35, 60 or 100 points are spent

@@ -305,7 +305,15 @@ public partial class CombatManager : Node
 		}
 
 		EmplacementManager emplacements = EmplacementManager.Instance;
-		emplacements?.ServerUse(combat, input, tick);
+
+		// A tap at a weapon locker opens its panel in the player's own process
+		// (docs/LOADOUT.md §7.2). On a listen host the host's player is simulated here,
+		// so this is that process; every other player's client opens its own from its
+		// prediction of the same frames (ClientSimulateLocal).
+		if (emplacements?.ServerUse(combat, input, tick) == UseAction.OpenLocker && combat == Local)
+		{
+			_hud?.OpenLocker(combat);
+		}
 
 		// A gunner's own weapons are not in their hands (docs/IMPLEMENTATION_PLAN.md
 		// §M5): while they are behind a gun, the trigger fires the gun.
@@ -1830,6 +1838,15 @@ public partial class CombatManager : Node
 			return;
 		}
 
+		// The use press, read where the server reads it — after the death check, before
+		// the gun — from the same frames: the one action of it that is this client's to
+		// take is opening a weapon locker's panel (docs/LOADOUT.md §7.2). Everything else
+		// a press does is the server's, a round trip later.
+		if (EmplacementManager.Instance?.PredictUse(combat, input) == UseAction.OpenLocker)
+		{
+			_hud?.OpenLocker(combat);
+		}
+
 		// Mounting is not predicted — it is one round trip, once, and a rejected
 		// mount has no message to correct it with. Firing the gun is, through the
 		// same step the server will run over the same frames (docs/NETCODE.md §10.2).
@@ -2120,26 +2137,10 @@ public partial class CombatManager : Node
 	// ---- loadout -----------------------------------------------------------
 
 	/// <summary>
-	/// Asks the server for a different large weapon on the next spawn, keeping the
-	/// rest of the kit asked for before. Applied immediately when this process is the
-	/// authority.
-	/// </summary>
-	public void RequestLoadout(byte largeWeaponId)
-	{
-		if (Local == null)
-		{
-			return;
-		}
-
-		LoadoutSelection wanted = Local.PendingLoadout;
-		wanted.Large = largeWeaponId;
-		RequestLoadout(wanted);
-	}
-
-	/// <summary>
 	/// Asks the server for a whole kit on the next spawn (docs/LOADOUT.md §5.3:
-	/// <c>ClientSelectLoadout</c> widened to the kit, next-spawn only). Applied
-	/// immediately when this process is the authority.
+	/// <c>ClientSelectLoadout</c> widened to the kit, next-spawn only): the death
+	/// screen's panel (§7.3) and the console's <c>loadout</c>. Applied immediately when
+	/// this process is the authority; accepted at any time, so nothing comes back.
 	/// </summary>
 	public void RequestLoadout(LoadoutSelection kit)
 	{
@@ -2257,9 +2258,10 @@ public partial class CombatManager : Node
 
 	/// <summary>
 	/// Asks the server for a kit at the weapon locker the local player is standing at
-	/// (docs/LOADOUT.md §5.3). Applied directly when this process is the authority, as
-	/// <see cref="RequestLoadout(LoadoutSelection)"/> is; the answer comes back as a
-	/// line on the console until the locker's panel shows it (L6).
+	/// (docs/LOADOUT.md §5.3): the locker panel's Enter. Applied directly when this
+	/// process is the authority, as <see cref="RequestLoadout"/> is, and answered on the
+	/// spot; a client's answer is <see cref="ServerKitResult"/>. Either way the answer
+	/// goes to the panel, which closes on a kit taken and shows a refusal.
 	/// </summary>
 	public void RequestLockerKit(LoadoutSelection kit)
 	{
@@ -2276,7 +2278,7 @@ public partial class CombatManager : Node
 		}
 
 		TryApplyLockerKit(Local, kit, net?.Tick ?? 0, out KitRefusal refusal);
-		ReportKitResult(refusal);
+		_hud?.AnswerKit(refusal);
 	}
 
 	/// <summary>
@@ -2321,13 +2323,8 @@ public partial class CombatManager : Node
 			return;
 		}
 
-		ReportKitResult(KitRequest.TryRead(refusal, out KitRefusal read) ? read : KitRefusal.Invalid);
+		_hud?.AnswerKit(KitRequest.TryRead(refusal, out KitRefusal read) ? read : KitRefusal.Invalid);
 	}
-
-	private static void ReportKitResult(KitRefusal refusal) =>
-		GameConsole.Print(refusal == KitRefusal.None
-			? "locker: kit taken"
-			: $"locker: kit refused, {KitRequest.CodeOf(refusal)}");
 
 	// ---- replication -------------------------------------------------------
 

@@ -8,8 +8,8 @@ using Godot;
 namespace Gdpyr.Ui;
 
 /// <summary>
-/// Health, ammunition, tickets and the round clock, plus the hit marker and the
-/// loadout picker.
+/// Health, ammunition, tickets and the round clock, plus the hit marker, the next
+/// spawn's kit on the death screen, and the loadout panel (docs/LOADOUT.md §7.2–7.4).
 ///
 /// Built in code rather than as a scene on purpose: it belongs to the process, not
 /// to the character — a death does not rebuild the character node, but nothing
@@ -26,7 +26,7 @@ public partial class CombatHud : CanvasLayer
 	private Label _notice;
 	private Label _prompt;
 	private Panel _hitMarker;
-	private LoadoutMenu _loadout;
+	private LoadoutPanel _panel;
 
 	private float _hitMarkerAge = float.MaxValue;
 	private bool _hitMarkerWasKill;
@@ -51,7 +51,8 @@ public partial class CombatHud : CanvasLayer
 		_status = NewLabel(root, HorizontalAlignment.Left, new Vector2(24f, -104f), anchorTop: 1f);
 		_ammo = NewLabel(root, HorizontalAlignment.Right, new Vector2(-260f, -80f), anchorLeft: 1f, anchorTop: 1f);
 		_round = NewLabel(root, HorizontalAlignment.Center, new Vector2(-160f, 16f), anchorLeft: 0.5f);
-		_notice = NewLabel(root, HorizontalAlignment.Center, new Vector2(-260f, 120f), anchorLeft: 0.5f);
+		// Wide enough for the death screen's line of the next spawn's kit (docs/LOADOUT.md §7.3).
+		_notice = NewLabel(root, HorizontalAlignment.Center, new Vector2(-400f, 120f), anchorLeft: 0.5f);
 
 		// Just under the reticle: what the key under the player's finger would do
 		// with whatever they are standing next to (docs/IMPLEMENTATION_PLAN.md §M5).
@@ -63,7 +64,7 @@ public partial class CombatHud : CanvasLayer
 		_status.Size = new Vector2(240f, 80f);
 		_ammo.Size = new Vector2(236f, 56f);
 		_round.Size = new Vector2(320f, 48f);
-		_notice.Size = new Vector2(520f, 72f);
+		_notice.Size = new Vector2(800f, 72f);
 
 		_hitMarker = new Panel
 		{
@@ -76,8 +77,43 @@ public partial class CombatHud : CanvasLayer
 		};
 		root.AddChild(_hitMarker);
 
-		_loadout = new LoadoutMenu { Name = "LoadoutMenu" };
-		root.AddChild(_loadout);
+		_panel = new LoadoutPanel { Name = "LoadoutPanel" };
+		root.AddChild(_panel);
+	}
+
+	/// <summary>
+	/// The local player's own tap at a weapon locker (docs/LOADOUT.md §7.2): resolved
+	/// from its predicted frames on a client, and by the authority's own use step on a
+	/// listen host.
+	/// </summary>
+	public void OpenLocker(PlayerCombat combat) => _panel?.Open(DraftMode.Locker, combat);
+
+	/// <summary>The locker's answer to the kit the panel asked for (§6.2).</summary>
+	public void AnswerKit(KitRefusal refusal) => _panel?.Answer(refusal);
+
+	/// <summary>
+	/// The death screen's <c>E</c> (docs/LOADOUT.md §7.3): the same panel, editing the
+	/// next spawn's kit. A dead player's frames carry no buttons (InputFrame.LookOnly),
+	/// so the key means nothing else while they are down; once the panel is up it is the
+	/// panel's, and its own <c>E</c> closes it.
+	/// </summary>
+	public override void _UnhandledInput(InputEvent @event)
+	{
+		if (_panel == null || _panel.IsOpen || InputFocus.TextEntry || GetTree().Paused
+			|| !@event.IsActionPressed("use") || @event.IsEcho())
+		{
+			return;
+		}
+
+		CombatManager combat = CombatManager.Instance;
+		if (combat?.Local is not { IsDowned: true } local || combat.LocalAwaitingRole
+			|| combat.Match.Phase == RoundPhase.Ended)
+		{
+			return;
+		}
+
+		_panel.Open(DraftMode.NextSpawn, local);
+		GetViewport().SetInputAsHandled();
 	}
 
 	public override void _Process(double delta)
@@ -99,8 +135,8 @@ public partial class CombatHud : CanvasLayer
 	///
 	/// <paramref name="awaitingRole"/> is the role menu being up
 	/// (<see cref="RoleSelect"/>). It occupies the middle of the screen, which is
-	/// where the loadout picker lives, and a player who has not picked a side has
-	/// nothing to pick a weapon for yet.
+	/// where the loadout panel lives, and a player who has not picked a side has
+	/// nothing to pick a kit for yet.
 	/// </summary>
 	public void Refresh(PlayerCombat combat, MatchState match, uint tick, bool awaitingRole)
 	{
@@ -113,6 +149,7 @@ public partial class CombatHud : CanvasLayer
 			_ammo.Text = string.Empty;
 			_notice.Text = string.Empty;
 			_prompt.Text = string.Empty;
+			_panel.Refresh(default);
 			if (spectating)
 			{
 				_round.Text = match.Phase == RoundPhase.Live
@@ -137,7 +174,7 @@ public partial class CombatHud : CanvasLayer
 				: match.Phase.ToString().ToLowerInvariant();
 			_notice.Text = string.Empty;
 			_prompt.Text = string.Empty;
-			_loadout.Refresh(false, combat.PendingLoadout.Large);
+			_panel.Refresh(default);
 			return;
 		}
 
@@ -161,12 +198,28 @@ public partial class CombatHud : CanvasLayer
 		};
 
 		bool dead = combat.IsDowned;
-		_notice.Text = dead ? "down — respawning" : string.Empty;
-		_prompt.Text = dead || awaitingRole ? string.Empty : JoinLines(emplacements?.PromptFor(combat),
+		bool roundOver = match.Phase == RoundPhase.Ended;
+		_panel.Refresh(new DraftSituation(combat.IsAlive, combat.Team == Team.GroundForce, awaitingRole, roundOver,
+			combat.Character != null && emplacements != null
+				? emplacements.LockerDistance(combat.Character.SimPosition)
+				: float.PositiveInfinity));
+
+		_notice.Text = !dead ? string.Empty
+			: roundOver || awaitingRole ? "down — respawning"
+			: $"down — respawning\n{NextSpawnLine(combat.PendingLoadout, editable: !_panel.IsOpen)}";
+
+		// The panel takes the middle of the screen, where the prompt is; what the prompt
+		// would say there is what the panel is for.
+		_prompt.Text = dead || awaitingRole || _panel.IsOpen ? string.Empty : JoinLines(emplacements?.PromptFor(combat),
 			ResupplyLine(combat, emplacements, tick));
-		_loadout.Refresh(!awaitingRole && (dead || match.Phase == RoundPhase.Ended),
-			combat.PendingLoadout.Large);
 	}
+
+	/// <summary>
+	/// The death screen's line (docs/LOADOUT.md §7.3): <c>next spawn: rifle · 5 mags · 3
+	/// grenades · no vest · 9.3 kg · 100 %   [E] edit</c>.
+	/// </summary>
+	private static string NextSpawnLine(in LoadoutSelection kit, bool editable) =>
+		$"next spawn: {WeaponCatalog.DescribeWithLoad(kit)}{(editable ? "   [E] edit" : string.Empty)}";
 
 	/// <summary>
 	/// Health, the vest's points and grenades (docs/LOADOUT.md §7.4): <c>HP 100   vest 60
