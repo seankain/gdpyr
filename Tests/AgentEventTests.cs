@@ -341,11 +341,44 @@ public class AgentEventTests
 		// docs/LOADOUT.md §5.3: a kit taken at a locker. Appended, so every kind before
 		// it keeps its number.
 		Assert.Equal(21, (int)AgentEventKind.Kit);
-		Assert.Equal(AgentEventKind.Kit, AgentEventSchema.Last);
 		Assert.Equal("kit", AgentEventSchema.NameOf(AgentEventKind.Kit));
 		Assert.Equal(new[] { "peer", "primary", "armour", "magazines", "grenades", "" },
 			AgentEventSchema.FieldsOf(AgentEventKind.Kit).ToArray());
 		Assert.Equal(-1, AgentEventSchema.NoPrimary);
+	}
+
+	[Fact]
+	public void Resupply_IsAppendedAfterKit_AndSaysHowLongSinceAHit()
+	{
+		// docs/LOADOUT.md L-D7: what a locker gave a player on one tick. Appended, so
+		// every kind before it keeps its number.
+		Assert.Equal(22, (int)AgentEventKind.Resupply);
+		Assert.Equal(AgentEventKind.Resupply, AgentEventSchema.Last);
+		Assert.Equal("resupply", AgentEventSchema.NameOf(AgentEventKind.Resupply));
+		Assert.Equal(new[] { "peer", "rounds", "grenades", "armour", "since_hurt", "" },
+			AgentEventSchema.FieldsOf(AgentEventKind.Resupply).ToArray());
+		Assert.Equal("rounds", Gdpyr.Playtest.EpisodeMetrics.DefaultFieldOf("resupply"));
+	}
+
+	[Fact]
+	public void AResupplySerializesAsItsNamedFields()
+	{
+		var buffer = new ArrayBufferWriter<byte>(256);
+		using (var writer = new Utf8JsonWriter(buffer))
+		{
+			AgentJson.WriteEvent(writer, AgentEvent.Make(AgentEventKind.Resupply, 900, 3, 30, 1, 3f, -1f));
+		}
+
+		using JsonDocument document = JsonDocument.Parse(buffer.WrittenMemory);
+		JsonElement root = document.RootElement;
+		Assert.Equal("resupply", root.GetProperty("kind").GetString());
+		Assert.Equal(900u, root.GetProperty("tick").GetUInt32());
+		Assert.Equal(3, root.GetProperty("peer").GetInt32());
+		Assert.Equal(30, root.GetProperty("rounds").GetInt32());
+		Assert.Equal(1, root.GetProperty("grenades").GetInt32());
+		Assert.Equal(3.0, root.GetProperty("armour").GetDouble());
+		Assert.Equal(-1.0, root.GetProperty("since_hurt").GetDouble());
+		Assert.False(root.TryGetProperty("", out _));
 	}
 
 	[Fact]

@@ -32,11 +32,12 @@ dedicated-server authoritative.
   boarding and unloading, and a vertical take-off and landing dropship
 - [`docs/LOADOUT.md`](docs/LOADOUT.md) — the ground force's loadout, planned: a locker panel for
   the primary, spare magazines or grenades and body armour, weight that sets movement speed, and
-  resupply at the locker; L0–L8, of which L0–L4 are built — how much bots fire in a life,
+  resupply at the locker; L0–L8, of which L0–L5 are built — how much bots fire in a life,
   which raised the default kit to five spare magazines; the kit itself: finite primary
   ammunition, no primary at all, and the player record that carries both; taking a kit at the
   locker, one validator for a person, a bot and an agent; body armour, a vest that takes a
-  share of each hit until its points run out; and weight, which sets how fast a kit moves
+  share of each hit until its points run out; weight, which sets how fast a kit moves; and
+  resupply within a metre of the locker, paced, and not under fire
 - [`docs/LAN.md`](docs/LAN.md) — hosting a room of machines from a checkout, with a dev build
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — AWS EC2 dedicated-server runbook
 
@@ -288,7 +289,14 @@ A kit's last word is **body armour**, for players: a light, medium or heavy vest
 — a heavy vest stands ten rifle hits where no vest stands five. The HUD shows what is left beside
 health (`HP 100   vest 60   grenades 3`), other players wear theirs as a band round the chest, light
 to heavy from khaki to charcoal, and asking a locker for the vest you already wear does not
-refill it ([`docs/LOADOUT.md`](docs/LOADOUT.md) §4.3).
+refill it ([`docs/LOADOUT.md`](docs/LOADOUT.md) §4.3) — standing at it does.
+
+**Resupply.** Stand within a metre of the locker's cabinet — inside the green line on the floor
+round it — and it tops your kit back up: a pouch's rounds every half second, a grenade every
+second and thirty vest points a second, up to what the kit holds, but not health and not the
+magazine in the weapon, and nothing at all for three seconds after anything hurts you. The prompt
+under the reticle says what it is doing (`resupplying — 4/5 mags · 2/3 grenades · 40/60 vest`, or
+`resupply waits: under fire`) ([`docs/LOADOUT.md`](docs/LOADOUT.md) L-D7).
 
 Everything in a kit **weighs** something, and the weight sets how fast its carrier moves: the
 default kit — a rifle, five spare magazines, three grenades, no vest, 9.3 kg — walks at 5 and

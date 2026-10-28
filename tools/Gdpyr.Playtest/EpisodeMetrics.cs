@@ -131,6 +131,7 @@ public sealed class EpisodeMetrics
 		"unit_task" => "goal",
 		"squad_drill" => "phase",
 		"kit" => "primary",
+		"resupply" => "rounds",
 		_ => null,
 	};
 
@@ -312,7 +313,7 @@ public sealed class EpisodeMetrics
 		"round_start", "round_end", "kill", "damage", "unit_built", "unit_lost", "node_captured",
 		"seat_attached", "seat_released", "structure_placed", "structure_built", "structure_lost",
 		"squad_task", "contact_spotted", "node_contested", "unit_embarked", "unit_disembarked", "dropship_landed",
-		"grenade_thrown", "unit_task", "squad_drill", "kit",
+		"grenade_thrown", "unit_task", "squad_drill", "kit", "resupply",
 	};
 
 	/// <summary>
@@ -344,6 +345,7 @@ public sealed class EpisodeMetrics
 		["unit_task"] = new[] { "unit", "tier", "goal", "x", "z" },
 		["squad_drill"] = new[] { "squad", "phase", "elements", "x", "z" },
 		["kit"] = new[] { "peer", "primary", "armour", "magazines", "grenades" },
+		["resupply"] = new[] { "peer", "rounds", "grenades", "armour", "since_hurt" },
 	};
 
 	/// <summary>

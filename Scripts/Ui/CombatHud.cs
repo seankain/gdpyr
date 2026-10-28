@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Gdpyr.Core;
 using Gdpyr.Fps;
 using Gdpyr.Match;
@@ -56,7 +57,8 @@ public partial class CombatHud : CanvasLayer
 		// with whatever they are standing next to (docs/IMPLEMENTATION_PLAN.md §M5).
 		_prompt = NewLabel(root, HorizontalAlignment.Center, new Vector2(-260f, 48f), anchorLeft: 0.5f,
 			anchorTop: 0.5f);
-		_prompt.Size = new Vector2(520f, 32f);
+		// Two lines: the use key's, and at a locker what its resupply is doing.
+		_prompt.Size = new Vector2(520f, 56f);
 
 		_status.Size = new Vector2(240f, 80f);
 		_ammo.Size = new Vector2(236f, 56f);
@@ -160,7 +162,8 @@ public partial class CombatHud : CanvasLayer
 
 		bool dead = combat.IsDowned;
 		_notice.Text = dead ? "down — respawning" : string.Empty;
-		_prompt.Text = dead || awaitingRole ? string.Empty : emplacements?.PromptFor(combat) ?? string.Empty;
+		_prompt.Text = dead || awaitingRole ? string.Empty : JoinLines(emplacements?.PromptFor(combat),
+			ResupplyLine(combat, emplacements, tick));
 		_loadout.Refresh(!awaitingRole && (dead || match.Phase == RoundPhase.Ended),
 			combat.PendingLoadout.Large);
 	}
@@ -174,6 +177,60 @@ public partial class CombatHud : CanvasLayer
 		vest.Tier == BodyArmourTier.None
 			? $"HP {health}   grenades {grenades}"
 			: $"HP {health}   vest {vest.Points}   grenades {grenades}";
+
+	/// <summary>
+	/// What a weapon locker's resupply is doing for a player in its reach
+	/// (docs/LOADOUT.md §7.4): <c>resupplying — 4/5 mags · 2/3 grenades · 40/60 vest</c>,
+	/// counting full magazines, for whatever the kit holds that is not yet full; or
+	/// <c>resupply waits: under fire</c> inside the three seconds after a hit. Nothing
+	/// out of reach, and nothing once the kit is full. A client's "hit" is its record's
+	/// health or vest falling, a one-way trip late (<see cref="PlayerCombat.LastDamagedTick"/>).
+	/// </summary>
+	private static string ResupplyLine(PlayerCombat combat, EmplacementManager lockers, uint tick)
+	{
+		if (lockers == null || combat.Character == null || !combat.IsAlive
+			|| !LockerSupply.InReach(lockers.LockerDistance(combat.Character.SimPosition)))
+		{
+			return string.Empty;
+		}
+
+		LoadoutSelection kit = combat.Loadout;
+		CarryStats primary = WeaponCatalog.CarryFor(kit.Large);
+		KitState carried = combat.Carried;
+		if (!LockerSupply.NeedsAnything(carried, kit, primary))
+		{
+			return string.Empty;
+		}
+
+		if (LockerSupply.IsLockedOut(tick, combat.LastDamagedTick))
+		{
+			return "resupply waits: under fire";
+		}
+
+		KitState full = LockerSupply.Ceiling(kit, primary);
+		var parts = new List<string>(3);
+		if (kit.Magazines > 0 && primary.PouchRounds > 0 && carried.Reserve >= 0)
+		{
+			parts.Add($"{carried.Reserve / primary.PouchRounds}/{kit.Magazines} mags");
+		}
+
+		if (full.Grenades > 0)
+		{
+			parts.Add($"{carried.Grenades}/{full.Grenades} grenades");
+		}
+
+		if (full.ArmourPoints > 0)
+		{
+			parts.Add($"{carried.ArmourPoints}/{full.ArmourPoints} vest");
+		}
+
+		return $"resupplying — {string.Join(" · ", parts)}";
+	}
+
+	private static string JoinLines(string first, string second) =>
+		string.IsNullOrEmpty(first) ? second ?? string.Empty
+		: string.IsNullOrEmpty(second) ? first
+		: $"{first}\n{second}";
 
 	/// <summary>
 	/// What the kit weighs and the share of their speed it leaves the player

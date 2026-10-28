@@ -358,8 +358,8 @@ public static class SimConfig
 	/// <summary>
 	/// How close a player's feet have to be to a weapon locker's footprint, flat, for
 	/// the use key to open it and for a kit to be taken at it (docs/LOADOUT.md L-D8,
-	/// <see cref="LockerSupply.FootprintDistance"/>) — and from L5, to be resupplied
-	/// there: one locker, one distance. Shorter than a gun's reach, which is measured
+	/// <see cref="LockerSupply.FootprintDistance"/>) — and to be resupplied there
+	/// (L-D7, <see cref="LockerSupply.Step"/>): one locker, one distance. Shorter than a gun's reach, which is measured
 	/// from a point.
 	/// </summary>
 	public const float LockerReachMeters = 1f;

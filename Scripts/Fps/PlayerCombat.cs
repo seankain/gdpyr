@@ -179,11 +179,21 @@ public sealed class PlayerCombat
 	public uint LastKitTick { get; set; }
 
 	/// <summary>
-	/// Server-side: the tick anything last hurt this player, a hit the vest took whole
-	/// included; 0 for never this life. What the locker's resupply waits out
-	/// (docs/LOADOUT.md L-D7, <see cref="Resupply.DamageLockoutTicks"/>). Never replicated.
+	/// The tick anything last hurt this player, a hit the vest took whole included; 0
+	/// for never this life. What the locker's resupply waits out (docs/LOADOUT.md L-D7,
+	/// <see cref="Resupply.DamageLockoutTicks"/>). Never replicated: the server sets it
+	/// in its damage; a client sets its own player's when the record shows health or
+	/// the vest's points falling, a one-way trip late, for the HUD's resupply prompt
+	/// and nothing else.
 	/// </summary>
 	public uint LastDamagedTick { get; set; }
+
+	/// <summary>
+	/// Server-side: when the locker's resupply may next give this player rounds, a
+	/// grenade and armour points (<see cref="LockerSupply.Step"/>). For the life: a
+	/// spawn starts it afresh, and leaving the reach does not.
+	/// </summary>
+	public SupplyPacing Supply;
 
 	/// <summary>
 	/// Server-side: a ground bot that plans, which perceives the strategist's fire
@@ -252,6 +262,7 @@ public sealed class PlayerCombat
 		// A life starts with its grenade pouches full, as it does with full magazines.
 		Grenades = GrenadeState.Full(Loadout.Grenades);
 		Vest = BodyArmourState.Full(Loadout.Armour);
+		Supply = default;
 		PrimaryRoundsThisLife = 0;
 
 		// Spawning with the large weapon up is what a player wants every time; the
@@ -265,8 +276,9 @@ public sealed class PlayerCombat
 	/// the same one keeps its magazine and spare rounds, losing what fewer pouches no
 	/// longer hold; grenades are kept up to the kit's grenade pouches; a different
 	/// vest is full, and the same one keeps the points it has left. A pouch added
-	/// is empty until the locker's resupply fills it (L5), so asking under fire
-	/// refills nothing — and asking for the vest already worn refills nothing either. The hammer, the pistol, and which slot is in the player's hands
+	/// is empty until the locker's resupply fills it (<see cref="TakeResupply"/>), so
+	/// asking under fire refills nothing — and asking for the vest already worn refills
+	/// nothing either. The hammer, the pistol, and which slot is in the player's hands
 	/// are left alone — a player who walked up with the pistol out is still holding
 	/// it — unless the primary in them is given up, when the pistol comes up.
 	///
@@ -287,6 +299,46 @@ public sealed class PlayerCombat
 		{
 			HandOverLarge();
 		}
+	}
+
+	/// <summary>
+	/// What the locker's resupply would top up, as this player carries it now: the
+	/// primary's spare rounds (none with no primary), the grenades and the vest's points.
+	/// </summary>
+	public KitState Carried => new(
+		Weapons[SimConfig.LargeSlot].IsEmpty ? 0 : Weapons[SimConfig.LargeSlot].Reserve,
+		Grenades.Count,
+		Vest.Points);
+
+	/// <summary>
+	/// One tick at a weapon locker (docs/LOADOUT.md L-D7): steps the resupply over what
+	/// this player carries, up to their kit, and writes back what it gave. Server-side —
+	/// the resupply pass's to call, for a living player in a locker's reach — and the
+	/// record carries the result to every client: the reserve under the owner's
+	/// acknowledgement guard, as a reload's, the grenades under the throw's, the vest whole.
+	/// </summary>
+	public SupplyGiven TakeResupply(uint tick)
+	{
+		KitState kit = Carried;
+		SupplyGiven given = LockerSupply.Step(ref kit, ref Supply, Loadout, WeaponCatalog.CarryFor(Loadout.Large),
+			tick, LastDamagedTick);
+
+		if (given.Rounds > 0)
+		{
+			Weapons[SimConfig.LargeSlot].Reserve = (short)kit.Reserve;
+		}
+
+		if (given.Grenades > 0)
+		{
+			Grenades.Count = (byte)kit.Grenades;
+		}
+
+		if (given.ArmourPoints > 0)
+		{
+			Vest = new BodyArmourState(Vest.Tier, kit.ArmourPoints);
+		}
+
+		return given;
 	}
 
 	/// <summary>

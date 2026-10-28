@@ -1,0 +1,31 @@
+{
+  "name": "a medium vest a rifleman wears down at the weapon locker gets nothing back within 3 s of a hit, and every point back once the rifleman is dead",
+  "seeds": [1, 2, 3, 4, 5, 6, 7, 8],
+  "duration_ticks": 600,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 0 },
+
+  "seats": [
+    { "id": "vest", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/crouch_return_fire.json",
+      "kit": { "primary": "rifle", "magazines": 5, "grenades": 3, "armour": "medium" } }
+  ],
+
+  "spawns": [
+    { "unit": "infantry", "team": "strategist", "at": [8, 1, -22], "order": "none", "autonomy": "off" },
+    { "peer": "vest", "at": [8, 1, 10.25], "look": [0, 0] }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.unit_lost.count", "op": "==", "value": 1 },
+    { "metric": "events.damage[victim=@vest].count", "op": "between", "value": [1, 7] },
+    { "metric": "events.damage[victim=@vest].absorbed.sum", "op": ">", "value": 0 },
+    { "metric": "events.resupply[peer=@vest,since_hurt>=0,since_hurt<180].count", "op": "==", "value": 0 },
+    { "metric": "events.resupply[peer=@vest,armour>0].count", "op": ">=", "value": 1 },
+    { "metric": "events.resupply[peer=@vest,armour>0].since_hurt.min", "op": ">=", "value": 180 },
+    { "metric": "events.resupply[peer=@vest].armour.sum", "op": "==", "value": 1,
+      "relative_to": "events.damage[victim=@vest].absorbed.sum" },
+    { "metric": "observation.vest.self.armour.last", "op": "==", "value": 60 },
+    { "metric": "observation.vest.self.alive.min", "op": "==", "value": 1 }
+  ]
+}

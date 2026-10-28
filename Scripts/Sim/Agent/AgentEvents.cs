@@ -73,6 +73,12 @@ public enum AgentEventKind : byte
 	/// a bot's locker run or a policy's <c>loadout</c> op, through the one validator.
 	/// </summary>
 	Kit = 21,
+
+	/// <summary>
+	/// A weapon locker's resupply gave a player something on this tick (docs/LOADOUT.md
+	/// L-D7, §5.4): a pouch's rounds, a grenade, armour points, or several at once.
+	/// </summary>
+	Resupply = 22,
 }
 
 /// <summary>
@@ -184,6 +190,10 @@ public static class AgentEventSchema
 		// The player; the primary's catalog id, -1 for none; the vest's tier, 0 none to 3
 		// heavy; and the pouches: magazines and grenades (docs/LOADOUT.md §5.3).
 		new[] { "peer", "primary", "armour", "magazines", "grenades", "" },                    // Kit
+		// The player; the rounds, grenades and armour points the locker gave on this tick;
+		// and the ticks since anything last hurt them, -1 for never this life — never
+		// under 180, the lockout (docs/LOADOUT.md L-D7).
+		new[] { "peer", "rounds", "grenades", "armour", "since_hurt", "" },                    // Resupply
 	};
 
 	private static readonly string[] Kinds =
@@ -191,7 +201,7 @@ public static class AgentEventSchema
 		"round_start", "round_end", "kill", "damage", "unit_built", "unit_lost", "node_captured",
 		"seat_attached", "seat_released", "structure_placed", "structure_built", "structure_lost",
 		"squad_task", "contact_spotted", "node_contested", "unit_embarked", "unit_disembarked", "dropship_landed",
-		"grenade_thrown", "unit_task", "squad_drill", "kit",
+		"grenade_thrown", "unit_task", "squad_drill", "kit", "resupply",
 	};
 
 	/// <summary>The highest kind there is. Everything from 0 to this has a name and a slate of fields.</summary>

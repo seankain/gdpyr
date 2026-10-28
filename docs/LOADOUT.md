@@ -1,6 +1,6 @@
 # Ground-force loadout: the locker panel, body armour and weight — implementation plan
 
-Status: **L0 built and measured, L1–L4 built (§10; L3's and L4's engine-side checks not yet taken); L5–L8 planned.** Planned from the code at `dd579dd`. Phases
+Status: **L0 built and measured, L1–L5 built (§10; their listen-host and dedicated-server checks not yet taken); L6–L8 planned.** Planned from the code at `dd579dd`. Phases
 L0–L8 (§10); decisions L-D1 to L-D15 (§3) are the defaults the plan is written against — flag any
 you disagree with before L1 starts. L0's measurement raised the default kit to five magazines;
 there are nine pouches, so it keeps three grenades (L-D1, L-D3, L-D4, L-D13; §10 L0's result).
@@ -906,6 +906,115 @@ through the harness; "listen host" and "dedicated server" need a person at the c
 - **Done when:** `locker_resupply` passes over its seeds; on a listen host a player standing at the
   locker sees magazines, grenades and vest come back at the stated pace and nothing while being
   shot.
+- **Result — built; both resupply scenarios pass engine-side.** This phase is the first in which
+  a Godot binary could be downloaded (4.6 stable .NET, checked against its release's SHA-512 sums),
+  so the scenarios ran headless, and the whole suite with them; the listen host still has not. One
+  event kind, a second scenario file and the armour's granularity differ from the plan; each is
+  said below.
+  - **The rule** (`Scripts/Sim/LockerSupply.cs`): `KitState` (reserve, grenades, vest points),
+    `SupplyPacing` (when each may next be given) and `Step`, §4.4's function with the pacing passed
+    beside the kit, since the counts live in the player's weapons, grenades and vest and the pacing
+    on the player. A pouch's rounds every 30 ticks, a grenade every 60, each the moment it is short
+    and due — so a player who walks up with three empty pouches has the first at once and the third
+    a second later — and nothing while `IsLockedOut`, which is `Resupply.CanHeal`'s three seconds,
+    the units' rule. Never past the kit (`Ceiling`: the pouches' rounds, the grenade pouches, the
+    vest's points), never taking anything away, nothing for a weapon that reloads forever, nothing
+    with no primary or no vest. The pacing is kept for the life, so stepping out of the reach and
+    back does not buy a pouch sooner; a spawn starts it afresh. A pouch goes to the reserve, not the
+    magazine; health is not resupplied.
+  - **Armour in handfuls, not per tick.** Thirty points a second is half a point a tick, and points
+    are whole; they are given as three every six ticks (`ArmourIntervalTicks`, `ArmourPerGrant`),
+    which keeps the rate, fills a medium vest from nothing in 1.9 s and a heavy one in 3.3 s, and
+    keeps the event stream below to ten records a second per player rather than thirty.
+  - **The pass** (`CombatManager.ServerResupply`), after `ServerRespawns`, as §5.4 says: every living
+    ground-force player whose feet are within 1.0 m of a locker's footprint
+    (`EmplacementManager.LockerDistance`, L2's) is stepped through `PlayerCombat.TakeResupply`.
+    Mounted or carrying makes no difference: L-D7 names neither. Nothing is sent — the record
+    carries reserve, grenades and vest points already, the reserve under the owner's
+    acknowledgement guard as a reload's and the grenades under the throw's. Counters for the debug
+    HUD and the round-over line: players resupplied, rounds, grenades and armour points given this
+    round, cleared with the round. A hit on tick 0 is now recorded as tick 1, so that "0 = never"
+    cannot drop it.
+  - **Beyond the plan: a `resupply` event.** §9's claim "none while a rifleman keeps hitting it" is
+    about time, and the harness's metrics are aggregates over an episode: with only `damage`
+    records and observations, it could be stated only as "the vest absorbed exactly its points",
+    which a gap of three seconds in the rifleman's fire would break for the right reason. So the pass
+    emits `resupply` — peer, rounds, grenades, armour, and `since_hurt`, the ticks since anything
+    last hurt the player (−1 for never this life) — for each tick it gave anything, and the lockout
+    becomes a claim on one field: no record with `since_hurt` from 0 to 179. Kind 22, appended
+    (`AgentEventSchema`, the harness's field table, AGENT_API.md §8); JSON-only and additive.
+  - **HUD**: the prompt under the reticle gains a second line in a locker's reach while the kit is
+    short — `resupplying — 4/5 mags · 2/3 grenades · 40/60 vest`, counting full magazines, for what
+    the kit holds — or `resupply waits: under fire` in the lockout. A client's "hit" is its record's
+    health or vest points falling, a one-way trip late (`PlayerCombat.LastDamagedTick`, which the
+    server never sends); on a listen host it is the server's own. The debug HUD has a `kit` row —
+    the living by vest tier and their mean load — and on the authority a `locker` row: kits taken
+    and what the resupply gave this round.
+  - **The locker** (`WeaponLocker`): its label reads `WEAPON LOCKER / RESUPPLY`, and a green line
+    ten centimetres wide lies on the floor along the reach's edge — a metre out all round, square
+    along the cabinet's sides and round at its corners — drawn along `LockerSupply.ReachOutline`,
+    which `LockerSupplyTests` pins to the footprint distance, so the line is where the reach ends.
+    Not on a dedicated server; the navigation bake parses colliders only and never sees it.
+  - **Grenades**: NETCODE.md §10.9 says a locker's resupply refills them, and that a kit carries its
+    grenade pouches, at most three, rather than "three a life".
+  - **Scenarios.** Two files where §9 has one row, because the Test map has one locker and a
+    rifleman shooting at one seat shoots at the other. **`locker_resupply.json`**: a rifleman in the
+    default kit 3 m from the footprint empties three magazines and throws its three grenades — the
+    reserve goes to 90, the grenades to 0, and nothing comes back there — then walks into the reach:
+    exactly four `resupply` records, two pouches of 30 and three grenades, the reserve back to 150
+    and the grenades to 3 within 3 s of arriving, the magazine still empty, `since_hurt` −1
+    throughout. (The plan's "fires 60 rounds at the locker" was dropped: at the locker each reload's
+    pouch comes back on the tick it is drawn, so the reserve never reads below 150 and the claim
+    would hold with or without a pace.) **`locker_resupply_under_fire.json`**: a medium-vest seat
+    crouched 0.5 m from the footprint and an infantry rifleman 32 m out, its micro-autonomy off; the
+    seat holds fire for a second, then kills the rifleman. Claims, over seeds 1–8: the rifleman
+    killed; 1–7 hits on the seat, and the vest absorbing some; no `resupply` record 0–179 ticks after
+    a hit; armour given at least once, the first of it 180 ticks or more after the last hit; the
+    armour given equal to what the vest absorbed (`relative_to`, L4's); 60 points at the end; the
+    seat alive throughout. Not the plan's "shot down to 0, walks to the locker": a scripted seat
+    cannot see when its vest is spent, and the rifleman lands its eighth hit — death, in a medium
+    vest — within two seconds of its first: in this file's first draft a seat standing with its fire
+    held took its eighth 108 ticks after spawning, and in a probe of a crouched seat that never
+    fired (not committed) the first hit came 6–84 ticks after spawning. Sitting at the locker throughout asks
+    the same two things — nothing while hit, all of it back after.
+  - **From L3: `armour_vs_rifleman.json`'s vest claims read the end of the episode.** Its first
+    engine-side run, on the build before this phase, failed two claims: `observation.heavy.self.
+    armour_max.min == 100` and `armour_tier.min == 3` read 0 at tick 3 of seed 6, a warmup sample
+    taken while the seat was still its bot in the default kit, before the scenario's `spawn` equips
+    the heavy vest (the effect L4 found for positions). Every other claim held. They are `.last`
+    now; on this phase's build the file passes seeds 6 and 7 — 5 hits kill the bare seat, 10 the
+    heavy one, and the heavy vest absorbs 100 — so §4.3's rifle row has been seen in a round.
+  - `dotnet test`: 2354 passed, 0 failed (2332 before; 22 new: 20 in `LockerSupplyTests`, 2 in
+    `AgentEventTests`). `dotnet build Gdpyr.csproj`: 0 warnings, 0 errors; the harness and the .NET
+    client build.
+  - **The tests test something.** One change at a time, each failed tests: no lockout (2), a pouch
+    every tick (3), grenades at the pouch's pace (1), armour past the vest's points (1), rounds past
+    the kit (1), grenades to three whatever the kit (2), an unlimited reserve topped up (1), the ring
+    drawn as an ellipse round the cabinet (3). Engine-side, with the lockout removed
+    `locker_resupply_under_fire` fails both lockout claims (14 records inside the three seconds in
+    seed 1), and with the pass's reach check removed `locker_resupply` fails three claims (the
+    reserve never below 150, the grenades never below 3, five records rather than four).
+  - **Scenarios** (Godot 4.6 .NET, headless, through the harness, default `htn`):
+    `locker_resupply` passed seeds 6 and 7 — in each the walk reached the locker on the same tick,
+    and the four records came at it and 30, 60 and 120 ticks later; the first run's hold ended 18
+    ticks after the last, and was lengthened by 28; `locker_resupply_under_fire` passed seeds 1–8, 1–4 hits
+    on the seat, 10–40 points absorbed, the first armour back exactly 180 ticks after the last hit.
+    **The full suite**, twice, one server a file and two runs side by side on separate ports: on the
+    build before this phase (`81f0cdd`), 35 of 36 files over 78 seeds, the one failure
+    `armour_vs_rifleman`'s two warmup claims above; on this phase's build, 38 of 38 over 88 seeds —
+    the 36 and the two new files.
+  - **L3's and L4's scenarios, run for the first time** (both runs above). `armour_vs_rifleman` as
+    said. `weight_speed` passes seeds 6 and 7: top sprints of 8.96, 8.0 and 5.6 m/s
+    (`velocity.2.min` −0.56, −0.5 and −0.35 of 16 m/s), and the stripped and heaviest seats' summed
+    z velocity 1.12–1.123 and 0.70 of the default's — so the default kit's sprint is 8.0 m/s as before
+    L4. The five scenarios whose windows L4 widened for slow bots (`htn_ground_denies_node`,
+    `htn_squad_retreats`, `tactics_move_to_node`, `htn_locker_runner_kit`,
+    `tactics_sniper_overwatch`) pass in both runs. L4's misprediction measurements on a listen host
+    and over `tc netem` are still not taken, nor is L3's pillbox check.
+  - **Not taken**: the listen host, so a person has not seen the paced refill, the HUD's two prompts,
+    the debug rows, the label or the ring, and no remote client's view of its own resupply (the
+    reserve arriving under the acknowledgement guard) has been watched. The HUD, the debug rows and
+    the ring have compiled and run headless, where nothing draws them.
 
 ### L6 — The locker panel and the death screen (2 days)
 
