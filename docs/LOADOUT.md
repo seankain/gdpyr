@@ -1,6 +1,6 @@
 # Ground-force loadout: the locker panel, body armour and weight — implementation plan
 
-Status: **L0 built and measured, L1–L7 built (§10; L1–L5's listen-host and dedicated-server checks not yet taken, L6's taken headless by a probe and not yet by a person; L7 measured in bot-only rounds, and its bots' dry share is over the 5 % it aimed for); L8 planned.** Planned from the code at `dd579dd`. Phases
+Status: **L0 built and measured, L1–L8 built (§10; L1–L5's listen-host and dedicated-server checks not yet taken, L6's taken headless by a probe and not yet by a person; L7 measured in bot-only rounds, and its bots' dry share is over the 5 % it aimed for; L8's engine-side checks — the suite against `gdpyr-agent-obs-4`, the legacy baseline's re-measure and the PPO smoke run — not yet taken).** Planned from the code at `dd579dd`. Phases
 L0–L8 (§10); decisions L-D1 to L-D15 (§3) are the defaults the plan is written against — flag any
 you disagree with before L1 starts. L0's measurement raised the default kit to five magazines;
 there are nine pouches, so it keeps three grenades (L-D1, L-D3, L-D4, L-D13; §10 L0's result).
@@ -1308,6 +1308,73 @@ through the harness; "listen host" and "dedicated server" need a person at the c
 - **Done when:** `dotnet test`, `dotnet build Gdpyr.csproj`, the agent client and the trainer build;
   the full scenario suite passes; a 500-episode PPO smoke run against obs-4 starts and logs, as
   TRAINING.md §3 describes.
+- **Result — built; nothing engine-side run.** The vector, the schema's version and the docs are
+  done, and everything that builds without an engine builds and passes; the scenario suite, the
+  legacy baseline's re-measure and the PPO smoke run need a Godot binary, which this session could
+  not download, and are said last. The reserve's float is the primary's where §9 left it open, and
+  the Python client's schema is now pinned by a test; each is said below.
+  - **The vector** (`AgentObservation`): a kit block, the last five floats — `kit.grenades`,
+    `kit.reserve`, `kit.armour`, `kit.armour_tier`, `kit.load_scale` — so a ground observation is
+    150 floats, 600 bytes, and every float before the block is at the offset obs-3 gave it. Each is
+    the kit normalized: grenades over three; spare rounds over what the kit's pouches hold, 0 with
+    no primary or no pouches; the vest's points over its tier's, 0 with no vest; the tier over
+    three, so a spent vest is not no vest; and the load's scale over 1.12, held to L-D4's floor and
+    cap, so 0.625–1, which the schema publishes as its range. Named under `kit.` so that a JSON
+    observation names them beside the extras, which keep their names and their raw units.
+    `move_speed_scale` is as it was, the product clamped to 1. The engine half fills the two
+    numbers the view did not have from what the resupply reads (`PlayerCombat.Carried`,
+    `Loadout.ReserveFor`).
+  - **Beyond §9's words: the reserve is the primary's.** §9 says "reserve fraction", and the extras'
+    `weapon.reserve` is the weapon in the hands'. In the hands' terms the float reads full whenever
+    the pistol is up, since it reloads forever — which the slot's one-hot already says — and so
+    says nothing about the primary exactly when a dry one has been put away for the pistol (L-D14)
+    and a policy has to decide whether to go back to it. The primary's, beside the slot, says both;
+    so `kit.reserve` is the primary's whatever is in the hands, what the locker's resupply would
+    fill (`AgentSelfView.PrimaryReserve`, `PrimaryReserveMax`). The extras are unchanged.
+  - **`gdpyr-agent-obs-4`**: `AgentProtocol.SchemaVersion` in the server, the .NET client and the
+    Python client (`SCHEMA_VERSION`), each refusing a `welcome` that names another, as before. A
+    ground checkpoint trained on obs-3's 145 inputs does not fit 150 and is retrained; the trainer
+    does not widen one (TRAINING.md §6). The strategist's layout is unchanged.
+  - **Beyond the plan: the Python client is pinned.** `AgentInteropTests` checked the .NET client
+    against the server; the Python client's schema and protocol constants were checked by nothing,
+    so a bump that missed them would have had it refuse every server. A test now reads them off
+    `tools/gdpyr_env/gdpyr_env.py`.
+  - **The docs**: NETCODE §7 (the 32-byte record's layout, `ClientLockerLoadout` and
+    `ServerKitResult`, the budget at 32 B), §9's cost of a bot, §10.6 rewritten as the loadout and
+    the locker — the kit, finite ammunition, the vest, weight, the reach, the resupply, the panel,
+    the validator, the bots' kits — and §10.9's grenade lines; AGENT_API's status, §6.1 (the kit
+    block, its table, the reserve's meaning, checkpoints across the bump), §7.2's grenade sentence,
+    §8 (a hit the vest took whole is a record), §9.1 (`observation.kit.*`), §10's test table (§7.1's
+    rows were already the shipped ones); DEMOS version 4 and journal playback at the kit's speed;
+    HTN_BOTS §5.1's `Ammo` fact, `Rearm` in the tree and as built, and the runner's role kit;
+    IMPLEMENTATION_PLAN §M2 superseded and §M11 built; TRAINING (150 floats, finite ammunition for a
+    seat, and §9's legacy bots since L1); RL_ARCHITECTURE's stacking width; README; and this file's
+    status.
+  - **The legacy baseline (TRAINING.md §9) is not re-measured.** What changed for legacy bots, and
+    when, is written there: since L1 their primary runs dry and is put away for the pistol, and
+    they never rearm or take a role's kit. No phase since L1 has recorded a round of theirs or a
+    checkpoint against them — L7's bot-only rounds were `htn` only — so L0's legacy numbers have
+    nothing after them to stand beside yet.
+  - `dotnet test`: 2475 passed, 0 failed (2468 before; 7 new: 6 in `AgentObservationTests`, 1 in
+    `AgentInteropTests`; the layout, offset and bounds tests widened to the block, and the test that
+    pinned obs-3's 145 floats now pins obs-4's 150). `dotnet build Gdpyr.csproj`: 0 warnings, 0
+    errors. The .NET client, the trainer, the harness, the divergence probe and the HTN bench build
+    with 0 errors; the trainer with one warning, CS9057 — an analyzer in `IEnumerableUnpacker` 1.0.3,
+    which RLMatrix 0.5.2 brings in, built for a newer compiler than this SDK's — which the build
+    before this phase gives too. The Python client imports with numpy and names obs-4. The SDK was
+    .NET 8.0.132 from Ubuntu's archive.
+  - **The tests test something.** One change at a time, each failed tests: the reserve read from the
+    hands (2), no pouches read as full (1), no vest read as full (1), the tier over two (1), grenades
+    over two (1), the load's scale not divided (3), its floor dropped (1), two of the block's names
+    swapped (4), the server's version left at obs-3 (3), the .NET client's (1), the Python client's
+    (1).
+  - **Not taken**: every engine-side check. No Godot binary could be had in this session: the
+    environment's network policy refused github.com, where L5–L7 downloaded 4.6 stable .NET, and
+    the engine's other download host. So the full scenario suite has not run against obs-4 — the
+    harness samples every field the schema publishes, the kit block's included, and no scenario names
+    a vector offset the block moved, since it moved none; no client has connected to a server
+    publishing obs-4; the legacy bots have not been re-measured; and the 500-episode PPO smoke run
+    has not started.
 
 **Total: ~12 days.**
 

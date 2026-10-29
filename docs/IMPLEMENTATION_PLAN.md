@@ -205,7 +205,12 @@ Each milestone ends in something you can play or measure. Estimates are solo-dev
 - `ProjectileSim`: analytic, server-authoritative, segment raycast per step, owner-predicted tracer
   (`NETCODE.md` §4).
 - Loadout: hammer (melee shapecast), semi-auto pistol, and one of DMR / assault rifle / single-shot
-  grenade launcher. Selection on spawn and on each respawn.
+  grenade launcher. Selection on spawn and on each respawn. **Superseded by M11**
+  ([`LOADOUT.md`](LOADOUT.md)): the hammer and the pistol are still always carried, but the third
+  slot may hold no primary, and a kit adds nine pouches — spare magazines, the primary's
+  ammunition being finite, or hand grenades, at most three — and a vest. It is chosen at the weapon
+  locker's panel (`E`) for this life and the next, or on the death screen for the next spawn; the
+  default is the rifle, five magazines, three grenades and no vest.
 - Health, death, respawn, ground-team ticket counter.
 - Weapon models: reuse the existing geopick + pistol; everything else is a scaled `BoxMesh`.
 - **Done when:** two players on a dedicated server can kill each other at 100 m, leading a moving
@@ -405,7 +410,7 @@ the same shot (`Scripts/Sim/Spread.cs`).
 - **Ground observation and action:** self, weapon, the eight nearest contacts its own eyes have
   acquired, a 16-ray fan, the objective — and the twelve bytes of `InputFrame` back. Shipped as
   **145 floats, not 144**: the movement-state one-hot is seven wide because the FSM has seven
-  states, and a client decodes by the schema `welcome` publishes rather than by this document. The
+  states (150 since M11 appended the kit's five, `gdpyr-agent-obs-4`), and a client decodes by the schema `welcome` publishes rather than by this document. The
   radius-and-line-of-sight scan moved out of `BotPilot` into `Scripts/Bots/GroundSensor.cs` so that
   a bot's acquisition and a policy's observation are one filter and not two.
 - **Time:** real time by default (mixed human/bot/policy rounds), plus a **stepped** mode that will
@@ -585,7 +590,7 @@ when its card's **Unload** is pressed. A vertical take-off and landing **dropshi
 from the air. The design, decisions and milestones (V1–V7) are [`VEHICLES.md`](VEHICLES.md); it
 lifts the "Dropships and troop carriers" cut in §5.
 
-### M11 — Ground-force loadout: the locker panel, body armour and weight (~12 days) *L0–L4 built; L5–L8 planned*
+### M11 — Ground-force loadout: the locker panel, body armour and weight (~12 days) *L0–L8 built; engine-side checks partly taken*
 
 `E` at the weapon locker opens a loadout panel instead of cycling the large weapon: a primary (or
 none), nine pouches that each hold a spare magazine or a grenade, and no, light, medium or heavy body
@@ -593,7 +598,18 @@ armour. Every component weighs something and the total sets movement speed — t
 as today, a stripped one faster, a heavy one slower. Primary ammunition becomes finite, and a player
 within a metre of a locker is resupplied with ammunition, grenades and armour. The design,
 decisions (L-D1–L-D15) and phases (L0–L8) are [`LOADOUT.md`](LOADOUT.md); it changes §M2's loadout
-and supersedes [`NETCODE.md`](NETCODE.md) §10.6's locker.
+and supersedes [`NETCODE.md`](NETCODE.md) §10.6's locker, which that section now describes.
+
+Built: finite primary ammunition and a 32-byte player record (L1, `DemoFormat` version 4); one
+validator for a kit, which a person's request, a bot's and an agent's `loadout` op all go through
+(L2); body armour (L3); weight that sets speed (L4); resupply within a metre of the locker, paced
+and locked out for three seconds after a hit (L5); the locker's panel and the death screen's editor
+of the next spawn's kit (L6); HTN bots that rearm at the locker when dry, in kits for their roles,
+`--bot-kits role` being the default (L7); and the ground observation's kit block,
+`gdpyr-agent-obs-4` (L8). Each phase in LOADOUT.md §10 says what it ran and what it did not: no
+listen-host or dedicated-server check by a person has been taken for any of them, L3's and L4's
+scenarios first ran in L5's suite, and L8's engine-side checks — the suite against obs-4, the
+legacy baseline's re-measure and a PPO smoke run — have not been taken.
 
 **Total: ~29–37 engineering days to end of M8.**
 

@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using Gdpyr.Sim;
 using Gdpyr.Sim.Agent;
 using Xunit;
@@ -30,6 +31,30 @@ public class AgentInteropTests
 		Assert.Equal(AgentProtocol.HeaderBytes, ClientProtocol.HeaderBytes);
 		Assert.Equal(AgentProtocol.MaxFrameBytes, ClientProtocol.MaxFrameBytes);
 		Assert.Equal(AgentActionCodec.GroundSizeBytes, ClientAction.SizeBytes);
+	}
+
+	[Fact]
+	public void ThePythonClientNamesTheSameSchema()
+	{
+		// The third client is not compiled here, so its constant is read off the file:
+		// a bump that missed it would have it refuse every server (docs/AGENT_API.md §9.3).
+		string[] lines = File.ReadAllLines(Repo("tools/gdpyr_env/gdpyr_env.py"));
+		Assert.Contains($"SCHEMA_VERSION = \"{AgentProtocol.SchemaVersion}\"", lines);
+		Assert.Contains($"PROTOCOL_VERSION = {AgentProtocol.Version}", lines);
+	}
+
+	private static string Repo(string relative)
+	{
+		for (var at = new DirectoryInfo(AppContext.BaseDirectory); at != null; at = at.Parent)
+		{
+			string candidate = Path.Combine(at.FullName, relative);
+			if (File.Exists(candidate) && File.Exists(Path.Combine(at.FullName, "project.godot")))
+			{
+				return candidate;
+			}
+		}
+
+		throw new InvalidOperationException($"no {relative} above {AppContext.BaseDirectory}");
 	}
 
 	[Fact]

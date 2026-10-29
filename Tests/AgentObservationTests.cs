@@ -37,12 +37,13 @@ public class AgentObservationTests
 	[Fact]
 	public void TheVectorIsTheBlocksTheDesignNames()
 	{
-		// 4 round + 20 self + 11 weapon + 88 contacts + 16 rays + 6 objective.
+		// 4 round + 20 self + 11 weapon + 88 contacts + 16 rays + 6 objective + 5 kit.
 		// The design sketched a six-state movement one-hot; the shipped FSM has
-		// seven, so the self block is 20 and the vector is 145 rather than 144.
+		// seven, so the self block is 20 and obs-3's vector was 145 rather than 144.
+		// LOADOUT.md L8 appended the kit's five (obs-4).
 		Assert.Equal(7, AgentObservation.MovementStates);
-		Assert.Equal(145, AgentObservation.Floats);
-		Assert.Equal(145 * 4, AgentObservation.Bytes);
+		Assert.Equal(150, AgentObservation.Floats);
+		Assert.Equal(150 * 4, AgentObservation.Bytes);
 		Assert.Equal(88, AgentObservation.MaxContacts * AgentObservation.ContactFloats);
 	}
 
@@ -104,6 +105,8 @@ public class AgentObservationTests
 		Assert.Equal(35, AgentObservation.OffsetOf("contacts"));
 		Assert.Equal(123, AgentObservation.OffsetOf("rays"));
 		Assert.Equal(139, AgentObservation.OffsetOf("objective.bearing_sin_cos"));
+		Assert.Equal(145, AgentObservation.OffsetOf("kit.grenades"));
+		Assert.Equal(149, AgentObservation.OffsetOf("kit.load_scale"));
 		Assert.Equal(-1, AgentObservation.OffsetOf("nothing.at.all"));
 	}
 
@@ -355,6 +358,13 @@ public class AgentObservationTests
 				Pitch = 9f,
 				MoveSpeedScale = 9f,
 				Health = 1_000,
+				Grenades = 900,
+				Armour = 900,
+				ArmourMax = 1,
+				ArmourTier = 9,
+				LoadScale = 9f,
+				PrimaryReserve = 900,
+				PrimaryReserveMax = 30,
 			},
 			weapon: new AgentWeaponView { Ammo = 900, MagazineSize = 30, ReloadProgress = 9f },
 			contacts: contacts,
@@ -929,12 +939,12 @@ public class AgentObservationTests
 	// ---- the fields beyond the vector (docs/LOADOUT.md §9) ----------------------
 
 	[Fact]
-	public void TheVectorIsUnchangedAndTheKitRidesBesideIt()
+	public void TheKitRidesBesideTheVectorRawAndInItNormalized()
 	{
-		// L1's, L3's and L4's fields are extras, so obs-3's vector — what every trained
-		// policy reads — is still 145 floats until L8 appends its own.
-		Assert.Equal(145, AgentObservation.Floats);
-		Assert.Equal("gdpyr-agent-obs-3", AgentProtocol.SchemaVersion);
+		// L1's, L3's and L4's fields are extras; L8 appended five of them, normalized,
+		// to the vector, which is what moved the schema to obs-4. The extras stay.
+		Assert.Equal(150, AgentObservation.Floats);
+		Assert.Equal("gdpyr-agent-obs-4", AgentProtocol.SchemaVersion);
 		Assert.Equal(8, AgentObservation.ExtraFloats);
 
 		var names = new System.Collections.Generic.List<string>();
@@ -1039,5 +1049,134 @@ public class AgentObservationTests
 		Assert.Equal("self.load_scale", load.GetProperty("name").GetString());
 		Assert.Equal(0.70f, load.GetProperty("min").GetSingle());
 		Assert.Equal(1.12f, load.GetProperty("max").GetSingle());
+	}
+
+	// ---- the vector's kit block (docs/LOADOUT.md §9, L8) ------------------------
+
+	[Fact]
+	public void TheKitBlockIsAppended_SoObs3sOffsetsStand()
+	{
+		var names = new System.Collections.Generic.List<string>();
+		int at = AgentObservation.OffsetOf("kit.grenades");
+		foreach (AgentField field in AgentObservation.Fields)
+		{
+			if (field.Offset >= at)
+			{
+				names.Add(field.Name);
+				Assert.Equal(1, field.Count);
+			}
+		}
+
+		Assert.Equal(new[] { "kit.grenades", "kit.reserve", "kit.armour", "kit.armour_tier", "kit.load_scale" },
+			names);
+		Assert.Equal(AgentObservation.Floats - 5, at);
+	}
+
+	[Fact]
+	public void TheKitBlockIsTheKitNormalized()
+	{
+		// Rifle, 4 of 5 magazines left, 2 grenades, a medium vest at 47 of 60.
+		float[] values = Encode(self: new AgentSelfView
+		{
+			Grenades = 2, Armour = 47, ArmourMax = 60, ArmourTier = 2, LoadScale = 0.88f,
+			PrimaryReserve = 120, PrimaryReserveMax = 150,
+		});
+
+		Assert.Equal(2f / 3f, At(values, "kit.grenades"), 5);
+		Assert.Equal(0.8f, At(values, "kit.reserve"), 5);
+		Assert.Equal(47f / 60f, At(values, "kit.armour"), 5);
+		Assert.Equal(2f / 3f, At(values, "kit.armour_tier"), 5);
+		Assert.Equal(0.88f / 1.12f, At(values, "kit.load_scale"), 5);
+
+		// The vector's move-speed scale is still the product, clamped to 1: the kit's
+		// own scale is where a lighter kit than the default shows.
+		values = Encode(self: new AgentSelfView { MoveSpeedScale = 1.12f, LoadScale = 1.12f });
+		Assert.Equal(1f, At(values, "self.move_speed_scale"));
+		Assert.Equal(1f, At(values, "kit.load_scale"));
+		values = Encode(self: new AgentSelfView { MoveSpeedScale = 1f, LoadScale = 1f });
+		Assert.Equal(1f / 1.12f, At(values, "kit.load_scale"), 5);
+	}
+
+	[Fact]
+	public void TheReserveIsThePrimarysWhateverIsInTheHands()
+	{
+		// The pistol up, which reloads forever, and the primary with 60 of its 150: the
+		// block says whether the primary is worth going back to.
+		float[] values = Encode(
+			self: new AgentSelfView { PrimaryReserve = 60, PrimaryReserveMax = 150 },
+			weapon: new AgentWeaponView { Slot = SimConfig.SidearmSlot, Reserve = -1, ReserveMax = -1 });
+		Assert.Equal(0.4f, At(values, "kit.reserve"), 5);
+
+		// Dry is zero, with the pistol up or the primary.
+		values = Encode(self: new AgentSelfView { PrimaryReserve = 0, PrimaryReserveMax = 150 },
+			weapon: new AgentWeaponView { Reserve = -1, ReserveMax = -1 });
+		Assert.Equal(0f, At(values, "kit.reserve"));
+
+		// No primary, or a primary with no pouches, has nothing spare and never will:
+		// empty, not a division by zero.
+		values = Encode(self: new AgentSelfView { PrimaryReserve = 0, PrimaryReserveMax = 0 });
+		Assert.Equal(0f, At(values, "kit.reserve"));
+
+		// More than the kit holds is full.
+		values = Encode(self: new AgentSelfView { PrimaryReserve = 270, PrimaryReserveMax = 150 });
+		Assert.Equal(1f, At(values, "kit.reserve"));
+	}
+
+	[Fact]
+	public void NoVestIsZeroInBoth_NotAVestWithNoPointsLeft()
+	{
+		float[] values = Encode(self: new AgentSelfView { Armour = 0, ArmourMax = 0, ArmourTier = 0 });
+		Assert.Equal(0f, At(values, "kit.armour"));
+		Assert.Equal(0f, At(values, "kit.armour_tier"));
+
+		// A spent heavy vest: no points, still the tier — and still its weight.
+		values = Encode(self: new AgentSelfView { Armour = 0, ArmourMax = 100, ArmourTier = 3 });
+		Assert.Equal(0f, At(values, "kit.armour"));
+		Assert.Equal(1f, At(values, "kit.armour_tier"));
+	}
+
+	[Fact]
+	public void TheLoadScaleIsHeldToTheSpeedLinesCapAndFloor()
+	{
+		AgentField field = default;
+		foreach (AgentField candidate in AgentObservation.Fields)
+		{
+			if (candidate.Name == "kit.load_scale")
+			{
+				field = candidate;
+			}
+		}
+
+		float[] values = Encode(self: new AgentSelfView { LoadScale = 0f });
+		Assert.Equal(field.Min, At(values, "kit.load_scale"));
+		Assert.Equal(0.625f, field.Min, 5);
+		values = Encode(self: new AgentSelfView { LoadScale = 5f });
+		Assert.Equal(field.Max, At(values, "kit.load_scale"));
+	}
+
+	[Fact]
+	public void AJsonObservationNamesTheKitBlockBesideTheExtras()
+	{
+		var values = new float[AgentObservation.Floats];
+		AgentObservation.Encode(default,
+			new AgentSelfView { Grenades = 3, LoadScale = 1f, PrimaryReserve = 150, PrimaryReserveMax = 150 },
+			new AgentWeaponView { Reserve = 150, ReserveMax = 150 }, Array.Empty<AgentContactView>(),
+			Array.Empty<float>(), default, values);
+		float[] extras = { 3f, 150f, 150f, 0f, 0f, 0f, 9.3f, 1f };
+
+		var buffer = new ArrayBufferWriter<byte>(16384);
+		using (var writer = new Utf8JsonWriter(buffer))
+		{
+			writer.WriteStartObject();
+			AgentJson.WriteObservation(writer, AgentObservation.Fields, values, AgentObservation.ExtraFields, extras);
+			writer.WriteEndObject();
+		}
+
+		using JsonDocument document = JsonDocument.Parse(buffer.WrittenMemory);
+		JsonElement observation = document.RootElement.GetProperty("observation");
+		Assert.Equal(1f, observation.GetProperty("kit.grenades").GetSingle());
+		Assert.Equal(1f, observation.GetProperty("kit.reserve").GetSingle());
+		Assert.Equal(3f, observation.GetProperty("self.grenades").GetSingle());
+		Assert.Equal(150f, observation.GetProperty("weapon.reserve").GetSingle());
 	}
 }

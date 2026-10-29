@@ -134,7 +134,7 @@ opponent nobody asked for.
 A run prints a line every `--report-every` steps and a summary at the end:
 
 ```
-attached to 127.0.0.1:7900 seat 1073741824 | ground | step_mul 4 | 145 floats (1 frame(s)) | legacy bots
+attached to 127.0.0.1:7900 seat 1073741824 | ground | step_mul 4 | 150 floats (1 frame(s)) | legacy bots
 step 5000/200000 | episodes 12 | last episode 41.30 | reward in flight 3.90 | wins 5/9
 ground: 12 episodes, 9 decided, 5 won, 4 lost, win rate 55.6%, against legacy bots
 ```
@@ -205,12 +205,14 @@ Use `--realtime` when you want to watch a trained policy play alongside people.
 
 Three files, and none of them is the game's opinion.
 
-### Observation — 145 floats
+### Observation — 150 floats
 
 Built by the server, decoded by the client against the schema `welcome`
 publishes. The layout is in `AGENT_API.md` §6.1; the short version is: round
 state, self, weapon, the eight nearest contacts **its own eyes have acquired**, a
-16-ray forward fan, and the objective.
+16-ray forward fan, the objective, and since `gdpyr-agent-obs-4` the kit — grenades,
+spare rounds, the vest's points and tier, and the load's speed scale, each as a
+fraction ([`LOADOUT.md`](LOADOUT.md) §9).
 
 Two things worth knowing:
 
@@ -219,10 +221,20 @@ Two things worth knowing:
   through one pair of eyes. `--agent-omniscient` lifts it, stamps `omniscient` on
   every observation frame, and makes any result obtained under it a result about
   a different game.
-- **The design says 144 floats; the shipped vector is 145.** The movement-state
-  one-hot is seven wide, not six, because the FSM has seven states. Decode by the
+- **The design says 144 floats; the shipped vector is 150.** The movement-state
+  one-hot is seven wide, not six, because the FSM has seven states, which made
+  145; LOADOUT.md L8 appended the kit's five (`gdpyr-agent-obs-4`). Decode by the
   schema, not by the document — that is what the schema is for, and the client
-  refuses to decode a `schema_version` it does not recognise.
+  refuses to decode a `schema_version` it does not recognise. A ground checkpoint
+  trained on obs-3's 145 inputs does not fit 150, and `--load` of one fails; the
+  first 145 floats mean what they meant, so it is retrained, or carried across by
+  widening its first layer, which the trainer does not do.
+- **Ammunition is finite** since LOADOUT.md L1: a seat attached without a `kit`
+  carries the default kit — five spare magazines, three grenades, no vest — with
+  the primary its bot carried, and
+  a primary that runs dry stays dry until a respawn or the weapon locker's
+  resupply. The action space has no kit head; `attach`'s `kit` and the `loadout`
+  op choose one, and the shipped environment uses neither.
 
 `--history N` concatenates the last N observations into the state, which is the
 cheap answer to a partially observed environment when the policy has no memory of
@@ -427,6 +439,17 @@ is: they are the baseline every checkpoint in this repository has been measured
 against, and "beats the bot" means beats *that* bot ([`HTN_BOTS.md`](HTN_BOTS.md)
 §8, D5). `./scripts/evaluate.sh runs/ppo-ground --bot-ai htn` measures the same
 checkpoint against the HTN bots; report the two as two numbers, never one.
+
+**The legacy bots' world moved once since H6**, with the loadout
+([`LOADOUT.md`](LOADOUT.md) L1, L-D14): their primary's ammunition is finite —
+five spare magazines, three grenades, no vest, and the primary of their roster
+slot — and a dry primary is put away for the pistol; they never rearm at the
+locker and never take a role's kit, which are HTN's. What they decide is otherwise
+legacy's, but a win rate against them from before L1 was won against bots that
+reloaded forever, and is a different number. In twenty bot-only rounds before L1,
+reloading forever, none of their rifle lives fired more than five pouches hold,
+and 4.2 % of their launcher lives did (LOADOUT.md §10, L0). L8's re-measure of them, in rounds and against a checkpoint,
+is in LOADOUT.md §10 L8, with what of it was taken.
 
 Five rules, argued in [`RL_ARCHITECTURE.md`](RL_ARCHITECTURE.md) §6: a truncated
 episode has no outcome and is in neither column; claims about this environment are

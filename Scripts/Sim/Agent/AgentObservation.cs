@@ -43,16 +43,16 @@ public struct AgentSelfView
 	/// </summary>
 	public float MoveSpeedScale;
 
-	/// <summary>Hand grenades left (docs/LOADOUT.md §9). One of the extras, not the vector.</summary>
+	/// <summary>Hand grenades left (docs/LOADOUT.md §9). An extra, and over three the vector's <c>kit.grenades</c>.</summary>
 	public int Grenades;
 
-	/// <summary>The vest's points left (docs/LOADOUT.md §4.3), 0 with none. An extra.</summary>
+	/// <summary>The vest's points left (docs/LOADOUT.md §4.3), 0 with none. An extra; over <see cref="ArmourMax"/> the vector's <c>kit.armour</c>.</summary>
 	public int Armour;
 
 	/// <summary>What the vest has when full: its tier's points, 0 with none. An extra.</summary>
 	public int ArmourMax;
 
-	/// <summary>The vest, <see cref="BodyArmourTier"/>: 0 none to 3 heavy. An extra.</summary>
+	/// <summary>The vest, <see cref="BodyArmourTier"/>: 0 none to 3 heavy. An extra, and over three the vector's <c>kit.armour_tier</c>.</summary>
 	public int ArmourTier;
 
 	/// <summary>What the kit weighs [kg] (docs/LOADOUT.md §4.1). An extra.</summary>
@@ -61,9 +61,18 @@ public struct AgentSelfView
 	/// <summary>
 	/// The share of its speeds the kit leaves the seat (L-D4): 1 for the default kit,
 	/// 0.70 to 1.12 for any. The kit's factor alone, where <see cref="MoveSpeedScale"/> is
-	/// the product with the carry's. An extra.
+	/// the product with the carry's. An extra, and over 1.12 the vector's <c>kit.load_scale</c>.
 	/// </summary>
 	public float LoadScale;
+
+	/// <summary>
+	/// The primary's spare rounds, whatever is in the hands: 0 with no primary. Over
+	/// <see cref="PrimaryReserveMax"/> the vector's <c>kit.reserve</c>.
+	/// </summary>
+	public int PrimaryReserve;
+
+	/// <summary>What the kit's pouches hold for the primary when full: 0 with no primary or no pouches.</summary>
+	public int PrimaryReserveMax;
 }
 
 /// <summary>What the seat is holding.</summary>
@@ -84,7 +93,10 @@ public struct AgentWeaponView
 	public bool CarryingGun;
 	public bool MountedOnGun;
 
-	/// <summary>Spare rounds for the weapon in the hands, or -1 for one that reloads forever. An extra.</summary>
+	/// <summary>
+	/// Spare rounds for the weapon in the hands, or -1 for one that reloads forever. An extra:
+	/// the vector's <c>kit.reserve</c> is the primary's, <see cref="AgentSelfView.PrimaryReserve"/>.
+	/// </summary>
 	public int Reserve;
 
 	/// <summary>What the kit's pouches hold for it when full, or -1 for unlimited. An extra.</summary>
@@ -237,9 +249,10 @@ public static class AgentObservation
 	/// Fields beyond the vector, in raw units rather than normalized (docs/LOADOUT.md
 	/// §9, L-D15). Every JSON observation carries them by name; a binary one only when
 	/// its session asked at <c>hello</c> (<c>"extras": true</c>), after the vector and
-	/// any planes, with bit 3 of the frame's flags set. So the vector — and the
-	/// schema's version — stay what every trained policy reads until L8 appends its
-	/// floats. Offsets are into the extras, not the vector.
+	/// any planes, with bit 3 of the frame's flags set. Since <c>gdpyr-agent-obs-4</c>
+	/// the vector's kit block carries the kit they describe, normalized; these stay,
+	/// raw, for the harness and for a client that wants the numbers. Offsets are into
+	/// the extras, not the vector.
 	/// </summary>
 	public static ReadOnlySpan<AgentField> ExtraFields => ExtraTable;
 
@@ -334,6 +347,14 @@ public static class AgentObservation
 			Next("objective.ground_nodes", 1, 0f, 1f),
 			Next("objective.strategist_nodes", 1, 0f, 1f),
 			Next("objective.contested_nodes", 1, 0f, 1f),
+
+			// Kit (docs/LOADOUT.md §9, L8): appended, so every float before it keeps the
+			// offset obs-3 gave it.
+			Next("kit.grenades", 1, 0f, 1f),
+			Next("kit.reserve", 1, 0f, 1f),
+			Next("kit.armour", 1, 0f, 1f),
+			Next("kit.armour_tier", 1, 0f, 1f),
+			Next("kit.load_scale", 1, Loadout.MinSpeedScale / Loadout.MaxSpeedScale, 1f),
 		};
 	}
 
@@ -455,6 +476,18 @@ public static class AgentObservation
 		into[at++] = Math.Clamp(objective.GroundNodes / (float)SimConfig.MaxResourceNodes, 0f, 1f);
 		into[at++] = Math.Clamp(objective.StrategistNodes / (float)SimConfig.MaxResourceNodes, 0f, 1f);
 		into[at++] = Math.Clamp(objective.ContestedNodes / (float)SimConfig.MaxResourceNodes, 0f, 1f);
+
+		// ---- kit ------------------------------------------------------------
+		// The primary's reserve, not the hand's: with the pistol up, which reloads forever,
+		// the slot already says so, and this says whether the primary is worth going back to.
+		into[at++] = Math.Clamp(self.Grenades / (float)SimConfig.MaxGrenades, 0f, 1f);
+		into[at++] = self.PrimaryReserveMax > 0
+			? Math.Clamp(self.PrimaryReserve / (float)self.PrimaryReserveMax, 0f, 1f)
+			: 0f;
+		into[at++] = self.ArmourMax > 0 ? Math.Clamp(self.Armour / (float)self.ArmourMax, 0f, 1f) : 0f;
+		into[at++] = Math.Clamp(self.ArmourTier / (float)BodyArmourTier.Heavy, 0f, 1f);
+		into[at++] = Math.Clamp(self.LoadScale, Loadout.MinSpeedScale, Loadout.MaxSpeedScale)
+			/ Loadout.MaxSpeedScale;
 
 		return at;
 	}
