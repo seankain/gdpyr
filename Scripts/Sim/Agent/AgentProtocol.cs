@@ -50,8 +50,13 @@ public static class AgentProtocol
 	/// micro-autonomy on: each unit of the strategist vector gained a float saying
 	/// whether it is (§5.9), so the unit block's records are 15 floats, not 14, and
 	/// every offset after the block moved. The ground layout is unchanged again.
+	///
+	/// Bumped to <c>-4</c> by docs/LOADOUT.md L8: the ground vector gained a kit block
+	/// of five floats at its end — grenades, reserve, armour, the vest's tier and the
+	/// load's scale — so it is 150 floats, not 145. Every offset before the block is
+	/// where <c>-3</c> put it; the strategist layout is unchanged.
 	/// </summary>
-	public const string SchemaVersion = "gdpyr-agent-obs-3";
+	public const string SchemaVersion = "gdpyr-agent-obs-4";
 
 	/// <summary>The u32 length prefix itself.</summary>
 	public const int LengthBytes = 4;

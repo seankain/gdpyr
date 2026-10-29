@@ -106,6 +106,10 @@ public sealed class AgentGroundView
 		ArmourTier = (int)player.Vest.Tier,
 		LoadKg = player.LoadKg,
 		LoadScale = player.LoadScale,
+
+		// What the locker's resupply would fill, and up to what (docs/LOADOUT.md §9).
+		PrimaryReserve = player.Carried.Reserve,
+		PrimaryReserveMax = Loadout.ReserveFor(player.Loadout, WeaponCatalog.CarryFor(player.Loadout.Large)),
 	};
 
 	private static AgentWeaponView Weapon(PlayerCombat player, fps_controller character, uint tick)
