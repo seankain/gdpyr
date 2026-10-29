@@ -89,7 +89,8 @@ The loadout is the bot's, by roster slot: rifle, DMR, launcher, DMR, rifle, laun
 a weapon locker and ask for a kit with the `loadout` op (§7.1, [`LOADOUT.md`](LOADOUT.md) §5.3), through
 the validator a person's request goes through. A kit taken there is also the next spawn's, so a
 `reset` gives each attached seat back the kit it was attached with — its `attach`'s `kit`, its last
-`spawn`'s, else its bot's — and episodes start alike.
+`spawn`'s, else the default kit with its bot's primary, even on a server whose bots carry role kits
+(`--bot-kits role`, [`LOADOUT.md`](LOADOUT.md) §8) — and episodes start alike.
 
 The same shape on the strategist side: an attached strategist seat skips `BotStrategist.ServerTick`
 and applies the agent's commands through `ServerIssueOrder` / `ServerQueueUnit` instead, so an
@@ -492,7 +493,7 @@ obtained by cheating is not a result about this game.
 | `op` | Direction | Purpose |
 |---|---|---|
 | `hello` | → | protocol version, observation format, token |
-| `welcome` | ← | tick rate, build id, observation schema, current seed, `bot_ai` — what the server's bots decide with, `legacy` or `htn` ([`HTN_BOTS.md`](HTN_BOTS.md) §8, D5; added in H6, and absent from a server that predates it, whose bots were legacy) — and `unit_autonomy`, what the strategist side's new units start with, `on` or `off` ([`TACTICS.md`](TACTICS.md) §5.9; absent from a server that predates it, whose units had no tactics: off) |
+| `welcome` | ← | tick rate, build id, observation schema, current seed, `bot_ai` — what the server's bots decide with, `legacy` or `htn` ([`HTN_BOTS.md`](HTN_BOTS.md) §8, D5; added in H6, and absent from a server that predates it, whose bots were legacy) — `bot_kits`, what the server's ground bots carry besides their primary, `default` or `role` ([`LOADOUT.md`](LOADOUT.md) §8; `role` only under `htn`; absent from a server that predates it, whose bots carried the default kit) — and `unit_autonomy`, what the strategist side's new units start with, `on` or `off` ([`TACTICS.md`](TACTICS.md) §5.9; absent from a server that predates it, whose units had no tactics: off) |
 | `config` | → | `mode` (realtime/stepped), `step_timeout_ms`, feature planes on/off |
 | `list_seats` | → ← | every roster slot: peer id, team, controller (human/bot/agent), alive |
 | `list_units` | → ← | a strategist seat's army, in the order its observation carries it, **with the ids an order names** (§7.5) |
@@ -857,6 +858,12 @@ command line overrides it, as `--bot-ai` overrides `bot_ai` — which is how one
 the tactics are checked with them off. A server already listening (`--attach`) whose `welcome`
 names another default is a harness error, not a run. Anything but `on` or `off`, and an `autonomy` on
 a seat or a structure, are refused when the file is read.
+
+**A scenario can name what the ground bots carry** ([`LOADOUT.md`](LOADOUT.md) §8): `"bot_kits":
+"role"` starts the harness's server with `--bot-kits role`, and `"default"` with `--bot-kits
+default`; `--bot-kits` on the harness's command line overrides it, which is how one file's claims
+are checked in either. A server whose `welcome` names other kits is a harness error, not a run.
+Anything but `default` or `role` is refused when the file is read.
 
 **A strategist seat's script is commands, not input.** Its steps carry `commands` instead of
 `move`, `look` and `buttons`, naming units by spawn label:

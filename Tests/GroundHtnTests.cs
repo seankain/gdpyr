@@ -50,6 +50,7 @@ public class GroundHtnTests
 			C.HasLocker = true;
 			C.LockerPoint = Locker;
 			C.LockerYaw = LockerYaw;
+			C.KitHoldsSpares = true;
 			C.Position = new Vector3(0f, 0.5f, -40f);
 
 			// A spot the pilot found; the Cover fact says whether it is in play.
@@ -305,6 +306,226 @@ public class GroundHtnTests
 		bot.Tick();
 
 		Assert.Equal("[Standoff]", bot.LastPlan);
+	}
+
+	// ---- rearm (docs/LOADOUT.md §8) -----------------------------------------
+
+	/// <summary>A bot whose primary is dry, with nothing around it.</summary>
+	private static Bot Dry()
+	{
+		var bot = new Bot();
+		bot.Sense(GroundFact.Ammo, AmmoBand.Dry);
+		return bot;
+	}
+
+	[Fact]
+	public void ADryBotWithNothingInSight_RunsToTheLocker_AndStaysUntilItsKitIsFull()
+	{
+		Bot bot = Dry();
+		bot.Tick();
+
+		Assert.Equal("[Rearm]", bot.LastPlan);
+		Assert.Equal(GroundGoal.Rearm, bot.Goal);
+		Assert.Equal(GroundMove.Run, bot.C.Intent.Move);
+		Assert.Equal(LockerSupply.StandPoint(Locker, LockerYaw), bot.C.Intent.Point);
+		Assert.False(bot.C.Intent.TakeLauncher);
+
+		// At the locker it asks for nothing: the resupply fills whoever is in its reach.
+		bot.C.Position = LockerSupply.StandPoint(Locker, LockerYaw);
+		bot.Tick(30);
+		Assert.Equal(GroundGoal.Rearm, bot.Goal);
+		Assert.Equal(GroundMove.Point, bot.C.Intent.Move);
+		Assert.False(bot.C.Intent.TakeLauncher);
+
+		// A pouch in: no longer dry, and it stays for the rest.
+		bot.Sense(GroundFact.Ammo, AmmoBand.Low);
+		bot.Tick(30);
+		Assert.Equal(GroundGoal.Rearm, bot.Goal);
+
+		bot.Sense(GroundFact.Ammo, AmmoBand.Ok);
+		bot.C.KitFull = true;
+		bot.Tick(2);
+
+		Assert.Equal(GroundGoal.Standoff, bot.Goal);
+		Assert.Equal(0, bot.C.FailedRearms);
+	}
+
+	[Fact]
+	public void ADryBotStaysAtTheLockerSixSecondsAtMost_FromWhenItGetsThere()
+	{
+		Bot bot = Dry();
+		bot.Tick(20);
+		bot.C.Position = LockerSupply.StandPoint(Locker, LockerYaw);
+		bot.Tick();
+		Assert.Equal(GroundGoal.Rearm, bot.Goal);
+		int plans = bot.Plans.Count;
+
+		// Shoved off its spot halfway: walked back, and the stay is not started again.
+		bot.Tick(Ground.RearmStayTicks / 2);
+		bot.C.Position = Locker + new Vector3(0f, 0f, -3f);
+		bot.Tick();
+		Assert.Equal(GroundMove.Point, bot.C.Intent.Move);
+		bot.C.Position = LockerSupply.StandPoint(Locker, LockerYaw);
+		bot.Tick(Ground.RearmStayTicks / 2 - 2);
+		Assert.Equal(plans, bot.Plans.Count);
+
+		// Six seconds there and still dry — everything was locked out — so it plans the
+		// stay again rather than walking off with the pistol.
+		bot.Tick(2);
+		Assert.Equal(plans + 1, bot.Plans.Count);
+		Assert.Equal("[Rearm]", bot.LastPlan);
+		Assert.Equal(6 * SimConfig.TickRate, Ground.RearmStayTicks);
+	}
+
+	[Fact]
+	public void ADryBotInAFightItCanSee_FightsWithThePistol_RatherThanWalkingAway()
+	{
+		Bot bot = Seeing(Threat.Infantry);
+		bot.Sense(GroundFact.Ammo, AmmoBand.Dry);
+		bot.Tick();
+
+		Assert.Equal("[Engage]", bot.LastPlan);
+	}
+
+	[Fact]
+	public void AFightComingIntoSight_EndsTheWalk_AndItsEndStartsItAgain()
+	{
+		Bot bot = Dry();
+		bot.Tick(10);
+		Assert.Equal(GroundGoal.Rearm, bot.Goal);
+
+		bot.Sense(GroundFact.Contact, ContactLevel.Visible);
+		bot.Sense(GroundFact.ThreatKind, Threat.Infantry);
+		bot.Tick();
+		Assert.Equal(GroundGoal.Engage, bot.Goal);
+
+		bot.Sense(GroundFact.Contact, ContactLevel.None);
+		bot.Tick(2);
+		Assert.Equal(GroundGoal.Rearm, bot.Goal);
+	}
+
+	[Fact]
+	public void AGhost_DoesNotKeepADryBotFromTheLocker()
+	{
+		Bot bot = Dry();
+		bot.Sense(GroundFact.Contact, ContactLevel.Ghost);
+		bot.Sense(GroundFact.ThreatKind, Threat.Infantry);
+		bot.Tick();
+
+		Assert.Equal("[Rearm]", bot.LastPlan);
+	}
+
+	[Fact]
+	public void UnderFire_ADryBotDoesNotWalkToTheLocker_AndAWalkUnderwayStops()
+	{
+		Bot pinned = Dry();
+		UnderFire(pinned, 3);
+		Assert.NotEqual(GroundGoal.Rearm, pinned.Goal);
+
+		Bot walking = Dry();
+		walking.Tick(10);
+		Assert.Equal(GroundGoal.Rearm, walking.Goal);
+		UnderFire(walking);
+		Assert.NotEqual(GroundGoal.Rearm, walking.Goal);
+	}
+
+	[Theory]
+	[InlineData(AmmoBand.Ok)]
+	[InlineData(AmmoBand.Low)]
+	public void NotDry_ItDoesNotRearm(AmmoBand ammo)
+	{
+		var bot = new Bot();
+		bot.Sense(GroundFact.Ammo, ammo);
+		bot.Tick();
+
+		Assert.Equal("[Standoff]", bot.LastPlan);
+	}
+
+	[Fact]
+	public void NoLocker_OrAKitWithNoSpareRounds_IsNoReasonToGo()
+	{
+		Bot noLocker = Dry();
+		noLocker.C.HasLocker = false;
+		noLocker.Tick();
+		Assert.Equal("[Standoff]", noLocker.LastPlan);
+
+		Bot noPouches = Dry();
+		noPouches.C.KitHoldsSpares = false;
+		noPouches.Tick();
+		Assert.Equal("[Standoff]", noPouches.LastPlan);
+		Assert.Equal(0, noPouches.C.FailedRearms);
+	}
+
+	[Fact]
+	public void AWalkThatTakesTooLong_IsGivenUp_AndTriedAgainThirtySecondsLater()
+	{
+		Bot bot = Dry();
+		bot.Tick(Ground.PathToLockerTimeoutTicks + 2);
+
+		Assert.Equal(1, bot.C.FailedRearms);
+		Assert.Equal(GroundGoal.Standoff, bot.Goal);
+		Assert.Equal(0, bot.C.FailedLockerTrips);
+
+		// Nothing changes around it while it waits: the scan's end of the wait is what
+		// makes it look again.
+		var scan = new GroundSense { HealthFraction = 1f, NearestFriendMeters = float.MaxValue, Ammo = AmmoBand.Dry };
+		for (int t = 0; t < Ground.RearmRetryTicks; t += 10)
+		{
+			bot.C.Encode(scan);
+			bot.Tick(10);
+			Assert.Equal(GroundGoal.Standoff, bot.Goal);
+		}
+
+		bot.C.Encode(scan);
+		bot.Tick();
+		Assert.Equal(GroundGoal.Rearm, bot.Goal);
+		Assert.Equal(SimConfig.TickRate * 30, Ground.RearmRetryTicks);
+	}
+
+	[Fact]
+	public void ADryLockerRunnerFacingArmour_RunsForItsLauncher()
+	{
+		Bot bot = Seeing(Threat.Armour);
+		bot.Sense(GroundFact.Role, GroundRole.LockerRunner);
+		bot.Sense(GroundFact.Ammo, AmmoBand.Dry);
+		bot.Tick();
+
+		Assert.Equal("[PathToLocker, UseLocker, EngageArmour]", bot.LastPlan);
+	}
+
+	[Theory]
+	[InlineData(30, 150, false, AmmoBand.Ok)]
+	[InlineData(0, 30, false, AmmoBand.Ok)]
+	[InlineData(12, 29, false, AmmoBand.Low)]
+	[InlineData(30, 0, false, AmmoBand.Low)]
+	[InlineData(0, 0, false, AmmoBand.Dry)]
+	[InlineData(0, 0, true, AmmoBand.Low)]
+	public void Ammo_IsDryWithNothingLeft_LowUnderAMagazineSpare(int magazine, int reserve, bool reloading,
+		AmmoBand expected)
+	{
+		var rifle = new WeaponState { DefinitionId = 3, Ammo = (short)magazine, Reserve = (short)reserve,
+			ReloadEndTick = reloading ? 100u : 0u };
+
+		Assert.Equal(expected, AmmoBands.Band(rifle, 30));
+	}
+
+	[Fact]
+	public void Ammo_IsOkWithNoPrimary_OrOneThatReloadsForever()
+	{
+		Assert.Equal(AmmoBand.Ok, AmmoBands.Band(WeaponState.Empty, 0));
+		Assert.Equal(AmmoBand.Ok, AmmoBands.Band(new WeaponState { DefinitionId = 1, Ammo = 0, Reserve = -1 }, 12));
+
+		// The launcher's tube is its magazine: one in it and none spare is low.
+		Assert.Equal(AmmoBand.Low, AmmoBands.Band(new WeaponState { DefinitionId = 4, Ammo = 1, Reserve = 0 }, 1));
+		Assert.Equal(AmmoBand.Ok, AmmoBands.Band(new WeaponState { DefinitionId = 4, Ammo = 0, Reserve = 2 }, 1));
+	}
+
+	[Fact]
+	public void Ammo_IsEncodedFromTheSense()
+	{
+		Assert.Equal((byte)AmmoBand.Dry, Encoded(new GroundSense { Ammo = AmmoBand.Dry }).Get(GroundFact.Ammo));
+		Assert.Equal((byte)AmmoBand.Ok, Encoded(new GroundSense()).Get(GroundFact.Ammo));
+		Assert.Equal("Dry", Gdpyr.Sim.AiDebug.HtnSchema.Ground.FactValue((int)GroundFact.Ammo, (byte)AmmoBand.Dry));
 	}
 
 	[Fact]
@@ -721,6 +942,8 @@ public class GroundHtnTests
 		yield return new object[] { GroundGoal.HoldCover,
 			new[] { (GroundFact.Contact, (byte)ContactLevel.Visible), (GroundFact.Cover, (byte)CoverState.In) },
 			(GroundFact.Contact, (byte)ContactLevel.None) };
+		yield return new object[] { GroundGoal.Rearm, new[] { (GroundFact.Ammo, (byte)AmmoBand.Dry) },
+			(GroundFact.Suppressed, (byte)1) };
 	}
 
 	[Theory]
@@ -1111,11 +1334,12 @@ public class GroundHtnTests
 	// ---- sharing and allocation --------------------------------------------
 
 	/// <summary>How many situations <see cref="Situation"/> has.</summary>
-	private const int Situations = 11;
+	private const int Situations = 12;
 
 	/// <summary>
-	/// Eleven situations: one per branch of §5.1, as facts, and a bot in its spot behind
-	/// cover pinned down by a gunner (docs/TACTICS.md §5.7).
+	/// Twelve situations: one per branch of §5.1, as facts, a bot in its spot behind
+	/// cover pinned down by a gunner (docs/TACTICS.md §5.7), and a dry one with nothing
+	/// in sight (docs/LOADOUT.md §8).
 	/// </summary>
 	private static void Situation(GroundContext c, int phase)
 	{
@@ -1142,6 +1366,7 @@ public class GroundHtnTests
 		c.Sense(GroundFact.MagazineLow, phase == 7);
 		c.Sense(GroundFact.Sweep, phase == 8);
 		c.Sense(GroundFact.InsideDefences, phase == 9);
+		c.Sense(GroundFact.Ammo, (byte)(phase == 11 ? AmmoBand.Dry : AmmoBand.Ok));
 	}
 
 	private static ulong[] Traces(int agents, int ticks)
@@ -1154,6 +1379,7 @@ public class GroundHtnTests
 			contexts[i] = planning.CreateContext();
 			contexts[i].HasZone = true;
 			contexts[i].HasLocker = true;
+			contexts[i].KitHoldsSpares = true;
 			hashes[i] = 14695981039346656037ul;
 		}
 
@@ -1200,6 +1426,7 @@ public class GroundHtnTests
 			contexts[i] = planning.CreateContext();
 			contexts[i].HasZone = true;
 			contexts[i].HasLocker = true;
+			contexts[i].KitHoldsSpares = true;
 		}
 
 		int dirtied = 0;

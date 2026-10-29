@@ -69,6 +69,14 @@ public partial class GameModeDefinition : Resource
 	public BotAi BotAi = BotAiNames.Default;
 
 	/// <summary>
+	/// What ground bots carry besides their roster slot's primary (docs/LOADOUT.md §8):
+	/// the default kit's pouches and no vest, or a kit for the primary's role — the
+	/// default since L7. Under <c>htn</c> only; <c>--bot-kits</c> overrides it.
+	/// </summary>
+	[Export]
+	public BotKits BotKits = BotKitNames.Fallback;
+
+	/// <summary>
 	/// Whether the strategist side's new units start with micro-autonomy on
 	/// (docs/TACTICS.md §5.9); <c>--unit-autonomy</c> overrides it, and a strategist
 	/// changes it in game. On since the tactics were measured (T8); off is how a round

@@ -87,6 +87,7 @@ public static class AiDebugText
 								? " · a legacy bot: --bot-ai legacy has no plan to show"
 								: " · driven by an external policy: no plan to show");
 					text.Append($" · health {health}");
+					AppendKit(text, inspect);
 					return text.ToString();
 				}
 
@@ -205,7 +206,60 @@ public static class AiDebugText
 			text.Append($" · {resupplies} resupplies given up");
 		}
 
+		if (inspect.TryValue(AiValueKey.FailedRearms, out int rearms) && rearms > 0)
+		{
+			text.Append($" · {rearms} rearms given up");
+		}
+
+		AppendKit(text, inspect);
 		return text.ToString();
+	}
+
+	/// <summary>
+	/// A ground player's kit and what is left of it, on a line of its own (docs/LOADOUT.md
+	/// §8): <c>kit rifle · 4 mags · 2 grenades · light vest · rounds 30 + 120 · grenades 2 · vest 35</c>.
+	/// Nothing for anything else.
+	/// </summary>
+	private static void AppendKit(StringBuilder text, AiInspect inspect)
+	{
+		if (!inspect.TryValue(AiValueKey.KitPrimary, out int primary))
+		{
+			return;
+		}
+
+		inspect.TryValue(AiValueKey.KitMagazines, out int magazines);
+		inspect.TryValue(AiValueKey.KitGrenades, out int kitGrenades);
+		inspect.TryValue(AiValueKey.KitVest, out int vest);
+		inspect.TryValue(AiValueKey.Magazine, out int magazine);
+		inspect.TryValue(AiValueKey.Reserve, out int reserve);
+		inspect.TryValue(AiValueKey.Grenades, out int grenades);
+		inspect.TryValue(AiValueKey.VestPoints, out int points);
+
+		bool armed = primary > 0 && primary < Loadout.PrimaryNames.Length;
+		text.Append("\nkit ").Append(armed ? Loadout.PrimaryNames[primary] : "no primary");
+		if (armed)
+		{
+			text.Append($" · {magazines} mag{(magazines == 1 ? string.Empty : "s")}");
+		}
+
+		text.Append($" · {kitGrenades} grenade{(kitGrenades == 1 ? string.Empty : "s")}");
+		bool worn = vest > 0 && vest < Loadout.ArmourNames.Length;
+		text.Append(worn ? $" · {Loadout.ArmourNames[vest]} vest" : " · no vest");
+
+		if (armed)
+		{
+			text.Append($" · rounds {magazine} + {(reserve < 0 ? "∞" : reserve.ToString())}");
+			if (magazine <= 0 && reserve == 0)
+			{
+				text.Append(" dry");
+			}
+		}
+
+		text.Append($" · grenades {grenades}");
+		if (worn)
+		{
+			text.Append($" · vest {points}");
+		}
 	}
 
 	/// <summary>What an owner id names: <c>unit 12</c>, <c>bot 3</c>, <c>structure 4</c>, <c>nothing</c>.</summary>

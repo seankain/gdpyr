@@ -146,6 +146,10 @@ public sealed partial class AgentServer
 			if (PlayerManager.Instance?.Bots is { } bots)
 			{
 				writer.WriteString("bot_ai", BotAiNames.Name(bots.Ai));
+
+				// And what the ground bots carry, so a claim about a kit is checked against
+				// the server it ran on (docs/LOADOUT.md §8).
+				writer.WriteString("bot_kits", BotKitNames.Name(bots.Kits));
 			}
 
 			// What the strategist side's new units start with (docs/TACTICS.md §5.9), so a
@@ -428,6 +432,17 @@ public sealed partial class AgentServer
 
 		if (team == Team.GroundForce && player != null)
 		{
+			// A seat attached with no kit of its own keeps its bot's primary and takes the
+			// default kit's pouches and vest, whatever the bots carry (docs/LOADOUT.md L-D3,
+			// §8): a policy's body is not a role's, and its episodes start alike under
+			// either --bot-kits. Its next spawn is in it; this life ends at the reset.
+			if (!kitted)
+			{
+				LoadoutSelection own = WeaponCatalog.DefaultLoadout;
+				own.Large = player.PendingLoadout.Large;
+				player.PendingLoadout = WeaponCatalog.Sanitize(own);
+			}
+
 			seat.Kit = player.PendingLoadout;
 		}
 

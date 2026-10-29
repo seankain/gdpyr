@@ -79,6 +79,26 @@ public class ScenarioTests
 	}
 
 	[Fact]
+	public void AScenarioMayNameWhatItsBotsCarry()
+	{
+		// docs/LOADOUT.md §8: the harness starts its server with the scenario's bot kits
+		// unless --bot-kits says otherwise.
+		Scenario role = Scenario.Parse("""
+			{ "bot_kits": "role", "assert": [ { "metric": "events.kill.count", "op": ">=", "value": 1 } ] }
+			""");
+		Assert.Equal("role", role.BotKits);
+		Assert.Null(Scenario.Parse(Minimal).BotKits);
+
+		ScenarioException error = Assert.Throws<ScenarioException>(() => Scenario.Parse("""
+			{ "bot_kits": "heavy", "assert": [ { "metric": "events.kill.count", "op": ">=", "value": 1 } ] }
+			"""));
+		Assert.Contains("bot_kits", error.Message);
+		Assert.Throws<ScenarioException>(() => Scenario.Parse("""
+			{ "bot_kits": 1, "assert": [ { "metric": "events.kill.count", "op": ">=", "value": 1 } ] }
+			"""));
+	}
+
+	[Fact]
 	public void AScenarioMayNameWhatItsUnitsStartWith()
 	{
 		// docs/TACTICS.md §5.9: a claim about the tactics names them, and the harness

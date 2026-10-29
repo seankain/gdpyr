@@ -1226,9 +1226,14 @@ public partial class CombatManager : Node
 		// ground-force death and costs the pool a ticket.
 		Match.RegisterGroundDeath(tick);
 
+		// Whether the life ended with nothing left for the primary, magazine or pouches: what
+		// a kit is sized against (docs/LOADOUT.md L0, L7).
+		WeaponState primary = victim.Weapons[SimConfig.LargeSlot];
+		bool dry = !primary.IsEmpty && primary.Ammo <= 0 && primary.Reserve == 0;
 		GD.Print($"[combat] peer {victim.PeerId} killed by {DescribeOwner(attackerOwnerId)}"
 			+ $" | tickets {Match.GroundTickets}"
-			+ $" | {WeaponCatalog.NameOf(victim.Loadout.Large)} {victim.PrimaryRoundsThisLife} rounds this life");
+			+ $" | {WeaponCatalog.NameOf(victim.Loadout.Large)} {victim.PrimaryRoundsThisLife} rounds this life"
+			+ (dry ? ", dry" : string.Empty));
 		return HitFlags.Killed;
 	}
 

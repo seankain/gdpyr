@@ -1,0 +1,26 @@
+{
+  "name": "with the bots in role kits, a seat on the rifle bot's slot starts its episodes in the default kit",
+  "bot_ai": "htn",
+  "bot_kits": "role",
+  "seeds": [1, 2],
+  "duration_ticks": 300,
+  "warmup_ticks": 60,
+  "roster": { "ground": 2, "strategists": 0 },
+
+  "seats": [
+    { "id": "rifleman", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json" }
+  ],
+
+  "spawns": [
+    { "peer": "rifleman", "at": [110, 1, 110], "look": [0, 0] }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "observation.rifleman.weapon.reserve_max.last", "op": "==", "value": 150 },
+    { "metric": "observation.rifleman.self.grenades.last", "op": "==", "value": 3 },
+    { "metric": "observation.rifleman.self.armour_tier.last", "op": "==", "value": 0 },
+    { "metric": "observation.rifleman.self.armour_max.last", "op": "==", "value": 0 },
+    { "metric": "observation.rifleman.self.load_scale.last", "op": "==", "value": 1, "tolerance": 0.001 }
+  ]
+}

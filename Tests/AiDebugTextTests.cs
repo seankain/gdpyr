@@ -228,6 +228,71 @@ public class AiDebugTextTests
 		Assert.Contains(expected, AiDebugText.Header(inspect, new AiDebugFrame(), HtnTextStyle.Plain));
 	}
 
+	/// <summary>A ground player's kit values, as the publisher adds them (docs/LOADOUT.md §8).</summary>
+	private static void AddKit(AiInspect inspect, int primary, int magazines, int grenades, BodyArmourTier vest,
+		int magazine, int reserve, int carried, int points)
+	{
+		inspect.Add(AiValueKey.KitPrimary, primary);
+		inspect.Add(AiValueKey.KitMagazines, magazines);
+		inspect.Add(AiValueKey.KitGrenades, grenades);
+		inspect.Add(AiValueKey.KitVest, (int)vest);
+		inspect.Add(AiValueKey.Magazine, magazine);
+		inspect.Add(AiValueKey.Reserve, reserve);
+		inspect.Add(AiValueKey.Grenades, carried);
+		inspect.Add(AiValueKey.VestPoints, points);
+	}
+
+	[Fact]
+	public void AnInspectedBot_SaysItsKitAndWhatIsLeftOfIt_OnALineOfItsOwn()
+	{
+		var bot = new AiInspect { Ref = AiEntityRef.Player(BotRoster.PeerIdFor(0)), Planning = true,
+			Goal = (byte)GroundGoal.Rearm };
+		bot.Add(AiValueKey.Health, 64);
+		bot.Add(AiValueKey.Role, (int)GroundRole.Assault);
+		bot.Add(AiValueKey.FailedRearms, 1);
+
+		// Rifle is the second of the large weapons: DMR, rifle, launcher.
+		AddKit(bot, 2, 4, 2, BodyArmourTier.Light, 0, 0, 1, 12);
+
+		string[] lines = AiDebugText.Header(bot, new AiDebugFrame(), HtnTextStyle.Plain).Split('\n');
+		Assert.Equal("goal Rearm (Resupply) · 1 rearms given up", lines[1]);
+		Assert.Equal("kit rifle · 4 mags · 2 grenades · light vest · rounds 0 + 0 dry · grenades 1 · vest 12", lines[2]);
+	}
+
+	[Fact]
+	public void APersonsKit_IsShownToo_AndNoPrimaryOrVestSaysSo()
+	{
+		var person = new AiInspect { Ref = AiEntityRef.Player(77) };
+		person.Add(AiValueKey.Person, 1);
+		person.Add(AiValueKey.Team, (int)Team.GroundForce);
+		person.Add(AiValueKey.Health, 100);
+		AddKit(person, 0, 0, 3, BodyArmourTier.None, 0, 0, 3, 0);
+
+		string[] lines = AiDebugText.Header(person, new AiDebugFrame(), HtnTextStyle.Plain).Split('\n');
+		Assert.Contains("a person", lines[0]);
+		Assert.Equal("kit no primary · 3 grenades · no vest · grenades 3", lines[1]);
+
+		// A strategist has no kit, and nothing is said about one.
+		var strategist = new AiInspect { Ref = AiEntityRef.Player(78) };
+		strategist.Add(AiValueKey.Team, (int)Team.Strategist);
+		Assert.DoesNotContain("kit", AiDebugText.Header(strategist, new AiDebugFrame(), HtnTextStyle.Plain));
+	}
+
+	[Fact]
+	public void TheKitsValues_SurviveTheWire()
+	{
+		var inspect = new AiInspect { Ref = AiEntityRef.Player(BotRoster.PeerIdFor(1)) };
+		inspect.Add(AiValueKey.Team, (int)Team.GroundForce);
+		AddKit(inspect, 3, 3, 3, BodyArmourTier.Medium, 1, 4, 2, 60);
+		var frame = new AiDebugFrame { Tick = 9 };
+		frame.Inspected.Add(inspect);
+
+		Assert.True(AiDebugCodec.TryDecodeFrame(AiDebugCodec.EncodeFrame(frame), out AiDebugFrame back));
+		string text = AiDebugText.Header(Assert.Single(back.Inspected), back, HtnTextStyle.Plain);
+
+		Assert.Contains("kit launcher · 3 mags · 3 grenades · medium vest · rounds 1 + 4 · grenades 2 · vest 60", text);
+	}
+
 	[Fact]
 	public void APassenger_SaysWhatItIsRidingIn_AndAVehicle_WhoIsAboard()
 	{

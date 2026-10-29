@@ -32,13 +32,14 @@ dedicated-server authoritative.
   boarding and unloading, and a vertical take-off and landing dropship
 - [`docs/LOADOUT.md`](docs/LOADOUT.md) — the ground force's loadout, planned: a locker panel for
   the primary, spare magazines or grenades and body armour, weight that sets movement speed, and
-  resupply at the locker; L0–L8, of which L0–L6 are built — how much bots fire in a life,
+  resupply at the locker; L0–L8, of which L0–L7 are built — how much bots fire in a life,
   which raised the default kit to five spare magazines; the kit itself: finite primary
   ammunition, no primary at all, and the player record that carries both; taking a kit at the
   locker, one validator for a person, a bot and an agent; body armour, a vest that takes a
   share of each hit until its points run out; weight, which sets how fast a kit moves;
-  resupply within a metre of the locker, paced, and not under fire; and the locker's panel on
-  `E`, which is also the death screen's editor of the next spawn's kit
+  resupply within a metre of the locker, paced, and not under fire; the locker's panel on
+  `E`, which is also the death screen's editor of the next spawn's kit; and bots that rearm at the
+  locker when they run dry, in kits for their roles
 - [`docs/LAN.md`](docs/LAN.md) — hosting a room of machines from a checkout, with a dev build
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — AWS EC2 dedicated-server runbook
 
@@ -124,11 +125,13 @@ Four more flags change the computer players the authority keeps around, and how 
 | `--bots <n>:<m>` | ...and the strategists to `m` |
 | `--no-bots` | no computer players at all |
 | `--bot-ai legacy\|htn` | what they decide with: the HTN planners of [`docs/HTN_BOTS.md`](docs/HTN_BOTS.md), the default, or the code from before them |
+| `--bot-kits default\|role` | what HTN ground bots carry besides their roster slot's primary ([`docs/LOADOUT.md`](docs/LOADOUT.md) §8): a kit for the primary's role, the default since L7 — rifle 4 magazines, 2 grenades, light vest; DMR 5, 1, none; launcher 3 pouches, 3 grenades, medium vest — or the default kit every bot carried before. Legacy bots carry the default kit either way, and so does a policy's seat |
 | `--unit-autonomy on\|off` | whether the strategist side's new units use tactics on their own ([`docs/TACTICS.md`](docs/TACTICS.md) §5.9); on by default since T8, and a strategist changes it in game; `off` is how units fought before the tactics |
 
 None is needed to get bots: the numbers default to `BotGroundForce` and `BotStrategists` in
-`Match/default_gamemode.tres` (6 and 1), the AI to its `BotAi` (htn since H6), and the units'
-micro-autonomy to its `UnitAutonomy` (on since TACTICS T8). `--bots 4`
+`Match/default_gamemode.tres` (6 and 1), the AI to its `BotAi` (htn since H6), the bots' kits to
+its `BotKits` (role since LOADOUT L7), and the units' micro-autonomy to its `UnitAutonomy` (on
+since TACTICS T8). `--bots 4`
 overrides only the ground force and leaves the strategists to the game mode. The training and
 evaluation scripts start their servers with `--bot-ai legacy` whatever the default is: the legacy
 bots are the baseline a policy is measured against ([`docs/TRAINING.md`](docs/TRAINING.md) §3,
@@ -355,6 +358,12 @@ round full of bots starts without waiting for anybody.
   bots, one with a low wall within 25 m of a fight walks to the side of it away from the enemy,
   fights from there, and crouches behind it to reload. A unit whose chest is behind a wall is
   shot at by its head.
+  Their ammunition runs out as anyone's does: a bot whose rifle, DMR or launcher is dry fights on
+  with the pistol, and under the HTN one with nothing in sight walks back to the weapon locker and
+  stands in its reach until its kit is full. HTN bots carry a kit for their weapon's role —
+  a rifleman 4 spare magazines, 2 grenades and a light vest; a marksman 5, 1 and none; a launcher 3
+  pouches, 3 grenades and a medium vest — and `--bot-kits default` gives them the default kit
+  instead ([`docs/LOADOUT.md`](docs/LOADOUT.md) §8).
 - **In the strategist's chair** one queues infantry at every barracks while the points last, keeps
   four units home defending, and attack-moves the rest at whatever its units have actually seen —
   it gets no free knowledge of where anybody is. Once it has four fighting units it buys a builder,

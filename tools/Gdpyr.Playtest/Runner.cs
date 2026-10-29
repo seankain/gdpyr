@@ -25,6 +25,9 @@ public sealed class ScenarioResult
 	/// <summary>What the server's bots decided with, as its <c>welcome</c> said.</summary>
 	public string BotAi;
 
+	/// <summary>What the server's ground bots carried, as its <c>welcome</c> said (docs/LOADOUT.md §8).</summary>
+	public string BotKits;
+
 	/// <summary>What the strategist side's new units started with, as its <c>welcome</c> said (docs/TACTICS.md §5.9).</summary>
 	public string UnitAutonomy;
 
@@ -95,6 +98,7 @@ public sealed class Runner
 		{
 			Scenario = scenario,
 			BotAi = _connection.BotAi,
+			BotKits = _connection.BotKits,
 			UnitAutonomy = _connection.UnitAutonomy,
 		};
 		long started = DateTime.UtcNow.Ticks;
@@ -195,6 +199,7 @@ public sealed class Runner
 			// And what the bots decided with, so a trace says which opponent it is
 			// about (docs/HTN_BOTS.md §8, D5).
 			writer.WriteString("bot_ai", _connection.BotAi);
+			writer.WriteString("bot_kits", _connection.BotKits);
 			writer.WriteString("unit_autonomy", _connection.UnitAutonomy);
 		});
 

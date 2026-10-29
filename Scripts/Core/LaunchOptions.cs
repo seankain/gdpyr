@@ -41,7 +41,7 @@ public sealed class LaunchOptions
 	public const string Usage =
 		"usage: gdpyr [--server [port]] | [--client <host[:port]>] | [--listen [port]]\n" +
 		"             [--bots <ground>[:<strategists>]] | [--no-bots]\n" +
-		"             [--bot-ai legacy|htn] [--unit-autonomy on|off]\n" +
+		"             [--bot-ai legacy|htn] [--bot-kits default|role] [--unit-autonomy on|off]\n" +
 		"             [--name <text>] [--no-advertise]\n" +
 		"             [--agent-api [host:]port] [--agent-token <token>]\n" +
 		"             [--agent-unbounded] [--agent-omniscient]\n" +
@@ -53,6 +53,7 @@ public sealed class LaunchOptions
 		"  --bots <n>[:<m>]        fill each side to n ground and m strategists with bots\n" +
 		"  --no-bots               no computer players, whatever the game mode says\n" +
 		"  --bot-ai legacy|htn     what computer players decide with; htn by default (docs/HTN_BOTS.md)\n" +
+		"  --bot-kits default|role what htn ground bots carry: one for their role, by default, or the default kit (docs/LOADOUT.md)\n" +
 		"  --unit-autonomy on|off  whether new units use tactics on their own; on by default (docs/TACTICS.md)\n" +
 		"  --name <text>           what this server calls itself in the browser (default: the hostname)\n" +
 		"  --no-advertise          do not answer LAN discovery; the address still works\n" +
@@ -95,6 +96,12 @@ public sealed class LaunchOptions
 	/// means "whatever the game mode says", as with <see cref="GroundBots"/>.
 	/// </summary>
 	public Gdpyr.Sim.BotAi? BotAi { get; private init; }
+
+	/// <summary>
+	/// What ground bots carry besides their primary (docs/LOADOUT.md §8). Null means
+	/// "whatever the game mode says", as with <see cref="BotAi"/>.
+	/// </summary>
+	public Gdpyr.Sim.BotKits? BotKits { get; private init; }
 
 	/// <summary>
 	/// Whether the strategist side's new units start with micro-autonomy on
@@ -199,6 +206,11 @@ public sealed class LaunchOptions
 			mode += $" | bot ai {Gdpyr.Sim.BotAiNames.Name(ai)}";
 		}
 
+		if (BotKits is { } kits)
+		{
+			mode += $" | bot kits {Gdpyr.Sim.BotKitNames.Name(kits)}";
+		}
+
 		if (UnitAutonomy is { } autonomy)
 		{
 			mode += $" | unit autonomy {Gdpyr.Sim.MicroAutonomyNames.Name(autonomy)}";
@@ -268,6 +280,7 @@ public sealed class LaunchOptions
 		int? strategistBots = null;
 		bool botsRefused = false;
 		Gdpyr.Sim.BotAi? botAi = null;
+		Gdpyr.Sim.BotKits? botKits = null;
 		Gdpyr.Sim.MicroAutonomy? unitAutonomy = null;
 		string serverName = null;
 		bool advertise = true;
@@ -372,6 +385,27 @@ public sealed class LaunchOptions
 					}
 
 					botAi = parsed;
+					break;
+				}
+
+				case "--bot-kits":
+				{
+					if (botKits.HasValue)
+					{
+						return Failure("--bot-kits given twice");
+					}
+
+					if (!TryTakeValue(args, ref i, out string value))
+					{
+						return Failure("--bot-kits needs default or role, e.g. --bot-kits role");
+					}
+
+					if (!Gdpyr.Sim.BotKitNames.TryParse(value, out Gdpyr.Sim.BotKits parsed))
+					{
+						return Failure($"--bot-kits: '{value}' is not default or role");
+					}
+
+					botKits = parsed;
 					break;
 				}
 
@@ -597,6 +631,7 @@ public sealed class LaunchOptions
 			GroundBots = groundBots,
 			StrategistBots = strategistBots,
 			BotAi = botAi,
+			BotKits = botKits,
 			UnitAutonomy = unitAutonomy,
 			ServerName = serverName,
 			Advertise = advertise,

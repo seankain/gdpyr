@@ -268,6 +268,37 @@ public enum AiValueKey : byte
 
 	/// <inheritdoc cref="Bounds"/>
 	GiveUps = 27,
+
+	/// <summary>
+	/// Ground: the kit's primary, as the record's large bits say it — 0 for none, else its
+	/// place in the catalog's large weapons plus one, which <c>Loadout.PrimaryNames</c>
+	/// spells (docs/LOADOUT.md §8).
+	/// </summary>
+	KitPrimary = 28,
+
+	/// <summary>Ground: the kit's magazine pouches.</summary>
+	KitMagazines = 29,
+
+	/// <summary>Ground: the kit's grenade pouches.</summary>
+	KitGrenades = 30,
+
+	/// <summary>Ground: the kit's vest, <c>BodyArmourTier</c>.</summary>
+	KitVest = 31,
+
+	/// <summary>Ground: rounds in the primary's magazine.</summary>
+	Magazine = 32,
+
+	/// <summary>Ground: the primary's spare rounds.</summary>
+	Reserve = 33,
+
+	/// <summary>Ground: hand grenades carried.</summary>
+	Grenades = 34,
+
+	/// <summary>Ground: the vest's points left.</summary>
+	VestPoints = 35,
+
+	/// <summary>Ground: rearms given up on (docs/LOADOUT.md §8).</summary>
+	FailedRearms = 36,
 }
 
 public struct AiMarker

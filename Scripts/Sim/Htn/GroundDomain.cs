@@ -64,6 +64,12 @@ public enum GroundFact : byte
 	/// </summary>
 	Suppressed,
 
+	/// <summary>
+	/// <see cref="AmmoBand"/>: what the primary has left, magazine and spare
+	/// (docs/LOADOUT.md §8). On the scan.
+	/// </summary>
+	Ammo,
+
 	Count,
 }
 
@@ -130,6 +136,45 @@ public static class HealthBands
 	}
 }
 
+/// <summary>What the primary has left (docs/LOADOUT.md §8).</summary>
+public enum AmmoBand : byte
+{
+	/// <summary>A magazine or more spare; or no primary, or one that reloads forever, which no locker tops up.</summary>
+	Ok = 0,
+
+	/// <summary>Less than one magazine spare.</summary>
+	Low = 1,
+
+	/// <summary>Nothing in the magazine and nothing spare: the pistol is out (L-D14).</summary>
+	Dry = 2,
+}
+
+/// <summary>The band a primary's rounds are in.</summary>
+public static class AmmoBands
+{
+	/// <summary>
+	/// <paramref name="primary"/>'s band, against its <paramref name="magazineSize"/>:
+	/// dry with nothing in the magazine, nothing spare and no reload under way — the
+	/// same test the brain puts its primary away on — low under one magazine spare,
+	/// else ok. An empty slot and an unlimited reserve are ok: neither has anything a
+	/// locker can give it.
+	/// </summary>
+	public static AmmoBand Band(in WeaponState primary, int magazineSize)
+	{
+		if (primary.IsEmpty || primary.HasUnlimitedReserve)
+		{
+			return AmmoBand.Ok;
+		}
+
+		if (primary.Ammo <= 0 && primary.Reserve == 0 && !primary.IsReloading)
+		{
+			return AmmoBand.Dry;
+		}
+
+		return primary.Reserve < magazineSize ? AmmoBand.Low : AmmoBand.Ok;
+	}
+}
+
 /// <summary>What the coordinator wants this bot for (§5.1). Humans are never given one.</summary>
 public enum GroundRole : byte
 {
@@ -166,6 +211,12 @@ public enum GroundGoal : byte
 
 	/// <summary>In the spot: stand to fire over the wall, crouch behind it to reload.</summary>
 	HoldCover,
+
+	/// <summary>
+	/// Dry, with nothing in sight: to the locker, and stay in its reach while the
+	/// resupply fills the kit (docs/LOADOUT.md §8).
+	/// </summary>
+	Rearm,
 }
 
 /// <summary>How the pilot picks where to walk for an intent.</summary>
@@ -281,11 +332,21 @@ public readonly struct GroundPlanTraits
 	/// </summary>
 	public readonly int SuppressedMaxTicks;
 
+	/// <summary>
+	/// How long a dry bot stays at the locker for its kit to fill (docs/LOADOUT.md §8),
+	/// from when it gets there; it leaves sooner once the resupply has nothing more to give.
+	/// </summary>
+	public readonly int RearmStayTicks;
+
+	/// <summary>How long a walk to rearm that took too long keeps the bot from trying again (§3.4, P4).</summary>
+	public readonly int RearmRetryTicks;
+
 	public GroundPlanTraits(float healthOkFraction, float healthCriticalFraction, float healthHysteresis,
 		float alliesNearMeters, float alliesNearHoldMeters, float investigateRadiusMeters, float lockerArriveMeters,
 		int pathToLockerTimeoutTicks, int useLockerTimeoutTicks, float buddyLeashMeters,
 		float coverSearchMeters = 25f, float coverMinThreatMeters = 8f, float coverMaxThreatMeters = 55f,
-		int suppressedTicks = SimConfig.TickRate * 3 / 2, int suppressedMaxTicks = SimConfig.TickRate * 3)
+		int suppressedTicks = SimConfig.TickRate * 3 / 2, int suppressedMaxTicks = SimConfig.TickRate * 3,
+		int rearmStayTicks = SimConfig.TickRate * 6, int rearmRetryTicks = SimConfig.TickRate * 30)
 	{
 		HealthOkFraction = healthOkFraction;
 		HealthCriticalFraction = healthCriticalFraction;
@@ -302,6 +363,8 @@ public readonly struct GroundPlanTraits
 		CoverMaxThreatMeters = MathF.Max(coverMaxThreatMeters, CoverMinThreatMeters);
 		SuppressedTicks = Math.Max(suppressedTicks, 0);
 		SuppressedMaxTicks = Math.Max(suppressedMaxTicks, 0);
+		RearmStayTicks = Math.Max(rearmStayTicks, 1);
+		RearmRetryTicks = Math.Max(rearmRetryTicks, 0);
 	}
 
 	/// <summary>
@@ -309,7 +372,9 @@ public readonly struct GroundPlanTraits
 	/// metre a kit is taken from (docs/LOADOUT.md L-D8); it gets two seconds there for
 	/// the launcher to be in its hands — the kit is taken on the tick it asks, and the
 	/// pistol, if that was out, put away for it after — and thirty seconds of walking,
-	/// the length of the map at a jog. Cover is looked
+	/// the length of the map at a jog. A dry bot stays six seconds at most for its kit
+	/// to fill — five pouches take two, a heavy vest from nothing 3.3 — and after a walk
+	/// that timed out waits thirty before trying again (docs/LOADOUT.md §8). Cover is looked
 	/// for within 25 m, between 8 m and 55 m of the fight (docs/COVER.md §5). A round
 	/// suppresses for 1.5 s after it, and a bot stays down for 3 s of it at most
 	/// (docs/TACTICS.md §5.7).
@@ -329,7 +394,9 @@ public readonly struct GroundPlanTraits
 		coverMinThreatMeters: 8f,
 		coverMaxThreatMeters: 55f,
 		suppressedTicks: SimConfig.TickRate * 3 / 2,
-		suppressedMaxTicks: SimConfig.TickRate * 3);
+		suppressedMaxTicks: SimConfig.TickRate * 3,
+		rearmStayTicks: SimConfig.TickRate * 6,
+		rearmRetryTicks: SimConfig.TickRate * 30);
 }
 
 /// <summary>
@@ -371,6 +438,9 @@ public struct GroundSense
 
 	/// <summary>Where it stands against the fight it is in, as the pilot's cover search banded it.</summary>
 	public CoverState Cover;
+
+	/// <summary>The primary's rounds (<see cref="AmmoBands.Band"/>).</summary>
+	public AmmoBand Ammo;
 }
 
 /// <summary>
@@ -388,6 +458,12 @@ public sealed class GroundContext : BaseContext
 
 	/// <summary>The tick it first went down in this suppression, behind its wall; <see cref="uint.MaxValue"/> for not yet.</summary>
 	private uint _downSince = uint.MaxValue;
+
+	/// <summary>The tick this rearm reached the locker; <see cref="uint.MaxValue"/> for not yet.</summary>
+	private uint _rearmArrivedTick = uint.MaxValue;
+
+	/// <summary>A rearm was given up on and the planner has not yet been told the wait is over.</summary>
+	private bool _rearmBarred;
 
 	public GroundContext(IFactory factory, in GroundPlanTraits traits)
 	{
@@ -435,6 +511,21 @@ public sealed class GroundContext : BaseContext
 	/// (docs/LOADOUT.md §8): the trip is given up, as a timeout gives it up.
 	/// </summary>
 	public bool KitRefused;
+
+	/// <summary>
+	/// Its kit holds spare rounds for the primary, which a locker's resupply can put back
+	/// (docs/LOADOUT.md §8): a kit with no magazine pouches has nothing to rearm. On the scan.
+	/// </summary>
+	public bool KitHoldsSpares;
+
+	/// <summary>The resupply has nothing more to give it: rounds, grenades and vest as full as its kit holds. Every tick.</summary>
+	public bool KitFull;
+
+	/// <summary>A rearm was given up on: none is planned before this tick.</summary>
+	public uint RearmRetryTick;
+
+	/// <summary>Rearms given up on: walks to the locker that took too long, or no locker. For the debugger.</summary>
+	public int FailedRearms;
 
 	/// <summary>The remembered contact to walk to: the nearest one worth investigating.</summary>
 	public Vector3 GhostPoint;
@@ -550,7 +641,23 @@ public sealed class GroundContext : BaseContext
 		Sense(GroundFact.InsideDefences, sense.InsideDefences);
 		Sense(GroundFact.MagazineLow, sense.MagazineLow);
 		Sense(GroundFact.Cover, (byte)sense.Cover);
+		Sense(GroundFact.Ammo, (byte)sense.Ammo);
+
+		// The wait after a given-up rearm is no fact, so its end is said to the planner
+		// here, once (§3.7): without it a bot standing off with nothing changing around
+		// it would never look again.
+		if (_rearmBarred && Tick >= RearmRetryTick)
+		{
+			_rearmBarred = false;
+			IsDirty = true;
+		}
 	}
+
+	/// <summary>
+	/// Whether a rearm may be planned: a locker to go to, a kit whose spare rounds a
+	/// resupply puts back, and no wait after one given up on (§3.4, P4).
+	/// </summary>
+	public bool CanRearm => HasLocker && KitHoldsSpares && Tick >= RearmRetryTick;
 
 	/// <summary>The health band for a fraction, held past its edge by <see cref="GroundPlanTraits.HealthHysteresis"/> once entered.</summary>
 	public static HealthBand Band(float fraction, HealthBand previous, in GroundPlanTraits traits) =>
@@ -563,6 +670,7 @@ public sealed class GroundContext : BaseContext
 	public TaskStatus Begin(GroundGoal goal)
 	{
 		GoalStartTick = Tick;
+		_rearmArrivedTick = uint.MaxValue;
 		return Perform(goal);
 	}
 
@@ -706,6 +814,9 @@ public sealed class GroundContext : BaseContext
 				Intent.Duck = StaysDown();
 				return Walk(GroundMove.Cover, CoverPoint);
 
+			case GroundGoal.Rearm:
+				return Rearm(running);
+
 			default:
 				return TaskStatus.Failure;
 		}
@@ -724,6 +835,47 @@ public sealed class GroundContext : BaseContext
 	private TaskStatus GiveUpLockerTrip()
 	{
 		FailedLockerTrips++;
+		return TaskStatus.Failure;
+	}
+
+	/// <summary>
+	/// A dry bot's trip to the locker (docs/LOADOUT.md §8): runs to stand in front of its
+	/// racks, and once it is at the locker stays there — the resupply pass fills the kit
+	/// of anyone in its reach, so there is nothing to ask for — until the kit is full or
+	/// <see cref="GroundPlanTraits.RearmStayTicks"/> have passed since it arrived. Being
+	/// shoved off its spot does not start the stay again. A walk that takes longer than
+	/// <see cref="GroundPlanTraits.PathToLockerTimeoutTicks"/> is given up on.
+	/// </summary>
+	private TaskStatus Rearm(uint running)
+	{
+		if (!HasLocker)
+		{
+			return GiveUpRearm();
+		}
+
+		Vector3 stand = LockerSupply.StandPoint(LockerPoint, LockerYaw);
+		if (_rearmArrivedTick == uint.MaxValue)
+		{
+			if (!AtLocker)
+			{
+				return running > (uint)Traits.PathToLockerTimeoutTicks ? GiveUpRearm() : Walk(GroundMove.Run, stand);
+			}
+
+			_rearmArrivedTick = Tick;
+		}
+
+		Walk(GroundMove.Point, stand);
+		return KitFull || Tick - _rearmArrivedTick >= (uint)Traits.RearmStayTicks
+			? TaskStatus.Success
+			: TaskStatus.Continue;
+	}
+
+	/// <summary>A rearm given up on: none is planned for <see cref="GroundPlanTraits.RearmRetryTicks"/> (§3.4, P4).</summary>
+	private TaskStatus GiveUpRearm()
+	{
+		FailedRearms++;
+		RearmRetryTick = Tick + (uint)Traits.RearmRetryTicks;
+		_rearmBarred = true;
 		return TaskStatus.Failure;
 	}
 
@@ -849,6 +1001,9 @@ public sealed class GroundDomainBuilder : BaseDomainBuilder<GroundDomainBuilder,
 	private static bool InContactOrSuppressed(GroundContext c) =>
 		c.Get(GroundFact.Contact) != (byte)ContactLevel.None || c.Is(GroundFact.Suppressed);
 
+	/// <summary><see cref="GroundContext.CanRearm"/>: a locker, spare rounds in the kit to put back, and no wait after a give-up.</summary>
+	public GroundDomainBuilder IfCanRearm() => Condition("can rearm", c => c.CanRearm);
+
 	/// <summary>A predicted outcome: true while planning, forgotten before execution; a scan has to make it true.</summary>
 	public GroundDomainBuilder Predict<TValue>(GroundFact fact, TValue value) where TValue : struct, Enum
 	{
@@ -904,6 +1059,18 @@ public static class GroundDomain
 					.If(GroundFact.MagazineLow)
 					.Act(GroundGoal.Reload).While(GroundFact.MagazineLow)
 						.WhileNot(GroundFact.Contact, ContactLevel.Visible).End()
+				.End()
+				// Dry, with the pistol out, and nothing in sight or firing at it: back to the
+				// locker (docs/LOADOUT.md L-D14, §8). A fight it can see is the pistol's, and
+				// stops the walk; a ghost does not, or with the team remembering something
+				// most of the time a dry bot would hardly ever go.
+				.Sequence("rearm")
+					.If(GroundFact.Ammo, AmmoBand.Dry)
+					.IfNot(GroundFact.Contact, ContactLevel.Visible)
+					.If(GroundFact.Suppressed, false)
+					.IfCanRearm()
+					.Act(GroundGoal.Rearm).WhileNot(GroundFact.Contact, ContactLevel.Visible)
+						.While(GroundFact.Suppressed, false).End()
 				.End()
 			.End()
 			// In contact, or under fire from what it has lost track of: the second reaches only

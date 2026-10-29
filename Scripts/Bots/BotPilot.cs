@@ -317,7 +317,7 @@ public sealed class BotPilot
 		bool duck = false;
 		if (_plan != null)
 		{
-			hasGoal = Planned(character, explosive, tick, hasTarget, targetGround, combat.LastFiredUponTick, out goal,
+			hasGoal = Planned(character, combat, explosive, tick, hasTarget, targetGround, out goal,
 				out keepMoving, out takeLauncher, out inCover, out duck);
 		}
 		else if (hasTarget)
@@ -637,8 +637,8 @@ public sealed class BotPilot
 	/// into where to walk, whether to keep walking, whether to ask the locker for a
 	/// launcher, and whether to stay down behind its wall under fire (docs/TACTICS.md §5.7).
 	/// </summary>
-	private bool Planned(fps_controller character, bool explosive, uint tick, bool hasTarget, Vector3 targetPosition,
-		uint lastFiredUponTick, out Vector3 goal, out bool keepMoving, out bool takeLauncher, out bool inCover,
+	private bool Planned(fps_controller character, PlayerCombat combat, bool explosive, uint tick, bool hasTarget,
+		Vector3 targetPosition, out Vector3 goal, out bool keepMoving, out bool takeLauncher, out bool inCover,
 		out bool duck)
 	{
 		GroundContext plan = _plan;
@@ -646,6 +646,11 @@ public sealed class BotPilot
 		plan.Position = character.SimPosition;
 		plan.Explosive = explosive;
 		_lastPlannedPosition = plan.Position;
+
+		// Whether a rearm has anything left to wait for, every tick: the resupply gives a
+		// pouch every half second, and the stay ends on the tick the last one lands.
+		plan.KitFull = !LockerSupply.NeedsAnything(combat.Carried, combat.Loadout,
+			WeaponCatalog.CarryFor(combat.Loadout.Large));
 
 		// The hands are known every tick, not only on a scan: a locker swap lands
 		// between scans, and the task after it is planned on what it produced.
@@ -658,7 +663,7 @@ public sealed class BotPilot
 
 		// And whether the strategist's rounds are coming near it, every tick: a burst is
 		// over in a second (docs/TACTICS.md §5.7).
-		plan.SenseSuppressed(lastFiredUponTick);
+		plan.SenseSuppressed(combat.LastFiredUponTick);
 		_planning.Tick(plan);
 		_planWasAlive = true;
 
@@ -758,13 +763,19 @@ public sealed class BotPilot
 		Vector3 at = character.SimPosition;
 
 		WeaponStats stats = combat.EquippedStats;
+		ref WeaponState primary = ref combat.Weapons[SimConfig.LargeSlot];
 		var sense = new GroundSense
 		{
 			Explosive = explosive,
 			HealthFraction = combat.Health / (float)SimConfig.MaxHealth,
-			MagazineLow = !stats.HasUnlimitedAmmo && !combat.Equipped.IsReloading
+
+			// A magazine with nothing spare to fill it from is not worth standing still for.
+			MagazineLow = !stats.HasUnlimitedAmmo && !combat.Equipped.IsReloading && combat.Equipped.Reserve != 0
 				&& combat.Equipped.Ammo <= stats.MagazineSize / 2,
+			Ammo = AmmoBands.Band(primary, WeaponCatalog.StatsFor(primary.DefinitionId).MagazineSize),
 		};
+
+		plan.KitHoldsSpares = Loadout.ReserveFor(combat.Loadout, WeaponCatalog.CarryFor(combat.Loadout.Large)) > 0;
 
 		bool armour = false;
 		float armourDistance = float.MaxValue;

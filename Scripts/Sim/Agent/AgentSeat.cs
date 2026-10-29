@@ -118,9 +118,10 @@ public sealed class AgentSeat
 
 	/// <summary>
 	/// The kit a ground seat starts every episode with (docs/LOADOUT.md §9): its
-	/// <c>attach</c>'s or its last <c>spawn</c>'s, else the one its bot carried when it
-	/// was attached. <c>reset</c> gives it back, so a kit taken at a locker in one
-	/// episode — which is also the next spawn's (L-D11) — does not start the next.
+	/// <c>attach</c>'s or its last <c>spawn</c>'s, else the default kit with the primary
+	/// its bot carried when it was attached — not a bot's role kit (§8). <c>reset</c>
+	/// gives it back, so a kit taken at a locker in one episode — which is also the next
+	/// spawn's (L-D11) — does not start the next.
 	/// </summary>
 	public LoadoutSelection? Kit;
 

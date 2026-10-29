@@ -342,6 +342,13 @@ public sealed class Scenario
 	public string BotAi;
 
 	/// <summary>
+	/// What the server's htn ground bots carry, <c>default</c> or <c>role</c>
+	/// (docs/LOADOUT.md §8); null for the server's default. <c>--bot-kits</c> on the
+	/// command line overrides it, which is how one file's claims are checked in either.
+	/// </summary>
+	public string BotKits;
+
+	/// <summary>
 	/// What the strategist side's new units start with, <c>on</c> or <c>off</c>
 	/// (docs/TACTICS.md §5.9); null for the server's default. A scenario that makes a
 	/// claim about the tactics names it; <c>--unit-autonomy</c> on the command line
@@ -437,6 +444,17 @@ public sealed class Scenario
 				}
 
 				scenario.BotAi = named;
+			}
+
+			if (root.TryGetProperty("bot_kits", out JsonElement botKits))
+			{
+				string named = botKits.ValueKind == JsonValueKind.String ? botKits.GetString() : null;
+				if (named is not ("default" or "role"))
+				{
+					throw new ScenarioException($"'{scenario.Name}': 'bot_kits' is \"default\" or \"role\"");
+				}
+
+				scenario.BotKits = named;
 			}
 
 			if (root.TryGetProperty("unit_autonomy", out JsonElement unitAutonomy))
