@@ -93,7 +93,7 @@ killed mid-round, and none of those may take a client down.
 
 A journalled tick is 5 bytes for the marker and 17 per character — a tag, a peer id and the frame.
 Eight players at 60 Hz is about 8.4 KB/s. The keyframes are the rest: a full player snapshot is
-`5 + 29n` bytes at 30 Hz and a unit snapshot `5 + 13n` at 20 Hz, so a busy round with fifty units
+`5 + 32n` bytes at 30 Hz and a unit snapshot `5 + 13n` at 20 Hz, so a busy round with fifty units
 adds roughly 24 KB/s. Call it a megabyte a half-minute, or a few hundred megabytes for a long
 evening.
 
@@ -223,7 +223,10 @@ the same function the authority ran, over the same frames, at the full 60 Hz rat
 interpolated at the snapshot rate. Every second tick the keyframe arrives and corrects it, exactly
 the way a client applies a correction to its own character. That is what bounds the drift: the
 re-simulation is free to disagree with the recording between keyframes and cannot accumulate past
-one of them.
+one of them. Each character is re-simulated at its kit's speed, from the kit byte of its last
+keyframe ([`LOADOUT.md`](LOADOUT.md) §6.3), so a heavy player's walk is not dragged back at every
+keyframe; what anyone carried in their arms — a gun, a can — is not recorded, so its slowing is not
+replayed, as it never was. A remote player's vest band is drawn from the same byte.
 
 **A stream is interpolated.** There is no journal to re-run, so the keyframes go to the same
 `SnapshotInterpolator` a live client uses and the bodies are drawn an interpolation delay behind the
@@ -298,4 +301,8 @@ Stated rather than discovered:
   record's yaw field names its vehicle ([`VEHICLES.md`](VEHICLES.md) §6). Version-1 demos are refused.
   Version 3 is the second: the unit record grew to 14 bytes, its flag byte split into a body byte,
   which carries the posture, and a flight byte ([`TACTICS.md`](TACTICS.md) §5.8). Version-2 demos are
-  refused, saying "demo format version 2; this build reads 3".
+  refused. Version 4 is the third: the player record grew from 29 to 32 bytes for the loadout — the
+  primary's spare rounds and the vest's points in bytes 29–30, the kit in byte 31, and a zero
+  primary meaning none ([`LOADOUT.md`](LOADOUT.md) §6.1, [`NETCODE.md`](NETCODE.md) §7). Version-3
+  demos are refused, saying "demo format version 3; this build reads 4". Kit requests are not
+  journalled: the record carries what they changed.

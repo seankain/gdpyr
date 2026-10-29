@@ -15,10 +15,11 @@ through · [`DEPLOYMENT.md`](DEPLOYMENT.md) — the box this must never be expos
 > planes (§6.3), the strategist action (§7.4), the playtest harness (§9) and the Python client
 > (§9.3) shipped in M7; `list_units` (§7.5) was added with the strategist learner in M7.5, because
 > a policy cannot name a unit it has only seen. Deviations are recorded inline below rather than smoothed over. The
-> observation schema is now `gdpyr-agent-obs-3`: M7 added a second observation, the planes and
-> the command vocabulary to what `welcome` publishes (`-2`), and TACTICS T8 each unit's
-> micro-autonomy to the strategist vector (`-3`, §6.2); a client decodes by the published schema
-> rather than by this document (§4).
+> observation schema is now `gdpyr-agent-obs-4`: M7 added a second observation, the planes and
+> the command vocabulary to what `welcome` publishes (`-2`), TACTICS T8 each unit's
+> micro-autonomy to the strategist vector (`-3`, §6.2), and LOADOUT L8 the kit's five floats to the
+> end of the ground vector (`-4`, §6.1); a client decodes by the published schema rather than by
+> this document (§4).
 
 ---
 
@@ -347,21 +348,25 @@ that hid the teammate in the doorway would be lying.
 | Contacts | 8 × 11 | per contact: is-player, is-unit, hostile, bearing sin/cos, elevation, distance, closing speed, lateral speed, health fraction, ticks since seen |
 | Rays | 16 | a horizontal fan ±60° about the look direction, normalized hit distance — the cheap "can I walk that way" signal an FPS policy otherwise has to learn from collisions |
 | Objective | 6 | bearing sin/cos (2) and distance to the nearest enemy barracks, nodes held by each side (2), nodes contested |
+| Kit | 5 | grenades / 3, the primary's spare rounds as a fraction of what the kit's pouches hold, the vest's points as a fraction of its tier's, the vest's tier / 3, the load's speed scale / 1.12 — since `gdpyr-agent-obs-4` |
 
-**145 floats, 580 bytes**, and the sketch above said 144. The movement-state one-hot is seven wide,
+**150 floats, 600 bytes** since `gdpyr-agent-obs-4`; 145 and 580 before it, and the sketch above
+said 144. The movement-state one-hot is seven wide,
 not six: the shipped FSM has idle, walking, sprinting, crouching, sliding, jumping and falling, so
 the self block is 20. Recorded rather than rounded — a client decodes by the schema `welcome`
 publishes and not by this document, which is the whole reason the schema is fetched (§4). The
-"reserve fraction" is published as `weapon.unlimited` for the same kind of reason: the game has no
-reserve-ammunition pool, so the float carries whether the magazine is counted at all.
+weapon block's "reserve fraction" is published as `weapon.unlimited` for the same kind of reason:
+when the vector was laid out the game had no reserve-ammunition pool, so the float carries whether
+the magazine is counted at all. The kit block's `kit.reserve` is the reserve fraction, now that
+there is a reserve.
 
 **Beyond the vector, since LOADOUT.md L1:** `self.grenades`, `weapon.reserve` (spare rounds for the
 weapon in the hands, −1 for one that reloads forever) and `weapon.reserve_max` (what the kit's
 pouches hold for it full, −1 for unlimited), in raw units, published as the ground schema's
 `extras` block. Every JSON observation carries them by name; a packed one only when the session's
-`hello` asked (`"extras": true`), after the vector and any planes, with flag bit 3 (8) set. The
-vector — and `gdpyr-agent-obs-3` — are unchanged until LOADOUT.md L8 appends its floats, so a
-client that does not ask reads the frames it always has. The playtest harness asks. Since L3,
+`hello` asked (`"extras": true`), after the vector and any planes, with flag bit 3 (8) set. So
+the vector — and `gdpyr-agent-obs-3` — stayed as they were until LOADOUT.md L8 appended five floats
+of its own (below), and a client that does not ask reads no extras. The playtest harness asks. Since L3,
 three more after those, appended so the first three keep their offsets: `self.armour` (the vest's
 points left), `self.armour_max` (its tier's points when full) and `self.armour_tier` (0 none, 1
 light, 2 medium, 3 heavy) — all 0 with no vest. Since L4, two more: `self.load_kg`, what the kit
@@ -369,6 +374,29 @@ weighs, and `self.load_scale`, the share of its speeds the kit leaves the seat (
 kit, 0.70 to 1.12 for any, LOADOUT.md L-D4). The vector's `move_speed_scale` is now the carry's scale
 times `self.load_scale`, still clamped to 1, so a kit lighter than the default reads 1 there and
 `self.load_scale` says by how much.
+
+**The kit block, since LOADOUT.md L8 (`gdpyr-agent-obs-4`).** The kit those extras describe,
+normalized, is the last five floats of the vector, appended so that every float before them is
+where obs-3 put it:
+
+| Field | Is | Range |
+|---|---|---|
+| `kit.grenades` | `self.grenades` / 3 | 0–1 |
+| `kit.reserve` | the **primary's** spare rounds over what the kit's pouches hold for it, whatever is in the hands — what the locker's resupply would fill; 0 with no primary or no pouches | 0–1 |
+| `kit.armour` | `self.armour` / `self.armour_max`; 0 with no vest | 0–1 |
+| `kit.armour_tier` | `self.armour_tier` / 3: so a spent vest (0 points, its tier) is not no vest (0, 0) | 0–1 |
+| `kit.load_scale` | `self.load_scale` / 1.12: 1 for the lightest kit, 0.89 for the default, 0.625 for the heaviest | 0.625–1 |
+
+`kit.reserve` is the primary's where `weapon.reserve` is the hands': with the pistol up — which
+reloads forever, as the slot already says — it still says whether the primary is worth switching
+back to, which is the question a dry primary put away for the pistol leaves. `move_speed_scale`
+is unchanged — still the carry's scale times the kit's, clamped to 1 — so the two together say both
+what slows the seat and by how much.
+The extras stay, raw, for the harness and for a client that wants the numbers. A ground checkpoint
+trained on obs-3's 145 inputs does not fit obs-4's 150, and a client built before it refuses
+today's server (§4); the first 145 floats mean what they meant, so widening a trained network's
+first layer with five zero-weight inputs is a way to carry one across, which this repository's
+trainer does not do.
 
 Contacts are the eight nearest the seat has actually acquired, ordered by
 distance, zero-padded. A ray fan is 16 physics queries per seat per decision; at `step_mul` 4 and
@@ -530,9 +558,10 @@ Deltas are **clamped server-side** to the attached seat's turn-rate ceiling.
 
 The button names are the ones `welcome` publishes: `jump`, `crouch`, `sprint`, `fire`, `ads`,
 `reload`, `use`, `melee`, `weapon1`–`weapon3`, and since hand grenades `grenade` (bit 11), which
-throws one on the press ([`NETCODE.md`](NETCODE.md) §10.9) — three a life, one a second. Held, it is
-one throw, as a held trigger on a semi-automatic weapon is one shot. The ground observation has no
-grenade count, so a policy that throws counts its own.
+throws one on the press ([`NETCODE.md`](NETCODE.md) §10.9) — as many as the kit's grenade pouches,
+at most three, refilled by a respawn and by the locker's resupply; one a second. Held, it is one
+throw, as a held trigger on a semi-automatic weapon is one shot. The observation counts them:
+`kit.grenades` in the vector, over three, and `self.grenades` among the extras (§6.1).
 
 ### 7.3 The fairness ceilings are on by default
 
@@ -755,7 +784,8 @@ is never a victim, because nothing can damage one; a structure is, and its `dama
 what it actually took after its armour, not what the round would have done to a body. So does a
 unit's. A hit that took nothing — any bullet into a tank, a pillbox or a sniper tower, which only
 explosives hurt ([`NETCODE.md`](NETCODE.md) §10.6) — is no record at all. Either one's
-`weapon` field reads 0, as a unit's does.
+`weapon` field reads 0, as a unit's does. A hit a player's vest took whole is a record, with
+`amount` 0 and the hit in `absorbed`: the shooter did something, and it is confirmed as one.
 
 A player's `weapon` is the weapon whose round did it, not whatever the player is holding when it
 lands: 12 for a hand grenade ([`NETCODE.md`](NETCODE.md) §10.9), 7 for a mounted heavy gun's
@@ -941,7 +971,9 @@ passes `--agent-api` (§4.1).
 
 An observation field that answers to nothing **fails** rather than reading zero: the harness samples
 every field the schema publishes, so a name it does not know is a typo, and a typo that read as zero
-would be an assertion that passes for the wrong reason.
+would be an assertion that passes for the wrong reason. The harness asks for the extras, so it
+samples those too: `observation.weapon.reserve` is spare rounds, raw, and since obs-4
+`observation.kit.reserve` the same as a fraction of the kit's.
 
 **A claim relative to another metric** names it in `relative_to`, and is then about the first
 metric divided by the second, in the same episode: `{"metric":
@@ -1053,6 +1085,7 @@ The same rule the rest of the codebase follows: the interesting part is engine-f
 | `squad_drill` after `unit_task`, its fields and its phase numbers; `unit_task`'s drill goals 28–32 | `Tests/AgentEventTests.cs`, `Tests/SquadDrillTests.cs` | TACTICS T6 |
 | `unit_task`'s goal 33, escorting a builder; a script's `construct`, and each malformed one as a sentence | `Tests/AgentEventTests.cs`, `Tests/EscortTests.cs`, `Tests/ScenarioTests.cs` | TACTICS T9 |
 | The strategist vector's `autonomy`, the last of a unit's 15 floats, and 1,156 floats in all (`gdpyr-agent-obs-3`); the client and the server name one schema version | `Tests/AgentObservationTests.cs`, `Tests/AgentInteropTests.cs` | TACTICS T8 |
+| The ground vector's kit block, the last five of 150 floats (`gdpyr-agent-obs-4`): appended, the kit normalized, the primary's reserve whatever is in the hands and no pouches empty, no vest apart from a spent one, the load's cap and floor, named in JSON beside the extras; the .NET client, the Python client and the server name one schema version | `Tests/AgentObservationTests.cs`, `Tests/AgentInteropTests.cs` | LOADOUT L8 |
 
 One test is not engine-free and is worth the exception: the **divergence probe** of §3 — two seeded
 600-tick episodes against one headless server, comparing `state_hash` per tick and reporting the

@@ -30,16 +30,17 @@ dedicated-server authoritative.
   journal, and what playback does with it
 - [`docs/VEHICLES.md`](docs/VEHICLES.md) — vehicles that carry units: the technical with seats,
   boarding and unloading, and a vertical take-off and landing dropship
-- [`docs/LOADOUT.md`](docs/LOADOUT.md) — the ground force's loadout, planned: a locker panel for
+- [`docs/LOADOUT.md`](docs/LOADOUT.md) — the ground force's loadout: a locker panel for
   the primary, spare magazines or grenades and body armour, weight that sets movement speed, and
-  resupply at the locker; L0–L8, of which L0–L7 are built — how much bots fire in a life,
+  resupply at the locker; L0–L8, all built — how much bots fire in a life,
   which raised the default kit to five spare magazines; the kit itself: finite primary
   ammunition, no primary at all, and the player record that carries both; taking a kit at the
   locker, one validator for a person, a bot and an agent; body armour, a vest that takes a
   share of each hit until its points run out; weight, which sets how fast a kit moves;
   resupply within a metre of the locker, paced, and not under fire; the locker's panel on
-  `E`, which is also the death screen's editor of the next spawn's kit; and bots that rearm at the
-  locker when they run dry, in kits for their roles
+  `E`, which is also the death screen's editor of the next spawn's kit; bots that rearm at the
+  locker when they run dry, in kits for their roles; and the kit in the agent observation's
+  vector, `gdpyr-agent-obs-4`
 - [`docs/LAN.md`](docs/LAN.md) — hosting a room of machines from a checkout, with a dev build
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — AWS EC2 dedicated-server runbook
 

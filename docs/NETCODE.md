@@ -453,7 +453,7 @@ route, so there is no second behaviour to write.
 | Message | Direction | Transfer | Rate | ~Size |
 |---|---|---|---|---|
 | `Input` (3 frames) | C→S | Unreliable | 60 Hz | ~48 B |
-| `PlayerSnapshot` (visible players) | S→C | Unreliable | 30 Hz | 29 B × players |
+| `PlayerSnapshot` (visible players) | S→C | Unreliable | 30 Hz | 32 B × players |
 | `UnitSnapshot` (visible units) | S→C | Unreliable | 20 Hz | 5 B + 14 B × units |
 | `ServerSpawnUnit` / `ServerDespawnUnit` | S→C | Reliable | per unit per life | ~24 B / 8 B |
 | `ProjectileSpawn` | S→C | Reliable | per shot | 23 B |
@@ -473,7 +473,9 @@ route, so there is no second behaviour to write.
 | `ServerTrainingState` | S→C | Reliable | 5 Hz per training structure while its queue changes | ~6 B |
 | `ServerRoundSummary` (scoreboard) | S→C | Reliable | once per round | 16 B + 9 B/player |
 | `ServerRequestRoleChoice` | S→C | Reliable | per person per round | ~4 B |
-| `ClientSelectTeam` / `ClientSelectLoadout` | C→S | Reliable | per choice | ~4 B |
+| `ClientSelectTeam` / `ClientSelectLoadout` | C→S | Reliable | per choice | ~4 B / ~7 B |
+| `ClientLockerLoadout` | C→S | Reliable | per kit taken at a locker | ~7 B |
+| `ServerKitResult` (to the requester) | S→C | Reliable | per `ClientLockerLoadout` | ~4 B |
 | `ClockProbe` / `ClockReply` | both | Unreliable | 2 Hz | ~12 B |
 
 Both snapshots say *visible*, and since M4 the player one means it: a strategist peer is sent its
@@ -486,8 +488,8 @@ Quantize positions to three `int16` at 1 cm resolution (±327 m covers the map) 
 `uint16`. Rough budget at 8 players + 50 visible units, at the rates actually shipped (players
 30 Hz, units 20 Hz):
 
-- Downstream per client: 8 × 29 B × 30 Hz ≈ 7 KB/s + (5 + 50 × 13) B × 20 Hz ≈ 13 KB/s ≈
-  **20 KB/s**, plus whatever is being shot.
+- Downstream per client: 8 × 32 B × 30 Hz ≈ 7.7 KB/s + (5 + 50 × 13) B × 20 Hz ≈ 13 KB/s ≈
+  **21 KB/s**, plus whatever is being shot.
 - Upstream per client: ≈ **3 KB/s**.
 
 Comfortable. The unit snapshot is now the larger half, so it is the one to thin first — drop it to
@@ -506,19 +508,33 @@ anyway, the *answer* rides `ClientSelectTeam`, which has existed since M3, and t
 ends up on rides the flag byte's team bit. There is no third team and no wire change: `Team` is one
 bit and stays one bit.
 
-**The weapon locker is not a message either** (§10.6). What a player walked away from one with is
-the large weapon in their snapshot, in two bits of the same flag byte that were spare (bits 4–5: an
-index into `WeaponCatalog.LargeWeapons` plus one, zero meaning "not said"). The record stays 29 B.
-A swap is server-side and not predicted — one round trip, like a mount — and the owning client
-re-arms its large slot the first time a snapshot names a different weapon from the one it has been
-predicting with. The same two bits close a gap that predates the locker: before them a client was
-never told which large weapon a respawn had given it, so a remote player who picked the DMR drew and
-predicted a rifle for as long as they played.
+**The loadout is two requests and the record** (§10.6, [`LOADOUT.md`](LOADOUT.md) §6). A kit —
+primary, magazine pouches, grenade pouches, vest: four bytes — is asked for with
+`ClientLockerLoadout` at a locker, which the server answers to the asker alone with
+`ServerKitResult` (taken, or one of `dead`, `not_at_locker`, `mounted`, `carrying`, `invalid`,
+`too_soon`), or with `ClientSelectLoadout` for the next spawn, which is not answered. Everything a
+kit changes rides the player record, which went from 29 to 32 B for it (LOADOUT.md L-D13):
+
+| Offset | Contents |
+|---|---|
+| 0–27 | peer id, position, velocity, yaw, pitch, last input tick, state, buffer depth, health, ammo |
+| 28 | weapon (`WeaponFlags`): slot 2 · reloading 1 · team 1 · primary 2 (an index into `WeaponCatalog.LargeWeapons` plus one; **0 is no primary**) · grenades 2 |
+| 29–30 | one little-endian 16-bit field (`KitFlags.PackSpare`): the primary's **spare rounds** in the low 9 bits (0–511; a rifle at nine pouches is 270), the vest's **points** in the high 7 (0–127; heavy is 100) |
+| 31 | the **kit** (`KitFlags`): vest 2 · magazine pouches 4 · grenade pouches 2 |
+
+The owning client takes its whole kit from the record — so its weight, and the speed it predicts
+with (§10.6), are the server's word a round trip late — and its reserve under the same
+acknowledgement guard as the magazine. Taking a kit is server-side and not predicted, one round
+trip like a mount; the locker's resupply sends nothing, being the reserve, the grenades and the
+points going up in the record. The primary's two bits also closed a gap that predates the locker:
+before them a client was never told which large weapon a respawn had given it, so a remote player
+who picked the DMR drew and predicted a rifle for as long as they played. A strategist's client is
+sent the same record and so could read a player's vest; nothing on that side reads it.
 
 **Hand grenades are not a message either** (§10.9). A throw is a `ProjectileSpawn`; a grenade
 coming to rest is a `ProjectileHit` with `HitFlags.Landed`, and its blast another; and how many a
-player has left is the last two bits of the same flag byte (bits 6–7). The record stays 29 B, and
-the input frame stays twelve bytes — the key is bit 11 of its button field.
+player has left is the last two bits of the same flag byte (bits 6–7). They cost the record nothing,
+and the input frame stays twelve bytes — the key is bit 11 of its button field.
 
 **LAN discovery is not on this wire at all.** The server browser answers "who is listening?" before
 there is a connection to ask it over, so it is its own datagram on its own UDP socket
@@ -583,8 +599,8 @@ That is the whole design, and it is what keeps the feature out of the netcode:
   has none (§4.3). Its `LagCompensationTicks` stays 0 by virtue of never appearing in the clock
   probe's table.
 
-Cost on the wire: 29 B per bot per snapshot at 30 Hz — **0.9 KB/s down per client per bot**. Seven
-bots (a full 6 + 1) is ~6 KB/s, which is the same as seven more people and is already inside the
+Cost on the wire: 32 B per bot per snapshot at 30 Hz — **0.96 KB/s down per client per bot**. Seven
+bots (a full 6 + 1) is ~6.7 KB/s, which is the same as seven more people and is already inside the
 budget in §7 for that reason. Bots are also bounded by the same `SnapshotCodec.MaxPlayers` as
 everybody else: `BotFillPolicy` will not spawn one that the broadcast could not carry.
 
@@ -886,7 +902,7 @@ no structure block, so the schema is unchanged (a policy may build through `cons
 see what it built, [`AGENT_API.md`](AGENT_API.md) §6.2); a hammer does not damage a structure; and
 one navigation mesh still serves every unit (§M5 of the plan).
 
-### 10.6 Armour and the weapon locker
+### 10.6 Armour, the loadout and the weapon locker
 
 **Three of the strategist's builds are armour: the tank, the pillbox and the sniper tower.** Small
 arms do nothing to them — not the rifle, not the DMR, not the pistol, and not the heavy gun's
@@ -919,33 +935,76 @@ strikes its hull. That is M2's rule for everything, players included, and armour
 than changing it; which way it should go is a playtest question
 ([`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) §7, item 2).
 
-**The weapon locker** is the answer to armour mid-life. Before it, the only way to a launcher was
-the loadout menu, and the menu only comes up while dead. A locker (`Scripts/Fps/WeaponLocker.cs`,
-group `weapon_locker`) stands at the ground force's spawn — the Test map has one at (8, 0.5, 11),
-three metres behind the spawn line and clear of the cans — and a **tap of the use key** within
-2.5 m of it swaps the large weapon in the player's hands for the next one it holds, with a full
-magazine: rifle → launcher → DMR → rifle (`LockerSim.Next`, over `WeaponCatalog.LargeWeapons`). The
-HUD prompt names both: `[E] weapon locker: swap the rifle for the launcher`.
+**The loadout and the weapon locker** ([`LOADOUT.md`](LOADOUT.md), which has the rules, the
+numbers and how each was measured). A ground-force player's kit is a **primary** — none, the rifle,
+the DMR or the launcher — **nine pouches**, each one reload of the primary (rifle 30 rounds, DMR 10,
+launcher 2 grenades) or one hand grenade, at most three grenades, and a **vest**: none, light,
+medium or heavy. The hammer and the pistol are always carried. Everything is optional, as in
+Counter-Strike's buy menu: a player with nothing but the pistol is the fastest on the field and the
+easiest to kill. A player who never chooses carries the **default kit**, rifle, five magazines,
+three grenades and no vest (L-D3).
 
-- **It is the use key's, not a menu's.** A menu would need keys, and the keys a living player
-  presses are the recorded input the simulation runs on — 1, 2 and 3 already switch slots. One
-  button, read from the frames by the same decision table as a gun and a can
-  (`EmplacementSim.Resolve`), is what lets a bot, a policy on the agent socket and a scripted
-  scenario use a locker exactly as a person does. A tap swaps; a hold does nothing, because a hold
-  is what carries things off. Something on your back comes first — a can is put down beside the
-  locker rather than kept — and a locker is used only when it is nearer than any gun or can in
-  reach.
-- **It is for this life.** What a player spawns with is still the loadout menu's to say. Carrying
-  a locker's weapon into the next life would make a round's starting loadout depend on how the
-  last one went, including for an agent seat, whose episodes are meant to start alike
-  ([`AGENT_API.md`](AGENT_API.md) §7.1).
-- **Nothing about it is on the wire** but the two bits of the snapshot's flag byte that name the
-  large weapon (§7). A locker has no state: every locker holds every large weapon for everybody,
-  always, so there is nothing to replicate and it is not named by index anywhere. It has no
-  collider either — it is furniture to walk up to, like a can.
+- **Primary ammunition is finite.** A reload moves what the magazine is missing out of the
+  primary's spare rounds (`WeaponState.Reserve`); with none spare it does not start, and a dry
+  primary dry-fires. The pistol, every unit's weapon and every mounted gun reload forever
+  (`Reserve = -1`), so units and the heavy gun are as they were.
+- **A vest is points and a share** (`BodyArmour`, `Scripts/Sim/BodyArmour.cs` — not this section's
+  `Armour`, which is the tanks' and the structures' rule). It takes its share of each bullet or
+  swing — light 35 %, medium 50 %, heavy 65 % — and half that of a blast, out of its points, 35, 60
+  and 100; spent, it does nothing until resupplied. Five rifle rounds kill a player without one and
+  ten one in a heavy vest. A `damage` record says how much the vest `absorbed` beside the health
+  lost.
+- **Weight sets speed.** What the kit weighs, as taken — firing a magazine away makes nobody faster
+  — scales every movement state's speed by `clamp(1 + 0.02 × (9.3 − kg), 0.70, 1.12)`, 9.3 kg being
+  the default kit's, so the default moves as players always have. That multiplies the carry scale
+  (a gun 0.55, a can 0.8) and is set before every simulated tick on the server and the owning
+  client alike, from the record (§7); the replay takes a new kit's scale at once. A pistol alone
+  sprints at 9.0 m/s, the heaviest kit at 5.6, which is too slow to slide.
+
+A **weapon locker** (`Scripts/Fps/WeaponLocker.cs`, group `weapon_locker`) stands at the ground
+force's spawn — the Test map has one at (8, 0.5, 11), three metres behind the spawn line and clear
+of the cans. Its reach is **1 m, flat, from its 1.2 × 0.5 m cabinet** turned with its node
+(`LockerSupply.FootprintDistance`; guns and cans keep 2.5 m from their origin), and within it two
+things happen:
+
+- **Resupply, on its own.** A living ground-force player in reach is topped up to what their kit
+  says — one pouch's rounds every 0.5 s, one grenade every second, 30 vest points a second — and
+  given nothing while anything has hurt them in the last three seconds, §10.7's lockout for units.
+  Health is not resupplied. Nothing is sent for it but the record (§7), and the agent stream has a
+  `resupply` record for each tick that gave anything.
+- **A tap of the use key opens the locker's panel** (`UseAction.OpenLocker`, from the same decision
+  table as a gun and a can, `EmplacementSim.Resolve`; the owning client resolves its own tap from
+  its predicted frames, so the panel opens without a round trip). The panel chooses the primary,
+  the pouches and the vest, and reads out the kit's weight, its speed and its vest's hits to kill
+  from the simulation's own functions; while it is open the player stands still, the sampler sending
+  neutral frames, and it closes on `E`, `Esc`, a kit taken, death, leaving the reach or the round's
+  end. The death screen opens the same panel on the next spawn's kit.
+
+**Choosing a kit is a request, not input**, and that answers the argument this section once made
+for the use key alone: a menu's keys would be recorded input the simulation runs on, and 1, 2 and 3
+already switch slots. So the panel's keys never reach the frames, and what it chose travels as
+`ClientLockerLoadout` (§7). **One validator** takes it (`KitRequest.Check`,
+`CombatManager.TryApplyLockerKit`): a living ground-force player, not mounted, carrying nothing,
+within the locker's reach plus 0.5 m of latency slack, asking for a kit `Loadout.Sanitize` would not
+change — refused, not trimmed — and not within a quarter-second of the last kit taken. A bot and a
+policy on the agent socket (the `loadout` op) ask through the same validator, so a person, a bot
+and a policy are on one rule. **Taking a kit fills what changed**: a different primary comes with a
+full magazine and full pouches, a different vest full; what did not change keeps its state and is
+left to the resupply, so opening the panel under fire refills nothing the lockout would refuse.
+**A kit taken is also the next spawn's** (`PendingLoadout`); the next spawn's kit alone is
+`ClientSelectLoadout`, from the death screen.
+
+A locker still has no state of its own — every locker offers every kit to everybody, always — and
+no collider: it is furniture to walk up to, like a can.
 
 **Ground bots** carry two of each large weapon (`BotDirector.Equip`, by roster slot: rifle, DMR,
-launcher, DMR, rifle, launcher). Launchers were left off them until armour, because a blast
+launcher, DMR, rifle, launcher) in a kit for it: under `--bot-ai htn`, the default, a kit for its
+role (`--bot-kits role`: the DMR with five magazines, a grenade and no vest; the rifle with four, two
+grenades and a light vest; the launcher with three pouches, three grenades and a medium vest), and
+under `legacy` the default kit with that primary. A bot whose primary runs dry puts it away for the
+pistol under either AI; an HTN bot with nothing in sight walks back to the locker to be resupplied
+(`Rearm`), and its locker runner asks the validator for a launcher kit
+([`HTN_BOTS.md`](HTN_BOTS.md) §5.1). Launchers were left off them until armour, because a blast
 spares friendly *units* and no players; a bot carrying one now holds its fire while a teammate is
 within the blast radius plus 2 m of the target, or the target is that close to the bot itself
 (`BotPilot.BlastEndangersFriends`, `BotSituation.HoldFire`) — it keeps its ground and strafes
@@ -962,14 +1021,17 @@ two seeds every rifle and DMR round that arrives deals nothing, and the only dam
 the launcher's: three grenades of 40 into its pillbox. The same lanes with the old shares restored
 (tank 1, pillbox 0.25, tower 0.5) put 35 rifle rounds of 20 into the tank and kill it, and 15 and
 18 DMR rounds of 30 and 15 into the tower and the pillbox — so the rounds are arriving, and the
-armour is what stops them. A seat spawned at the locker with a rifle taps the use key once, a second in, and puts
-four grenades of 40 into a tank 45 m away, one every 4.3 s — the launcher's 1.5 s cycle and 2.5 s
-reload, rounded up to the script's next pull of the trigger.
+armour is what stops them. A seat spawned 0.75 m from the locker's footprint with a rifle asks it,
+a second in, for a launcher kit with three pouches (a `loadout` step), and puts four grenades of 40
+into a tank 45 m away, one every 4.3 s — the launcher's 1.5 s cycle and 2.5 s reload, rounded up to
+the script's next pull of the trigger.
 
-**Not in it:** the ground observation has no field for which large weapon a seat carries, so the
-agent schema is unchanged and a policy that uses a locker has to remember what it took
-([`AGENT_API.md`](AGENT_API.md) §6.1); and the strategist's units do not know what the ground force
-is carrying — a tank does not stand off from a grenadier.
+**Not in it:** the ground observation carries the kit's state — grenades, spare rounds, the vest's
+points and tier, the load's scale, normalized in the vector since `gdpyr-agent-obs-4` and raw in its
+extras ([`AGENT_API.md`](AGENT_API.md) §6.1) — but no field for which primary a seat carries: the
+`loadout` op's answer and the `kit` event name it, and a policy that uses a locker remembers what it
+took. The strategist's units do not know what the ground force is carrying — a tank does not stand
+off from a grenadier, and no unit prefers the unarmoured.
 
 ### 10.7 Resupply and the supply truck
 
@@ -1090,9 +1152,10 @@ structure block, as for the builder and the truck.
 
 ### 10.9 Hand grenades
 
-Every ground-force player and every strategist unit on foot carries **three hand grenades**
-(`GrenadeSim.Carried`; a unit's is `UnitDefinition.Grenades`, which the technical, the tank, the
-supply truck and the dropship set to 0). They are **anti-personnel**: a wide blast that kills a person near it, and a
+Every strategist unit on foot carries **three hand grenades** (`UnitDefinition.Grenades`, by
+default `GrenadeSim.Carried`, which the technical, the tank, the supply truck and the dropship set to
+0), and a ground-force player as many as their kit's grenade pouches, at most three — three in the
+default kit ([`LOADOUT.md`](LOADOUT.md) L-D1, L-D3). They are **anti-personnel**: a wide blast that kills a person near it, and a
 quarter of that to a vehicle or a structure.
 
 | | hand grenade | launcher grenade (§10.6) |
@@ -1164,12 +1227,13 @@ rifle round fired together each find their own. Landing is a `ProjectileHit` wit
 it out of the air, and it lies there until the blast, which is a second `ProjectileHit` with
 `Exploded`. The count a player has left is in the last two bits of the snapshot's flag byte (bits
 6–7, `WeaponFlags.Grenades`, so the most a body carries is `SimConfig.MaxGrenades`, 3), applied to
-the owner's prediction once it acknowledges its last throw, as the magazine is. The record stays
-29 B. A unit's grenades are server-side and not replicated. On the agent stream
-([`AGENT_API.md`](AGENT_API.md) §8) a player's grenade's `damage` and `kill` records name weapon 12.
+the owner's prediction once it acknowledges its last throw, as the magazine is; the kit byte's
+grenade pouches are the ceiling (§7). A unit's grenades are server-side and not replicated. On the agent stream
+([`AGENT_API.md`](AGENT_API.md) §8) a player's grenade's `damage` and `kill` records name weapon 12,
+and a ground seat's observation counts what it has left: `self.grenades` among the extras, and
+`kit.grenades`, over three, in the vector since `gdpyr-agent-obs-4` (§6.1 there).
 
-**Not in it:** the agent's ground observation has no grenade count, so the schema is unchanged and a
-policy that throws has to count its own; the RL action space in `tools/` has no grenade head (the
+**Not in it:** the RL action space in `tools/` has no grenade head (the
 raw `grenade` button works on the socket); a unit does not get out of the way of a grenade, and
 neither does a bot; and the computer strategist does not plan with grenades — its units throw them
 on their own. Not run in Godot here: everything above that is engine-free is in
