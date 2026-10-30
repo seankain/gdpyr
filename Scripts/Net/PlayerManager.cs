@@ -763,6 +763,7 @@ public partial class PlayerManager : Node
 			else
 			{
 				player.Interpolator?.Push(tick, snapshot.Position, snapshot.Yaw, snapshot.Pitch);
+				player.Character.ApplyRemoteMovementState(snapshot.StateId);
 			}
 		}
 	}
@@ -1226,6 +1227,7 @@ public partial class PlayerManager : Node
 				{
 					player.Interpolator?.Push(tick, _snapshotScratch[i].Position,
 						_snapshotScratch[i].Yaw, _snapshotScratch[i].Pitch);
+					player.Character.ApplyRemoteMovementState(_snapshotScratch[i].StateId);
 				}
 			}
 		}

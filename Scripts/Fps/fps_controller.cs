@@ -1,3 +1,4 @@
+using Gdpyr.Characters;
 using Gdpyr.Core;
 using Gdpyr.Sim;
 using Godot;
@@ -20,8 +21,13 @@ namespace Gdpyr.Fps;
 /// </list>
 /// <see cref="PlayerManager"/> sets the two flags before the node enters the tree
 /// and drives <see cref="Simulate"/>; this class never ticks itself.
+///
+/// It is drawn as a <see cref="HumanoidRig"/> (<see cref="Humanoid"/>), the scene's
+/// <c>Body</c>, which reads its pose from here: the movement state, which a client's
+/// remote characters take from the snapshot (<see cref="ApplyRemoteMovementState"/>),
+/// and the pitch.
 /// </summary>
-public partial class fps_controller : CharacterBody3D
+public partial class fps_controller : CharacterBody3D, IHumanoidPoseSource
 {
 	[Export]
 	public float TiltLowerLimit = Mathf.DegToRad(-90);
@@ -36,6 +42,9 @@ public partial class fps_controller : CharacterBody3D
 	CollisionObject3D selfCollider;
 	[Export]
 	public ShapeCast3D headShapeCast;
+
+	/// <summary>The ground force's colour, which the placeholder capsule was drawn in.</summary>
+	private static readonly Color BodyColour = new(0.196078f, 1f, 1f);
 
 	/// <summary>Get the gravity from the project settings to be synced with RigidBody nodes.</summary>
 	public float gravity = ProjectSettings.GetSetting("physics/3d/default_gravity").AsSingle();
@@ -98,6 +107,12 @@ public partial class fps_controller : CharacterBody3D
 	public string StateName => _stateMachine?.CurrentState?.Name ?? string.Empty;
 
 	/// <summary>
+	/// The body this character is drawn as; null on a dedicated server, which draws
+	/// nothing. The character looked out of draws only its shadow.
+	/// </summary>
+	public HumanoidRig Humanoid => _body;
+
+	/// <summary>
 	/// The buttons the *previous* simulated tick saw. Read before
 	/// <see cref="Simulate"/> to build the <see cref="InputContext"/> that combat
 	/// needs, so that movement and weapons agree about which presses were edges
@@ -141,7 +156,9 @@ public partial class fps_controller : CharacterBody3D
 	private Vector3 _visualOffset;
 	private ushort _previousButtons;
 	private bool _deadPresentation;
+	private bool _corpse;
 	private bool _fogHidden;
+	private HumanoidRig _body;
 	private BodyArmourTier _vestTier;
 	private MeshInstance3D _vestBand;
 
@@ -149,6 +166,15 @@ public partial class fps_controller : CharacterBody3D
 	{
 		_stateMachine = GetNode<StateMachine>("PlayerStateMachine");
 		_collisionShape = GetNodeOrNull<CollisionShape3D>("CollisionShape3D");
+		_body = GetNodeOrNull<HumanoidRig>("Body");
+		if (Bootstrap.IsDedicatedServer && _body != null)
+		{
+			_body.QueueFree();
+			_body = null;
+		}
+
+		_body?.Fit((_collisionShape?.Shape as CapsuleShape3D)?.Height ?? 2f);
+		_body?.Tint(BodyColour);
 		headShapeCast.AddException(selfCollider);
 
 		// Crouching and sliding animate the collision capsule, so the animation has
@@ -170,6 +196,13 @@ public partial class fps_controller : CharacterBody3D
 	/// </summary>
 	public override void _Process(double delta)
 	{
+		// A corpse is drawn until it has finished falling, and then goes as a body did.
+		if (_corpse && _body is not { IsDying: true })
+		{
+			_corpse = false;
+			ApplyPresentation();
+		}
+
 		if (_visualOffset == Vector3.Zero)
 		{
 			return;
@@ -234,11 +267,28 @@ public partial class fps_controller : CharacterBody3D
 	/// The server and the owning client both call this — the client on the health
 	/// byte in a snapshot — so the collision they each simulate agrees, a round trip
 	/// apart, and reconciliation closes the gap.
+	///
+	/// <paramref name="killed"/> is a death rather than a player taken off the field
+	/// for the role menu or the strategist's chair: the body falls, drawn and solid to
+	/// nothing, and is hidden once it is down. Not the body a process looks out of,
+	/// whose view is not of itself.
 	/// </summary>
-	public void SetDeadPresentation(bool dead)
+	public void SetDeadPresentation(bool dead, bool killed = false)
 	{
 		_deadPresentation = dead;
 		CollisionLayer = dead ? 0u : CollisionLayers.Players;
+
+		if (!dead)
+		{
+			_corpse = false;
+			_body?.Revive();
+		}
+		else if (killed && _body != null)
+		{
+			_body.Die();
+			_corpse = !IsLocalPlayer;
+		}
+
 		ApplyPresentation();
 	}
 
@@ -271,12 +321,13 @@ public partial class fps_controller : CharacterBody3D
 	/// says. Presentation only: never on the character a process looks out of, whose
 	/// chest is not in its view, nor on a dedicated server, which draws nothing.
 	///
-	/// A child of the collision shape, as the placeholder body is, so it crouches and
-	/// slides with it; and of the character, so a dead or fogged one hides it too.
+	/// A child of the body's chest bone, so it crouches, runs and falls with it, sized
+	/// to the mannequin's chest in its own metres; and of the character, so a dead or
+	/// fogged one hides it too.
 	/// </summary>
 	public void SetVestPresentation(BodyArmourTier tier)
 	{
-		if (tier == _vestTier || IsLocalPlayer || Bootstrap.IsDedicatedServer || _collisionShape == null)
+		if (tier == _vestTier || IsLocalPlayer || Bootstrap.IsDedicatedServer || _body == null)
 		{
 			return;
 		}
@@ -287,12 +338,11 @@ public partial class fps_controller : CharacterBody3D
 			_vestBand = new MeshInstance3D
 			{
 				Name = "VestBand",
-				Mesh = new CylinderMesh { TopRadius = 0.53f, BottomRadius = 0.53f, Height = 0.4f },
+				Mesh = new CylinderMesh { TopRadius = 0.23f, BottomRadius = 0.23f, Height = 0.26f },
 				MaterialOverride = new StandardMaterial3D(),
-				Position = new Vector3(0f, 0.3f, 0f),
 				CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
 			};
-			_collisionShape.AddChild(_vestBand);
+			_body.Chest.AddChild(_vestBand);
 		}
 
 		_vestBand.Visible = tier != BodyArmourTier.None;
@@ -311,9 +361,23 @@ public partial class fps_controller : CharacterBody3D
 	/// The one place <see cref="Node3D.Visible"/> is decided. Two reasons to hide a
 	/// character — it is dead, and it is out of sight — and either of them setting
 	/// the flag on its own would make the other one's state depend on the order they
-	/// arrived in.
+	/// arrived in. A death is drawn until the body is down.
 	/// </summary>
-	private void ApplyPresentation() => Visible = !_deadPresentation && !_fogHidden;
+	private void ApplyPresentation() => Visible = (!_deadPresentation || _corpse) && !_fogHidden;
+
+	/// <summary>The body's pose (<see cref="HumanoidRig"/>): from the movement state, and where the eyes point.</summary>
+	public BodyPose ReadPose()
+	{
+		State state = _stateMachine?.CurrentState;
+		return new BodyPose
+		{
+			Crouched = state is PlayerCrouchingState or PlayerSlidingState,
+			Airborne = state is PlayerJumpingState or PlayerFallingState,
+			Jumped = state is PlayerJumpingState,
+			Sprinting = state is PlayerSprintingState,
+			AimPitch = Pitch,
+		};
+	}
 
 	/// <summary>
 	/// Takes the camera and the mouse back for the first-person view.
@@ -343,6 +407,21 @@ public partial class fps_controller : CharacterBody3D
 		_simPosition = position;
 		GlobalPosition = position;
 		ApplyLook(yaw, pitch);
+	}
+
+	/// <summary>
+	/// Takes a remote character's movement state from a snapshot, for its body to be
+	/// drawn crouching, sprinting or in the air. Without <c>Enter</c>, as a rewind is
+	/// (<see cref="StateMachine.ForceState"/>): the state is shown, never stepped. Taken
+	/// as the record arrives, so about the interpolation delay ahead of the position
+	/// drawn with it — a tenth of a second early to crouch.
+	/// </summary>
+	public void ApplyRemoteMovementState(byte stateId)
+	{
+		if (!IsSimulated)
+		{
+			_stateMachine?.ForceState(stateId);
+		}
 	}
 
 	public CharacterState CaptureState(uint tick) => new()
@@ -453,6 +532,10 @@ public partial class fps_controller : CharacterBody3D
 			{
 				camera.Current = true;
 			}
+
+			// The camera is in the head: the body it looks out of casts its shadow and
+			// is not drawn, or every view would start inside a skull.
+			_body?.SetShadowCasting(GeometryInstance3D.ShadowCastingSetting.ShadowsOnly);
 			return;
 		}
 

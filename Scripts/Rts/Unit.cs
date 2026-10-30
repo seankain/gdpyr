@@ -1,3 +1,4 @@
+using Gdpyr.Characters;
 using Gdpyr.Core;
 using Gdpyr.Sim;
 using Gdpyr.Sim.Htn;
@@ -22,9 +23,11 @@ namespace Gdpyr.Rts;
 ///
 /// Built in code rather than from a scene: everything about its shape comes from
 /// <see cref="UnitDefinition"/>, and a .tscn would only be a second place for the
-/// capsule's height to disagree with the hitbox's.
+/// capsule's height to disagree with the hitbox's. A unit on foot is drawn as a
+/// <see cref="HumanoidRig"/> as tall as that capsule, in its definition's colour; a
+/// vehicle is still drawn as the capsule, and an aircraft as its airframe.
 /// </summary>
-public partial class Unit : CharacterBody3D
+public partial class Unit : CharacterBody3D, IHumanoidPoseSource
 {
 	/// <summary>Metres the destination must move before the path is asked for again.</summary>
 	private const float RepathThresholdMeters = 0.75f;
@@ -317,8 +320,12 @@ public partial class Unit : CharacterBody3D
 	/// </summary>
 	public HitCapsule Hitbox => Body.Hitbox(GlobalPosition, Posture);
 
+	/// <summary>What a unit on foot is drawn as, on a peer that draws; null for a vehicle, an aircraft and on a dedicated server.</summary>
+	public HumanoidRig Humanoid => _body;
+
 	private NavigationAgent3D _agent;
 	private MeshInstance3D _mesh;
+	private HumanoidRig _body;
 
 	/// <summary>An aircraft's rotors, on a peer that draws anything, and whether they are turning: off the ground, and shown.</summary>
 	private Node3D[] _rotors;
@@ -635,9 +642,10 @@ public partial class Unit : CharacterBody3D
 	/// <summary>
 	/// Whether it is drawn and solid, from whether it is alive and on foot — the one
 	/// place both are decided, so that dying and getting in or out cannot undo each
-	/// other (docs/VEHICLES.md §5.1). A dead unit is hidden and off its collision layer
-	/// for the frame or two before it is freed, so nothing walks into an invisible
-	/// corpse; a rider is hidden and off it for as long as it rides, and on the server
+	/// other (docs/VEHICLES.md §5.1). A dead unit is off its collision layer for the
+	/// corpse's time before it is freed, so nothing walks into it; one drawn as a
+	/// humanoid falls dead there and lies until it is freed, and anything else is hidden
+	/// at once. A rider is hidden and off it for as long as it rides, and on the server
 	/// collides with nothing either, so the hidden body never pushes its vehicle. An
 	/// aircraft off the ground is drawn, on nobody's layer, and on the server meets only
 	/// the world (docs/VEHICLES.md §8.3): nothing rides its roof into the air, and it
@@ -647,8 +655,13 @@ public partial class Unit : CharacterBody3D
 	{
 		bool shown = IsAlive && !IsRiding;
 		bool grounded = Phase == FlightPhase.Grounded;
-		Visible = shown;
+		Visible = shown || (!IsAlive && _body != null);
 		CollisionLayer = shown && grounded ? CollisionLayers.Units : 0u;
+
+		if (!IsAlive)
+		{
+			_body?.Die();
+		}
 
 		if (IsSimulated)
 		{
@@ -676,6 +689,13 @@ public partial class Unit : CharacterBody3D
 			_rotors[i].RotateY(i % 2 == 0 ? turn : -turn);
 		}
 	}
+
+	/// <summary>The body's pose (<see cref="HumanoidRig"/>): crouched or standing, and aiming while it engages.</summary>
+	public BodyPose ReadPose() => new()
+	{
+		Crouched = Posture == UnitPosture.Crouched,
+		Aiming = State == UnitStateId.Engaging,
+	};
 
 	// ---- posture (docs/TACTICS.md §5.8) ---------------------------------------
 
@@ -734,18 +754,32 @@ public partial class Unit : CharacterBody3D
 			return;
 		}
 
-		_mesh = new MeshInstance3D
+		if (Definition?.IsVehicle != true && !Bootstrap.IsDedicatedServer)
 		{
-			Name = "Mesh",
-			Position = new Vector3(0f, height * 0.5f, 0f),
-			Mesh = new CapsuleMesh { Height = height, Radius = radius, RadialSegments = 8, Rings = 3 },
-			CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-			MaterialOverride = new StandardMaterial3D
+			_body = HumanoidRig.Instantiate();
+			_body.Name = "Body";
+			AddChild(_body);
+			_body.Fit(height);
+			_body.Tint(Definition?.Color ?? new Color(0.85f, 0.25f, 0.2f));
+
+			// As the capsule was: fifty units' shadows are not worth their cost.
+			_body.SetShadowCasting(GeometryInstance3D.ShadowCastingSetting.Off);
+		}
+		else
+		{
+			_mesh = new MeshInstance3D
 			{
-				AlbedoColor = Definition?.Color ?? new Color(0.85f, 0.25f, 0.2f),
-			},
-		};
-		AddChild(_mesh);
+				Name = "Mesh",
+				Position = new Vector3(0f, height * 0.5f, 0f),
+				Mesh = new CapsuleMesh { Height = height, Radius = radius, RadialSegments = 8, Rings = 3 },
+				CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+				MaterialOverride = new StandardMaterial3D
+				{
+					AlbedoColor = Definition?.Color ?? new Color(0.85f, 0.25f, 0.2f),
+				},
+			};
+			AddChild(_mesh);
+		}
 
 		if (Definition?.IsSupply == true && !Bootstrap.IsDedicatedServer)
 		{

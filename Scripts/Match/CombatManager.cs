@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Gdpyr.Characters;
 using Gdpyr.Core;
 using Gdpyr.Fps;
 using Gdpyr.Net;
@@ -525,6 +526,7 @@ public partial class CombatManager : Node
 		}
 
 		ShotsFired++;
+		ShowFired(ownerId, definitionId);
 
 		Broadcast(MethodName.ServerProjectileSpawn, ProjectileCodec.EncodeSpawn(new ProjectileSpawn
 		{
@@ -537,6 +539,32 @@ public partial class CombatManager : Node
 		}), origin);
 
 		return id;
+	}
+
+	/// <summary>
+	/// Shows a round on the body that fired it (<see cref="HumanoidRig"/>): a grenade is a
+	/// throw, anything else a shot. From the spawn, which a listen host makes and every
+	/// client is sent, so no message of its own; a dedicated server has no bodies.
+	/// </summary>
+	private void ShowFired(int ownerId, byte definitionId)
+	{
+		HumanoidRig body = OwnerId.IsPeer(ownerId) ? Find(ownerId)?.Character?.Humanoid
+			: OwnerId.IsUnit(ownerId) ? UnitManager.Instance?.Find(OwnerId.UnitOf(ownerId))?.Humanoid
+			: null;
+
+		if (body == null)
+		{
+			return;
+		}
+
+		if (definitionId == WeaponCatalog.HandGrenade)
+		{
+			body.Throw();
+		}
+		else
+		{
+			body.Shoot();
+		}
 	}
 
 	/// <summary>
@@ -1214,7 +1242,7 @@ public partial class CombatManager : Node
 
 		victim.Deaths++;
 		victim.RespawnTick = tick + (uint)WeaponStats.SecondsToTicks(_gameMode.RespawnSeconds);
-		victim.Character?.SetDeadPresentation(true);
+		victim.Character?.SetDeadPresentation(true, killed: true);
 		victim.History.Clear();
 
 		if (attacker != null && attacker != victim)
@@ -1991,7 +2019,11 @@ public partial class CombatManager : Node
 
 		if (wasAlive != combat.IsAlive)
 		{
-			combat.Character?.SetDeadPresentation(!combat.IsAlive);
+			// Downed is a ground-force player at zero health: a death, as far as a client
+			// can tell, and the body falls. A person held for the role menu as a round
+			// starts is at zero health too (docs/NETCODE.md §7), so other clients show
+			// that as a fall as well.
+			combat.Character?.SetDeadPresentation(!combat.IsAlive, killed: combat.IsDowned);
 		}
 
 		// A respawn: the server armed the new life with full magazines in all three
@@ -2049,6 +2081,8 @@ public partial class CombatManager : Node
 		{
 			UnitManager.Instance?.OnStructureShot(spawn.OwnerPeerId, spawn.Direction);
 		}
+
+		ShowFired(spawn.OwnerPeerId, spawn.DefinitionId);
 
 		// Everyone else's shot is fast-forwarded to the tick this client is rendering,
 		// which is where the shooter is drawn too (docs/NETCODE.md §4.3).
