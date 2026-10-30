@@ -1,0 +1,13 @@
+[gd_scene format=3 uid="uid://duc3vctuedos0"]
+
+[ext_resource type="Script" uid="uid://cmsev1ekynqow" path="res://Scripts/Characters/HumanoidRig.cs" id="1_rig"]
+[ext_resource type="PackedScene" uid="uid://b3m81mxfx002v" path="res://ThirdParty/UniversalAnimationLibrary/UAL1_Standard.glb" id="2_ual"]
+
+[node name="Humanoid" type="Node3D" unique_id=1460183527]
+script = ExtResource("1_rig")
+
+[node name="Model" parent="." unique_id=873561204 instance=ExtResource("2_ual")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="." unique_id=2094417790]
+root_node = NodePath("../Model")

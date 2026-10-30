@@ -57,6 +57,9 @@ Scripts/Sim/Htn/ HTN planning: the pooled FluidHTN factory, the contact memories
 Scripts/Sim/AiDebug/ The AI debugger's engine-free half: domain maps, plan traces and history,
                 the text and graph renderers, and the spectator's wire format
 Scripts/Fps/    Character controller, movement FSM, input sampler, weapons, viewmodel
+Scripts/Characters/ The humanoid body players and units on foot are drawn as: the rig that plays the
+                Universal Animation Library's clips on its mannequin; which clip shows is
+                Scripts/Sim/BodyAnimation.cs, engine-free
 Scripts/Rts/    Units, barracks, orders, the strategist camera and selection
 Scripts/Match/  CombatManager (the round), MatchState, TeamService
 Scripts/Bots/   Computer players: the roster director, the ground pilot, the strategist, the sensor
@@ -64,13 +67,15 @@ Scripts/Agent/  The agent control channel: listener, sessions, seats, observatio
 Scripts/Ui/     Main menu and server browser, role select, pause menu, reticle, combat HUD, RTS HUD,
                 net debug HUD, the `~` console and the demo camera
 Scripts/Ui/Spectator/ The spectator's camera, and the AI debugger's panel, graph and world overlay
-Scenes/         Main menu, greybox map, player, weapon, pause menu
+Scenes/         Main menu, greybox map, player, humanoid body, weapon, pause menu
 Units/          UnitDefinition resources: three fighting tiers, the builder, the supply truck, and the
                 sniper and heavy gunner a sniper tower and a pillbox train
 Structures/     StructureDefinition resources: pillbox, sandbag wall, sniper tower
 Tests/          xUnit over the engine-free sources — `dotnet test`, no Godot needed
 Tests/Scenarios/ Playtest scenario files: data, and authoring one needs no Godot install
-ThirdParty/     Vendored source: FluidHTN at a pinned commit (docs/HTN_BOTS.md §3.8)
+ThirdParty/     Vendored source: FluidHTN at a pinned commit (docs/HTN_BOTS.md §3.8); and assets: the
+                Universal Animation Library's mannequin and clips (Quaternius, CC0), and the
+                prototyping models and textures
 tools/          External processes that talk to a server over a socket: the agent client (both
                 seats' action spaces, rewards and environments), the RLMatrix trainer, the
                 divergence probe, the playtest harness, a Python client, and the HTN planner

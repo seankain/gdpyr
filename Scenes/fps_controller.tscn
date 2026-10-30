@@ -19,15 +19,9 @@
 [ext_resource type="PackedScene" uid="uid://cpausemenuscene1" path="res://Scenes/PauseMenu.tscn" id="15_pausem"]
 [ext_resource type="Script" path="res://Scripts/Fps/AimZoom.cs" id="16_aimzm"]
 [ext_resource type="Script" path="res://Scripts/Ui/ScopeOverlay.cs" id="17_scope"]
+[ext_resource type="PackedScene" uid="uid://duc3vctuedos0" path="res://Scenes/humanoid.tscn" id="18_body"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_87822"]
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_rf7sx"]
-albedo_color = Color(0.196078, 1, 1, 1)
-
-[sub_resource type="CapsuleMesh" id="CapsuleMesh_ox3v2"]
-
-[sub_resource type="BoxMesh" id="BoxMesh_4oumj"]
 
 [sub_resource type="FastNoiseLite" id="FastNoiseLite_4oumj"]
 
@@ -370,14 +364,7 @@ headShapeCast = NodePath("ShapeCast3D")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
 shape = SubResource("CapsuleShape3D_87822")
 
-[node name="PlaceholderMesh" type="MeshInstance3D" parent="CollisionShape3D" unique_id=1150974747]
-material_overlay = SubResource("StandardMaterial3D_rf7sx")
-mesh = SubResource("CapsuleMesh_ox3v2")
-skeleton = NodePath("../..")
-
-[node name="MeshInstance3D" type="MeshInstance3D" parent="CollisionShape3D" unique_id=2006109640]
-transform = Transform3D(0.805, 0, 0, 0, 0.2, 0, 0, 0, 0.2, 0, 0.625, -0.43)
-mesh = SubResource("BoxMesh_4oumj")
+[node name="Body" parent="." unique_id=1150974747 instance=ExtResource("18_body")]
 
 [node name="CameraController" type="Node3D" parent="." unique_id=1316654868]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.596318, -0.218104)

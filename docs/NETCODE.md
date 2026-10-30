@@ -508,6 +508,14 @@ anyway, the *answer* rides `ClientSelectTeam`, which has existed since M3, and t
 ends up on rides the flag byte's team bit. There is no third team and no wire change: `Team` is one
 bit and stays one bit.
 
+The same zero is what a client draws a death from. Players and units on foot are drawn as a
+humanoid (`Scripts/Characters/HumanoidRig.cs`), and a ground-force record whose health reaches
+zero makes that body fall and lie until it is down, rather than vanish. So a person held for the
+menu as a round starts falls on other clients too, behind their own role menus; the server, which
+knows a kill from a hold, falls only the killed. A remote body's crouch, sprint and jump come from
+the record's movement state, and its shots and throws from `ProjectileSpawn`. None of it is a
+message of its own.
+
 **The loadout is two requests and the record** (§10.6, [`LOADOUT.md`](LOADOUT.md) §6). A kit —
 primary, magazine pouches, grenade pouches, vest: four bytes — is asked for with
 `ClientLockerLoadout` at a locker, which the server answers to the asker alone with
