@@ -312,8 +312,8 @@ Done in H0.
   `Properties/AssemblyInfo.cs`, the old-style `.csproj` or the Unity package metadata
   (`Fluid.HTN.asmdef`, its `.meta`, `package.json`), with upstream's `LICENSE` beside them and the
   commit in a one-line `README`. Not upstream's `Fluid-HTN.UnitTests/`: it is MSTest, and the glob
-  in §3.5 would compile it into the game. `ThirdParty/.gdignore` keeps the editor from writing
-  `.uid` files into it.
+  in §3.5 would compile it into the game. `ThirdParty/FluidHTN/.gdignore` keeps the editor from
+  writing `.uid` files into it.
 - `Gdpyr.csproj` picks the library up through the SDK's default glob, unchanged (`dotnet build
   Gdpyr.csproj`: 0 warnings, 0 errors); `Tests/Gdpyr.Tests.csproj` has one
   `<Compile Include="../ThirdParty/FluidHTN/**/*.cs" />`, plus the bench's `GroundSketch.cs` and

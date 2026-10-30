@@ -136,6 +136,11 @@ public partial class HumanoidRig : Node3D
 
 	public override void _Process(double delta)
 	{
+		if (_animator == null)
+		{
+			return;
+		}
+
 		float dt = (float)delta;
 		Vector3 position = GlobalPosition;
 		Vector3 step = position - _lastPosition;
@@ -305,18 +310,22 @@ public partial class HumanoidRig : Node3D
 		for (int i = 0; i < Clips.Length; i++)
 		{
 			Clip clip = Clips[i];
-			StringName name = _player.HasAnimation(clip.Name) ? clip.Name
+
+			// A string until it is known to be one: a null string converts to an empty
+			// StringName, not to null.
+			string found = _player.HasAnimation(clip.Name) ? clip.Name
 				: _player.HasAnimation(clip.Name + "_Loop") ? clip.Name + "_Loop"
 				: null;
-			_names[i] = name;
-			if (name == null)
+			if (found == null)
 			{
 				GD.PushWarning($"[humanoid] no clip named {clip.Name} for {(BodyClip)i}");
 				continue;
 			}
 
+			_names[i] = found;
+
 			// The import already loops what it named a loop; the aim poses are looped here.
-			_player.GetAnimation(name).LoopMode = clip.Loop ? Animation.LoopModeEnum.Linear : Animation.LoopModeEnum.None;
+			_player.GetAnimation(found).LoopMode = clip.Loop ? Animation.LoopModeEnum.Linear : Animation.LoopModeEnum.None;
 		}
 	}
 
