@@ -57,9 +57,10 @@ Scripts/Sim/Htn/ HTN planning: the pooled FluidHTN factory, the contact memories
 Scripts/Sim/AiDebug/ The AI debugger's engine-free half: domain maps, plan traces and history,
                 the text and graph renderers, and the spectator's wire format
 Scripts/Fps/    Character controller, movement FSM, input sampler, weapons, viewmodel
-Scripts/Characters/ The humanoid body players and units on foot are drawn as: the rig that plays the
-                Universal Animation Library's clips on its mannequin; which clip shows is
-                Scripts/Sim/BodyAnimation.cs, engine-free
+Scripts/Characters/ The humanoid body players and units on foot are drawn as: the rig whose
+                AnimationTree poses the Universal Animation Library's mannequin in layers —
+                the legs' stride, the arms' aim, recoil and throw over it, a death over
+                both; how it is posed is Scripts/Sim/BodyAnimation.cs, engine-free
 Scripts/Rts/    Units, barracks, orders, the strategist camera and selection
 Scripts/Match/  CombatManager (the round), MatchState, TeamService
 Scripts/Bots/   Computer players: the roster director, the ground pilot, the strategist, the sensor

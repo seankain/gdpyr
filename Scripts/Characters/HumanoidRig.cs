@@ -14,15 +14,21 @@ public interface IHumanoidPoseSource
 /// <summary>
 /// The body a ground-force player and a strategist's unit on foot are drawn as: the
 /// Universal Animation Library's mannequin (ThirdParty/UniversalAnimationLibrary,
-/// Quaternius, CC0) and an <see cref="AnimationPlayer"/> playing its clips
+/// Quaternius, CC0), posed by an <see cref="AnimationTree"/> from its clips
 /// (Scenes/humanoid.tscn).
 ///
 /// Presentation only. The capsule a body collides with and is hit as is the owner's,
 /// and unchanged; the mannequin is scaled to stand as tall as it (<see cref="Fit"/>), so
-/// a round aimed at a head finds one. Which clip shows is <see cref="BodyAnimator"/>'s,
+/// a round aimed at a head finds one. How it is posed is <see cref="BodyAnimator"/>'s,
 /// from the owner's <see cref="IHumanoidPoseSource"/> — its parent — and from what
 /// happens to it: <see cref="Shoot"/>, <see cref="Throw"/>, <see cref="Die"/>. A
 /// dedicated server draws nothing and never keeps one.
+///
+/// The tree is layered (<see cref="HumanoidBlendTree"/>): the legs walk, run, crouch
+/// and jump, and the chest, arms and head over them aim, recoil and throw, so a body
+/// can do both at once; <see cref="TorsoAlign"/> keeps the aim on the body's line over
+/// a stride that turns the hips. The scene's <c>AnimationPlayer</c> only holds the
+/// clips, for the tree to read.
 ///
 /// The library's clips are a pistol's: what aims and fires here is a pistol stance
 /// whatever is in the hands, and there is no throw among them, so the throw is the
@@ -39,13 +45,14 @@ public partial class HumanoidRig : Node3D
 	/// <summary>The bone a chest-worn thing hangs off: the upper spine, about armpit height.</summary>
 	private const string ChestBone = "spine_03";
 
+	/// <summary>The bone the arms layer starts at: it and everything off it are the chest, arms and head.</summary>
+	private const string UpperBodyBone = "spine_01";
+
 	/// <summary>Faster than anything walks, sprints or drives [m/s]: a respawn or a correction, not a stride.</summary>
 	private const float TeleportSpeed = 15f;
 
 	/// <summary>How quickly the measured speed follows the body [s]: steadies a server's 60 Hz steps under a faster frame.</summary>
 	private const float SpeedSmoothingSeconds = 0.1f;
-
-	private const float BlendSeconds = 0.15f;
 
 	/// <summary>
 	/// One clip as the library names it — the import drops a trailing <c>_Loop</c> and
@@ -93,16 +100,22 @@ public partial class HumanoidRig : Node3D
 
 	private static PackedScene _scene;
 
+	/// <summary>The one graph every body plays, built from the first body's skeleton (<see cref="HumanoidBlendTree"/>).</summary>
+	private static AnimationNodeBlendTree _blendTree;
+
 	/// <summary>A material pair per colour, so every rifleman of one kind draws with the same two.</summary>
 	private static readonly Dictionary<Color, (StandardMaterial3D Main, StandardMaterial3D Joints)> Paints = new();
 
 	private AnimationPlayer _player;
+	private AnimationTree _tree;
+	private TorsoAlign _torso;
 	private IHumanoidPoseSource _source;
 	private BodyAnimator _animator;
-	private readonly StringName[] _names = new StringName[Clips.Length];
-	private BodyClip _shown;
-	private bool _showing;
-	private int _shownSerial;
+	private readonly string[] _names = new string[Clips.Length];
+	private BodyClip _legsShown;
+	private bool _legsStarted;
+	private int _legsSerial;
+	private int _armsSerial;
 	private Vector3 _lastPosition;
 	private float _speed;
 	private BoneAttachment3D _chest;
@@ -124,14 +137,43 @@ public partial class HumanoidRig : Node3D
 	public override void _Ready()
 	{
 		_player = GetNode<AnimationPlayer>("AnimationPlayer");
-		AdoptImportedLibrary();
+		_tree = GetNode<AnimationTree>("AnimationTree");
+		if (!AdoptImportedLibrary() || FindSkeleton() is not { } skeleton)
+		{
+			_tree.Active = false;
+			return;
+		}
+
 		ResolveClips();
+
+		// A library, not a player: the tree plays the clips.
+		_player.Active = false;
+
+		Node model = GetNode("Model");
+		string skeletonPath = model.GetPathTo(skeleton).ToString();
+		_blendTree ??= HumanoidBlendTree.Build(clip => _names[(int)clip] ?? Clips[(int)clip].Name,
+			UpperBodyTracks(skeleton, skeletonPath));
+		_tree.TreeRoot = _blendTree;
+		_tree.AnimPlayer = _tree.GetPathTo(_player);
+
+		_tree.Set(HumanoidBlendTree.RecoilDeltaAmount, 1f);
+		foreach (BodyClip clip in System.Enum.GetValues<BodyClip>())
+		{
+			_tree.Set(HumanoidBlendTree.Speed(clip), Clips[(int)clip].Rate);
+		}
+
+		int spine = skeleton.FindBone(UpperBodyBone);
+		_torso = new TorsoAlign { Name = "TorsoAlign" };
+		_torso.Configure(skeleton, spine, TorsoAlign.PoseRotation(AnimationOf(BodyClip.Aim), skeletonPath, skeleton,
+			spine >= 0 ? skeleton.GetBoneParent(spine) : -1));
+		skeleton.AddChild(_torso);
 
 		_animator = new BodyAnimator(new BodyClipTimes(Seconds(BodyClip.JumpStart), Seconds(BodyClip.Land),
 			Seconds(BodyClip.Shoot), Seconds(BodyClip.Throw), Seconds(BodyClip.Death)));
 		_source = GetParent() as IHumanoidPoseSource;
 		_lastPosition = GlobalPosition;
-		Show(BodyClip.Idle, 0f);
+		_tree.Active = true;
+		Pose(default);
 	}
 
 	public override void _Process(double delta)
@@ -154,12 +196,12 @@ public partial class HumanoidRig : Node3D
 
 		// A hidden body — a rider, a fogged player, the dead — poses for nobody.
 		bool visible = IsVisibleInTree();
-		if (_player.Active != visible)
+		if (_tree.Active != visible)
 		{
-			_player.Active = visible;
+			_tree.Active = visible;
 		}
 
-		if (_source == null || !visible)
+		if (!visible)
 		{
 			return;
 		}
@@ -172,9 +214,10 @@ public partial class HumanoidRig : Node3D
 
 		_speed += (measured - _speed) * (1f - Mathf.Exp(-dt / SpeedSmoothingSeconds));
 
-		BodyPose pose = _source.ReadPose();
+		// A body with no owner to ask stands — and still falls when it is killed.
+		BodyPose pose = _source?.ReadPose() ?? default;
 		pose.GroundSpeed = _speed;
-		Show(_animator.Step(pose, dt), BlendSeconds);
+		Pose(_animator.Step(pose, dt));
 	}
 
 	/// <summary>Stands the mannequin as tall as <paramref name="heightMeters"/>: its owner's standing capsule.</summary>
@@ -234,10 +277,10 @@ public partial class HumanoidRig : Node3D
 		}
 	}
 
-	/// <summary>A round fired: the recoil standing still, and the weapon kept up for a moment after.</summary>
+	/// <summary>A round fired: the arms up and the recoil over whatever the legs are doing, and the aim kept up for a moment after.</summary>
 	public void Shoot() => _animator?.Shoot();
 
-	/// <summary>A grenade thrown.</summary>
+	/// <summary>A grenade thrown, by the arms, over whatever the legs are doing.</summary>
 	public void Throw() => _animator?.Throw();
 
 	public void Die()
@@ -249,7 +292,7 @@ public partial class HumanoidRig : Node3D
 
 		_animator.Die();
 		_deathBasis = GlobalBasis;
-		Show(BodyClip.Death, 0.1f);
+		_tree.Set(HumanoidBlendTree.DeathSeekRequest, 0.0);
 	}
 
 	/// <summary>Back on its feet at once: a respawn is a teleport, and so is its pose.</summary>
@@ -267,22 +310,60 @@ public partial class HumanoidRig : Node3D
 		if (wasDead)
 		{
 			Basis = Basis.Identity.Scaled(Vector3.One * _scale);
-			Show(BodyClip.Idle, 0f);
+			_tree.Set(HumanoidBlendTree.RecoilRequest, (int)AnimationNodeOneShot.OneShotRequest.Abort);
+			_tree.Set(HumanoidBlendTree.ThrowRequest, (int)AnimationNodeOneShot.OneShotRequest.Abort);
+			Pose(default);
 		}
+	}
+
+	/// <summary>Sets the tree's parameters from <paramref name="mix"/>, and starts what began since the last frame.</summary>
+	private void Pose(in BodyMix mix)
+	{
+		// The legs change clip when they are told to; a push-off or a landing begun
+		// again while it shows is played again from the top.
+		bool begunAgain = _animator.LegsSerial != _legsSerial && _animator.IsLegsActing
+			&& mix.Legs == _animator.LegsAction && mix.Legs == _legsShown;
+		_legsSerial = _animator.LegsSerial;
+		if (!_legsStarted || mix.Legs != _legsShown || begunAgain)
+		{
+			_tree.Set(HumanoidBlendTree.LegsRequest, HumanoidBlendTree.LegsInput(mix.Legs));
+			_legsShown = mix.Legs;
+			_legsStarted = true;
+		}
+
+		Clip legs = Clips[(int)mix.Legs];
+		_tree.Set(HumanoidBlendTree.Speed(mix.Legs), legs.Rate * BodyAnimator.StrideScale(_speed, legs.StrideSpeed));
+
+		// A recoil or a throw that began, if it is still running: a body that fired while
+		// hidden does not recoil when it is next seen.
+		if (_animator.ArmsSerial != _armsSerial)
+		{
+			_armsSerial = _animator.ArmsSerial;
+			if (_animator.IsArmsActing)
+			{
+				_tree.Set(_animator.ArmsAction == BodyClip.Throw ? HumanoidBlendTree.ThrowRequest
+					: HumanoidBlendTree.RecoilRequest, (int)AnimationNodeOneShot.OneShotRequest.Fire);
+			}
+		}
+
+		_tree.Set(HumanoidBlendTree.ArmsAmount, mix.Arms);
+		_tree.Set(HumanoidBlendTree.AimPitchAmount, mix.AimBlend);
+		_tree.Set(HumanoidBlendTree.DeathAmount, mix.Death);
+		_torso.Weight = mix.Arms * (1f - mix.Death);
 	}
 
 	/// <summary>
 	/// The imported scene brings its own player with the clips in it. Its library moves to
-	/// this rig's player, which the scene points at the mannequin, and the imported one goes:
-	/// one player per body, and the one the rig was written against.
+	/// this rig's player, which the scene points at the mannequin and the tree reads from,
+	/// and the imported one goes: one player per body, and the one the rig was written against.
 	/// </summary>
-	private void AdoptImportedLibrary()
+	private bool AdoptImportedLibrary()
 	{
 		Node model = GetNodeOrNull("Model");
 		if (model?.FindChild("AnimationPlayer", false, false) is not AnimationPlayer imported)
 		{
 			GD.PushWarning($"[humanoid] {ScenePath}: no imported AnimationPlayer under Model; the body will not animate");
-			return;
+			return false;
 		}
 
 		foreach (StringName name in imported.GetAnimationLibraryList())
@@ -298,6 +379,7 @@ public partial class HumanoidRig : Node3D
 		imported.Stop();
 		model.RemoveChild(imported);
 		imported.QueueFree();
+		return true;
 	}
 
 	private void ResolveClips()
@@ -310,9 +392,6 @@ public partial class HumanoidRig : Node3D
 		for (int i = 0; i < Clips.Length; i++)
 		{
 			Clip clip = Clips[i];
-
-			// A string until it is known to be one: a null string converts to an empty
-			// StringName, not to null.
 			string found = _player.HasAnimation(clip.Name) ? clip.Name
 				: _player.HasAnimation(clip.Name + "_Loop") ? clip.Name + "_Loop"
 				: null;
@@ -329,42 +408,41 @@ public partial class HumanoidRig : Node3D
 		}
 	}
 
-	/// <summary>How long a clip runs as played [s]; 0 for one the library does not have.</summary>
-	private float Seconds(BodyClip clip)
+	/// <summary>The clip, or null for one the library does not have.</summary>
+	private Animation AnimationOf(BodyClip clip)
 	{
-		StringName name = _names[(int)clip];
-		return name == null ? 0f : (float)_player.GetAnimation(name).Length / Clips[(int)clip].Rate;
+		string name = _names[(int)clip];
+		return name == null ? null : _player.GetAnimation(name);
 	}
 
-	private void Show(BodyClip clip, float blendSeconds)
+	/// <summary>How long a clip runs as played [s]; 0 for one the library does not have.</summary>
+	private float Seconds(BodyClip clip) =>
+		AnimationOf(clip) is { } animation ? (float)animation.Length / Clips[(int)clip].Rate : 0f;
+
+	/// <summary>The tracks of the arms layer: <see cref="UpperBodyBone"/> and every bone off it, as the clips address them.</summary>
+	private static List<NodePath> UpperBodyTracks(Skeleton3D skeleton, string skeletonPath)
 	{
-		int serial = _animator.ActionSerial;
-		bool begunAgain = serial != _shownSerial && clip == _animator.Action;
-		_shownSerial = serial;
-
-		Clip spec = Clips[(int)clip];
-		_player.SpeedScale = spec.Rate * BodyAnimator.StrideScale(_speed, spec.StrideSpeed);
-
-		if (_showing && clip == _shown && !begunAgain)
+		var paths = new List<NodePath>();
+		int root = skeleton.FindBone(UpperBodyBone);
+		if (root < 0)
 		{
-			return;
+			GD.PushWarning($"[humanoid] no bone named {UpperBodyBone}; the arms will not layer over the legs");
+			return paths;
 		}
 
-		bool restart = _showing && clip == _shown;
-		_shown = clip;
-		_showing = true;
-
-		StringName name = _names[(int)clip];
-		if (name == null)
+		var open = new Stack<int>();
+		open.Push(root);
+		while (open.Count > 0)
 		{
-			return;
+			int bone = open.Pop();
+			paths.Add(new NodePath($"{skeletonPath}:{skeleton.GetBoneName(bone)}"));
+			foreach (int child in skeleton.GetBoneChildren(bone))
+			{
+				open.Push(child);
+			}
 		}
 
-		_player.Play(name, blendSeconds);
-		if (restart)
-		{
-			_player.Seek(0, true);
-		}
+		return paths;
 	}
 
 	private IEnumerable<MeshInstance3D> Meshes()
