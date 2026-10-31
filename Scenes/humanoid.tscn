@@ -11,3 +11,7 @@ transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0, 0)
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="." unique_id=2094417790]
 root_node = NodePath("../Model")
+
+[node name="AnimationTree" type="AnimationTree" parent="." unique_id=1730962113]
+root_node = NodePath("../Model")
+active = false
