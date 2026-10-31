@@ -60,10 +60,18 @@ public partial class LoadoutPanel : Control
 	public override void _Ready()
 	{
 		Visible = false;
+
+		// Centred by its anchors and offsets, not by Position: this runs inside the tree,
+		// where moving an anchor keeps the rect where it was and Position is measured from
+		// the parent's corner, so the panel would sit off the top left of the screen.
 		AnchorLeft = 0.5f;
 		AnchorTop = 0.5f;
-		Position = new Vector2(-Width * 0.5f, -Height * 0.5f);
-		Size = new Vector2(Width, Height);
+		AnchorRight = 0.5f;
+		AnchorBottom = 0.5f;
+		OffsetLeft = -Width * 0.5f;
+		OffsetTop = -Height * 0.5f;
+		OffsetRight = Width * 0.5f;
+		OffsetBottom = Height * 0.5f;
 		Theme = GD.Load<Theme>(ThemePath);
 		Build();
 	}
