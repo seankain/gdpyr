@@ -1,4 +1,5 @@
 using System;
+using Godot;
 
 namespace Gdpyr.Sim;
 
@@ -70,6 +71,87 @@ public struct BodyPose
 
 	/// <summary>Where the weapon points above the horizontal [rad]; positive looks up, as <see cref="Aim"/> has it.</summary>
 	public float AimPitch;
+}
+
+/// <summary>
+/// A body's ground speed (<see cref="BodyPose.GroundSpeed"/>), measured from where it is
+/// drawn, once per simulation tick rather than once per rendered frame.
+///
+/// Every body is moved on the tick (60 Hz, <c>_PhysicsProcess</c>): the server's
+/// simulation, a client's prediction and its interpolation of everyone else alike. A
+/// frame drawn between two ticks shows the body where the last tick left it, and the
+/// frame after the next tick shows the whole tick's step. Measured per frame, a body
+/// drawn faster than the tick reads 0 on the frames between and the frame rate over the
+/// tick rate times its speed on the one after: past <see cref="TeleportSpeed"/> — a
+/// 5 m/s walk drawn at 240 Hz, an 8 m/s sprint at 120 — that frame is taken for a
+/// teleport and only the zeros are kept, and a running body is drawn standing. So a
+/// frame on which no tick has run measures nothing, and the next one measures the
+/// distance since over the ticks' time.
+/// </summary>
+public sealed class GroundSpeedMeter
+{
+	/// <summary>Faster than anything walks, sprints or drives [m/s]: a respawn or a correction, not a stride.</summary>
+	public const float TeleportSpeed = 15f;
+
+	/// <summary>How quickly the speed follows the body [s].</summary>
+	public const float SmoothingSeconds = 0.1f;
+
+	private readonly float _tickSeconds;
+	private Vector3 _position;
+	private ulong _tick;
+
+	/// <param name="tickSeconds">How long one simulation tick is [s].</param>
+	/// <param name="position">Where the body is drawn now.</param>
+	/// <param name="tick">How many ticks have run in all (<c>Engine.GetPhysicsFrames</c>).</param>
+	public GroundSpeedMeter(float tickSeconds, Vector3 position, ulong tick)
+	{
+		_tickSeconds = MathF.Max(tickSeconds, 1e-4f);
+		Reset(position, tick);
+	}
+
+	/// <summary>Horizontal speed [m/s].</summary>
+	public float Speed { get; private set; }
+
+	/// <summary>
+	/// The body drawn at <paramref name="position"/> once <paramref name="tick"/> ticks have
+	/// run in all. Measures the horizontal distance since the last measurement over the
+	/// ticks run since, if any have; nothing if none has.
+	/// </summary>
+	public float Observe(Vector3 position, ulong tick)
+	{
+		if (tick <= _tick)
+		{
+			return Speed;
+		}
+
+		float seconds = (tick - _tick) * _tickSeconds;
+		Vector3 step = position - _position;
+		step.Y = 0f;
+		_position = position;
+		_tick = tick;
+
+		float measured = step.Length() / seconds;
+		if (measured <= TeleportSpeed)
+		{
+			Speed += (measured - Speed) * (1f - MathF.Exp(-seconds / SmoothingSeconds));
+		}
+
+		return Speed;
+	}
+
+	/// <summary>The body is at <paramref name="position"/> but not measured — it is hidden: the next measurement starts from here.</summary>
+	public void Track(Vector3 position, ulong tick)
+	{
+		_position = position;
+		_tick = tick;
+	}
+
+	/// <summary>Standing at <paramref name="position"/>: a respawn.</summary>
+	public void Reset(Vector3 position, ulong tick)
+	{
+		Track(position, tick);
+		Speed = 0f;
+	}
 }
 
 /// <summary>How long each clip that plays once runs as played [s]: its length over its rate.</summary>
