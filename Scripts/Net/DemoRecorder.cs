@@ -119,6 +119,9 @@ public sealed class DemoRecorder : IDisposable
 		Warn();
 	}
 
+	// TODO(control points 2, docs/CONTROL_POINTS.md §6): record the drone state message as a
+	// record of its own, so a replay draws a drone's flight and not only its blast; and give a
+	// pilot's body its look-only frame in playback, as the authority did.
 	public void UnitSnapshot(uint tick, ReadOnlySpan<byte> payload)
 	{
 		_writer.WriteUnitSnapshot(tick, payload);

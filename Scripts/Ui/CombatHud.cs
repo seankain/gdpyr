@@ -199,6 +199,8 @@ public partial class CombatHud : CanvasLayer
 
 		// The drones the side's drone nodes have built, or the one being flown
 		// (docs/CONTROL_POINTS.md §4.4).
+		// TODO(control points 3, docs/CONTROL_POINTS.md §6): check on a display that the second
+		// line fits the round label's 48 px. Never looked at.
 		if (CombatManager.Instance is { } manager && combat.IsAlive)
 		{
 			int flying = manager.PilotedSlot(combat.PeerId);

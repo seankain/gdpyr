@@ -5,6 +5,9 @@ using Godot;
 
 namespace Gdpyr.Fps;
 
+// TODO(control points 3, docs/CONTROL_POINTS.md §6): check on a display, as a pilot on a client
+// and on a listen host: the camera out of the nose, the viewmodel hidden and back, and the drone
+// bodies other players see. Built headless and compiled, never looked at.
 /// <summary>
 /// What a drone looks like (docs/CONTROL_POINTS.md §4.3): a small quadcopter for every
 /// drone this process knows about, and — for the player flying one — the view from its

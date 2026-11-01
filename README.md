@@ -356,7 +356,8 @@ keeps one at a time; `Q` launches it while your side still holds a drone node. Y
 looking — it goes 24 m/s and turns towards wherever you look — while your body stands where you
 left it. It goes off on whatever it hits, on `fire` once it has flown half a second, or when its
 15 s battery runs out: 800 to what it hits, which is a dead tank, and a 4 m blast for everything
-near. If you die, it falls and does nothing. The line under the round's clock says what you have
+near. If you die, it falls and does nothing. The strategist's units cannot shoot one down yet
+([`docs/CONTROL_POINTS.md`](docs/CONTROL_POINTS.md) §6, TODO 1). The line under the round's clock says what you have
 (`[Q] drone`, `drone 40 %`, `drone 12 s · fire sets it off`).
 
 **Resupply.** Stand within a metre of the locker's cabinet — inside the green line on the floor

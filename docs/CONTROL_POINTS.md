@@ -236,22 +236,34 @@ locker near the end of an 86 s window, and whether it gets there in time changes
 
 ## 6. Not done, and open
 
+### TODO
+
+Each is marked in the code with `TODO(control points N, docs/CONTROL_POINTS.md §6)` where the work
+goes (`grep -rn "TODO(control points" Scripts`).
+
+1. **Strategist units should be able to shoot at drones.** Today nothing can: units do not take a
+   drone as a target (`UnitManager.AcquireTarget`), and no round is tested against one — a drone has
+   no hit shape in `CombatManager.FirstContact` and no health. Its counters are the pilot's body
+   standing still, retaking the drone nodes, the two minutes a node takes to build one, and the HUD
+   line that says one is ready. With it, the computer strategist should also keep its tanks back
+   while the ground force has a drone ready (`BotStrategist`, beside its commander's decision).
+2. **Demos and the agent observation should carry drones.** A replay shows a drone's blast and kill,
+   not its flight, and between keyframes walks a pilot's body where the round held it still
+   (`DemoRecorder`). The agent observation has neither the shelf nor the seat's own drone
+   (`AgentGroundView.Encode`; a layout change past `gdpyr-agent-obs-4`); a policy can press `drone`
+   and learns what happened only from the events.
+3. **Check it on a display.** The pilot's camera, the viewmodel hidden and back, other players'
+   view of a drone, the node's perk marker, and the HUD lines — the ground force's drone line, the
+   strategist's `· out at the held node` and drone warning — were built headless and compiled, never
+   looked at (`DroneView`, `ResourceNode.BuildPerkMarker`, `CombatHud`, `StrategistHud`).
+
+### Open
+
 - **No person has played it.** The strategist losing to people is the reason for all of this, and
   nothing here measures a person: whether forward deployment gives the strategist enough, and whether
   the drone gives too much back, is a playtest's question. The knobs are `DroneRules` (build time,
   shelf, airspeed, battery) and `fpv_drone.tres` (the warhead).
-- **The strategist cannot shoot a drone down.** Units do not target one, and the drone is not in the
-  hitbox registry. Its counters are the pilot's body standing still, retaking the drone nodes, the
-  two minutes a node takes to build one, and the HUD line that says one is ready. Shooting one down,
-  and the computer strategist keeping its tanks back while one is ready, are the obvious next ones.
-- **Demos** do not record drones: a replay shows the explosion's hit and the kill, not the flight, and
-  the authority's journal holds a pilot's whole frames, so between keyframes a replay walks the
-  pilot's body where the round held it still.
-- **The agent observation** does not carry drones or the shelf (`gdpyr-agent-obs-4` is unchanged);
-  a policy can press `drone` and learns what happened from the events.
 - **Only one perk.** The enum, the map's per-node setting and the marker are there for more; the
   request names the drone as an example. The near node has none on purpose (§4.1).
 - **The suite's six standing failures** (§5.4) were found here and not fixed: they fail on the
   commit this branch starts from.
-- **Not checked with a display**: the pilot's camera, the hidden viewmodel, the marker and the HUD
-  line were built headless and compiled, not looked at.

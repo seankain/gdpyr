@@ -112,6 +112,8 @@ public partial class ResourceNode : Node3D
 		}
 	}
 
+	// TODO(control points 3, docs/CONTROL_POINTS.md §6): check the marker on a display — size,
+	// colours, readable across the map. Built headless, never looked at.
 	/// <summary>
 	/// A marker for a node with a perk (docs/CONTROL_POINTS.md §4): a post at the middle
 	/// of the pad with a ring on top, a quadcopter's silhouette from a distance. It is

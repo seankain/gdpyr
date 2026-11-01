@@ -200,6 +200,9 @@ public partial class CombatManager
 		var chord = new ProjectileSegment(0, ownerId, WeaponCatalog.FpvDrone, from, drone.Position,
 			DroneRules.SweepRadiusMeters, origin: from);
 
+		// TODO(control points 1, docs/CONTROL_POINTS.md §6): strategist units should be able to
+		// shoot at drones. Nothing tests a round against a drone yet: it needs a hit shape that
+		// FirstContact checks every unit's, defence's and structure's rounds against, and health.
 		if (FirstContact(chord, ownerId, Team.GroundForce, tick, out Vector3 point, out PlayerCombat victim,
 			out Unit unitVictim, out Structure structureVictim))
 		{

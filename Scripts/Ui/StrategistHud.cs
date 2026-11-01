@@ -201,6 +201,8 @@ public partial class StrategistHud : CanvasLayer
 		UnitManager.BarracksStatus status = units?.StatusOf(barracks, tick) ?? default;
 		// Forward deployment (docs/CONTROL_POINTS.md §2): its rally point on a node the
 		// side holds puts the units out there, which is worth saying where the queue is.
+		// TODO(control points 3, docs/CONTROL_POINTS.md §6): check on a display that this line and
+		// the drone warning on the node line fit their 520 px labels. Never looked at.
 		string deploy = status.DeployNode != ForwardDeploy.Door ? " · out at the held node" : string.Empty;
 		_production.Text = status.Queued > 0
 			? $"barracks: {Display(UnitCatalog.NameOf(status.Head))} {Mathf.RoundToInt(status.Progress * 100f)}%"

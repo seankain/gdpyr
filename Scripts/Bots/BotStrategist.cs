@@ -318,6 +318,8 @@ public sealed class BotStrategist
 			world.HasMuster = true;
 		}
 
+		// TODO(control points 1, docs/CONTROL_POINTS.md §6): keep tanks back from the ground
+		// force while it has a drone ready (combat.Drones.CanLaunch): a tank's one defence is distance.
 		_commander.Decide(world, _commandUnits.AsSpan(0, count), _zones, contacts);
 		Deploy(combat, units);
 

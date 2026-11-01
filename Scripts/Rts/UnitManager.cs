@@ -810,6 +810,9 @@ public partial class UnitManager : Node
 		LaunchGrenade(unit, combat, tick, aim, situation.TargetInCover);
 	}
 
+	// TODO(control points 1, docs/CONTROL_POINTS.md §6): strategist units should be able to
+	// shoot at drones. A drone is never a candidate here, and a unit's round is never
+	// tested against one (CombatManager.FirstContact): it needs both.
 	/// <summary>
 	/// Finds the nearest ground-force player this unit can see, and keeps the one it
 	/// has while that is still true. One line-of-sight ray per unit per scan, which
