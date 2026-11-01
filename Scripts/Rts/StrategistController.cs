@@ -82,10 +82,10 @@ public partial class StrategistController : Node3D
 	/// </summary>
 	private const float VehiclePickScale = 1.25f;
 
-	/// <summary>Milliseconds a notice — a vehicle that was full — replaces the selection line.</summary>
+	/// <summary>Milliseconds a notice — a vehicle that was full — is shown at the top of the screen.</summary>
 	private const ulong NoticeMilliseconds = 1500;
 
-	/// <summary>What the selection line says instead of the next order, until <see cref="_noticeUntilMs"/>.</summary>
+	/// <summary>What the HUD's notice line says, until <see cref="_noticeUntilMs"/>.</summary>
 	private string _notice;
 	private ulong _noticeUntilMs;
 
@@ -167,6 +167,8 @@ public partial class StrategistController : Node3D
 		AddChild(_hud);
 		_hud.Overlay.Attach(_camera);
 		_hud.BuildPressed += CardBuild;
+		_hud.PlacePressed += ArmPlacement;
+		_hud.OrderPressed += CardOrder;
 		_hud.CancelPressed += CancelUnit;
 		_hud.UnloadPressed += UnloadSelected;
 		_hud.TacticsPressed += ToggleTactics;
@@ -215,10 +217,8 @@ public partial class StrategistController : Node3D
 		if (CombatManager.Instance is { } combat)
 		{
 			RefreshContacts(combat, tick);
-			_hud.Refresh(combat.Match, UnitManager.Instance, tick, Summarize(), _pendingOrder, combat.Economy,
-				BuildTarget, _selectedBarracks >= 0, SelectedStructure);
-			_hud.RefreshBuilders(UnitManager.Instance, combat.Local?.Team ?? Team.Strategist, _placing,
-				CountSelectedBuilders());
+			_hud.Refresh(combat.Match, UnitManager.Instance, tick, Summarize(), _pendingOrder, _placing,
+				combat.Economy, BuildTarget, _selectedBarracks >= 0, SelectedStructure);
 		}
 	}
 
@@ -233,7 +233,7 @@ public partial class StrategistController : Node3D
 		if (@event.IsActionPressed("rts_order_attack")) { Arm(OrderKind.Attack); }
 		else if (@event.IsActionPressed("rts_order_patrol")) { Arm(OrderKind.Patrol); }
 		else if (@event.IsActionPressed("rts_order_defend")) { Arm(OrderKind.Defend); }
-		else if (@event.IsActionPressed("rts_order_stop")) { _placing = NotPlacing; IssueOrder(OrderKind.Stop, Vector3.Zero, OwnerId.None); }
+		else if (@event.IsActionPressed("rts_order_stop")) { Stop(); }
 		else if (@event.IsActionPressed("rts_select_all")) { SelectAll(); }
 		else if (@event.IsActionPressed("rts_build_infantry")) { QueueUnit(UnitCatalog.Infantry); }
 		else if (@event.IsActionPressed("rts_build_technical")) { QueueUnit(UnitCatalog.Technical); }
@@ -249,6 +249,7 @@ public partial class StrategistController : Node3D
 		else if (@event.IsActionPressed("rts_cancel_build")) { CancelUnit(); }
 		else if (@event.IsActionPressed("rts_unload")) { UnloadSelected(); }
 		else if (@event.IsActionPressed("rts_toggle_tactics")) { ToggleTactics(); }
+		else if (@event.IsActionPressed("rts_toggle_keys")) { _hud.ToggleKeys(); }
 		else
 		{
 			return;
@@ -885,9 +886,33 @@ public partial class StrategistController : Node3D
 		_placing = NotPlacing;
 	}
 
+	/// <summary><c>Z</c> and the card's stop: puts any structure away and clears the selection's orders.</summary>
+	private void Stop()
+	{
+		_placing = NotPlacing;
+		IssueOrder(OrderKind.Stop, Vector3.Zero, OwnerId.None);
+	}
+
 	/// <summary>
-	/// Arms a structure for the next right-click. The same key again puts it away,
-	/// which is the only way out of placement besides Z and a placement.
+	/// An order button on the card: what its key does, except that pressing the armed
+	/// one again puts it away (<see cref="StrategistCards.ArmFromCard"/>). Stop is given
+	/// at once, as <c>Z</c> is.
+	/// </summary>
+	private void CardOrder(OrderKind kind)
+	{
+		if (kind == OrderKind.Stop)
+		{
+			Stop();
+			return;
+		}
+
+		Arm(StrategistCards.ArmFromCard(_pendingOrder, kind));
+	}
+
+	/// <summary>
+	/// Arms a structure for the next right-click. The same key — or its button on the
+	/// builder card — again puts it away, which is the only way out of placement
+	/// besides Z, an order key and a placement.
 	/// </summary>
 	private void ArmPlacement(byte kind)
 	{
@@ -1113,7 +1138,6 @@ public partial class StrategistController : Node3D
 		return true;
 	}
 
-	/// <summary>U and the card's button: every selected vehicle with anybody aboard lets them out where it is (V-D5).</summary>
 	/// <summary>
 	/// Switches the selection's micro-autonomy (docs/TACTICS.md §5.9): to direct when every
 	/// unit in it that has tactics is on, else on. Only those units: a builder, a vehicle
@@ -1156,6 +1180,7 @@ public partial class StrategistController : Node3D
 	private static bool HasTactics(Unit unit) =>
 		unit?.Definition is { } definition && definition.Doctrine != UnitDoctrine.None;
 
+	/// <summary>U and the card's button: every selected vehicle with anybody aboard lets them out where it is (V-D5).</summary>
 	private void UnloadSelected()
 	{
 		PruneSelection();
@@ -1240,17 +1265,26 @@ public partial class StrategistController : Node3D
 		return best;
 	}
 
-	/// <summary>The selection, as the HUD's line and card need it: the vehicles in it, and who is aboard them.</summary>
+	/// <summary>
+	/// The selection, as the HUD's card needs it: how many, how many of them are builders,
+	/// the vehicles in it, and who is aboard them.
+	/// </summary>
 	private StrategistHud.SelectionSummary Summarize()
 	{
 		var summary = new StrategistHud.SelectionSummary
 		{
 			Count = _selected.Count,
+			UnitName = _selected.Count == 1 && _selected[0] != null ? UnitCatalog.NameOf(_selected[0].DefinitionId) : null,
 			Notice = Time.GetTicksMsec() < _noticeUntilMs ? _notice : null,
 		};
 
 		for (int i = 0; i < _selected.Count; i++)
 		{
+			if (_selected[i] != null && UnitCatalog.CanConstruct(_selected[i].DefinitionId))
+			{
+				summary.Builders++;
+			}
+
 			if (HasTactics(_selected[i]))
 			{
 				summary.Tactical++;

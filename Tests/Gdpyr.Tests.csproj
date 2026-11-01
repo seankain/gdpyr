@@ -24,6 +24,12 @@
          standing a game up and typing into it is how they stop being asked. The
          half that needs a window — Scripts/Ui/GameConsole.cs — is left out. -->
     <Compile Include="../Scripts/Core/ConsoleCommands.cs" />
+    <!-- The strategist's command card, the half without a window: which card a
+         selection gets and which key each of its buttons is. "A selection of nothing
+         but builders gets the builder card" and "the card's keys are the input map's"
+         are worth answering without standing a match up. The HUD that draws it —
+         Scripts/Ui/StrategistHud.cs — is left out. -->
+    <Compile Include="../Scripts/Ui/StrategistCards.cs" />
     <!-- The round's rules are engine-free for the same reason: a ticket pool that
          ends a round is worth testing without standing a server up, and "what
          happens when the third person asks to be a strategist" is worth answering
