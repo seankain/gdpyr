@@ -8,18 +8,20 @@ using Godot;
 namespace Gdpyr.Ui;
 
 /// <summary>
-/// What the strategist needs on screen: points, what the barracks is building,
-/// what is selected, what the next right-click will mean, and the keys
-/// (docs/IMPLEMENTATION_PLAN.md §3, "Ui/ RTS HUD").
+/// What the strategist needs on screen: points, what the barracks is building, the
+/// nodes, and a command card for whatever is selected (docs/IMPLEMENTATION_PLAN.md §3,
+/// "Ui/ RTS HUD").
 ///
 /// Built in code and hosting <see cref="SelectionOverlay"/>, for the same reason
 /// <see cref="CombatHud"/> is: a greybox HUD that costs a scene file costs a merge
 /// conflict every time a milestone touches it.
 ///
-/// The key list is on screen permanently on purpose. A playtester who has to be
-/// told the controls is a playtester whose first round measures how well they were
-/// told them. The barracks card is the same argument for the build keys: a new
-/// player clicks the building, and the buttons say what the keys are.
+/// Little text on screen at any one time, on purpose: three short lines top left, and
+/// the card, which shows only what the selection can do — a barracks' units, a
+/// builder's structures, a vehicle's riders, the orders — each a button with its key
+/// printed on it (<see cref="StrategistCards"/>). A new player clicks a thing and the
+/// buttons say what the keys are; an experienced one never needs to look. The full
+/// key list is folded away behind <c>K</c> and the <b>Keys</b> button.
 /// </summary>
 public partial class StrategistHud : CanvasLayer
 {
@@ -27,8 +29,8 @@ public partial class StrategistHud : CanvasLayer
 	/// What the strategist has selected, as the HUD needs it (docs/VEHICLES.md §7):
 	/// how many units, and of them the vehicles that carry units — how many, how many
 	/// are aboard them and how many seats they have, and whether one is an aircraft
-	/// with nowhere to land. <see cref="Notice"/> is a line that replaces the usual one
-	/// for a moment: a vehicle that was full.
+	/// with nowhere to land. <see cref="Notice"/> is a line shown for a moment at the
+	/// top of the screen: a vehicle that was full.
 	/// </summary>
 	public struct SelectionSummary
 	{
@@ -44,26 +46,31 @@ public partial class StrategistHud : CanvasLayer
 		/// <summary>Of those, the ones with it on.</summary>
 		public int Autonomous;
 
-		/// <summary>The one vehicle's kind when <see cref="Vehicles"/> is 1, as a person reads it.</summary>
+		/// <summary>
+		/// Units in the selection that put structures up (docs/NETCODE.md §10.5). When it is
+		/// all of them, the card is the builder card.
+		/// </summary>
+		public int Builders;
+
+		/// <summary>The one vehicle's kind when <see cref="Vehicles"/> is 1, as the catalog names it.</summary>
 		public string VehicleName;
+
+		/// <summary>The one unit's kind when <see cref="Count"/> is 1, as the catalog names it.</summary>
+		public string UnitName;
 
 		public string Notice;
 	}
 
-	private const string Keys =
-		"WASD/edge pan · Space/Ctrl raise/lower · hold RMB and drag to look (Q/E also turn) · wheel zoom\n"
-		+ "LMB select · click the barracks to train units · RMB order · X attack-move · C patrol · B defend · Z stop · F select all\n"
-		+ "1/2/3 queue infantry/technical/tank · 4 queue builder · 8 queue supply truck · Backspace cancel · RMB with no units selected sets the rally point\n"
-		+ "9 queue a sniper at a sniper tower · 0 queue a heavy gunner at a pillbox · click a finished tower or pillbox for its queue and rally point\n"
-		+ "with builders selected: 5/6/7 then RMB places pillbox/sandbags/tower (turn the view to turn it) · RMB on a site finishes or mends it\n"
-		+ "units out of a fight for 3 s heal inside the barracks ring and a supply truck's ring: move them there\n"
-		+ "with units selected, RMB a technical and they get in, up to 4 · select it and RMB to drive · U lets them out\n"
-		+ "T queue a dropship: 8 seats, flies, lands where it has nowhere to go · RMB it with units selected to board\n"
-		+ "H tactics auto/direct for the selection: auto units take cover from fire and fire back on their own\n"
-		+ "F1 ground force · F2 strategist";
+	/// <summary>Pixels the HUD keeps from the window's edges.</summary>
+	private const float Margin = 16f;
 
-	/// <summary>Pixels the key list is tall, 26 a line; the card sits on top of it.</summary>
-	private const float KeysHeight = 260f;
+	/// <summary>Pixels between the key list, its button and the card.</summary>
+	private const float Gap = 8f;
+
+	private const float KeysButtonHeight = 28f;
+
+	/// <summary>Pixels below the top of the window the notice sits: under the round clock and the new-units button.</summary>
+	private const float NoticeTop = 56f;
 
 	/// <summary>
 	/// Every unit a card can offer, in the order the keys are: the three tiers, the
@@ -83,27 +90,48 @@ public partial class StrategistHud : CanvasLayer
 
 	private static readonly Color CardBorderColor = new(0.35f, 0.45f, 0.55f, 0.9f);
 
+	/// <summary>The armed order's or structure's button, and the notice: the overlay's site-progress amber.</summary>
+	private static readonly Color ArmedColor = new(1f, 0.85f, 0.35f);
+
+	/// <summary>
+	/// Whether the key list is open. Static so that it stays the way the player left it
+	/// when they swap seats and come back, which builds a new HUD.
+	/// </summary>
+	private static bool s_keysShown;
+
 	private Label _points;
 	private Label _production;
-	private Label _selection;
 	private Label _economy;
-	private Label _builders;
-	private Label _keys;
+	private Label _notice;
+	private Button _defaultTactics;
+
+	private Control _keysPanel;
+	private Button _keysButton;
 
 	private Control _card;
 	private Label _cardStatus;
 	private ProgressBar _cardProgress;
+	private Control _unitRow;
 	private readonly Button[] _cardButtons = new Button[CardUnits.Length];
+	private Control _structureRow;
+	private readonly Button[] _structureButtons = new Button[StrategistCards.Structures.Length];
+	private Control _orderRow;
+	private readonly Button[] _orderButtons = new Button[StrategistCards.Orders.Length];
 	private Button _cardCancel;
 	private Button _cardUnload;
 	private Button _cardTactics;
 	private Label _cardHint;
-	private Button _defaultTactics;
 
 	public SelectionOverlay Overlay { get; private set; }
 
 	/// <summary>A unit button on the card was pressed. Carries the unit's catalog id.</summary>
 	public event Action<byte> BuildPressed;
+
+	/// <summary>A structure button on the builder card was pressed: arm it, or put it away. Carries its <see cref="StructureKinds"/>.</summary>
+	public event Action<byte> PlacePressed;
+
+	/// <summary>An order button on the card was pressed: arm the order (or put it away), or, for stop, give it now.</summary>
+	public event Action<OrderKind> OrderPressed;
 
 	/// <summary>The card's cancel button was pressed.</summary>
 	public event Action CancelPressed;
@@ -135,11 +163,7 @@ public partial class StrategistHud : CanvasLayer
 
 		_points = NewLabel(root, new Vector2(24f, 16f), new Vector2(420f, 32f));
 		_production = NewLabel(root, new Vector2(24f, 48f), new Vector2(520f, 32f));
-		_selection = NewLabel(root, new Vector2(24f, 80f), new Vector2(520f, 32f));
-		_economy = NewLabel(root, new Vector2(24f, 112f), new Vector2(640f, 32f));
-		_builders = NewLabel(root, new Vector2(24f, 144f), new Vector2(760f, 32f));
-		_keys = NewLabel(root, new Vector2(24f, -(KeysHeight + 12f)), new Vector2(1100f, KeysHeight), anchorTop: 1f);
-		_keys.Text = Keys;
+		_economy = NewLabel(root, new Vector2(24f, 80f), new Vector2(520f, 32f));
 
 		// What the side's new units start with (docs/TACTICS.md §5.9), beside the points:
 		// a setting, so a button rather than a key.
@@ -149,145 +173,245 @@ public partial class StrategistHud : CanvasLayer
 			+ " auto units take cover from fire and fire back on their own";
 		_defaultTactics.Pressed += () => TacticsDefaultPressed?.Invoke();
 
+		BuildNotice(root);
+		BuildKeys(root);
 		BuildCard(root);
+		ShowKeys(s_keysShown);
 	}
 
 	/// <summary>
 	/// Called once per simulation tick by <see cref="StrategistController"/>.
 	/// <paramref name="barracks"/> is the one the build keys mean, and
-	/// <paramref name="barracksSelected"/> whether the strategist clicked on it,
-	/// which is what puts its card up. <paramref name="structure"/> is the sniper
-	/// tower or pillbox clicked on for its queue, or null; while there is one, the
-	/// card is its. With neither, and vehicles that carry units in the selection, the
-	/// card is theirs: who is aboard, and the unload button.
+	/// <paramref name="barracksSelected"/> whether the strategist clicked on it.
+	/// <paramref name="structure"/> is the sniper tower or pillbox clicked on for its
+	/// queue, or null. <paramref name="placing"/> is the structure the next right-click
+	/// puts up, or anything that is not a <see cref="StructureKinds"/> when none is armed.
+	/// Which card is up is <see cref="StrategistCards.Choose"/>'s to say.
 	/// </summary>
 	public void Refresh(MatchState match, UnitManager units, uint tick, in SelectionSummary selection,
-		OrderKind pendingOrder, EconomyService economy, int barracks, bool barracksSelected, Structure structure)
+		OrderKind pendingOrder, byte placing, EconomyService economy, int barracks, bool barracksSelected,
+		Structure structure)
 	{
 		int live = units?.LiveUnitCount ?? 0;
 
 		_points.Text = match.Phase == RoundPhase.Live
-			? $"points {match.StrategistPoints}   units {live}/{SimConfig.MaxUnits}   {Clock(match.SecondsRemaining(tick))}"
-			: $"points {match.StrategistPoints}   units {live}/{SimConfig.MaxUnits}   {match.Phase}";
+			? $"points {match.StrategistPoints} · units {live}/{SimConfig.MaxUnits} · {Clock(match.SecondsRemaining(tick))}"
+			: $"points {match.StrategistPoints} · units {live}/{SimConfig.MaxUnits} · {match.Phase}";
 
 		UnitManager.BarracksStatus status = units?.StatusOf(barracks, tick) ?? default;
 		_production.Text = status.Queued > 0
-			? $"barracks: {UnitCatalog.NameOf(status.Head)} {Mathf.RoundToInt(status.Progress * 100f)}%"
-				+ $"   queued {status.Queued}"
+			? $"barracks: {Display(UnitCatalog.NameOf(status.Head))} {Mathf.RoundToInt(status.Progress * 100f)}%"
+				+ $" · queued {status.Queued}"
 			: "barracks: idle";
 
-		_selection.Text = structure != null
-			? $"selected {NameOf(structure)}   right-click the ground to set its rally point"
-			: barracksSelected
-				? "selected barracks   right-click the ground to set its rally point"
-				: !string.IsNullOrEmpty(selection.Notice)
-					? $"selected {selection.Count}   {selection.Notice}"
-					: $"selected {selection.Count}   next order: {Describe(pendingOrder)}";
 		_economy.Text = Economy(economy);
 		_defaultTactics.Text = $"new units: {(units?.AutonomyDefault == MicroAutonomy.On ? "Auto" : "Direct")}";
 
-		if (structure != null)
+		string placingName = StructureKinds.IsValid(placing) ? Display(StructureCatalog.NameOf(placing)) : null;
+		RefreshNotice(selection, placingName);
+
+		StrategistCardMode mode = StrategistCards.Choose(structure != null, barracksSelected, selection.Count,
+			selection.Builders, selection.Vehicles);
+
+		_card.Visible = mode != StrategistCardMode.None;
+		if (mode == StrategistCardMode.None)
 		{
-			RefreshCard(match, shown: true, NameOf(structure), structure.TrainingQueued, structure.TrainsUnit,
-				structure.TrainingProgress(tick), only: structure.TrainsUnit);
+			return;
 		}
-		else if (barracksSelected || (selection.Vehicles == 0 && selection.Tactical == 0))
+
+		ShowRows(mode, selection);
+		_cardHint.Text = StrategistCards.RightClick(mode, pendingOrder, selection.Builders > 0 ? placingName : null);
+
+		switch (mode)
 		{
-			RefreshCard(match, barracksSelected, "barracks", status.Queued, status.Head, status.Progress, only: -1);
+			case StrategistCardMode.Structure:
+				RefreshTraining(match, NameOf(structure), structure.TrainingQueued, structure.TrainsUnit,
+					structure.TrainingProgress(tick), only: structure.TrainsUnit);
+				break;
+			case StrategistCardMode.Barracks:
+				RefreshTraining(match, "barracks", status.Queued, status.Head, status.Progress, only: -1);
+				break;
+			case StrategistCardMode.Builders:
+				RefreshBuilders(match, units, selection, placing);
+				break;
+			case StrategistCardMode.Vehicles:
+				RefreshVehicles(selection);
+				break;
+			default:
+				RefreshUnits(selection);
+				break;
 		}
-		else if (selection.Vehicles > 0)
+
+		if (StrategistCards.HasOrders(mode))
 		{
-			RefreshVehicleCard(selection);
+			RefreshOrders(pendingOrder);
 		}
-		else
-		{
-			RefreshUnitCard(selection);
-		}
+
+		PlaceCard();
+	}
+
+	/// <summary><c>K</c> and the <b>Keys</b> button: opens the full key list, or folds it away.</summary>
+	public void ToggleKeys() => ShowKeys(!s_keysShown);
+
+	private void ShowKeys(bool shown)
+	{
+		s_keysShown = shown;
+		_keysPanel.Visible = shown;
+		_keysButton.Text = shown ? "Hide keys (K)" : "Keys (K)";
+		PlaceCard();
 	}
 
 	/// <summary>
-	/// The card's fourth mode (docs/TACTICS.md §5.9): units on foot selected, and how they
-	/// fight — auto, direct, or mixed — with the switch.
+	/// The one line at the top that comes and goes: a notice — a vehicle that was full,
+	/// tactics switched — or, while a structure is armed with no builder selected to put
+	/// it up, what is missing. Hidden otherwise.
 	/// </summary>
-	private void RefreshUnitCard(in SelectionSummary selection)
+	private void RefreshNotice(in SelectionSummary selection, string placingName)
 	{
-		_card.Visible = true;
-		ShowTrainingControls(false);
-		_cardUnload.Visible = false;
-		RefreshTactics(selection);
+		string text = !string.IsNullOrEmpty(selection.Notice)
+			? selection.Notice
+			: placingName != null && selection.Builders == 0
+				? $"placing a {placingName}: select a builder to put it up"
+				: string.Empty;
 
-		_cardStatus.Text = $"{selection.Count} selected · tactics {MicroAutonomyNames.Describe(selection.Tactical, selection.Autonomous).ToLowerInvariant()}"
-			+ (selection.Tactical is > 0 && selection.Autonomous > 0 && selection.Autonomous < selection.Tactical
-				? $" ({selection.Autonomous} of {selection.Tactical} auto)"
-				: string.Empty);
-		_cardHint.Text = "auto: they take cover from fire and fire back · direct: they do what they are told";
+		_notice.Text = text;
+		_notice.Visible = text.Length > 0;
 	}
 
-	/// <summary>The tactics button, for whatever on foot the selection holds: shown only when there is something to set.</summary>
+	/// <summary>
+	/// Which of the card's rows the mode has. Set once per refresh, each to its final
+	/// value, so a container is not laid out twice a tick by a row that goes and comes back.
+	/// </summary>
+	private void ShowRows(StrategistCardMode mode, in SelectionSummary selection)
+	{
+		bool training = mode is StrategistCardMode.Barracks or StrategistCardMode.Structure;
+		bool orders = StrategistCards.HasOrders(mode);
+
+		_cardProgress.Visible = training;
+		_unitRow.Visible = training;
+		_cardCancel.Visible = training;
+		_structureRow.Visible = mode == StrategistCardMode.Builders;
+		_orderRow.Visible = orders;
+		_cardUnload.Visible = mode == StrategistCardMode.Vehicles;
+		_cardTactics.Visible = orders && selection.Tactical > 0;
+	}
+
+	/// <summary>
+	/// The builder card (docs/NETCODE.md §10.5): how many builders, how many structures
+	/// stand and are going up, and a button per structure they put up — pressed is the
+	/// same as its key, and the armed one stays lit until it is placed or put away. One
+	/// the strategist cannot afford is greyed out, as on the barracks card.
+	/// </summary>
+	private void RefreshBuilders(MatchState match, UnitManager units, in SelectionSummary selection, byte placing)
+	{
+		int standing = units?.StructureCount ?? 0;
+		int sites = units?.SitesUnderConstruction ?? 0;
+		string who = selection.Count == 1 ? "builder" : $"{selection.Count} builders";
+		_cardStatus.Text = $"{who} · structures {standing}/{SimConfig.MaxStructures}"
+			+ (sites > 0 ? $", {sites} going up" : string.Empty);
+
+		bool full = standing >= SimConfig.MaxStructures;
+		for (int i = 0; i < StrategistCards.Structures.Length; i++)
+		{
+			byte kind = StrategistCards.Structures[i];
+			int cost = StructureCatalog.CostOf(kind);
+			bool armed = placing == kind;
+			Button button = _structureButtons[i];
+
+			// Every refresh, for the reason the unit buttons are: this HUD does not know
+			// whether the catalog was loaded before it was built.
+			button.Text = $"{StructureCatalog.NameOf(kind).Capitalize()} ({StrategistCards.StructureKeys[i]})\n{cost} pts";
+			button.TooltipText = StructureTooltip(kind);
+
+			// The armed one stays pressable, so a click puts it away whatever the points say.
+			button.Disabled = !armed && (full || !StructureCatalog.IsBuildable(kind) || match.StrategistPoints < cost);
+			button.SetPressedNoSignal(armed);
+		}
+	}
+
+	/// <summary>What a structure is, for its button's tooltip: the numbers the README gives.</summary>
+	private static string StructureTooltip(byte kind)
+	{
+		if (StructureCatalog.Definition(kind) is not { } definition)
+		{
+			return string.Empty;
+		}
+
+		string text = $"{definition.Cost} points, {definition.BuildSeconds:0.#} s for one builder to put up,"
+			+ $" {definition.MaxHealth:0} health";
+		text += definition.IsBulletProof ? ", bullet-proof" : string.Empty;
+		text += definition.IsArmed ? $"; a gun that reaches {definition.RangeMeters:0} m" : "; cover, and nothing else";
+		text += definition.Trains ? $"; trains {Display(UnitCatalog.NameOf(definition.TrainsUnit))}s" : string.Empty;
+		return text;
+	}
+
+	/// <summary>
+	/// The unit card (docs/TACTICS.md §5.9): what is selected, how it fights — auto,
+	/// direct, or mixed — the orders, and the tactics switch where it means anything.
+	/// </summary>
+	private void RefreshUnits(in SelectionSummary selection)
+	{
+		string who = selection.Count == 1 && selection.UnitName != null
+			? Display(selection.UnitName)
+			: $"{selection.Count} selected";
+
+		_cardStatus.Text = selection.Tactical > 0
+			? $"{who} · tactics {MicroAutonomyNames.Describe(selection.Tactical, selection.Autonomous).ToLowerInvariant()}"
+				+ (selection.Autonomous > 0 && selection.Autonomous < selection.Tactical
+					? $" ({selection.Autonomous} of {selection.Tactical} auto)"
+					: string.Empty)
+			: who;
+
+		RefreshTactics(selection);
+	}
+
+	/// <summary>The tactics button's label. Whether it is up at all is <see cref="ShowRows"/>'.</summary>
 	private void RefreshTactics(in SelectionSummary selection)
 	{
-		_cardTactics.Visible = selection.Tactical > 0;
 		_cardTactics.Text = $"Tactics: {MicroAutonomyNames.Describe(selection.Tactical, selection.Autonomous)} (H)";
 	}
 
 	/// <summary>
-	/// The card's third mode (docs/VEHICLES.md §7): the selected vehicles that carry
-	/// units, how many are aboard of how many seats, and the button that lets them out —
-	/// greyed out with nobody aboard. Nothing to train, so no unit buttons, no bar and
-	/// no cancel.
+	/// The vehicle card (docs/VEHICLES.md §7): the selected vehicles that carry units,
+	/// how many are aboard of how many seats, the orders, and the button that lets them
+	/// out — greyed out with nobody aboard.
 	/// </summary>
-	private void RefreshVehicleCard(in SelectionSummary selection)
+	private void RefreshVehicles(in SelectionSummary selection)
 	{
-		_card.Visible = true;
-		ShowTrainingControls(false);
-
 		string what = selection.Vehicles == 1
-			? (selection.VehicleName ?? "vehicle").Replace('_', ' ')
+			? Display(selection.VehicleName ?? "vehicle")
 			: $"{selection.Vehicles} vehicles";
 		_cardStatus.Text = selection.CannotLand
 			? $"{what} · no room to land"
 			: $"{what} · {selection.Aboard}/{selection.Seats} aboard";
 
 		_cardUnload.Disabled = selection.Aboard == 0;
-		_cardHint.Text = "right-click with units selected to board · right-click the ground to drive";
 		RefreshTactics(selection);
 	}
 
-	/// <summary>The parts of the card that are about training, shown for a barracks or a structure and hidden for vehicles.</summary>
-	private void ShowTrainingControls(bool training)
+	/// <summary>The order row: the armed order's button lit. Stop is never armed; it is given when pressed.</summary>
+	private void RefreshOrders(OrderKind pendingOrder)
 	{
-		_cardProgress.Visible = training;
-		_cardCancel.Visible = training;
-		_cardUnload.Visible = !training;
-		_cardTactics.Visible = false;
-		for (int i = 0; i < _cardButtons.Length && !training; i++)
+		for (int i = 0; i < StrategistCards.Orders.Length; i++)
 		{
-			_cardButtons[i].Visible = false;
+			OrderKind kind = StrategistCards.Orders[i];
+			_orderButtons[i].SetPressedNoSignal(kind != OrderKind.Stop && kind == pendingOrder);
 		}
 	}
 
 	/// <summary>
-	/// The card's live half: what is training, and which buttons can be pressed. It
-	/// offers what a barracks trains when <paramref name="only"/> is negative, and that
-	/// one unit when it is a structure's. A button the strategist cannot afford is
-	/// greyed out rather than hidden, so the card always shows the whole menu and the
-	/// price of each thing on it.
+	/// The barracks or structure card: what is training, and which buttons can be
+	/// pressed. It offers what a barracks trains when <paramref name="only"/> is
+	/// negative, and that one unit when it is a structure's. A button the strategist
+	/// cannot afford is greyed out rather than hidden, so the card always shows the
+	/// whole menu and the price of each thing on it.
 	/// </summary>
-	private void RefreshCard(MatchState match, bool shown, string title, int queued, byte head, float progress,
-		int only)
+	private void RefreshTraining(MatchState match, string title, int queued, byte head, float progress, int only)
 	{
-		_card.Visible = shown;
-		if (!shown)
-		{
-			return;
-		}
-
-		ShowTrainingControls(true);
-		_cardHint.Text = "right-click the ground to set the rally point";
 		_cardStatus.Text = queued > 0
-			? $"{title}: training {UnitCatalog.NameOf(head).Replace('_', ' ')} {Mathf.RoundToInt(progress * 100f)}%"
-				+ $"   queued {queued}"
-			: $"{title}: idle, pick a unit to train";
+			? $"{title}: training {Display(UnitCatalog.NameOf(head))} {Mathf.RoundToInt(progress * 100f)}%"
+				+ $" · queued {queued}"
+			: $"{title}: idle";
 		_cardProgress.Value = queued > 0 ? progress : 0f;
 
 		bool full = queued >= SimConfig.MaxBuildQueue;
@@ -324,36 +448,38 @@ public partial class StrategistHud : CanvasLayer
 		_cardCancel.Disabled = queued == 0;
 	}
 
-	/// <summary>A structure's name as a person reads it: "sniper tower", not "sniper_tower".</summary>
-	private static string NameOf(Structure structure) => StructureCatalog.NameOf(structure.Kind).Replace('_', ' ');
-
 	/// <summary>
-	/// The builders' line (docs/NETCODE.md §10.5): how many there are, what is
-	/// standing and what is going up, and — while a structure is armed — what the
-	/// next right-click will put down and what it costs.
+	/// The card sits in the bottom-right corner, and above the key list while that is
+	/// open: the list is as wide as a narrow window.
 	/// </summary>
-	public void RefreshBuilders(UnitManager units, Team team, byte placing, int buildersSelected)
+	private void PlaceCard()
 	{
-		int builders = units?.BuilderCount(team) ?? 0;
-		int standing = units?.StructureCount ?? 0;
-		int sites = units?.SitesUnderConstruction ?? 0;
-
-		string line = $"builders {builders}   structures {standing}/{SimConfig.MaxStructures}"
-			+ (sites > 0 ? $" ({sites} going up)" : string.Empty);
-
-		if (StructureKinds.IsValid(placing))
+		if (_card == null || _keysPanel == null)
 		{
-			line += buildersSelected > 0
-				? $"   placing {StructureCatalog.NameOf(placing).Replace('_', ' ')} ({StructureCatalog.CostOf(placing)})"
-				: "   select a builder to place with";
+			return;
 		}
 
-		_builders.Text = line;
+		float bottom = -Margin - (s_keysShown
+			? KeysButtonHeight + Gap + _keysPanel.GetCombinedMinimumSize().Y + Gap
+			: 0f);
+		_card.OffsetTop = bottom;
+		_card.OffsetBottom = bottom;
 	}
 
+	/// <summary>A structure's name as a person reads it: "sniper tower", not "sniper_tower".</summary>
+	private static string NameOf(Structure structure) => Display(StructureCatalog.NameOf(structure.Kind));
+
+	/// <summary>A catalog name as a person reads it.</summary>
+	private static string Display(string name) => name.Replace('_', ' ');
+
+	/// <summary>"attack-move" as a button says it: "Attack-move".</summary>
+	private static string Sentence(string text) =>
+		string.IsNullOrEmpty(text) ? text : char.ToUpperInvariant(text[0]) + text[1..];
+
 	/// <summary>
-	/// What the nodes are doing, in one line: what is being held, what is being
-	/// fought over, and what has been earned (docs/IMPLEMENTATION_PLAN.md §M5).
+	/// What the nodes are doing, in one line: what is being held, what has been lost
+	/// and what is being fought over (docs/IMPLEMENTATION_PLAN.md §M5). Only what is
+	/// not zero; nothing at all on a map without nodes.
 	///
 	/// A strategist with no nodes and no units is one losing condition away from
 	/// the round being over, so this is the line that says how close that is.
@@ -362,21 +488,13 @@ public partial class StrategistHud : CanvasLayer
 	{
 		if (economy == null || economy.NodeCount == 0)
 		{
-			return "nodes: none on this map";
+			return string.Empty;
 		}
 
-		string contested = economy.ContestedNodes > 0 ? $"   {economy.ContestedNodes} contested" : string.Empty;
 		return $"nodes {economy.StrategistNodes}/{economy.NodeCount} held"
-			+ $"   {economy.GroundNodes} lost{contested}   earned {economy.IncomePaid}";
+			+ (economy.GroundNodes > 0 ? $" · {economy.GroundNodes} lost" : string.Empty)
+			+ (economy.ContestedNodes > 0 ? $" · {economy.ContestedNodes} contested" : string.Empty);
 	}
-
-	private static string Describe(OrderKind kind) => kind switch
-	{
-		OrderKind.Attack => "attack-move",
-		OrderKind.Patrol => "patrol",
-		OrderKind.Defend => "defend",
-		_ => "move",
-	};
 
 	private static string Clock(float seconds)
 	{
@@ -384,10 +502,69 @@ public partial class StrategistHud : CanvasLayer
 		return $"{whole / 60:00}:{whole % 60:00}";
 	}
 
+	private void BuildNotice(Control root)
+	{
+		_notice = new Label
+		{
+			MouseFilter = Control.MouseFilterEnum.Ignore,
+			HorizontalAlignment = HorizontalAlignment.Center,
+			Visible = false,
+		};
+		_notice.AddThemeColorOverride("font_color", ArmedColor);
+		_notice.AddThemeColorOverride("font_outline_color", Colors.Black);
+		_notice.AddThemeConstantOverride("outline_size", 4);
+		root.AddChild(_notice);
+
+		// Pinned by the middle of its top edge and grown both ways, so it is centred
+		// whatever it says.
+		_notice.SetAnchorsPreset(Control.LayoutPreset.CenterTop);
+		_notice.GrowHorizontal = Control.GrowDirection.Both;
+		_notice.OffsetLeft = 0f;
+		_notice.OffsetRight = 0f;
+		_notice.OffsetTop = NoticeTop;
+		_notice.OffsetBottom = NoticeTop;
+	}
+
 	/// <summary>
-	/// The command card: what the selected barracks, sniper tower or pillbox is
-	/// training, a button per unit it can train, and a way to take the last one back.
-	/// Up only while one is selected, in the bottom-right corner above the key list.
+	/// The key list, folded away behind a small button in the bottom-left corner. It
+	/// passes clicks through to the map: it is something to read, not to press.
+	/// </summary>
+	private void BuildKeys(Control root)
+	{
+		_keysButton = NewCardButton(root, new Vector2(0f, KeysButtonHeight));
+		_keysButton.TooltipText = "every key the strategist has";
+		_keysButton.Pressed += ToggleKeys;
+		_keysButton.SetAnchorsPreset(Control.LayoutPreset.BottomLeft);
+		_keysButton.GrowVertical = Control.GrowDirection.Begin;
+		_keysButton.OffsetLeft = Margin;
+		_keysButton.OffsetRight = Margin;
+		_keysButton.OffsetTop = -Margin;
+		_keysButton.OffsetBottom = -Margin;
+
+		var panel = new PanelContainer { Visible = false, MouseFilter = Control.MouseFilterEnum.Ignore };
+		panel.AddThemeStyleboxOverride("panel", CardStyle());
+		root.AddChild(panel);
+
+		var keys = new Label { Text = StrategistCards.KeyList, MouseFilter = Control.MouseFilterEnum.Ignore };
+		keys.AddThemeFontSizeOverride("font_size", 13);
+		panel.AddChild(keys);
+
+		float bottom = -(Margin + KeysButtonHeight + Gap);
+		panel.SetAnchorsPreset(Control.LayoutPreset.BottomLeft);
+		panel.GrowVertical = Control.GrowDirection.Begin;
+		panel.OffsetLeft = Margin;
+		panel.OffsetRight = Margin;
+		panel.OffsetTop = bottom;
+		panel.OffsetBottom = bottom;
+
+		_keysPanel = panel;
+	}
+
+	/// <summary>
+	/// The command card: a status line, then the rows the selection has — what a
+	/// barracks or structure trains, what builders put up, the orders — and a footer
+	/// with cancel, unload, tactics and what a right-click does. Up only while
+	/// something is selected, in the bottom-right corner.
 	/// </summary>
 	private void BuildCard(Control root)
 	{
@@ -398,16 +575,7 @@ public partial class StrategistHud : CanvasLayer
 			// Stop, so a click on the card is not also a box select of the map behind it.
 			MouseFilter = Control.MouseFilterEnum.Stop,
 		};
-		panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
-		{
-			BgColor = new Color(0.04f, 0.05f, 0.07f, 0.85f),
-			BorderColor = CardBorderColor,
-			BorderWidthTop = 2,
-			ContentMarginLeft = 12f,
-			ContentMarginRight = 12f,
-			ContentMarginTop = 8f,
-			ContentMarginBottom = 10f,
-		});
+		panel.AddThemeStyleboxOverride("panel", CardStyle());
 		root.AddChild(panel);
 
 		var column = new VBoxContainer();
@@ -428,18 +596,34 @@ public partial class StrategistHud : CanvasLayer
 
 		// The overlay's site-progress colours, so "going up" looks the same everywhere.
 		_cardProgress.AddThemeStyleboxOverride("background", new StyleBoxFlat { BgColor = new Color(0f, 0f, 0f, 0.6f) });
-		_cardProgress.AddThemeStyleboxOverride("fill", new StyleBoxFlat { BgColor = new Color(1f, 0.85f, 0.35f) });
+		_cardProgress.AddThemeStyleboxOverride("fill", new StyleBoxFlat { BgColor = ArmedColor });
 		column.AddChild(_cardProgress);
 
-		var units = new HBoxContainer();
-		units.AddThemeConstantOverride("separation", 6);
-		column.AddChild(units);
-
+		_unitRow = NewRow(column);
 		for (int i = 0; i < CardUnits.Length; i++)
 		{
 			byte id = CardUnits[i];
-			_cardButtons[i] = NewCardButton(units, new Vector2(104f, 56f));
+			_cardButtons[i] = NewCardButton(_unitRow, new Vector2(104f, 56f));
 			_cardButtons[i].Pressed += () => BuildPressed?.Invoke(id);
+		}
+
+		_structureRow = NewRow(column);
+		for (int i = 0; i < StrategistCards.Structures.Length; i++)
+		{
+			byte kind = StrategistCards.Structures[i];
+			_structureButtons[i] = NewCardButton(_structureRow, new Vector2(132f, 56f), toggle: true);
+			_structureButtons[i].Pressed += () => PlacePressed?.Invoke(kind);
+		}
+
+		_orderRow = NewRow(column);
+		for (int i = 0; i < StrategistCards.Orders.Length; i++)
+		{
+			OrderKind kind = StrategistCards.Orders[i];
+			Button button = NewCardButton(_orderRow, new Vector2(0f, 32f), toggle: kind != OrderKind.Stop);
+			button.Text = $"{Sentence(StrategistCards.NameOf(kind))} ({StrategistCards.OrderKeys[i]})";
+			button.TooltipText = StrategistCards.DescribeOrder(kind);
+			button.Pressed += () => OrderPressed?.Invoke(kind);
+			_orderButtons[i] = button;
 		}
 
 		var footer = new HBoxContainer();
@@ -466,7 +650,6 @@ public partial class StrategistHud : CanvasLayer
 		// Set per mode: what a right-click means depends on what the card is up for.
 		_cardHint = new Label
 		{
-			Text = "right-click the ground to set the rally point",
 			VerticalAlignment = VerticalAlignment.Center,
 			MouseFilter = Control.MouseFilterEnum.Ignore,
 		};
@@ -479,19 +662,33 @@ public partial class StrategistHud : CanvasLayer
 		panel.SetAnchorsPreset(Control.LayoutPreset.BottomRight);
 		panel.GrowHorizontal = Control.GrowDirection.Begin;
 		panel.GrowVertical = Control.GrowDirection.Begin;
-		panel.OffsetLeft = -16f;
-		panel.OffsetRight = -16f;
-		panel.OffsetTop = -(KeysHeight + 20f);
-		panel.OffsetBottom = -(KeysHeight + 20f);
+		panel.OffsetLeft = -Margin;
+		panel.OffsetRight = -Margin;
+		panel.OffsetTop = -Margin;
+		panel.OffsetBottom = -Margin;
 
 		_card = panel;
 	}
 
-	private static Button NewCardButton(Control parent, Vector2 minimumSize)
+	private static HBoxContainer NewRow(Control parent)
+	{
+		var row = new HBoxContainer();
+		row.AddThemeConstantOverride("separation", 6);
+		parent.AddChild(row);
+		return row;
+	}
+
+	/// <summary>
+	/// A button for the card. <paramref name="toggle"/> makes it one that stays down while
+	/// what it arms is armed: an order or a structure. The HUD sets whether it is down,
+	/// every refresh, from what the controller says is armed.
+	/// </summary>
+	private static Button NewCardButton(Control parent, Vector2 minimumSize, bool toggle = false)
 	{
 		var button = new Button
 		{
 			CustomMinimumSize = minimumSize,
+			ToggleMode = toggle,
 
 			// Never focused: Space raises the camera, and a focused button takes Space
 			// as a press.
@@ -500,30 +697,50 @@ public partial class StrategistHud : CanvasLayer
 
 		// The default theme's buttons are near-black, which on a near-black card
 		// reads as text rather than as something to press.
-		button.AddThemeStyleboxOverride("normal", CardButtonStyle(new Color(0.14f, 0.18f, 0.23f)));
-		button.AddThemeStyleboxOverride("hover", CardButtonStyle(new Color(0.2f, 0.26f, 0.33f)));
-		button.AddThemeStyleboxOverride("pressed", CardButtonStyle(new Color(0.09f, 0.11f, 0.14f)));
-		button.AddThemeStyleboxOverride("disabled", CardButtonStyle(new Color(0.08f, 0.09f, 0.11f)));
+		button.AddThemeStyleboxOverride("normal", CardButtonStyle(new Color(0.14f, 0.18f, 0.23f), CardBorderColor));
+		button.AddThemeStyleboxOverride("hover", CardButtonStyle(new Color(0.2f, 0.26f, 0.33f), CardBorderColor));
+		button.AddThemeStyleboxOverride("disabled", CardButtonStyle(new Color(0.08f, 0.09f, 0.11f), CardBorderColor));
+
+		if (toggle)
+		{
+			// Down means armed: the next right-click is this. Lit, not darkened.
+			button.AddThemeStyleboxOverride("pressed", CardButtonStyle(new Color(0.32f, 0.27f, 0.12f), ArmedColor));
+			button.AddThemeStyleboxOverride("hover_pressed", CardButtonStyle(new Color(0.38f, 0.32f, 0.14f), ArmedColor));
+		}
+		else
+		{
+			button.AddThemeStyleboxOverride("pressed", CardButtonStyle(new Color(0.09f, 0.11f, 0.14f), CardBorderColor));
+		}
 
 		parent.AddChild(button);
 		return button;
 	}
 
-	private static StyleBoxFlat CardButtonStyle(Color background)
+	private static StyleBoxFlat CardStyle() => new()
 	{
-		var style = new StyleBoxFlat { BgColor = background, BorderColor = CardBorderColor };
+		BgColor = new Color(0.04f, 0.05f, 0.07f, 0.85f),
+		BorderColor = CardBorderColor,
+		BorderWidthTop = 2,
+		ContentMarginLeft = 12f,
+		ContentMarginRight = 12f,
+		ContentMarginTop = 8f,
+		ContentMarginBottom = 10f,
+	};
+
+	private static StyleBoxFlat CardButtonStyle(Color background, Color border)
+	{
+		var style = new StyleBoxFlat { BgColor = background, BorderColor = border };
 		style.SetBorderWidthAll(1);
 		style.SetCornerRadiusAll(3);
 		style.SetContentMarginAll(6f);
 		return style;
 	}
 
-	private static Label NewLabel(Control parent, Vector2 position, Vector2 size, float anchorTop = 0f)
+	private static Label NewLabel(Control parent, Vector2 position, Vector2 size)
 	{
 		var label = new Label
 		{
 			MouseFilter = Control.MouseFilterEnum.Ignore,
-			AnchorTop = anchorTop,
 			Position = position,
 			Size = size,
 		};

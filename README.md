@@ -197,7 +197,22 @@ the two keys keep working mid-round for changing your mind.
 
 Two strategists at a time; a third request lands on the ground, and you find that out from the HUD
 rather than from a second menu. A strategist's body leaves the field and the camera moves above the
-map:
+map.
+
+The HUD keeps text to a minimum: three short lines top left (points, units and clock; what the
+barracks is building; the nodes) and, bottom right, a **command card** for whatever is selected,
+each button with its key printed on it:
+
+| selected | the card |
+|---|---|
+| the barracks | a button per unit it trains, the queue, **Cancel last**; right-click the ground sets its rally point |
+| a finished sniper tower or pillbox | its one unit, its queue, **Cancel last** |
+| nothing but builders | a button per structure — **Pillbox (5)**, **Sandbag wall (6)**, **Sniper tower (7)** — with its price; the armed one stays lit until it is placed, or pressed again; and the orders |
+| a technical or a dropship, among anything | who is aboard of how many seats, the orders, **Unload (U)**, and **Tactics (H)** if units on foot are selected too |
+| any other units | the orders — **Attack-move (X)**, **Patrol (C)**, **Defend (B)**, **Stop (Z)**, the armed one lit — and **Tactics (H)** for units that have tactics |
+
+Every key below works whether or not the card is up. `K`, or the **Keys** button bottom left, opens
+and folds away the full key list:
 
 | | |
 |---|---|
@@ -213,6 +228,7 @@ map:
 | right-click a technical or a dropship, with units selected | they walk to it and get in, nearest first, up to its seats (four, or eight); the vehicle becomes the selection and waits for them — a dropship in the air comes down to be boarded |
 | `U` | every selected vehicle with anybody aboard lets them out round it, where it is; a dropship lands first |
 | `H`, or the card's **Tactics** button | the selection's tactics ([`docs/TACTICS.md`](docs/TACTICS.md) §5.9). **Auto**, the default: units take cover from where they are fired on and fire back, throw grenades at enemies the side knows are behind cover, heavy gunners suppress where enemies are or were, snipers fire from concealment, pop out and move on, and a move onto a resource node is taken as a squad — to ground, a base of fire, bounds from cover, grenades, the rush — rather than walked into fire. **Direct**: they do what they are told, as before the tactics. The **new units** button beside the points sets what the side's next units start with |
+| `K`, or the **Keys** button | show or hide the full key list |
 
 Right-clicking an enemy player orders an attack on that player rather than on the ground under
 them. Units are server-simulated and never predicted; the order marker appears immediately and the
