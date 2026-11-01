@@ -39,6 +39,15 @@ public partial class ResourceNode : Node3D
 	[Export]
 	public float IncomeIntervalSeconds = 5f;
 
+	/// <summary>
+	/// What it gives the ground force while they hold it (docs/CONTROL_POINTS.md §4): the
+	/// map says, node by node, so different nodes are worth different things to the two
+	/// sides. A node held by the strategist pays them and deploys their units whatever
+	/// this says (§2).
+	/// </summary>
+	[Export]
+	public NodePerk Perk = NodePerk.None;
+
 	/// <summary>Who holds it, how far a capture has got and what it has paid. Server-authoritative.</summary>
 	public CaptureState Capture { get; } = new();
 
@@ -47,8 +56,10 @@ public partial class ResourceNode : Node3D
 
 	private MeshInstance3D _pad;
 	private StandardMaterial3D _material;
+	private StandardMaterial3D _perkMaterial;
 	private NodeHolder _painted = NodeHolder.Neutral;
 	private bool _paintedContested;
+	private bool _perkPainted;
 
 	public override void _Ready()
 	{
@@ -61,6 +72,7 @@ public partial class ResourceNode : Node3D
 			IncomePoints);
 
 		BuildPad();
+		BuildPerkMarker();
 		Repaint();
 	}
 
@@ -70,13 +82,15 @@ public partial class ResourceNode : Node3D
 	/// <summary>Colours the pad for whoever holds it. Presentation only; called on every process.</summary>
 	public void Repaint()
 	{
-		if (_material == null || (_painted == Capture.Owner && _paintedContested == Capture.Contested))
+		if (_material == null || (_painted == Capture.Owner && _paintedContested == Capture.Contested
+			&& _perkPainted))
 		{
 			return;
 		}
 
 		_painted = Capture.Owner;
 		_paintedContested = Capture.Contested;
+		_perkPainted = true;
 
 		Color colour = Capture.Owner switch
 		{
@@ -88,6 +102,51 @@ public partial class ResourceNode : Node3D
 		// Contested is the one state worth reading across the map at a glance: it is
 		// the only one that means somebody is standing there right now.
 		_material.AlbedoColor = Capture.Contested ? new Color(0.95f, 0.85f, 0.2f) : colour;
+
+		if (_perkMaterial != null)
+		{
+			// Lit while the ground force has what it gives, dim while it is there to take.
+			_perkMaterial.AlbedoColor = Capture.Owner == NodeHolder.GroundForce
+				? new Color(0.3f, 0.8f, 1f)
+				: new Color(0.35f, 0.35f, 0.35f);
+		}
+	}
+
+	/// <summary>
+	/// A marker for a node with a perk (docs/CONTROL_POINTS.md §4): a post at the middle
+	/// of the pad with a ring on top, a quadcopter's silhouette from a distance. It is
+	/// for finding the node worth taking from across the map, so it is tall.
+	/// </summary>
+	private void BuildPerkMarker()
+	{
+		if (Perk == NodePerk.None)
+		{
+			return;
+		}
+
+		_perkMaterial = new StandardMaterial3D
+		{
+			AlbedoColor = new Color(0.35f, 0.35f, 0.35f),
+			ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+		};
+
+		AddChild(new MeshInstance3D
+		{
+			Name = "PerkPost",
+			Position = new Vector3(0f, 1.5f, 0f),
+			Mesh = new CylinderMesh { TopRadius = 0.08f, BottomRadius = 0.08f, Height = 3f, RadialSegments = 8 },
+			MaterialOverride = _perkMaterial,
+			CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+		});
+
+		AddChild(new MeshInstance3D
+		{
+			Name = "PerkRing",
+			Position = new Vector3(0f, 3.1f, 0f),
+			Mesh = new TorusMesh { InnerRadius = 0.45f, OuterRadius = 0.6f, Rings = 24, RingSegments = 6 },
+			MaterialOverride = _perkMaterial,
+			CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+		});
 	}
 
 	/// <summary>

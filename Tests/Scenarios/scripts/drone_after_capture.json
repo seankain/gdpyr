@@ -1,0 +1,12 @@
+{
+  "repeat": false,
+  "steps": [
+    { "ticks": 120, "move": [0, 0], "look": { "dyaw": 0, "dpitch": 0 }, "buttons": [] },
+    { "ticks": 8, "move": [0, 0], "look": { "dyaw": 0, "dpitch": 0 }, "buttons": ["drone"] },
+    { "ticks": 2400, "move": [0, 0], "look": { "dyaw": 0, "dpitch": 0 }, "buttons": [] },
+    { "ticks": 8, "move": [0, 0], "look": { "dyaw": 0, "dpitch": 0 }, "buttons": ["drone"] },
+    { "ticks": 5500, "move": [0, 0], "look": { "dyaw": 0, "dpitch": 0 }, "buttons": [] },
+    { "ticks": 8, "move": [0, 0], "look": { "dyaw": 0, "dpitch": 0 }, "buttons": ["drone"] },
+    { "ticks": 400, "move": [0, 0], "look": { "dyaw": 0, "dpitch": 0 }, "buttons": [] }
+  ]
+}

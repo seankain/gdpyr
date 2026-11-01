@@ -107,6 +107,13 @@ public sealed class CaptureState
 	/// <summary>Points this node has paid the strategist this round. For the HUD and M8's CSV.</summary>
 	public int Paid { get; private set; }
 
+	/// <summary>
+	/// Whether anybody from the ground force was standing on it at the last scan,
+	/// whoever holds it. Server-side: what stops a held node paying is what stops it
+	/// deploying (<see cref="ForwardDeploy"/>), and a client is never asked.
+	/// </summary>
+	public bool GroundPresent { get; private set; }
+
 	/// <summary>Bumped on every change worth replicating, so a client can ignore a stale message.</summary>
 	public uint Version { get; private set; }
 
@@ -130,6 +137,7 @@ public sealed class CaptureState
 		bool ground = groundOccupants > 0;
 		bool strategist = strategistOccupants > 0;
 		bool contested = ground && strategist;
+		GroundPresent = ground;
 
 		if (contested != Contested)
 		{
@@ -206,6 +214,7 @@ public sealed class CaptureState
 		ProgressTicks = 0;
 		Contested = false;
 		Paid = 0;
+		GroundPresent = false;
 		_nextIncomeTick = 0;
 		Version++;
 	}

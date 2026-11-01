@@ -1,0 +1,23 @@
+{
+  "name": "the HTN strategist, its garrison full, puts its barracks' units out at a node it holds",
+  "bot_ai": "htn",
+  "seeds": [1, 2, 3],
+  "duration_ticks": 12000,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 1 },
+
+  "seats": [
+    { "id": "idle", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json" }
+  ],
+
+  "spawns": [
+    { "peer": "idle", "at": [145, 1, 145], "look": [0, 0] }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.node_captured[owner=2].count", "op": ">=", "value": 2 },
+    { "metric": "events.unit_built[barracks=0,x<60].count", "op": ">=", "value": 3 },
+    { "metric": "events.unit_built[barracks=0,x>90].count", "op": ">=", "value": 4 }
+  ]
+}

@@ -336,6 +336,13 @@ public static class SimConfig
 	/// <summary>How often a node tells everyone who holds it. 5 Hz is a progress bar.</summary>
 	public const int NodeReportIntervalTicks = TickRate / 5;
 
+	/// <summary>
+	/// Ticks between two drone state messages (docs/CONTROL_POINTS.md §4.3): 30 Hz. A
+	/// drone crosses a metre in two ticks at its 24 m/s, and its pilot's view is drawn
+	/// from these, so it is sent twice as often as a unit snapshot.
+	/// </summary>
+	public const int DroneStateIntervalTicks = 2;
+
 	// ---- emplacements (docs/IMPLEMENTATION_PLAN.md §M5) --------------------
 
 	/// <summary>

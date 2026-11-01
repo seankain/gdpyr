@@ -866,9 +866,17 @@ public partial class PlayerManager : Node
 	{
 		CombatManager combat = CombatManager.Instance;
 
+		// A drone's pilot steers it with this frame as they sent it (docs/CONTROL_POINTS.md
+		// §4); the server keeps the latest for the tick the drones fly.
+		if (authoritative)
+		{
+			combat?.NoteDroneInput(player.PeerId, frame);
+		}
+
 		// A dead player keeps their look and loses everything else, on the server and
-		// on their own client alike.
-		if (combat != null && !combat.IsAlive(player.PeerId))
+		// on their own client alike — and so does one flying a drone, whose body stands
+		// where they launched it from while the mouse and the trigger are the drone's.
+		if (combat != null && (!combat.IsAlive(player.PeerId) || combat.IsPiloting(player.PeerId)))
 		{
 			frame = InputFrame.LookOnly(frame);
 		}
@@ -1113,6 +1121,11 @@ public partial class PlayerManager : Node
 					frame = InputFrame.LookOnly(frame);
 				}
 
+				// A drone's pilot is the exception (docs/CONTROL_POINTS.md §4): their frame
+				// is recorded and sent whole, because the server steers and sets off the
+				// drone with it, and their body is given its look-only half — in Simulate
+				// here and in a replay (Reconcile) — as the server gives it.
+
 				Simulate(_local, frame, tick, authoritative: false);
 				_ledger.Record(tick, frame, _local.Character.CaptureState(tick));
 			}
@@ -1282,6 +1295,12 @@ public partial class PlayerManager : Node
 			{
 				// Never sampled — the clock stalled that tick to let the server catch up.
 				continue;
+			}
+
+			// A pilot's ledger holds whole frames (above); the body under them stands still.
+			if (CombatManager.Instance is { } combat && combat.IsPiloting(_local.PeerId))
+			{
+				frame = InputFrame.LookOnly(frame);
 			}
 
 			character.Simulate(frame);

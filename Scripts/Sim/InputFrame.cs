@@ -29,6 +29,13 @@ public enum InputButtons : ushort
 	/// is still twelve bytes and every frame written before it means what it did.
 	/// </summary>
 	Grenade = 1 << 11,
+
+	/// <summary>
+	/// Launch an FPV drone, while the ground force holds a drone node
+	/// (docs/CONTROL_POINTS.md §4). Bit 12 was spare, as 11 was for the grenade: the frame
+	/// is still twelve bytes.
+	/// </summary>
+	Drone = 1 << 12,
 }
 
 /// <summary>

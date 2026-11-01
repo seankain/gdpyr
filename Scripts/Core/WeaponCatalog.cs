@@ -35,6 +35,7 @@ public static class WeaponCatalog
 		"res://Weapons/marksman/marksman.tres", // 10 — sniper tower, sniper
 		"res://Weapons/lmg/lmg.tres",           // 11 — heavy gunner
 		"res://Weapons/grenade/grenade.tres",   // 12 — hand grenade, thrown
+		"res://Weapons/drone/drone.tres",       // 13 — FPV drone's warhead, a node perk
 	};
 
 	public const byte Hammer = 0;
@@ -94,6 +95,15 @@ public static class WeaponCatalog
 	/// people — a quarter of it reaches a vehicle or a structure.
 	/// </summary>
 	public const byte HandGrenade = 12;
+
+	/// <summary>
+	/// The FPV drone (docs/CONTROL_POINTS.md §4): not carried, not a slot. A ground-force
+	/// player launches one from their side's stock while it holds a drone node, flies it
+	/// by looking, and it goes off on what it hits. Its round is the warhead — what a
+	/// direct hit and the blast do, under the armour rule every other explosive is — and
+	/// its id is what the kill stream names a drone kill by.
+	/// </summary>
+	public const byte FpvDrone = 13;
 
 	/// <summary>
 	/// No primary (docs/LOADOUT.md L-D1): the large slot's id when a kit carries none.

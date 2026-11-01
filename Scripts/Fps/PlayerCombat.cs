@@ -143,6 +143,20 @@ public sealed class PlayerCombat
 	public readonly HitboxHistory History = new();
 
 	/// <summary>
+	/// Server-side: the look angles and buttons of this player's latest frame, before a
+	/// pilot's body is given a look-only one (docs/CONTROL_POINTS.md §4). What steers
+	/// and detonates their drone on the tick the drones fly.
+	/// </summary>
+	public float DroneYaw;
+
+	public float DronePitch;
+
+	public ushort DroneButtons;
+
+	/// <summary>Server-side: the tick this player's last drone stopped flying, 0 for never — the relaunch lockout.</summary>
+	public uint DroneEndedTick;
+
+	/// <summary>
 	/// The use key, as a tap or a hold (docs/IMPLEMENTATION_PLAN.md §M5). On the
 	/// authority it decides emplacement transitions, the one player action here that is
 	/// not predicted (<see cref="EmplacementManager.ServerUse"/>). On the owning client

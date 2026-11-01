@@ -25,7 +25,7 @@ namespace Gdpyr.Bots;
 /// one; a bot arrives on a client as an ordinary <c>SpawnPlayer</c> and is
 /// interpolated from snapshots like any other remote player (docs/NETCODE.md §9).
 /// </summary>
-public sealed class BotPilot
+public sealed partial class BotPilot
 {
 	/// <summary>
 	/// Ticks between target re-scans, staggered across bots by peer id. The same
@@ -228,6 +228,14 @@ public sealed class BotPilot
 			}
 
 			return InputFrame.Neutral(tick, character.Yaw, character.Pitch);
+		}
+
+		// A drone, when the side has one and there is a tank to fly it at, comes before
+		// the plan (docs/CONTROL_POINTS.md §4.5). The HTN bots only: the legacy bots are
+		// the baseline policies are measured against, and stay as they were.
+		if (_plan != null && TrySampleDrone(character, combat, tick, out InputFrame droneFrame))
+		{
+			return droneFrame;
 		}
 
 		// Whether what is in its hands can hurt armour decides what it may pick as a

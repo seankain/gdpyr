@@ -53,8 +53,8 @@ public partial class UnitManager : Node
 	/// <summary>How often a barracks tells everyone what it is building. 5 Hz is a progress bar.</summary>
 	private const int BarracksReportIntervalTicks = SimConfig.TickRate / 5;
 
-	/// <summary>Bytes counted for the barracks-state RPC, for the bandwidth HUD.</summary>
-	private const int BarracksStateBytes = 8;
+	/// <summary>Bytes counted for the barracks-state RPC, for the bandwidth HUD. One more since forward deployment.</summary>
+	private const int BarracksStateBytes = 9;
 
 	/// <summary>Messages arriving on the idle frame wait for the physics step, as snapshots do.</summary>
 	private const int MaxPendingSnapshots = 8;
@@ -65,6 +65,19 @@ public partial class UnitManager : Node
 		public byte Queued;
 		public byte Head;
 		public float Progress;
+
+		/// <summary>
+		/// Where its next unit comes out (docs/CONTROL_POINTS.md §2): 0 its door, otherwise
+		/// one more than the resource node's index. Shifted so that a status nobody has
+		/// sent yet reads as the door.
+		/// </summary>
+		public byte Deploy;
+
+		/// <summary>The node it deploys at, or <see cref="ForwardDeploy.Door"/>.</summary>
+		public readonly int DeployNode => Deploy == 0 ? ForwardDeploy.Door : Deploy - 1;
+
+		public static byte EncodeDeploy(int node) =>
+			node < 0 || node >= byte.MaxValue ? (byte)0 : (byte)(node + 1);
 	}
 
 	private readonly Dictionary<ushort, Unit> _units = new();
@@ -388,7 +401,8 @@ public partial class UnitManager : Node
 				continue;
 			}
 
-			Unit unit = SpawnUnit(definitionId, SpawnPoint(barracks, definitionId), barracks.Team);
+			Vector3 at = DeployPoint(barracks, definitionId, tick, out int node);
+			Unit unit = SpawnUnit(definitionId, at, barracks.Team);
 			if (unit == null)
 			{
 				// The field is full. Refund rather than swallow it: the strategist paid
@@ -408,6 +422,11 @@ public partial class UnitManager : Node
 				TargetOwnerId = OwnerId.None,
 			};
 			UnitsProduced++;
+			if (node != ForwardDeploy.Door)
+			{
+				UnitsDeployedForward++;
+			}
+
 			AgentEventBus.Emit(AgentEventKind.UnitBuilt, tick, unit.UnitId, definitionId, i,
 				unit.GlobalPosition.X, unit.GlobalPosition.Z);
 		}
@@ -2209,7 +2228,8 @@ public partial class UnitManager : Node
 		{
 			BuildQueue queue = _barracks[i].Queue;
 			Rpc(MethodName.ServerBarracksState, i, (byte)Mathf.Min(queue.Count, byte.MaxValue), queue.Head,
-				(byte)Mathf.RoundToInt(queue.Progress(tick) * byte.MaxValue));
+				(byte)Mathf.RoundToInt(queue.Progress(tick) * byte.MaxValue),
+				BarracksStatus.EncodeDeploy(DeployNodeOf(_barracks[i])));
 		}
 
 		NetworkManager.Instance?.Stats.RecordSent(BarracksStateBytes * _barracks.Count * peers);
@@ -2269,7 +2289,7 @@ public partial class UnitManager : Node
 
 	[Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
 		TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-	private void ServerBarracksState(int index, byte queued, byte head, byte progress)
+	private void ServerBarracksState(int index, byte queued, byte head, byte progress, byte deploy)
 	{
 		NetworkManager net = NetworkManager.Instance;
 		if (net == null || !net.IsClient)
@@ -2289,6 +2309,7 @@ public partial class UnitManager : Node
 			Queued = queued,
 			Head = head,
 			Progress = progress / (float)byte.MaxValue,
+			Deploy = deploy,
 		};
 	}
 
@@ -2466,7 +2487,7 @@ public partial class UnitManager : Node
 		{
 			BuildQueue queue = _barracks[i].Queue;
 			RpcId(peerId, MethodName.ServerBarracksState, i, (byte)Mathf.Min(queue.Count, byte.MaxValue),
-				queue.Head, (byte)0);
+				queue.Head, (byte)0, BarracksStatus.EncodeDeploy(DeployNodeOf(_barracks[i])));
 		}
 
 		SendStructuresTo(peerId);
@@ -2600,6 +2621,7 @@ public partial class UnitManager : Node
 		Squads.Clear();
 
 		UnitsProduced = 0;
+		UnitsDeployedForward = 0;
 		UnitsLost = 0;
 		HealthResupplied = 0f;
 		UnitsResupplied = 0;
@@ -2659,6 +2681,7 @@ public partial class UnitManager : Node
 				Queued = (byte)Mathf.Min(barracks.Queue.Count, byte.MaxValue),
 				Head = barracks.Queue.Head,
 				Progress = barracks.Queue.Progress(tick),
+				Deploy = BarracksStatus.EncodeDeploy(DeployNodeOf(barracks)),
 			};
 		}
 

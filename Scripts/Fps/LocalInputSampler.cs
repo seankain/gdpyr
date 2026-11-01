@@ -116,6 +116,7 @@ public partial class LocalInputSampler : Node
 		if (Input.IsActionPressed("weapon_sidearm")) { buttons |= InputButtons.Weapon2; }
 		if (Input.IsActionPressed("weapon_large")) { buttons |= InputButtons.Weapon3; }
 		if (Input.IsActionPressed("throw_grenade")) { buttons |= InputButtons.Grenade; }
+		if (Input.IsActionPressed("fpv_drone")) { buttons |= InputButtons.Drone; }
 
 		// What was pressed for the menu that just closed stays the menu's until it is
 		// let go: otherwise the E that closed the locker's panel would be a use tap that

@@ -98,6 +98,7 @@ public partial class CombatManager : Node
 	private ProjectileSim _projectiles;
 	private GameModeDefinition _gameMode;
 	private ProjectileView _view;
+	private DroneView _droneView;
 	private CombatHud _hud;
 	private TeamSelect _teamSelect;
 	private RoleSelect _roleSelect;
@@ -316,6 +317,11 @@ public partial class CombatManager : Node
 			_hud?.OpenLocker(combat);
 		}
 
+		// An FPV drone off the side's shelf, on its key's press (docs/CONTROL_POINTS.md §4).
+		// Never from behind a mounted gun, whose trigger is the gun's.
+		bool behindGun = emplacements != null && emplacements.TryMounted(peerId, out _);
+		ServerDroneLaunch(combat, input, tick, behindGun);
+
 		// A gunner's own weapons are not in their hands (docs/IMPLEMENTATION_PLAN.md
 		// §M5): while they are behind a gun, the trigger fires the gun.
 		if (emplacements != null && emplacements.TryMounted(peerId, out Emplacement mounted))
@@ -377,6 +383,10 @@ public partial class CombatManager : Node
 
 		RecordHitboxes(tick);
 		StepProjectiles(tick, authoritative: true);
+
+		// After the rounds and against the same hitboxes; before the wrecks, so a truck a
+		// drone destroys throws its riders out this tick (docs/CONTROL_POINTS.md §4).
+		ServerDrones(tick);
 
 		// After every kill of the tick — a melee kill in the roster loop earlier
 		// included — and outside every damage loop, so what a destroyed vehicle does to
@@ -1464,6 +1474,7 @@ public partial class CombatManager : Node
 		_projectiles.Clear();
 		Visibility.Clear();
 		Economy.Reset();
+		ResetDrones();
 		SendNodeState(0);
 		EmplacementManager.Instance?.ResetAll();
 		UnitManager.Instance?.ClearUnits();
@@ -1961,6 +1972,7 @@ public partial class CombatManager : Node
 	{
 		EnsureEconomy();
 		ApplyPendingMessages(tick);
+		ApplyDroneState(tick);
 		PrunePredictions(tick);
 		StepProjectiles(tick, authoritative: false);
 		UpdateHud(tick);
@@ -2721,6 +2733,10 @@ public partial class CombatManager : Node
 
 		_view = new ProjectileView { Name = "ProjectileView" };
 		AddChild(_view);
+
+		// The drones in the air, and the pilot's view out of theirs (docs/CONTROL_POINTS.md §4).
+		_droneView = new DroneView { Name = "DroneView" };
+		AddChild(_droneView);
 
 		_hud = new CombatHud { Name = "CombatHud" };
 		AddChild(_hud);

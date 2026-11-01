@@ -41,6 +41,11 @@ dedicated-server authoritative.
   `E`, which is also the death screen's editor of the next spawn's kit; bots that rearm at the
   locker when they run dry, in kits for their roles; and the kit in the agent observation's
   vector, `gdpyr-agent-obs-4`
+- [`docs/CONTROL_POINTS.md`](docs/CONTROL_POINTS.md) — what the resource nodes do besides pay:
+  a node the strategist holds is a door for its barracks (forward deployment, which the computer
+  strategist uses), and a node can carry a perk for the ground force — the FPV drone, flown by
+  looking, which kills a tank on a direct hit; what bot-only rounds measured, and what is left for
+  a person to playtest
 - [`docs/LAN.md`](docs/LAN.md) — hosting a room of machines from a checkout, with a dev build
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — AWS EC2 dedicated-server runbook
 
@@ -219,7 +224,7 @@ and folds away the full key list:
 | WASD, or the screen edge | pan |
 | Q / E, mouse wheel | rotate, zoom |
 | left-drag, left-click, `F` | box select, single select, select all |
-| right-click | order the selection (or, with nothing selected, move the barracks rally point) |
+| right-click | order the selection (or, with nothing selected, move the barracks rally point — onto a node you hold, and the barracks' units come out there) |
 | `X` `C` `B` `Z` | attack-move · patrol · defend · stop, applied by the next right-click |
 | `1` `2` `3` `4` `8`, Backspace | queue an infantryman, a technical, a tank, a builder or a supply truck; cancel the last one |
 | `5` `6` `7` | with builders selected: put a pillbox, a sandbag wall or a sniper tower where the next right-click lands |
@@ -233,6 +238,13 @@ and folds away the full key list:
 Right-clicking an enemy player orders an attack on that player rather than on the ground under
 them. Units are server-simulated and never predicted; the order marker appears immediately and the
 units move a round trip later, which is what an RTS feels like anyway.
+
+**Control points** ([`docs/CONTROL_POINTS.md`](docs/CONTROL_POINTS.md)) are doors as well as
+income. Put the barracks' rally point on the pad of a node you hold and what it trains comes out at
+the node instead of at the barracks — every unit but the dropship — while nobody from the ground
+force is standing on that pad; the production line says `· out at the held node` while it does. The
+computer strategist does the same with a quiet node towards the ground force once its home garrison
+is full, and keeps the squads it is forming there.
 
 **Builders** put up three structures ([`docs/NETCODE.md`](docs/NETCODE.md) §10.5). A **pillbox**
 (150 points) is a concrete box with a gun in it that bullets do nothing to; a **sandbag wall** (25) is
@@ -337,6 +349,16 @@ health (`HP 100   vest 60   grenades 3`), other players wear theirs as a band ro
 to heavy from khaki to charcoal, and asking a locker for the vest you already wear does not
 refill it ([`docs/LOADOUT.md`](docs/LOADOUT.md) §4.3) — standing at it does.
 
+**FPV drones** ([`docs/CONTROL_POINTS.md`](docs/CONTROL_POINTS.md) §4). The middle node and the far
+one are drone nodes — a post with a ring on it at the middle of the pad, lit while your side holds
+it. Each one your side holds builds a drone in two minutes — both together, in one — and the side
+keeps one at a time; `Q` launches it while your side still holds a drone node. You see out of its nose and fly it by
+looking — it goes 24 m/s and turns towards wherever you look — while your body stands where you
+left it. It goes off on whatever it hits, on `fire` once it has flown half a second, or when its
+15 s battery runs out: 800 to what it hits, which is a dead tank, and a 4 m blast for everything
+near. If you die, it falls and does nothing. The line under the round's clock says what you have
+(`[Q] drone`, `drone 40 %`, `drone 12 s · fire sets it off`).
+
 **Resupply.** Stand within a metre of the locker's cabinet — inside the green line on the floor
 round it — and it tops your kit back up: a pouch's rounds every half second, a grenade every
 second and thirty vest points a second, up to what the kit holds, but not health and not the
@@ -381,6 +403,8 @@ round full of bots starts without waiting for anybody.
   bots, one with a low wall within 25 m of a fight walks to the side of it away from the enemy,
   fights from there, and crouches behind it to reload. A unit whose chest is behind a wall is
   shot at by its head.
+  An HTN bot with a drone on its side's shelf puts it up at a strategist tank it can see 15–140 m
+  away, with nothing on foot within 20 m of it, and flies it into the hull; the legacy bots do not.
   Their ammunition runs out as anyone's does: a bot whose rifle, DMR or launcher is dry fights on
   with the pistol, and under the HTN one with nothing in sight walks back to the weapon locker and
   stands in its reach until its kit is full. HTN bots carry a kit for their weapon's role —
