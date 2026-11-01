@@ -48,12 +48,6 @@ public partial class HumanoidRig : Node3D
 	/// <summary>The bone the arms layer starts at: it and everything off it are the chest, arms and head.</summary>
 	private const string UpperBodyBone = "spine_01";
 
-	/// <summary>Faster than anything walks, sprints or drives [m/s]: a respawn or a correction, not a stride.</summary>
-	private const float TeleportSpeed = 15f;
-
-	/// <summary>How quickly the measured speed follows the body [s]: steadies a server's 60 Hz steps under a faster frame.</summary>
-	private const float SpeedSmoothingSeconds = 0.1f;
-
 	/// <summary>
 	/// One clip as the library names it — the import drops a trailing <c>_Loop</c> and
 	/// loops what it dropped it from — how fast it plays, and the ground speed its stride
@@ -116,8 +110,7 @@ public partial class HumanoidRig : Node3D
 	private bool _legsStarted;
 	private int _legsSerial;
 	private int _armsSerial;
-	private Vector3 _lastPosition;
-	private float _speed;
+	private GroundSpeedMeter _meter;
 	private BoneAttachment3D _chest;
 	private float _scale = 1f;
 
@@ -171,7 +164,7 @@ public partial class HumanoidRig : Node3D
 		_animator = new BodyAnimator(new BodyClipTimes(Seconds(BodyClip.JumpStart), Seconds(BodyClip.Land),
 			Seconds(BodyClip.Shoot), Seconds(BodyClip.Throw), Seconds(BodyClip.Death)));
 		_source = GetParent() as IHumanoidPoseSource;
-		_lastPosition = GlobalPosition;
+		_meter = new GroundSpeedMeter(1f / Engine.PhysicsTicksPerSecond, GlobalPosition, Engine.GetPhysicsFrames());
 		_tree.Active = true;
 		Pose(default);
 	}
@@ -184,11 +177,6 @@ public partial class HumanoidRig : Node3D
 		}
 
 		float dt = (float)delta;
-		Vector3 position = GlobalPosition;
-		Vector3 step = position - _lastPosition;
-		step.Y = 0f;
-		_lastPosition = position;
-
 		if (_animator.IsDead)
 		{
 			GlobalBasis = _deathBasis;
@@ -201,22 +189,17 @@ public partial class HumanoidRig : Node3D
 			_tree.Active = visible;
 		}
 
+		// Measured by the ticks that have run, not by the frame: the body moves on the tick.
+		ulong tick = Engine.GetPhysicsFrames();
 		if (!visible)
 		{
+			_meter.Track(GlobalPosition, tick);
 			return;
 		}
 
-		float measured = dt > 0f ? step.Length() / dt : _speed;
-		if (measured > TeleportSpeed)
-		{
-			measured = _speed;
-		}
-
-		_speed += (measured - _speed) * (1f - Mathf.Exp(-dt / SpeedSmoothingSeconds));
-
 		// A body with no owner to ask stands — and still falls when it is killed.
 		BodyPose pose = _source?.ReadPose() ?? default;
-		pose.GroundSpeed = _speed;
+		pose.GroundSpeed = _meter.Observe(GlobalPosition, tick);
 		Pose(_animator.Step(pose, dt));
 	}
 
@@ -305,8 +288,7 @@ public partial class HumanoidRig : Node3D
 
 		bool wasDead = _animator.IsDead;
 		_animator.Revive();
-		_speed = 0f;
-		_lastPosition = GlobalPosition;
+		_meter.Reset(GlobalPosition, Engine.GetPhysicsFrames());
 		if (wasDead)
 		{
 			Basis = Basis.Identity.Scaled(Vector3.One * _scale);
@@ -332,7 +314,7 @@ public partial class HumanoidRig : Node3D
 		}
 
 		Clip legs = Clips[(int)mix.Legs];
-		_tree.Set(HumanoidBlendTree.Speed(mix.Legs), legs.Rate * BodyAnimator.StrideScale(_speed, legs.StrideSpeed));
+		_tree.Set(HumanoidBlendTree.Speed(mix.Legs), legs.Rate * BodyAnimator.StrideScale(_meter.Speed, legs.StrideSpeed));
 
 		// A recoil or a throw that began, if it is still running: a body that fired while
 		// hidden does not recoil when it is next seen.
