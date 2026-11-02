@@ -320,7 +320,8 @@ public partial class Debug : PanelContainer
 
 		if (NetworkManager.Instance is { IsServer: true })
 		{
-			SetProperty("income", $"{economy.IncomePaid} paid  balance {combat.Match.StrategistPoints}");
+			SetProperty("income", $"{economy.IncomePaid} paid  {combat.Match.BaselinePaid} base"
+				+ $"  balance {combat.Match.StrategistPoints}");
 		}
 	}
 

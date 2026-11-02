@@ -120,6 +120,8 @@ public partial class Scoreboard : CanvasLayer
 	{
 		RoundOutcome.GroundForceEliminated => "the ground force ran out of tickets",
 		RoundOutcome.TimeExpired => "the clock ran out",
+		// Retired; read only from a demo recorded before the strategist became the wave
+		// director (MatchState.RoundOutcome).
 		RoundOutcome.StrategistEliminated => "the strategist ran out of units, points and ground",
 		_ => "undecided",
 	};

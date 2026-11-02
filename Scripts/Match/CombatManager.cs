@@ -400,9 +400,8 @@ public partial class CombatManager : Node
 		// out, and after the respawns, whose kits are full anyway (docs/LOADOUT.md §5.4).
 		ServerResupply(tick);
 
-		// Before the round is judged, not after: the strategist's defeat condition
-		// reads both the balance the nodes have just paid into and which nodes are
-		// held (docs/IMPLEMENTATION_PLAN.md §M5).
+		// Before the round's clock, so a payment due on the round's last tick is made
+		// before it ends (docs/IMPLEMENTATION_PLAN.md §M5).
 		Economy.ServerTick(tick, this, UnitManager.Instance);
 		BroadcastNodeState(tick);
 
@@ -1407,17 +1406,22 @@ public partial class CombatManager : Node
 			// is still looking at the role menu is not on it yet (docs/NETCODE.md §7).
 			case RoundPhase.Warmup when Teams.ReadyCount > 0:
 				Match.Start(tick, _gameMode.GroundForceTickets, _gameMode.StrategistTickets,
-					_gameMode.RoundDurationMinutes * 60 * SimConfig.TickRate);
+					_gameMode.RoundDurationMinutes * 60 * SimConfig.TickRate, _gameMode.StrategistBaseline);
 				AgentEventBus.Emit(AgentEventKind.RoundStart, tick, RoundSeed, Match.GroundTickets,
 					Match.StrategistPoints, _gameMode.RoundDurationMinutes);
 				GD.Print($"[match] round live | tickets {Match.GroundTickets}"
 					+ $" | points {Match.StrategistPoints}"
+					+ $" | baseline {Match.Baseline.PointsPerMinute:0}/min"
 					+ $" | {_gameMode.RoundDurationMinutes} minutes");
 				break;
 
+			// The round ends on the clock or on the last ticket (Damage()), and in no
+			// other way: the strategist directs the waves and cannot be bankrupted out of
+			// the round, because the baseline always pays for another one
+			// (docs/IMPLEMENTATION_PLAN.md §M5).
 			case RoundPhase.Live:
+				Match.PayBaseline(tick);
 				Match.Advance(tick);
-				CheckStrategistDefeat(tick);
 				break;
 		}
 
@@ -1527,44 +1531,6 @@ public partial class CombatManager : Node
 
 		GD.Print($"[match] round reset by the agent api at tick {tick}");
 		RestartRound(tick);
-	}
-
-	/// <summary>
-	/// Ends the round if the strategist has nothing left to play with
-	/// (docs/IMPLEMENTATION_PLAN.md §M5).
-	///
-	/// Cheap enough to ask every tick — five integers, all of them already counted —
-	/// and it has to be, because the tick the last queue empties is the tick the
-	/// answer changes. The condition itself is engine-free and tested
-	/// (<see cref="WinConditions.IsStrategistEliminated"/>).
-	/// </summary>
-	private void CheckStrategistDefeat(uint tick)
-	{
-		UnitManager units = UnitManager.Instance;
-		if (units == null)
-		{
-			return;
-		}
-
-		// Nobody in the chair is not a defeat: a round with no strategist connected
-		// is a round the bots have not filled yet (docs/IMPLEMENTATION_PLAN.md §M3.5),
-		// and ending it would make an empty server restart forever.
-		if (Teams.StrategistCount == 0)
-		{
-			return;
-		}
-
-		if (!WinConditions.IsStrategistEliminated(Match.StrategistPoints, UnitCatalog.CheapestCost,
-			units.LiveUnitCount, units.QueuedUnits, Economy.StrategistNodes))
-		{
-			return;
-		}
-
-		if (Match.RegisterStrategistDefeat(tick))
-		{
-			GD.Print($"[match] strategist eliminated | points {Match.StrategistPoints}"
-				+ $" | units {units.LiveUnitCount} | nodes {Economy.StrategistNodes}");
-		}
 	}
 
 	// ---- the scoreboard (docs/IMPLEMENTATION_PLAN.md §M5) -------------------

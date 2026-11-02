@@ -132,7 +132,7 @@ Scripts/
   Sim/         Pure C#, no Godot nodes, unit-testable: Ballistics, ProjectileSim, ResourceLedger
   Fps/         PlayerCharacter (predicted), InputFrame, movement FSM, weapons, emplacements
   Rts/         StrategistController, Selection, Unit, UnitDefinition, Barracks, ResourceNode
-  Match/       MatchState (tickets/points), TeamService, VisibilityService (fog), win conditions
+  Match/       MatchState (tickets/points, baseline income), TeamService, VisibilityService (fog)
   Bots/        BotDirector (backfill), BotPilot (ground), BotStrategist (RTS) — decisions in Sim/
   Agent/       M6: the agent listener and the seat leases; M7: the strategist view and the planes.
                Codecs, observations and the command model live in Sim/Agent/
@@ -324,6 +324,19 @@ call. This makes one person enough to see a round.
   an assault looks like. The scoreboard is one reliable message at round end (§10.3) and the
   existing intermission restarts the round, because a playtest that needs somebody to press a key
   between rounds gets fewer rounds per session.
+  **Superseded: the strategist can no longer be eliminated.** The strategist is the director of
+  the waves the ground force has to survive, as in Halo's Firefight, not an opponent to be
+  bankrupted, so a round ends two ways only: the ground force out of tickets (a strategist win),
+  or the clock running out with tickets left (a ground-force win). The four-clause check and
+  `WinConditions` are gone; `RoundOutcome.StrategistEliminated` (3) is kept as a retired wire value
+  so older demos and traces still read. In its place the strategist is paid a **baseline income**
+  for the whole of a live round, whatever it holds (`Scripts/Sim/BaselineIncome.cs`,
+  `MatchState.PayBaseline`): `StrategistBaselineIncome` points every
+  `StrategistBaselineIntervalSeconds` in `Match/default_gamemode.tres`, 10 every 5 s — 120 a
+  minute, a four-rifleman wave about every hundred seconds with every node lost. A node pays 300 a
+  minute on top, so the nodes still decide how big the waves are; they no longer decide whether
+  there are any. The baseline is not in `round.income_paid` (§M6's observation, and the strategist
+  reward's income term), which stays the nodes' alone: it is not something a policy earns.
 - **Barracks defences** *(added after playtesting)*. Rounds kept ending up as the ground force
   parked on the barracks door, killing every unit the strategist paid for as it walked out. A
   barracks now carries its own guns and a mortar (`DefenseMount`, [`NETCODE.md`](NETCODE.md)
@@ -689,8 +702,10 @@ pool: three nodes pay for being held and stop paying the moment a rifleman stand
 the first reason the ground force has had to leave a firefight and walk somewhere. The catalog grew
 the two tiers the fog argued for — a technical that sees 70 m and shoots to 50, and a tank that
 survives being shot at — and the ground force got heavy guns it can pick up, carry, put down and
-feed. The round can now be lost from either side: at zero tickets, or when the strategist has no
-points, no units, nothing building and no ground, and it ends on a scoreboard and restarts itself.
+feed. The round can be lost from either side: at zero tickets, or on the clock. (M5 shipped a
+third way, the strategist with no points, no units, nothing building and no ground; it was
+retired for a baseline income that always pays for another wave — §M5.) It ends on a scoreboard
+and restarts itself.
 
 The front door came last: a main menu that lists the servers on this network and a panel that asks
 which side you want before a round puts you anywhere. Both are deliberately small. The browser is

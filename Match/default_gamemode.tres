@@ -6,6 +6,8 @@
 script = ExtResource("1_gamemode")
 GroundForceTickets = 50
 StrategistTickets = 1000
+StrategistBaselineIncome = 10
+StrategistBaselineIntervalSeconds = 5.0
 RoundDurationMinutes = 20
 RespawnSeconds = 3.0
 IntermissionSeconds = 10.0
