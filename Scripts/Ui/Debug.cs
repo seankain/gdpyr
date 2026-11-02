@@ -146,6 +146,13 @@ public partial class Debug : PanelContainer
 		SetProperty("projectiles", $"{combat.LiveProjectiles} live  {combat.ShotsFired} fired"
 			+ (combat.ProjectileOverflows > 0 ? $"  {combat.ProjectileOverflows} dropped" : string.Empty));
 
+		// Whether rounds and wrecks are being drawn going off at all (docs/EFFECTS.md §5).
+		if (Effects.ExplosionEffects.Instance is { } explosions)
+		{
+			SetProperty("explosions", $"{explosions.Active} playing  {explosions.Played} drawn"
+				+ (explosions.Evictions > 0 ? $"  {explosions.Evictions} cut short" : string.Empty));
+		}
+
 		MatchState match = combat.Match;
 		SetProperty("round", $"{match.Phase}  tickets {match.GroundTickets}/{match.StartingGroundTickets}"
 			+ $"  deaths {match.GroundDeaths}");

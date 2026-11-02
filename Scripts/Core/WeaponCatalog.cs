@@ -227,6 +227,12 @@ public static class WeaponCatalog
 	public static ProjectileStats RoundFor(byte id) => id < Projectiles.Length ? Projectiles[id] : default;
 
 	/// <summary>
+	/// What a weapon's round looks like going off (docs/EFFECTS.md §2.1); none for one
+	/// that does not, a swing, or an id this build does not have. Presentation only.
+	/// </summary>
+	public static ExplosionKind ExplosionOf(byte id) => Definition(id)?.Projectile?.Explosion ?? ExplosionKind.None;
+
+	/// <summary>
 	/// What raising this weapon's sights does. <see cref="AimStats.None"/> for an id
 	/// this build does not have, which is the same answer as "there is nothing to
 	/// raise" and keeps the caller from having to ask twice.

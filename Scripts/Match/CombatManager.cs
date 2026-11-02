@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Gdpyr.Characters;
 using Gdpyr.Core;
+using Gdpyr.Effects;
 using Gdpyr.Fps;
 using Gdpyr.Net;
 using Gdpyr.Rts;
@@ -82,6 +83,16 @@ public partial class CombatManager : Node
 	/// <summary>Client-side: tracers fired locally and not yet matched to the server's account of them.</summary>
 	private readonly List<(uint Id, uint Tick)> _predicted = new();
 
+	/// <summary>
+	/// Client-side: which weapon each explosive round seen fired came from, so that its
+	/// hit message — which names it by id alone — is drawn as the explosion it was
+	/// (docs/EFFECTS.md §2.1).
+	/// </summary>
+	private readonly RecentRounds _explosiveRounds = new();
+
+	/// <summary>A hit whose round this peer cannot name: drawn as <see cref="Explosions.Unidentified"/> if it went off.</summary>
+	private const byte UnknownRound = byte.MaxValue;
+
 	/// <summary>A vehicle destroyed with somebody aboard, and by what (docs/VEHICLES.md §5.5).</summary>
 	private struct Wreck
 	{
@@ -98,6 +109,7 @@ public partial class CombatManager : Node
 	private ProjectileSim _projectiles;
 	private GameModeDefinition _gameMode;
 	private ProjectileView _view;
+	private ExplosionEffects _explosions;
 	private DroneView _droneView;
 	private CombatHud _hud;
 	private TeamSelect _teamSelect;
@@ -647,13 +659,13 @@ public partial class CombatManager : Node
 			point = to;
 		}
 
-		Broadcast(MethodName.ServerProjectileHit, ProjectileCodec.EncodeHit(new ProjectileHit
+		PublishHit(new ProjectileHit
 		{
 			Id = 0,
 			Point = point,
 			VictimPeerId = victim?.PeerId ?? (unitVictim != null ? OwnerId.ForUnit(unitVictim.UnitId) : 0),
 			Flags = flags,
-		}), point);
+		}, attacker.EquippedDefinitionId);
 	}
 
 	/// <summary>
@@ -739,7 +751,7 @@ public partial class CombatManager : Node
 				tick);
 		}
 
-		Broadcast(MethodName.ServerProjectileHit, ProjectileCodec.EncodeHit(new ProjectileHit
+		PublishHit(new ProjectileHit
 		{
 			Id = segment.Id,
 			Point = point,
@@ -747,7 +759,7 @@ public partial class CombatManager : Node
 				?? (unitVictim != null ? OwnerId.ForUnit(unitVictim.UnitId)
 					: structureVictim?.ShooterId ?? 0),
 			Flags = flags,
-		}), point);
+		}, segment.DefinitionId);
 	}
 
 	/// <summary>
@@ -862,13 +874,13 @@ public partial class CombatManager : Node
 		UnitManager.Instance?.NoteBlast(new FireSource(segment.Origin, segment.OwnerPeerId, segment.DefinitionId,
 			segment.Id), ownerTeam, point, stats.ExplosionRadiusMeters, FireKind.NearMiss, tick);
 
-		Broadcast(MethodName.ServerProjectileHit, ProjectileCodec.EncodeHit(new ProjectileHit
+		PublishHit(new ProjectileHit
 		{
 			Id = segment.Id,
 			Point = point,
 			VictimPeerId = 0,
 			Flags = HitFlags.Landed,
-		}), point);
+		}, segment.DefinitionId);
 	}
 
 	/// <summary>
@@ -906,13 +918,13 @@ public partial class CombatManager : Node
 			ownerTeam, point, stats.ExplosionRadiusMeters, FireKind.Hit, tick);
 		NoteBlastAtBots(ownerTeam, point, stats.ExplosionRadiusMeters, tick);
 
-		Broadcast(MethodName.ServerProjectileHit, ProjectileCodec.EncodeHit(new ProjectileHit
+		PublishHit(new ProjectileHit
 		{
 			Id = segment.Id,
 			Point = point,
 			VictimPeerId = 0,
 			Flags = flags,
-		}), point);
+		}, segment.DefinitionId);
 	}
 
 	/// <summary>
@@ -1476,6 +1488,7 @@ public partial class CombatManager : Node
 		ArmourResupplied = 0;
 		Match.Reset();
 		_projectiles.Clear();
+		_explosions?.Clear();
 		Visibility.Clear();
 		Economy.Reset();
 		ResetDrones();
@@ -2040,6 +2053,12 @@ public partial class CombatManager : Node
 
 	private void ApplySpawn(in ProjectileSpawn spawn, float renderTick)
 	{
+		// Before anything can return: an adopted prediction goes off as much as any other round.
+		if (WeaponCatalog.RoundFor(spawn.DefinitionId).IsExplosive)
+		{
+			_explosiveRounds.Note(spawn.Id, spawn.DefinitionId);
+		}
+
 		// The client's own shot is already in the air as a predicted tracer. Adopting
 		// it — taking the server's id for the projectile that is already flying —
 		// rather than replacing it keeps the tracer from jumping back down its own
@@ -2108,7 +2127,66 @@ public partial class CombatManager : Node
 			_projectiles.Kill(hit.Id);
 		}
 
-		_view?.Impact(hit.Point, hit.Flags);
+		PresentHit(hit, RoundOfHit(hit));
+	}
+
+	/// <summary>
+	/// Which weapon's round a hit message was about, as far as this client can say: the
+	/// one it noted when the round was fired. A blast that names no round is a drone's —
+	/// the one thing that goes off without being a projectile (docs/CONTROL_POINTS.md §4).
+	/// </summary>
+	private byte RoundOfHit(in ProjectileHit hit)
+	{
+		if (hit.Id == 0)
+		{
+			return hit.Flags.HasFlag(HitFlags.Exploded) ? WeaponCatalog.FpvDrone : UnknownRound;
+		}
+
+		return _explosiveRounds.TryGet(hit.Id, out byte definitionId) ? definitionId : UnknownRound;
+	}
+
+	/// <summary>
+	/// A hit, to every peer allowed to know of it (<see cref="Broadcast"/>), and drawn on
+	/// this one when it draws anything — a listen host or an offline round, which the
+	/// broadcast it sends tells nothing (docs/EFFECTS.md §2.2).
+	/// <paramref name="definitionId"/> is the weapon whose round it was.
+	/// </summary>
+	private void PublishHit(in ProjectileHit hit, byte definitionId)
+	{
+		Broadcast(MethodName.ServerProjectileHit, ProjectileCodec.EncodeHit(hit), hit.Point);
+
+		// What the broadcast keeps from a strategist's peer in the fog, this one is not shown either.
+		if (Local is { Team: Team.Strategist } && !Visibility.Covers(hit.Point))
+		{
+			return;
+		}
+
+		PresentHit(hit, definitionId);
+	}
+
+	/// <summary>
+	/// What a hit looks like here: an explosion for a round that went off, the impact
+	/// marker for one that only stopped or a swing, and nothing for a grenade that has
+	/// only landed (docs/EFFECTS.md §2.1). Nothing at all on a process that draws nothing.
+	/// </summary>
+	private void PresentHit(in ProjectileHit hit, byte definitionId)
+	{
+		if (_view == null)
+		{
+			return;
+		}
+
+		ExplosionKind kind = Explosions.ForHit(hit.Flags, WeaponCatalog.ExplosionOf(definitionId));
+		if (kind != ExplosionKind.None)
+		{
+			_explosions?.Spawn(kind, hit.Point, WeaponCatalog.RoundFor(definitionId).ExplosionRadiusMeters);
+			return;
+		}
+
+		if (!hit.Flags.HasFlag(HitFlags.Landed))
+		{
+			_view.Impact(hit.Point, hit.Flags);
+		}
 	}
 
 	/// <summary>
@@ -2699,6 +2777,10 @@ public partial class CombatManager : Node
 
 		_view = new ProjectileView { Name = "ProjectileView" };
 		AddChild(_view);
+
+		// Where rounds go off and vehicles are destroyed (docs/EFFECTS.md).
+		_explosions = new ExplosionEffects { Name = "ExplosionEffects" };
+		AddChild(_explosions);
 
 		// The drones in the air, and the pilot's view out of theirs (docs/CONTROL_POINTS.md §4).
 		_droneView = new DroneView { Name = "DroneView" };

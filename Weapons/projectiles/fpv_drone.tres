@@ -18,3 +18,4 @@ StructureDamageScale = 0.5
 TracerColor = Color(0.95, 0.75, 0.2, 1)
 TracerLengthMeters = 0.4
 TracerRadiusMeters = 0.15
+Explosion = 4

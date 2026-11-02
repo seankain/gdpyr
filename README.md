@@ -46,6 +46,9 @@ dedicated-server authoritative.
   strategist uses), and a node can carry a perk for the ground force — the FPV drone, flown by
   looking, which kills a tank on a direct hit; what bot-only rounds measured, and what is left for
   a person to playtest
+- [`docs/EFFECTS.md`](docs/EFFECTS.md) — explosions: what is drawn when a grenade, a launcher round,
+  a tank shell or a drone goes off and when a vehicle is destroyed, the placeholder that draws it,
+  and where art goes to replace it
 - [`docs/LAN.md`](docs/LAN.md) — hosting a room of machines from a checkout, with a dev build
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — AWS EC2 dedicated-server runbook
 
@@ -73,6 +76,8 @@ Scripts/Agent/  The agent control channel: listener, sessions, seats, observatio
 Scripts/Ui/     Main menu and server browser, role select, pause menu, reticle, combat HUD, RTS HUD,
                 net debug HUD, the `~` console and the demo camera
 Scripts/Ui/Spectator/ The spectator's camera, and the AI debugger's panel, graph and world overlay
+Scripts/Effects/ Explosions as drawn: the pooled manager, the placeholder, and the contract art
+                replaces it under (docs/EFFECTS.md); what they decide is Scripts/Sim/Explosions.cs
 Scenes/         Main menu, greybox map, player, humanoid body, weapon, pause menu
 Units/          UnitDefinition resources: three fighting tiers, the builder, the supply truck, and the
                 sniper and heavy gunner a sniper tower and a pillbox train

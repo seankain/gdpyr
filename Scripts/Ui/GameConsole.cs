@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using Gdpyr.Bots;
 using Gdpyr.Core;
+using Gdpyr.Effects;
 using Gdpyr.Net;
 using Gdpyr.Sim.AiDebug;
 using Gdpyr.Sim.Demo;
@@ -367,6 +368,11 @@ public partial class GameConsole : CanvasLayer
 		_commands.Register("loadout", "loadout [<primary> <magazines> <grenades> [armour]]",
 			"the next spawn's kit: primary none|dmr|rifle|launcher, armour none|light|medium|heavy", Loadout);
 
+		// A look at what an explosion is drawn as, without a fight to make one
+		// (docs/EFFECTS.md §5): this peer only, nothing to the simulation.
+		_commands.Register("explode", ExplodeUsage, "draw an explosion where the camera looks, on this screen only",
+			Explode);
+
 		_commands.Register("clear", "clear", "empty the scrollback", _ =>
 		{
 			_lines.Clear();
@@ -412,6 +418,59 @@ public partial class GameConsole : CanvasLayer
 
 		combat.RequestLoadout(kit);
 		return ConsoleResult.Say(KitLine(local.PendingLoadout));
+	}
+
+	private static readonly string ExplodeUsage =
+		$"explode <{string.Join('|', Array.ConvertAll(Sim.Explosions.Drawn, Sim.Explosions.NameOf))}>";
+
+	/// <summary>How far the camera's line is followed for somewhere to put a previewed explosion [m].</summary>
+	private const float ExplodeRangeMeters = 80f;
+
+	/// <summary>Where a previewed explosion goes when the camera's line meets nothing [m].</summary>
+	private const float ExplodeFallbackMeters = 12f;
+
+	private ConsoleResult Explode(IReadOnlyList<string> args)
+	{
+		if (args.Count != 1 || !Sim.Explosions.TryParse(args[0], out Sim.ExplosionKind kind))
+		{
+			return ConsoleResult.Failed(ExplodeUsage);
+		}
+
+		if (ExplosionEffects.Instance is not { } effects || GetViewport().GetCamera3D() is not { } camera)
+		{
+			return ConsoleResult.Failed("nothing is drawing explosions: join or host a round first");
+		}
+
+		Vector3 from = camera.GlobalPosition;
+		Vector3 forward = -camera.GlobalBasis.Z;
+		Vector3 point = from + (forward * ExplodeFallbackMeters);
+		Godot.Collections.Dictionary hit = camera.GetWorld3D().DirectSpaceState.IntersectRay(
+			PhysicsRayQueryParameters3D.Create(from, from + (forward * ExplodeRangeMeters), CollisionLayers.World));
+		if (hit.Count > 0)
+		{
+			point = hit["position"].AsVector3();
+		}
+
+		// A wreck's preview is a tank's, standing where the camera looks.
+		if (kind == Sim.ExplosionKind.Vehicle && UnitCatalog.Definition(UnitCatalog.Tank) is { } tank)
+		{
+			effects.SpawnWreck(point, tank.HeightMeters, tank.RadiusMeters, tank.Color);
+			return ConsoleResult.Say($"tank wreck at ({point.X:0.0}, {point.Y:0.0}, {point.Z:0.0})");
+		}
+
+		// A round's preview shows its blast's reach as the round's own would.
+		float reach = 0f;
+		for (byte id = 0; id < WeaponCatalog.Count; id++)
+		{
+			if (WeaponCatalog.ExplosionOf(id) == kind)
+			{
+				reach = WeaponCatalog.RoundFor(id).ExplosionRadiusMeters;
+				break;
+			}
+		}
+
+		effects.Spawn(kind, point, reach);
+		return ConsoleResult.Say($"{Sim.Explosions.NameOf(kind)} at ({point.X:0.0}, {point.Y:0.0}, {point.Z:0.0})");
 	}
 
 	private static string KitLine(in Sim.LoadoutSelection kit) => $"next spawn: {WeaponCatalog.DescribeWithLoad(kit)}";

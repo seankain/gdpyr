@@ -6,7 +6,8 @@ namespace Gdpyr.Fps;
 
 /// <summary>
 /// Draws the projectiles the simulation is flying: a pooled mesh per round in the
-/// air, plus a short-lived marker where one stopped.
+/// air, plus a short-lived marker where one stopped. Where one went off is
+/// <see cref="Effects.ExplosionEffects"/>'s.
 ///
 /// Purely cosmetic, and deliberately dumb — it reads <see cref="ProjectileSim"/>
 /// and never writes to it. Nothing here may feed the simulation
@@ -103,7 +104,10 @@ public partial class ProjectileView : Node3D
 		}
 	}
 
-	/// <summary>Marks where a round stopped.</summary>
+	/// <summary>
+	/// Marks where a round stopped, or a swing landed: red for a kill. A round that went
+	/// off is an explosion instead (<see cref="Effects.ExplosionEffects"/>, docs/EFFECTS.md).
+	/// </summary>
 	public void Impact(Vector3 point, HitFlags flags)
 	{
 		MeshInstance3D mesh = _impacts[_nextImpact];
@@ -111,10 +115,7 @@ public partial class ProjectileView : Node3D
 		_nextImpact = (_nextImpact + 1) % ImpactPool;
 
 		mesh.GlobalPosition = point;
-		mesh.Scale = Vector3.One * (flags.HasFlag(HitFlags.Exploded) ? 6f : 1f);
-		SetColor(mesh, flags.HasFlag(HitFlags.Killed) ? Colors.Red
-			: flags.HasFlag(HitFlags.Exploded) ? Colors.Orange
-			: Colors.White);
+		SetColor(mesh, flags.HasFlag(HitFlags.Killed) ? Colors.Red : Colors.White);
 		mesh.Visible = true;
 	}
 
