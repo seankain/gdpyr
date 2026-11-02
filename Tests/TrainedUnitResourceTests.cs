@@ -275,7 +275,7 @@ public class TrainedUnitResourceTests
 	internal static float Float(Dictionary<string, string> values, string key) =>
 		float.Parse(values[key], CultureInfo.InvariantCulture);
 
-	private static string Repo(string relative)
+	internal static string Repo(string relative)
 	{
 		for (var at = new DirectoryInfo(AppContext.BaseDirectory); at != null; at = at.Parent)
 		{

@@ -1,5 +1,6 @@
 using Gdpyr.Characters;
 using Gdpyr.Core;
+using Gdpyr.Effects;
 using Gdpyr.Sim;
 using Gdpyr.Sim.Htn;
 using Godot;
@@ -521,7 +522,25 @@ public partial class Unit : CharacterBody3D, IHumanoidPoseSource
 
 		State = UnitStateId.Dead;
 		ApplyPresentation();
+		PresentDestroyed();
 		return true;
+	}
+
+	/// <summary>
+	/// A vehicle's wreck going up (docs/EFFECTS.md §2.3): on the authority when the
+	/// damage that killed it lands, on a client when the first record that says so
+	/// arrives — never for one that was already dead when this peer first heard of it.
+	/// Drawn at the middle of the hull, as big as the hull, its debris the vehicle's
+	/// colour. Presentation only, and nothing on a peer that draws nothing.
+	/// </summary>
+	private void PresentDestroyed()
+	{
+		if (Definition is not { IsVehicle: true } definition || ExplosionEffects.Instance is not { } effects)
+		{
+			return;
+		}
+
+		effects.SpawnWreck(GlobalPosition, definition.HeightMeters, definition.RadiusMeters, definition.Color);
 	}
 
 	/// <summary>
@@ -639,6 +658,10 @@ public partial class Unit : CharacterBody3D, IHumanoidPoseSource
 			}
 
 			ApplyPresentation();
+			if (wasAlive && !IsAlive)
+			{
+				PresentDestroyed();
+			}
 		}
 	}
 

@@ -94,6 +94,17 @@ public partial class ProjectileDefinition : Resource
 	[Export]
 	public float TracerRadiusMeters = 0.03f;
 
+	[ExportCategory("Explosion")]
+
+	/// <summary>
+	/// What its going off looks like (docs/EFFECTS.md §2.1): presentation only, and
+	/// never on the wire. <see cref="ExplosionKind.None"/> for a round that only stops;
+	/// a round that explodes and names none is drawn as
+	/// <see cref="Explosions.Unidentified"/>.
+	/// </summary>
+	[Export]
+	public ExplosionKind Explosion;
+
 	public ProjectileStats ToStats() => new(
 		ProjectileParams.FromGramsAndMillimeters(MassGrams, RadiusMillimeters, DragCoefficient),
 		MuzzleVelocity,

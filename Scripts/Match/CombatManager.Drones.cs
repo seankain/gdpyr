@@ -284,19 +284,14 @@ public partial class CombatManager
 			stats.ExplosionRadiusMeters, FireKind.Hit, tick);
 		NoteBlastAtBots(Team.GroundForce, point, stats.ExplosionRadiusMeters, tick);
 
-		Broadcast(MethodName.ServerProjectileHit, ProjectileCodec.EncodeHit(new ProjectileHit
+		PublishHit(new ProjectileHit
 		{
 			Id = 0,
 			Point = point,
 			VictimPeerId = victim?.PeerId
 				?? (unitVictim != null ? OwnerId.ForUnit(unitVictim.UnitId) : structureVictim?.ShooterId ?? 0),
 			Flags = flags,
-		}), point);
-
-		if (!Bootstrap.IsDedicatedServer)
-		{
-			_view?.Impact(point, flags);
-		}
+		}, weapon);
 
 		string what = victim != null ? $"peer {victim.PeerId}"
 			: unitVictim != null ? $"{UnitCatalog.NameOf(unitVictim.DefinitionId)} {unitVictim.UnitId}"
