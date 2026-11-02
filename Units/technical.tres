@@ -21,6 +21,7 @@ LeashRadiusMeters = 30.0
 ArrivalRadiusMeters = 2.5
 WeaponId = 5
 AccuracyConeDegrees = 3.5
+MaxRounds = 300
 Grenades = 0
 Doctrine = 0
 Color = Color(0.95, 0.55, 0.15, 1)

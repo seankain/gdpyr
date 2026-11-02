@@ -212,6 +212,12 @@ public partial class UnitManager : Node
 	/// <summary>Units that got health back on the last tick. Server-side, for the debug HUD.</summary>
 	public int UnitsResupplied { get; private set; }
 
+	/// <summary>Rounds units have been filled back up with this round (<see cref="Ammunition"/>). Server-side.</summary>
+	public int RoundsResupplied { get; private set; }
+
+	/// <summary>Units that fired every round they carry, as the last tick left them. Server-side, for the debug HUD.</summary>
+	public int UnitsOutOfRounds { get; private set; }
+
 	/// <summary>The supply sources as the last tick found them: barracks rings, then trucks. Server-side.</summary>
 	public ReadOnlySpan<SupplySource> Supplies => _supplies.AsSpan(0, _supplyCount);
 
@@ -299,9 +305,11 @@ public partial class UnitManager : Node
 		}
 
 		UnitsResupplied = 0;
+		UnitsOutOfRounds = 0;
 		for (int i = 0; i < _ordered.Count; i++)
 		{
 			SimulateUnit(_ordered[i], tick);
+			UnitsOutOfRounds += _ordered[i].IsAlive && !_ordered[i].HasRounds ? 1 : 0;
 		}
 
 		TimeUnits(Stopwatch.GetTimestamp() - started);
@@ -328,6 +336,7 @@ public partial class UnitManager : Node
 		{
 			BroadcastBarracksState(tick);
 			SendAutonomyState();
+			SendAmmoState();
 		}
 	}
 
@@ -677,15 +686,28 @@ public partial class UnitManager : Node
 	}
 
 	/// <summary>
-	/// One tick of the resupply rule for one unit: health back at its own rate while it
-	/// is inside a friendly source's reach and has not been hit for
-	/// <see cref="Resupply.DamageLockoutTicks"/>. A rule of the game, whoever gave the
+	/// One tick of the resupply rule for one unit, while it is inside a friendly source's
+	/// reach: health back at its own rate once it has not been hit for
+	/// <see cref="Resupply.DamageLockoutTicks"/>, and its rounds filled back up at once,
+	/// lockout or none (<see cref="Ammunition"/>). A rule of the game, whoever gave the
 	/// unit its orders and whichever AI the bots run.
 	/// </summary>
 	private void ServerResupply(Unit unit, uint tick)
 	{
-		if (!unit.CanBeResupplied || !Resupply.CanHeal(tick, unit.LastDamagedTick)
-			|| !Resupply.IsSupplied(unit.GlobalPosition, unit.UnitId, unit.Team, Supplies))
+		bool heals = unit.CanBeResupplied && Resupply.CanHeal(tick, unit.LastDamagedTick);
+		bool rearms = unit.CanBeRearmed;
+		if ((!heals && !rearms) || !Resupply.IsSupplied(unit.GlobalPosition, unit.UnitId, unit.Team, Supplies))
+		{
+			return;
+		}
+
+		if (rearms)
+		{
+			RoundsResupplied += unit.Rearm();
+			_ammoRevision++;
+		}
+
+		if (!heals)
 		{
 			return;
 		}
@@ -703,6 +725,11 @@ public partial class UnitManager : Node
 	/// else reads the edge, and <see cref="WeaponState.NextFireTick"/> is what
 	/// actually decides the cadence either way. With nothing to fire at, a plan that asks
 	/// for a reload presses that instead (docs/TACTICS.md §5.2).
+	///
+	/// A unit that has fired every round it carries does not pull the trigger
+	/// (<see cref="Ammunition"/>): it still sees, aims and stands to its target, and fires
+	/// nothing until it is back inside a supply source's reach. Every round that leaves
+	/// spends one.
 	/// </summary>
 	private void ServerFire(Unit unit, uint tick, bool hasTarget, Vector3 targetPoint, Vector3 targetVelocity,
 		bool reload = false)
@@ -715,7 +742,8 @@ public partial class UnitManager : Node
 
 		// A crouched unit does not fire — it stands to shoot (docs/TACTICS.md §5.8) — and
 		// its weapon still steps, so a reload runs on behind the wall.
-		bool pullingTrigger = hasTarget && unit.State == UnitStateId.Engaging && unit.Posture == UnitPosture.Standing;
+		bool pullingTrigger = hasTarget && unit.State == UnitStateId.Engaging && unit.Posture == UnitPosture.Standing
+			&& unit.HasRounds;
 		InputButtons buttons = pullingTrigger ? InputButtons.Fire : reload ? InputButtons.Reload : InputButtons.None;
 
 		var frame = InputFrame.Create(tick, 0f, 0f, unit.Yaw, 0f, buttons);
@@ -728,6 +756,10 @@ public partial class UnitManager : Node
 		}
 
 		unit.LastShotTick = tick;
+		if (unit.SpendRound())
+		{
+			_ammoRevision++;
+		}
 
 		Vector3 muzzle = unit.EyePosition;
 		ProjectileStats projectile = WeaponCatalog.Projectiles.Length > unit.Weapon.DefinitionId
@@ -1337,10 +1369,11 @@ public partial class UnitManager : Node
 
 		// The nearest friendly supply source, by the edge of its reach (D2): a barracks'
 		// ring or a truck, never the unit's own truck. One a unit with no rate to heal
-		// at is no source at all.
+		// at and no rounds to run out of is no source at all.
 		int source = Resupply.Nearest(at, unit.UnitId, unit.Team, Supplies, out float supplyEdge);
-		bool heals = source >= 0 && (unit.Definition?.RegenPerSecond ?? 0f) > 0f;
-		plan.SupplyPoint = heals ? _supplies[source].Position : at;
+		bool serves = source >= 0
+			&& ((unit.Definition?.RegenPerSecond ?? 0f) > 0f || Ammunition.IsLimited(unit.FullRounds));
+		plan.SupplyPoint = serves ? _supplies[source].Position : at;
 
 		plan.Encode(new UnitSense
 		{
@@ -1353,8 +1386,10 @@ public partial class UnitManager : Node
 			Autonomous = IsBotOrder(unit.OrderIssuer),
 			UnderFire = unit.LastDamagedTick != 0 && tick - unit.LastDamagedTick <= (uint)traits.UnderFireTicks,
 			FriendNear = around.Friends > 0,
-			HasSupply = heals,
+			HasSupply = serves,
 			SupplyEdgeMeters = supplyEdge,
+			AmmoShort = !Ammunition.IsFull(unit.Rounds, unit.FullRounds),
+			AmmoLow = Ammunition.IsBelow(unit.Rounds, unit.FullRounds, traits.AmmoLowFraction),
 			HasCover = hasCover,
 			CoverHides = hasCover,
 			Objective = objective,
@@ -2627,10 +2662,13 @@ public partial class UnitManager : Node
 		UnitsLost = 0;
 		HealthResupplied = 0f;
 		UnitsResupplied = 0;
+		RoundsResupplied = 0;
+		UnitsOutOfRounds = 0;
 		_supplyCount = 0;
 		ResetFire();
 		ResetGrenades();
 		ResetAutonomy();
+		ResetAmmo();
 		ResetDrills();
 	}
 

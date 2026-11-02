@@ -1,3 +1,4 @@
+using System;
 using Gdpyr.Sim;
 
 namespace Gdpyr.Ui;
@@ -68,6 +69,7 @@ public static class StrategistCards
 		+ "builders: 5 pillbox · 6 sandbags · 7 sniper tower, then RMB places it (turn the view to turn it)\n"
 		+ "    RMB a site or a damaged structure to finish or mend it\n"
 		+ "units out of a fight for 3 s heal inside the barracks ring and a supply truck's ring\n"
+		+ "    and are filled back up with rounds there at once; out of them, ammo runs out\n"
 		+ "K hide this list · F1 ground force · F2 strategist";
 
 	/// <summary>
@@ -133,6 +135,34 @@ public static class StrategistCards
 		OrderKind.Stop => "stop: they drop their order and hold where they are",
 		_ => "move",
 	};
+
+	/// <summary>
+	/// The selection's ammunition, for the card's status line (<see cref="Ammunition"/>):
+	/// <c>ammo 24/30</c> for one unit that can run out, and for several the share they
+	/// have left between them — each unit's share, averaged, so a rifleman's two hundred
+	/// rounds do not drown a tank's thirty — and how many have none. Empty when nothing
+	/// selected can run out: a dropship has no gun.
+	/// </summary>
+	/// <param name="limited">Selected units that can run out.</param>
+	/// <param name="rounds">The rounds they have left, between them.</param>
+	/// <param name="fullRounds">The rounds they carry full, between them.</param>
+	/// <param name="fractionSum">Each one's share left (<see cref="Ammunition.Fraction"/>), added up.</param>
+	/// <param name="empty">How many of them have none left.</param>
+	public static string AmmoReadout(int limited, int rounds, int fullRounds, float fractionSum, int empty)
+	{
+		if (limited <= 0)
+		{
+			return string.Empty;
+		}
+
+		if (limited == 1)
+		{
+			return empty > 0 ? $"ammo 0/{fullRounds} · out" : $"ammo {rounds}/{fullRounds}";
+		}
+
+		int percent = (int)MathF.Round(Math.Clamp(fractionSum / limited, 0f, 1f) * 100f);
+		return empty > 0 ? $"ammo {percent}% · {empty} out" : $"ammo {percent}%";
+	}
 
 	/// <summary>
 	/// The card's footer: what the next right-click does. <paramref name="placing"/> is the

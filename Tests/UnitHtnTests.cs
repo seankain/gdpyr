@@ -83,7 +83,7 @@ public class UnitHtnTests
 
 		/// <summary>One scan: its health, how far outside the nearest supply source's reach it is, and whose order it has.</summary>
 		public void Scan(float health, float supplyEdge, bool autonomous = true, bool sideKnown = false,
-			bool hasSupply = true) => C.Encode(new UnitSense
+			bool hasSupply = true, bool ammoShort = false, bool ammoLow = false) => C.Encode(new UnitSense
 		{
 			HealthFraction = health,
 			Autonomous = autonomous,
@@ -91,6 +91,8 @@ public class UnitHtnTests
 			Odds = OddsBand.Even,
 			HasSupply = hasSupply,
 			SupplyEdgeMeters = supplyEdge,
+			AmmoShort = ammoShort || ammoLow,
+			AmmoLow = ammoLow,
 		});
 
 		/// <summary>One scan that found a spot behind cover at <paramref name="spot"/> (docs/COVER.md §6), or none.</summary>
@@ -735,6 +737,101 @@ public class UnitHtnTests
 		c.Sense(UnitFact.Wounded, before);
 		c.Sense(UnitFact.Health, (byte)(before ? HealthBand.Hurt : HealthBand.Ok));
 		c.Encode(new UnitSense { HealthFraction = health });
+
+		Assert.Equal(expected, c.Is(UnitFact.Wounded));
+	}
+
+	// ---- resupply for rounds (docs/NETCODE.md §10.7) --------------------------
+
+	/// <summary>A unit on a computer strategist's attack order, whole, <paramref name="supplyEdge"/> metres outside a supply source's reach, low on rounds.</summary>
+	private static Squaddie Dry(float supplyEdge = 30f, bool autonomous = true)
+	{
+		Squaddie unit = Ordered(OrderKind.Attack, Objective);
+		unit.C.SupplyPoint = Supply;
+		unit.Scan(1f, supplyEdge, autonomous, ammoLow: true);
+		return unit;
+	}
+
+	[Fact]
+	public void ABotsUnitLowOnRounds_AtFullHealth_WithNothingInSight_WalksToTheNearestSupply()
+	{
+		Squaddie unit = Dry();
+		unit.Tick();
+
+		Assert.Equal("[Resupply]", unit.LastPlan);
+		Assert.Equal(UnitMove.Point, unit.C.Intent.Move);
+		Assert.Equal(Supply, unit.C.Intent.Point);
+	}
+
+	[Fact]
+	public void AUnitShortOfAFullLoad_ButNotLow_KeepsToItsOrder()
+	{
+		Squaddie unit = Ordered(OrderKind.Attack, Objective);
+		unit.C.SupplyPoint = Supply;
+		unit.Scan(1f, 30f, ammoShort: true);
+		unit.Tick();
+
+		Assert.Equal(UnitGoal.Advance, unit.Goal);
+	}
+
+	[Fact]
+	public void AResupplyForRounds_LastsUntilItIsFull_ThenTheOrderResumes()
+	{
+		Squaddie unit = Dry();
+		unit.Tick();
+		Assert.Equal(UnitGoal.Resupply, unit.Goal);
+
+		// Above the low line on the way, and still short: it keeps going.
+		unit.Scan(1f, 10f, ammoShort: true);
+		unit.Tick();
+		Assert.Equal(UnitGoal.Resupply, unit.Goal);
+
+		// Inside the reach it is filled at once, and goes back to its order.
+		unit.Scan(1f, -3.5f);
+		unit.Tick();
+		Assert.Equal(UnitGoal.Advance, unit.Goal);
+	}
+
+	[Fact]
+	public void AUnitAPersonOrdered_LowOnRounds_NeverGoesBackOnItsOwn()
+	{
+		Squaddie unit = Dry(autonomous: false);
+		unit.Tick();
+
+		Assert.Equal(UnitGoal.Advance, unit.Goal);
+	}
+
+	[Fact]
+	public void AUnitLowOnRounds_WithAContactNearby_KeepsToItsOrder()
+	{
+		Squaddie unit = Dry();
+		unit.Scan(1f, 30f, sideKnown: true, ammoLow: true);
+		unit.Tick();
+
+		Assert.Equal(UnitGoal.Advance, unit.Goal);
+	}
+
+	[Fact]
+	public void AUnitLowOnRounds_WithNoSourceInRange_KeepsToItsOrder()
+	{
+		Squaddie unit = Dry(supplyEdge: UnitPlanTraits.Default.SupplyRangeMeters + 1f);
+		unit.Tick();
+
+		Assert.Equal(UnitGoal.Advance, unit.Goal);
+	}
+
+	[Theory]
+	[InlineData(false, false, false, false)]
+	[InlineData(false, true, false, false)]
+	[InlineData(false, true, true, true)]
+	[InlineData(true, true, false, true)]
+	[InlineData(true, false, false, false)]
+	public void Wounded_IsEnteredLowOnRounds_AndHeldUntilFull(bool before, bool shortOfFull, bool low, bool expected)
+	{
+		UnitContext c = Context();
+		c.Sense(UnitFact.Wounded, before);
+		c.Sense(UnitFact.Health, (byte)HealthBand.Ok);
+		c.Encode(new UnitSense { HealthFraction = 1f, AmmoShort = shortOfFull || low, AmmoLow = low });
 
 		Assert.Equal(expected, c.Is(UnitFact.Wounded));
 	}

@@ -22,5 +22,6 @@ LeashRadiusMeters = 20.0
 ArrivalRadiusMeters = 1.5
 WeaponId = 10
 AccuracyConeDegrees = 0.45
+MaxRounds = 40
 Doctrine = 3
 Color = Color(0.3, 0.5, 0.3, 1)

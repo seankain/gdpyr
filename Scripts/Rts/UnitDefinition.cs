@@ -201,6 +201,24 @@ public partial class UnitDefinition : Resource
 	public int SuppressTicks => WeaponStats.SecondsToTicks(SuppressSeconds);
 
 	/// <summary>
+	/// Rounds it carries for its weapon (<see cref="Ammunition"/>, docs/NETCODE.md
+	/// §10.7): every round that leaves the muzzle spends one, whatever the magazine
+	/// says, and inside a friendly supply source's reach — a barracks' ring, a supply
+	/// truck's — it is filled back up at once. Out of reach, a unit that has fired them
+	/// all stops firing. The tank's thirty main-gun rounds are what send it home. Zero
+	/// never runs out, which is what a file that says nothing gets: the dropship, which
+	/// has no gun.
+	/// </summary>
+	[Export]
+	public int MaxRounds;
+
+	/// <summary>
+	/// What it carries full, as <see cref="Ammunition"/> counts it: <see cref="MaxRounds"/>,
+	/// or <see cref="Ammunition.Unlimited"/>.
+	/// </summary>
+	public int FullRounds => Ammunition.Full(MaxRounds);
+
+	/// <summary>
 	/// Hand grenades it carries for its life (docs/NETCODE.md §10.9): three for anything
 	/// on foot, which is what a file that says nothing gets, and none for a vehicle,
 	/// whose crew does not lean out to throw one. It throws at a target in throwing
