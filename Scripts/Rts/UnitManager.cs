@@ -182,8 +182,7 @@ public partial class UnitManager : Node
 	/// <summary>
 	/// Units on every barracks queue and every structure's training queue
 	/// (docs/NETCODE.md §10.8). Server-side: a queued unit has already been paid for,
-	/// so it is the difference between a strategist who is broke and one who is out
-	/// of the round (<see cref="Sim.WinConditions.IsStrategistEliminated"/>).
+	/// so it is part of the strategist's army before it is on the field.
 	/// </summary>
 	public int QueuedUnits
 	{

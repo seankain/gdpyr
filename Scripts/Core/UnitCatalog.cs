@@ -177,33 +177,6 @@ public static class UnitCatalog
 	/// <summary>Whether a barracks trains units of this kind, rather than only a structure (docs/NETCODE.md §10.8).</summary>
 	public static bool IsTrainedInBarracks(byte id) => Definition(id)?.TrainedInBarracks ?? false;
 
-	/// <summary>
-	/// What the cheapest unit a barracks trains costs, or <see cref="int.MaxValue"/>
-	/// when nothing can be built at all.
-	///
-	/// This is half of the strategist's defeat condition — "points below the
-	/// cheapest unit" (docs/IMPLEMENTATION_PLAN.md §M5) — and it is derived rather
-	/// than authored so that adding a fourth tier cannot leave a constant behind.
-	/// A unit only a structure trains is left out: the structure may not be standing,
-	/// and a strategist who can afford only that has nothing a barracks will sell.
-	/// </summary>
-	public static int CheapestCost
-	{
-		get
-		{
-			int cheapest = int.MaxValue;
-			for (int i = 0; i < Definitions.Length; i++)
-			{
-				UnitDefinition definition = Definitions[i];
-				if (definition != null && definition.TrainedInBarracks && definition.Cost < cheapest)
-				{
-					cheapest = definition.Cost;
-				}
-			}
-			return cheapest;
-		}
-	}
-
 	public static int CostOf(byte id) => Definition(id)?.Cost ?? int.MaxValue;
 
 	/// <summary>

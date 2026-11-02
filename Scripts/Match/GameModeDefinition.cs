@@ -26,6 +26,18 @@ public partial class GameModeDefinition : Resource
 	[Export]
 	public int StrategistTickets = 1000;
 
+	/// <summary>
+	/// Points the strategist is paid every <see cref="StrategistBaselineIntervalSeconds"/>
+	/// for the whole of a live round, whatever it holds (<see cref="BaselineIncome"/>).
+	/// 10 every 5 s is 120 a minute: a four-rifleman wave about every hundred seconds
+	/// with every node lost. A node pays 300 a minute on top. Zero turns it off.
+	/// </summary>
+	[Export]
+	public int StrategistBaselineIncome = 10;
+
+	[Export]
+	public float StrategistBaselineIntervalSeconds = 5f;
+
 	[Export]
 	public int RoundDurationMinutes = 20;
 
@@ -84,4 +96,8 @@ public partial class GameModeDefinition : Resource
 	/// </summary>
 	[Export]
 	public MicroAutonomy UnitAutonomy = MicroAutonomyNames.Default;
+
+	/// <summary>The two baseline numbers above, in ticks.</summary>
+	public BaselineIncome StrategistBaseline =>
+		new(StrategistBaselineIncome, WeaponStats.SecondsToTicks(StrategistBaselineIntervalSeconds));
 }

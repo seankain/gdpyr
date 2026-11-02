@@ -664,6 +664,11 @@ detail:
   leaves the other where it got to.
 - **Income is paid on a tick index**, never accumulated into a float. Two peers have to agree what
   the strategist has; sixty additions a second of `0.41666` would not.
+- **The nodes are not the only income.** A baseline (`BaselineIncome`, 10 points every 5 s by
+  default) is paid for the whole of a live round whatever is held, on a schedule kept from the
+  round's start (`MatchState.PayBaseline`). Denying every node shrinks the strategist's waves; it
+  cannot stop them, and the strategist loses only on the clock (implementation plan §M5). Nothing
+  new is on the wire: the balance replicates on the ledger's version as a node's payment does.
 
 Replication is one ~8-byte reliable message per node whose state changed, at 5 Hz, plus the whole
 set to a joining peer. There is **no fog over it**: both sides can see who is standing on a pad in
@@ -773,8 +778,8 @@ against:
 - **The ground force's spawn goes outside it**, with room to spare. A spawn inside the ring is a
   ticket drain with no decision in it.
 - **Every resource node goes outside it.** A node inside is one the ground force can never stand on,
-  and a strategist holding a node can never be eliminated (`WinConditions.IsStrategistEliminated`),
-  so a node inside the ring turns the round into a clock.
+  so its income can never be denied, and denial is the ground force's whole reason to walk to a
+  node.
 - **Keep the ring inside the playable space where you can.** A ring that runs past a wall leaves
   ground between the two that looks outside the ring and is not.
 
@@ -809,7 +814,7 @@ gun, shoot.
 seconds at the barracks, 80 health, a rifleman's pace and a pistol. What makes it a builder is one
 flag, `UnitDefinition.CanConstruct`. It is not a tier — `UnitCatalog.Tiers` is still the three
 fighting units, which is what the computer strategist chooses its army from — and it costs more than
-a rifleman, so the "points below the cheapest unit" half of the defeat condition is unchanged.
+a rifleman.
 
 **The structures** are three resources (`Structures/*.tres`, `StructureCatalog`, ids in
 `StructureKinds`), and every number that decides how strong one is lives there:
@@ -1134,9 +1139,8 @@ The door is worked out rather than authored (`Scripts/Sim/StructureTraining.cs`,
 from what the structure was put up to face — or the next wall round that no other structure's
 footprint is on. Fresh units stand in rows along it and walk to the structure's rally point, six
 metres straight out until the strategist moves it. **A knocked-down structure refunds its queue**:
-the strategist paid for units and gets the units or the points. The defeat condition counts units
-on a structure's queue as it counts a barracks', and its "cheapest unit" is the cheapest a barracks
-trains — a unit only a standing structure can train is not one a broke strategist can count on.
+the strategist paid for units and gets the units or the points. `UnitManager.QueuedUnits` counts
+units on a structure's queue as it counts a barracks'.
 
 **For the strategist:** click a finished tower or pillbox and the card is its queue — one button,
 the queue, the progress bar, cancel — and a right-click on the ground with no units selected moves

@@ -209,7 +209,7 @@ public partial class StrategistHud : CanvasLayer
 				+ $" · queued {status.Queued}{deploy}"
 			: $"barracks: idle{deploy}";
 
-		_economy.Text = Economy(economy);
+		_economy.Text = Economy(economy, CombatManager.Instance?.GameMode?.StrategistBaseline ?? default);
 
 		// What the ground force's drone nodes have built them (docs/CONTROL_POINTS.md §4.4):
 		// the one thing on the field that kills a tank in one hit, and worth a tank's distance.
@@ -489,21 +489,24 @@ public partial class StrategistHud : CanvasLayer
 		string.IsNullOrEmpty(text) ? text : char.ToUpperInvariant(text[0]) + text[1..];
 
 	/// <summary>
-	/// What the nodes are doing, in one line: what is being held, what has been lost
-	/// and what is being fought over (docs/IMPLEMENTATION_PLAN.md §M5). Only what is
-	/// not zero; nothing at all on a map without nodes.
+	/// The income, in one line: the baseline nothing can stop, then what the nodes are
+	/// doing — what is being held, what has been lost and what is being fought over
+	/// (docs/IMPLEMENTATION_PLAN.md §M5). Only what is not zero.
 	///
-	/// A strategist with no nodes and no units is one losing condition away from
-	/// the round being over, so this is the line that says how close that is.
+	/// The baseline is what a strategist with every node lost still builds waves
+	/// with, so it is the first thing on the line.
 	/// </summary>
-	private static string Economy(EconomyService economy)
+	private static string Economy(EconomyService economy, BaselineIncome baseline)
 	{
+		string text = baseline.Pays ? $"base +{Mathf.RoundToInt(baseline.PointsPerMinute)}/min" : string.Empty;
+
 		if (economy == null || economy.NodeCount == 0)
 		{
-			return string.Empty;
+			return text;
 		}
 
-		return $"nodes {economy.StrategistNodes}/{economy.NodeCount} held"
+		return (text.Length > 0 ? text + " · " : string.Empty)
+			+ $"nodes {economy.StrategistNodes}/{economy.NodeCount} held"
 			+ (economy.GroundNodes > 0 ? $" · {economy.GroundNodes} lost" : string.Empty)
 			+ (economy.ContestedNodes > 0 ? $" · {economy.ContestedNodes} contested" : string.Empty);
 	}

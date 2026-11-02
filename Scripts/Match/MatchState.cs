@@ -28,8 +28,11 @@ public enum RoundOutcome : byte
 	TimeExpired,
 
 	/// <summary>
-	/// The strategist has no points, no units, nothing building and no node held
-	/// (<see cref="WinConditions.IsStrategistEliminated"/>). The ground force wins.
+	/// Retired: no round ends this way any more. The strategist had no points, no
+	/// units, nothing building and no node held. It now directs the waves rather than
+	/// playing an economy it can lose (<see cref="BaselineIncome"/>), and loses only on
+	/// the clock. The value stays, as every value on this wire does: a demo, a
+	/// scoreboard or an agent trace written before it was retired still reads 3.
 	/// </summary>
 	StrategistEliminated,
 }
@@ -38,9 +41,11 @@ public enum RoundOutcome : byte
 /// The round: its phase, the ground force's ticket pool, the strategist's points
 /// and its clock.
 ///
-/// Engine-free and server-authoritative. Resource nodes and the full win condition
-/// are still M5 (docs/IMPLEMENTATION_PLAN.md §M5); M3 added the point pool,
-/// because a strategist who cannot run out of units is not making decisions.
+/// Engine-free and server-authoritative. The round ends two ways: the ground force
+/// runs out of tickets, and the strategist wins; or the clock runs out with tickets
+/// left, and the ground force wins. The strategist cannot run out of the round: its
+/// points are the nodes' income plus a baseline nothing can stop
+/// (<see cref="BaselineIncome"/>), so it can always send a wave.
 ///
 /// Time is counted in ticks, not seconds: a round that lasts a different length
 /// on a server having a bad minute is a measurement the playtest instrumentation
@@ -88,16 +93,25 @@ public sealed class MatchState
 
 	/// <summary>
 	/// The strategist's points: what units cost come out of here
-	/// (docs/IMPLEMENTATION_PLAN.md §M3). Income is M5's resource nodes; until then
-	/// the pool is filled once at the start of the round and only shrinks.
+	/// (docs/IMPLEMENTATION_PLAN.md §M3). Filled at the start of the round, paid into
+	/// by the nodes it holds (M5) and by <see cref="Baseline"/>.
 	/// </summary>
 	public ResourceLedger Strategist { get; } = new();
 
 	public int StrategistPoints => Strategist.Balance;
 
+	/// <summary>What the strategist is paid this round whatever it holds. Server-side.</summary>
+	public BaselineIncome Baseline { get; private set; }
+
+	/// <summary>Points <see cref="Baseline"/> has paid this round. Server-side; for the HUD and M8's CSV.</summary>
+	public int BaselinePaid { get; private set; }
+
+	private uint _nextBaselineTick;
+
 	public bool IsLive => Phase == RoundPhase.Live;
 
-	public void Start(uint tick, int groundTickets, int strategistPoints, int durationTicks)
+	public void Start(uint tick, int groundTickets, int strategistPoints, int durationTicks,
+		BaselineIncome baseline = default)
 	{
 		Phase = RoundPhase.Live;
 		Outcome = RoundOutcome.Undecided;
@@ -107,7 +121,45 @@ public sealed class MatchState
 		StartTick = tick;
 		EndTick = tick + (uint)Math.Max(durationTicks, 0);
 		Strategist.Reset(strategistPoints);
+		Baseline = baseline;
+		BaselinePaid = 0;
+		// The first payment is one interval in, as a node's is after it is taken: the
+		// starting pool is the payment for the first interval.
+		_nextBaselineTick = tick + (uint)baseline.IntervalTicks;
 		Version++;
+	}
+
+	/// <summary>
+	/// Pays the strategist its baseline when one is due. Returns the points paid,
+	/// which is 0 on all but one tick in <see cref="BaselineIncome.IntervalTicks"/>.
+	///
+	/// Every live tick, nodes or none, contested or not: it is the part of the
+	/// strategist's income the ground force cannot deny. Payments are scheduled off
+	/// the round's start rather than counted, so a tick the server skipped is paid on
+	/// the next one rather than lost.
+	/// </summary>
+	public int PayBaseline(uint tick)
+	{
+		if (Phase != RoundPhase.Live || !Baseline.Pays)
+		{
+			return 0;
+		}
+
+		int paid = 0;
+		while (tick >= _nextBaselineTick)
+		{
+			paid += Baseline.Points;
+			_nextBaselineTick += (uint)Baseline.IntervalTicks;
+		}
+
+		if (paid > 0)
+		{
+			// The ledger bumps its own version, which is what replicates a balance.
+			Strategist.Add(paid);
+			BaselinePaid += paid;
+		}
+
+		return paid;
 	}
 
 	/// <summary>
@@ -134,26 +186,6 @@ public sealed class MatchState
 		}
 
 		End(tick, RoundOutcome.GroundForceEliminated);
-		return true;
-	}
-
-	/// <summary>
-	/// Ends the round because the strategist has nothing left to play with
-	/// (docs/IMPLEMENTATION_PLAN.md §M5). Returns true when this was the call that
-	/// ended it.
-	///
-	/// The condition itself is <see cref="WinConditions.IsStrategistEliminated"/> and
-	/// is tested there; what belongs here is only that it ends the round exactly once
-	/// and only while one is running.
-	/// </summary>
-	public bool RegisterStrategistDefeat(uint tick)
-	{
-		if (Phase != RoundPhase.Live)
-		{
-			return false;
-		}
-
-		End(tick, RoundOutcome.StrategistEliminated);
 		return true;
 	}
 
@@ -232,6 +264,9 @@ public sealed class MatchState
 		StartTick = 0;
 		EndTick = 0;
 		Strategist.Reset(0);
+		Baseline = default;
+		BaselinePaid = 0;
+		_nextBaselineTick = 0;
 		Version++;
 	}
 }
