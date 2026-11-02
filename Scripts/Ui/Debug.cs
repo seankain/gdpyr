@@ -197,8 +197,10 @@ public partial class Debug : PanelContainer
 			SetProperty("unit ms", $"{units.UnitMilliseconds:0.000}  {units.LiveUnitCount} units");
 
 			// Resupply (docs/HTN_BOTS.md §8, D2): units getting health back this tick, and
-			// how much the round has given back, under either AI.
-			SetProperty("resupply", $"{units.UnitsResupplied} healing  {units.HealthResupplied:0} hp this round");
+			// how much the round has given back, under either AI; the rounds it has filled
+			// back up, and the units out of them now (docs/NETCODE.md §10.7).
+			SetProperty("resupply", $"{units.UnitsResupplied} healing  {units.HealthResupplied:0} hp"
+				+ $"  {units.RoundsResupplied} rounds this round  {units.UnitsOutOfRounds} out of rounds");
 			if (units.Plans)
 			{
 				SetProperty("unit plan", units.DescribeUnitPlans());

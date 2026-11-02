@@ -67,6 +67,21 @@ public partial class Unit : CharacterBody3D, IHumanoidPoseSource
 	public GrenadeState Grenades;
 
 	/// <summary>
+	/// The rounds it has left for its weapon (<see cref="Ammunition"/>):
+	/// <see cref="UnitDefinition.MaxRounds"/> at birth, one fewer for every round fired,
+	/// full again inside a friendly supply source's reach; <see cref="Ammunition.Unlimited"/>
+	/// for a unit that never runs out. On a client, what the last <c>ServerAmmoState</c>
+	/// said, for the selection card — strategist peers only, never in the unit snapshot.
+	/// </summary>
+	public int Rounds { get; set; } = Ammunition.Unlimited;
+
+	/// <summary>What it carries full (<see cref="UnitDefinition.FullRounds"/>); <see cref="Ammunition.Unlimited"/> for a unit that never runs out.</summary>
+	public int FullRounds => Definition?.FullRounds ?? Ammunition.Unlimited;
+
+	/// <summary>False only for a unit that has fired every round it carries.</summary>
+	public bool HasRounds => Ammunition.CanFire(Rounds);
+
+	/// <summary>
 	/// Server-side: the peer whose order it is carrying out — a person, a computer
 	/// strategist or an agent's seat — or 0 for one nobody gave: a fresh unit walking
 	/// to its rally point, one a scenario placed. What tells a human's unit from a
@@ -363,6 +378,7 @@ public partial class Unit : CharacterBody3D, IHumanoidPoseSource
 		byte weaponId = Definition?.WeaponDefinitionId ?? WeaponCatalog.Rifle;
 		Weapon = WeaponState.Ready(weaponId, WeaponCatalog.StatsFor(weaponId));
 		Grenades = GrenadeState.Full(Definition?.Grenades ?? 0);
+		Rounds = FullRounds;
 
 		CollisionLayer = CollisionLayers.Units;
 		CollisionMask = CollisionLayers.UnitMask;
@@ -533,6 +549,35 @@ public partial class Unit : CharacterBody3D, IHumanoidPoseSource
 		&& Health < (Definition?.MaxHealth ?? 100f);
 
 	public byte HealthPercent => UnitFlags.PackHealth(Health, Definition?.MaxHealth ?? 100f);
+
+	/// <summary>Health over its maximum, 0–1: on a client, as the newest snapshot record had it.</summary>
+	public float HealthFraction => Mathf.Clamp(Health / Mathf.Max(Definition?.MaxHealth ?? 100f, 1f), 0f, 1f);
+
+	/// <summary>
+	/// One round left the muzzle (<see cref="Ammunition.Spend"/>). True when that changed
+	/// the count — always, for a unit that can run out. Server-side.
+	/// </summary>
+	public bool SpendRound()
+	{
+		int before = Rounds;
+		Rounds = Ammunition.Spend(Rounds);
+		return Rounds != before;
+	}
+
+	/// <summary>True while it is alive and short of what it carries full.</summary>
+	public bool CanBeRearmed => IsAlive && !Ammunition.IsFull(Rounds, FullRounds);
+
+	/// <summary>
+	/// Filled back up (<see cref="Ammunition.Rearm"/>): the caller has decided it is
+	/// resupplied. Returns the rounds that took. Server-side, and sent to strategist peers
+	/// as <c>ServerAmmoState</c>.
+	/// </summary>
+	public int Rearm()
+	{
+		int before = Rounds;
+		Rounds = Ammunition.Rearm(Rounds, FullRounds, supplied: true);
+		return Rounds - before;
+	}
 
 	// ---- client ------------------------------------------------------------
 

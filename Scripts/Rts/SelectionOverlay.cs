@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Gdpyr.Core;
 using Gdpyr.Match;
 using Gdpyr.Sim;
+using Gdpyr.Ui;
 using Godot;
 
 namespace Gdpyr.Rts;
@@ -22,6 +23,10 @@ namespace Gdpyr.Rts;
 /// M4 gave it the other half of the strategist's picture: the contacts its units
 /// have, and the ghosts of the ones they have lost
 /// (docs/IMPLEMENTATION_PLAN.md §M4).
+///
+/// Every unit on the field has a small health bar over it, green when whole through
+/// yellow and orange to red (<see cref="UnitBars"/>), selected or not: which units
+/// need to go back to a barracks is the question the bars answer at a glance.
 /// </summary>
 public partial class SelectionOverlay : Control
 {
@@ -92,6 +97,17 @@ public partial class SelectionOverlay : Control
 	/// <summary>Pixels across one seat pip over a vehicle, and between two.</summary>
 	private const float SeatPipPixels = 6f;
 	private const float SeatPipGapPixels = 2f;
+
+	/// <summary>
+	/// A unit's health bar, in pixels: as wide as the camera's distance allows between
+	/// these two, and this tall. Small on purpose — fifty of them are on screen at once.
+	/// </summary>
+	private const float HealthBarMinPixels = 14f;
+	private const float HealthBarMaxPixels = 30f;
+	private const float HealthBarHeightPixels = 4f;
+
+	/// <summary>Metres above a unit's head its health bar is drawn.</summary>
+	private const float HealthBarClearanceMeters = 0.5f;
 
 	private static readonly Color SeatColor = new(0.4f, 0.9f, 1f);
 	private static readonly Color RefusedColor = new(1f, 0.35f, 0.3f);
@@ -227,6 +243,7 @@ public partial class SelectionOverlay : Control
 		DrawSelectedBarracks();
 		DrawContacts();
 		DrawStructures();
+		DrawUnitHealth();
 		DrawSeats();
 		DrawAircraftShadows();
 		DrawGhost();
@@ -436,8 +453,8 @@ public partial class SelectionOverlay : Control
 				continue;
 			}
 
-			float height = vehicle.Definition?.HeightMeters ?? 2f;
-			if (!TryScreen(vehicle.GlobalPosition + (Vector3.Up * (height + 0.8f)), out Vector2 screen))
+			// Just over its health bar, so the two never overlap however far the camera is.
+			if (!TryBarAnchor(vehicle, out Vector2 screen, out _))
 			{
 				continue;
 			}
@@ -445,7 +462,8 @@ public partial class SelectionOverlay : Control
 			int seats = vehicle.Cargo.Seats;
 			int aboard = Mathf.Min(vehicle.AboardCount, seats);
 			float width = (seats * SeatPipPixels) + ((seats - 1) * SeatPipGapPixels);
-			Vector2 at = screen - new Vector2(width * 0.5f, SeatPipPixels * 0.5f);
+			Vector2 at = screen - new Vector2(width * 0.5f,
+				(HealthBarHeightPixels * 0.5f) + SeatPipGapPixels + SeatPipPixels);
 			for (int s = 0; s < seats; s++)
 			{
 				var pip = new Rect2(at + new Vector2(s * (SeatPipPixels + SeatPipGapPixels), 0f),
@@ -454,6 +472,54 @@ public partial class SelectionOverlay : Control
 				DrawRect(pip, SeatColor, filled: false, width: 1f);
 			}
 		}
+	}
+
+	/// <summary>
+	/// A small bar over the head of every unit on the field, its length the unit's health
+	/// and its colour running green, yellow, orange, red as that goes down
+	/// (<see cref="UnitBars.HealthColor"/>). Health is in every unit snapshot record, so
+	/// this costs nothing on the wire. A rider is not on the field, and has none.
+	/// </summary>
+	private void DrawUnitHealth()
+	{
+		UnitManager units = UnitManager.Instance;
+		for (int i = 0; units != null && i < units.SlotCount; i++)
+		{
+			Unit unit = units.UnitAt(i);
+			if (unit == null || !IsInstanceValid(unit) || !unit.IsOnField || !unit.Visible
+				|| !TryBarAnchor(unit, out Vector2 screen, out float width))
+			{
+				continue;
+			}
+
+			float fraction = unit.HealthFraction;
+			var back = new Rect2(screen - new Vector2(width * 0.5f, HealthBarHeightPixels * 0.5f),
+				new Vector2(width, HealthBarHeightPixels));
+			DrawRect(back, UnitBars.Back);
+			DrawRect(new Rect2(back.Position, new Vector2(width * fraction, HealthBarHeightPixels)),
+				UnitBars.HealthColor(fraction));
+		}
+	}
+
+	/// <summary>
+	/// Where a unit's health bar is centred on screen, a little over its head, and how wide
+	/// it is from there: the nearer the camera, the wider, between the two limits.
+	/// </summary>
+	private bool TryBarAnchor(Unit unit, out Vector2 screen, out float width)
+	{
+		width = HealthBarMinPixels;
+
+		// Its height as it stands now: a crouched rifleman's bar comes down with its head.
+		float height = unit.Body.Height(unit.Posture);
+		Vector3 over = unit.GlobalPosition + (Vector3.Up * (height + HealthBarClearanceMeters));
+		if (!TryScreen(over, out screen))
+		{
+			return false;
+		}
+
+		float distance = Mathf.Max(1f, _camera.GlobalPosition.DistanceTo(over));
+		width = Mathf.Clamp(900f / distance, HealthBarMinPixels, HealthBarMaxPixels);
+		return true;
 	}
 
 	private void DrawGhost()

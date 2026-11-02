@@ -49,12 +49,14 @@ public enum UnitFact : byte
 
 	/// <summary>
 	/// It wants resupply: entered when <see cref="Health"/> leaves ok, held until it is
-	/// back to <see cref="UnitPlanTraits.ResupplyDoneFraction"/> (§5.2, D2).
+	/// back to <see cref="UnitPlanTraits.ResupplyDoneFraction"/> (§5.2, D2); or entered
+	/// when it has less than <see cref="UnitPlanTraits.AmmoLowFraction"/> of its rounds
+	/// left, held until it is full again (<see cref="Ammunition"/>).
 	/// </summary>
 	Wounded,
 
 	/// <summary>
-	/// A friendly supply source that can heal it is within
+	/// A friendly supply source that can heal or rearm it is within
 	/// <see cref="UnitPlanTraits.SupplyRangeMeters"/> of the edge of its reach, and the
 	/// last trip to one was not given up on too recently (<see cref="Resupply"/>).
 	/// </summary>
@@ -548,6 +550,12 @@ public readonly struct UnitPlanTraits
 	/// </summary>
 	public readonly int GuardWalkMaxTicks;
 
+	/// <summary>
+	/// Below this share of its rounds left a unit wants resupply (<see cref="UnitFact.Wounded"/>),
+	/// and it wants it until it is full: a source fills it at once (<see cref="Ammunition"/>).
+	/// </summary>
+	public readonly float AmmoLowFraction;
+
 	public UnitPlanTraits(float healthOkFraction, float healthCriticalFraction, float healthHysteresis,
 		float engagedFriendMeters, float paceAheadMeters, float paceResumeMeters, int paceMaxWaitTicks,
 		float postSpacingMeters, float postMinRadiusMeters, float postLeashShare, int underFireTicks,
@@ -561,7 +569,8 @@ public readonly struct UnitPlanTraits
 		float relocateMeters = 8f, float recentFireMeters = 6f, int recentFireTicks = SimConfig.TickRate * 20,
 		int suppressBurstTicks = SimConfig.TickRate, int suppressCycleTicks = SimConfig.TickRate * 2,
 		int beltReserveRounds = 30, int suppressMaxTicks = SimConfig.TickRate * 8,
-		int suppressRetryTicks = SimConfig.TickRate * 8, int guardWalkMaxTicks = SimConfig.TickRate * 12)
+		int suppressRetryTicks = SimConfig.TickRate * 8, int guardWalkMaxTicks = SimConfig.TickRate * 12,
+		float ammoLowFraction = 0.25f)
 	{
 		HealthOkFraction = healthOkFraction;
 		HealthCriticalFraction = healthCriticalFraction;
@@ -604,6 +613,7 @@ public readonly struct UnitPlanTraits
 		SuppressMaxTicks = Math.Max(suppressMaxTicks, 1);
 		SuppressRetryTicks = Math.Max(suppressRetryTicks, 0);
 		GuardWalkMaxTicks = Math.Max(guardWalkMaxTicks, 1);
+		AmmoLowFraction = Math.Clamp(ammoLowFraction, 0f, 1f);
 	}
 
 	/// <summary>
@@ -611,7 +621,8 @@ public readonly struct UnitPlanTraits
 	/// ahead of its squad waits until it is within 3 m, for 8 s at a stretch at most;
 	/// posts stand 4 m apart on a ring of at least 4 m and at most half the leash.
 	/// A unit out of ok health goes to a supply source within 60 m of its reach, stops
-	/// 3 m inside it and comes back at 95 %; a resupply that has not finished in 60 s
+	/// 3 m inside it and comes back at 95 %; one with under a quarter of its rounds left
+	/// goes too, and comes back full; a resupply that has not finished in 60 s
 	/// is dropped for 30 s. A unit taking a point counts as on it 1 m inside its
 	/// edge; two stand on it, and the rest may take cover up to 4 m outside it; posts
 	/// and a holder's cover are a metre further in than they have to be. A unit whose
@@ -680,11 +691,20 @@ public struct UnitSense
 
 	public bool FriendNear;
 
-	/// <summary>A friendly supply source can heal this unit: there is one, and the unit has a rate to heal at (<see cref="Resupply"/>).</summary>
+	/// <summary>
+	/// A friendly supply source can serve this unit: there is one, and the unit has a rate
+	/// to heal at or rounds that run out (<see cref="Resupply"/>, <see cref="Ammunition"/>).
+	/// </summary>
 	public bool HasSupply;
 
 	/// <summary>How far outside the nearest source's reach the unit is, measured flat; negative inside.</summary>
 	public float SupplyEdgeMeters;
+
+	/// <summary>It has fired rounds it has not been resupplied with: short of a full load. False for a unit that never runs out.</summary>
+	public bool AmmoShort;
+
+	/// <summary>It has less than <see cref="UnitPlanTraits.AmmoLowFraction"/> of its rounds left.</summary>
+	public bool AmmoLow;
 
 	/// <summary>A spot behind cover from the fight it is in, or from what is shooting at a builder (docs/COVER.md §6).</summary>
 	public bool HasCover;
@@ -1385,15 +1405,16 @@ public sealed class UnitContext : BaseContext
 
 	/// <summary>
 	/// Resupply's three facts (D2), each with its hysteresis: wounded from the moment
-	/// health leaves ok until it is back to <see cref="UnitPlanTraits.ResupplyDoneFraction"/>;
-	/// a source in range, held a little further once it is; inside its reach, entered
-	/// a margin inside the edge and held to the edge.
+	/// health leaves ok until it is back to <see cref="UnitPlanTraits.ResupplyDoneFraction"/>,
+	/// or from the moment its rounds fall below <see cref="UnitPlanTraits.AmmoLowFraction"/>
+	/// until it is full; a source in range, held a little further once it is; inside its
+	/// reach, entered a margin inside the edge and held to the edge.
 	/// </summary>
 	private void SenseSupply(in UnitSense sense)
 	{
 		bool wounded = Is(UnitFact.Wounded)
-			? sense.HealthFraction < Traits.ResupplyDoneFraction
-			: Get(UnitFact.Health) != (byte)HealthBand.Ok;
+			? sense.HealthFraction < Traits.ResupplyDoneFraction || sense.AmmoShort
+			: Get(UnitFact.Health) != (byte)HealthBand.Ok || sense.AmmoLow;
 		Sense(UnitFact.Wounded, wounded);
 
 		float range = Traits.SupplyRangeMeters + (Is(UnitFact.Supply) ? Traits.SupplyRangeHysteresisMeters : 0f);
@@ -2385,9 +2406,9 @@ public sealed class UnitDomainBuilder : BaseDomainBuilder<UnitDomainBuilder, Uni
 /// executing condition for its premise, and every one for its order: a new order is
 /// usually a lower branch, which could not replace the old one otherwise.
 ///
-/// Resupply (H5) is second: a wounded unit with nothing in sight goes to the nearest
-/// supply source in range — a barracks' ring or a supply truck (D2) — and stands in
-/// it until it is healed. Nothing below it replaces it, so it ends only on its
+/// Resupply (H5) is second: a wounded unit, or one low on rounds, with nothing in sight
+/// goes to the nearest supply source in range — a barracks' ring or a supply truck
+/// (D2) — and stands in it until it is healed and full. Nothing below it replaces it, so it ends only on its
 /// executing conditions: healed, a target of its own, the source gone, a new order.
 ///
 /// Neither retreating nor resupplying takes a unit off a move, a build, a walk to a

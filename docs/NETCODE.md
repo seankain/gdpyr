@@ -461,6 +461,7 @@ route, so there is no second behaviour to write.
 | `ClientIssueOrder` | C→S | Reliable | per click | ~16 B + 4 B/unit |
 | `ClientSetAutonomy` / `ClientAutonomyDefault` | C→S | Reliable | per click | ~5 B + 4 B/unit / ~5 B |
 | `ServerAutonomyState` (strategist peers only) | S→C | Reliable | ≤ 5 Hz, on change | 3 B + 3 B/unit not at the default |
+| `ServerAmmoState` (strategist peers only) | S→C | Reliable | ≤ 5 Hz, on change | 2 B + 4 B/unit short of a full load (§10.7) |
 | `ClientEmbark` / `ClientUnload` | C→S | Reliable | per click | ~8 B + 4 B/unit / ~4 B + 4 B/vehicle |
 | `ServerBarracksState` | S→C | Reliable | 5 Hz per barracks | ~9 B: queue, head, progress, and since forward deployment where its next unit comes out ([`CONTROL_POINTS.md`](CONTROL_POINTS.md) §2) |
 | `MatchState` (tickets, points) | S→C | Reliable | on change | ~22 B |
@@ -1089,6 +1090,37 @@ healing can bring back heals at the nearest source instead of being merged, and 
 ordered, with nothing in sight, walks to a source within 60 m of its reach and stands in it until it
 is back to 95 % ([`HTN_BOTS.md`](HTN_BOTS.md) §5.2, §5.3). Legacy's strategist never buys one; its
 garrison heals where it stands, inside the ring.
+
+**Ammunition.** Added because the tank was too much for the ground force: a unit that never ran out
+could sit on a node and shell it for the whole round. Every strategist unit with a gun now carries
+`UnitDefinition.MaxRounds` for it (`Scripts/Sim/Ammunition.cs`, engine-free,
+`Tests/AmmunitionTests.cs`). Every round that leaves the muzzle spends one, whatever the magazine
+says — the magazine still empties and reloads on the weapon's cadence, and a reload still draws on
+nothing; what runs out is the unit's count, so the sniper, whose weapon has no magazine, runs out like
+the rest. A unit with none left sees, aims and stands to its target, and does not pull the trigger.
+Inside a friendly supply source's reach — the same reach that heals, never its own truck — it is
+filled back up at once, every tick, with no lockout: in reach its ammunition is not finite at all. Zero
+never runs out, which is what a file that says nothing gets: the dropship, which has no gun. Barracks
+defences and structures' guns are not units and are unchanged.
+
+| | tank | rifleman | technical | heavy gunner | sniper | builder | supply truck |
+|---|---|---|---|---|---|---|---|
+| `MaxRounds` | 30 | 210 | 300 | 600 | 40 | 48 | 48 |
+
+The tank's thirty is three minutes of its gun at its fastest — a round every six seconds, the
+3 s cycle and the 3 s reload — and a rifleman's 210 seven magazines. On the wire it is one message,
+`ServerAmmoState` (`AmmoStateCodec`: 2 B, then 4 B — unit id, rounds — for every living strategist
+unit short of a full load; every unit not listed is full), reliable, **to strategist peers only**, on
+the barracks report's 5 Hz tick to every one that has not been sent the current revision, which every
+round fired and every refill bumps — micro-autonomy's scheme (§7). Not in the unit snapshot, which
+every ground client receives: what a tank has left is the strategist's to know. The card's status line
+shows it (`ammo 24/30`; for several units the mean share left and how many are out), and the overlay
+draws a small health bar over every unit on the field, green through yellow and orange to red
+(`Scripts/Ui/UnitBars.cs`) — health was already in every snapshot record, so the bars cost nothing.
+Under `--bot-ai htn` a unit a bot ordered with under a quarter of its rounds left
+(`UnitPlanTraits.AmmoLowFraction`) and nothing in sight goes to a source in range as a wounded one
+does, and stays until it is full, which is the moment it is inside (`UnitFact.Wounded` is "wants
+resupply"). The agent schema is unchanged.
 
 ### 10.8 Units a structure trains: the sniper and the heavy gunner
 

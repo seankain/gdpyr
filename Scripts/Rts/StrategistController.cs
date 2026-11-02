@@ -1267,7 +1267,8 @@ public partial class StrategistController : Node3D
 
 	/// <summary>
 	/// The selection, as the HUD's card needs it: how many, how many of them are builders,
-	/// the vehicles in it, and who is aboard them.
+	/// the vehicles in it, who is aboard them, and the rounds they have left — as the last
+	/// <c>ServerAmmoState</c> said (<see cref="Ammunition"/>).
 	/// </summary>
 	private StrategistHud.SelectionSummary Summarize()
 	{
@@ -1289,6 +1290,15 @@ public partial class StrategistController : Node3D
 			{
 				summary.Tactical++;
 				summary.Autonomous += _selected[i].Autonomy == MicroAutonomy.On ? 1 : 0;
+			}
+
+			if (_selected[i] is { } armed && Ammunition.IsLimited(armed.FullRounds))
+			{
+				summary.AmmoLimited++;
+				summary.Rounds += Math.Max(armed.Rounds, 0);
+				summary.FullRounds += armed.FullRounds;
+				summary.AmmoFractionSum += Ammunition.Fraction(armed.Rounds, armed.FullRounds);
+				summary.OutOfRounds += armed.HasRounds ? 0 : 1;
 			}
 
 			if (_selected[i] is not { HasSeats: true } vehicle)

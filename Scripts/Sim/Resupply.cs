@@ -41,8 +41,9 @@ public readonly struct SupplySource
 /// supply truck — and nothing has hurt it for <see cref="DamageLockoutTicks"/>. That
 /// last clause is what makes it resupply rather than armour: a fight at the door is
 /// fought at the health the units walked into it with, and healing is what happens
-/// between fights. Magazines already reload without a reserve, so health is the one
-/// thing a unit has to resupply.
+/// between fights. Magazines reload without a reserve; what a unit carries in all is
+/// its rounds (<see cref="Ammunition"/>), which the same reach fills back up at once,
+/// with no lockout.
 ///
 /// It is a rule of the game, not of a bot: a person's units heal where a computer
 /// strategist's do, under <c>--bot-ai legacy</c> as under <c>htn</c>. The HTNs only

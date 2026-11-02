@@ -216,6 +216,9 @@ each button with its key printed on it:
 | a technical or a dropship, among anything | who is aboard of how many seats, the orders, **Unload (U)**, and **Tactics (H)** if units on foot are selected too |
 | any other units | the orders — **Attack-move (X)**, **Patrol (C)**, **Defend (B)**, **Stop (Z)**, the armed one lit — and **Tactics (H)** for units that have tactics |
 
+Every card up for units ends its status line with their ammunition: `ammo 24/30` for one, the share
+left (and how many are out) for several.
+
 Every key below works whether or not the card is up. `K`, or the **Keys** button bottom left, opens
 and folds away the full key list:
 
@@ -288,6 +291,16 @@ riders out as the truck does; higher than that, nobody aboard lives.
 the green ring round a **supply truck** (120 points, `8`), once nothing has hit them for three
 seconds — a rifleman at half health is whole again ten seconds later. The truck is soft, carries a
 pistol and does not heal itself; move it up behind a fight and send the wounded back to it.
+
+**Ammunition runs out** ([`docs/NETCODE.md`](docs/NETCODE.md) §10.7) outside those same rings. Each
+unit carries `MaxRounds` for its weapon (`Units/*.tres`): the tank thirty main-gun rounds, a
+rifleman 210, the technical 300, a heavy gunner 600, a sniper 40, the builder and the supply truck 48.
+Every round fired spends one; a unit with none left still sees and aims but does not fire. Inside a
+barracks' ring or a supply truck's it is filled back up at once, under fire or not. The card's status
+line reads the selection's ammunition — `ammo 24/30` for one unit, the share left and how many are
+out for several — and every unit on the field has a small health bar over it that runs green,
+yellow, orange, red as it is hurt. A unit a computer strategist ordered with under a quarter of its
+rounds left and nothing in sight walks back to the nearest source within 60 m, as a wounded one does.
 
 **Hand grenades** ([`docs/NETCODE.md`](docs/NETCODE.md) §10.9): three a life, thrown with `G`
 whatever is in your hands, 10° above where you are looking — 17 m looking level, 33 m looking 35° up.

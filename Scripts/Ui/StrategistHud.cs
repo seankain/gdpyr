@@ -58,6 +58,21 @@ public partial class StrategistHud : CanvasLayer
 		/// <summary>The one unit's kind when <see cref="Count"/> is 1, as the catalog names it.</summary>
 		public string UnitName;
 
+		/// <summary>Units in the selection whose rounds can run out (<see cref="Ammunition"/>).</summary>
+		public int AmmoLimited;
+
+		/// <summary>The rounds those have left, between them.</summary>
+		public int Rounds;
+
+		/// <summary>The rounds those carry full, between them.</summary>
+		public int FullRounds;
+
+		/// <summary>Each one's share of its rounds left, added up: the card shows the mean.</summary>
+		public float AmmoFractionSum;
+
+		/// <summary>Of those, the ones with none left.</summary>
+		public int OutOfRounds;
+
 		public string Notice;
 	}
 
@@ -320,7 +335,8 @@ public partial class StrategistHud : CanvasLayer
 		int sites = units?.SitesUnderConstruction ?? 0;
 		string who = selection.Count == 1 ? "builder" : $"{selection.Count} builders";
 		_cardStatus.Text = $"{who} · structures {standing}/{SimConfig.MaxStructures}"
-			+ (sites > 0 ? $", {sites} going up" : string.Empty);
+			+ (sites > 0 ? $", {sites} going up" : string.Empty)
+			+ Ammo(selection);
 
 		bool full = standing >= SimConfig.MaxStructures;
 		for (int i = 0; i < StrategistCards.Structures.Length; i++)
@@ -367,14 +383,26 @@ public partial class StrategistHud : CanvasLayer
 			? Display(selection.UnitName)
 			: $"{selection.Count} selected";
 
-		_cardStatus.Text = selection.Tactical > 0
+		_cardStatus.Text = (selection.Tactical > 0
 			? $"{who} · tactics {MicroAutonomyNames.Describe(selection.Tactical, selection.Autonomous).ToLowerInvariant()}"
 				+ (selection.Autonomous > 0 && selection.Autonomous < selection.Tactical
 					? $" ({selection.Autonomous} of {selection.Tactical} auto)"
 					: string.Empty)
-			: who;
+			: who) + Ammo(selection);
 
 		RefreshTactics(selection);
+	}
+
+	/// <summary>
+	/// The selection's ammunition, as the end of the card's status line: <c> · ammo 24/30</c>
+	/// for one unit, the share left for several (<see cref="StrategistCards.AmmoReadout"/>),
+	/// nothing when nothing selected can run out.
+	/// </summary>
+	private static string Ammo(in SelectionSummary selection)
+	{
+		string ammo = StrategistCards.AmmoReadout(selection.AmmoLimited, selection.Rounds, selection.FullRounds,
+			selection.AmmoFractionSum, selection.OutOfRounds);
+		return ammo.Length > 0 ? $" · {ammo}" : string.Empty;
 	}
 
 	/// <summary>The tactics button's label. Whether it is up at all is <see cref="ShowRows"/>'.</summary>
@@ -393,9 +421,9 @@ public partial class StrategistHud : CanvasLayer
 		string what = selection.Vehicles == 1
 			? Display(selection.VehicleName ?? "vehicle")
 			: $"{selection.Vehicles} vehicles";
-		_cardStatus.Text = selection.CannotLand
+		_cardStatus.Text = (selection.CannotLand
 			? $"{what} · no room to land"
-			: $"{what} · {selection.Aboard}/{selection.Seats} aboard";
+			: $"{what} · {selection.Aboard}/{selection.Seats} aboard") + Ammo(selection);
 
 		_cardUnload.Disabled = selection.Aboard == 0;
 		RefreshTactics(selection);
