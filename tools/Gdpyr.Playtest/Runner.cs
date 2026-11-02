@@ -747,6 +747,7 @@ public sealed class Runner
 				"weapon2" => AgentButtons.Weapon2,
 				"weapon3" => AgentButtons.Weapon3,
 				"grenade" => AgentButtons.Grenade,
+				"drone" => AgentButtons.Drone,
 				_ => AgentButtons.None,
 			};
 		}

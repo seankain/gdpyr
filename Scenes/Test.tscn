@@ -388,10 +388,12 @@ script = ExtResource("5_resourcenode")
 CaptureRadiusMeters = 12.0
 CaptureSeconds = 10.0
 IncomePoints = 35
+Perk = 1
 
 [node name="ResourceNode3" type="Node3D" parent="." unique_id=939772662 groups=["resource_node"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -25, 0.5, -100)
 script = ExtResource("5_resourcenode")
+Perk = 1
 
 [node name="Emplacement1" type="Node3D" parent="." unique_id=1711532423 groups=["emplacement"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6, 0.5, 4)

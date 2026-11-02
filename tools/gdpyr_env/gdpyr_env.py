@@ -79,6 +79,7 @@ BUTTONS = {
     "weapon2": 1 << 9,
     "weapon3": 1 << 10,
     "grenade": 1 << 11,
+    "drone": 1 << 12,
 }
 
 _TWO_PI = 2.0 * np.pi

@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="ProjectileDefinition" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Fps/ProjectileDefinition.cs" id="1_projdef"]
+
+[resource]
+script = ExtResource("1_projdef")
+Name = &"fpv_drone"
+MassGrams = 1500.0
+RadiusMillimeters = 150.0
+DragCoefficient = 1.0
+MuzzleVelocity = 24.0
+LifetimeSeconds = 15.0
+Damage = 800.0
+ExplosionRadiusMeters = 4.0
+ExplosionDamage = 250.0
+SweepRadiusMeters = 0.3
+StructureDamageScale = 0.5
+TracerColor = Color(0.95, 0.75, 0.2, 1)
+TracerLengthMeters = 0.4
+TracerRadiusMeters = 0.15

@@ -29,6 +29,9 @@ public sealed class AgentGroundView
 	private readonly AgentContactView[] _views = new AgentContactView[AgentObservation.MaxContacts];
 	private readonly float[] _rays = new float[AgentObservation.Rays];
 
+	// TODO(control points 2, docs/CONTROL_POINTS.md §6): carry the drone shelf and the seat's
+	// own drone (flying, position, battery) in the observation. A layout change: a schema bump
+	// past gdpyr-agent-obs-4, in the server, the .NET client and the Python client together.
 	/// <summary>
 	/// Fills <paramref name="into"/> with one observation for
 	/// <paramref name="peerId"/>. Returns false when the seat has no character to

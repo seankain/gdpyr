@@ -561,7 +561,12 @@ The button names are the ones `welcome` publishes: `jump`, `crouch`, `sprint`, `
 throws one on the press ([`NETCODE.md`](NETCODE.md) §10.9) — as many as the kit's grenade pouches,
 at most three, refilled by a respawn and by the locker's resupply; one a second. Held, it is one
 throw, as a held trigger on a semi-automatic weapon is one shot. The observation counts them:
-`kit.grenades` in the vector, over three, and `self.grenades` among the extras (§6.1).
+`kit.grenades` in the vector, over three, and `self.grenades` among the extras (§6.1). Since the
+control-point perks, `drone` (bit 12) launches an FPV drone on the press while the ground force
+holds a drone node and has one built ([`CONTROL_POINTS.md`](CONTROL_POINTS.md) §4); the seat's body
+then stands still, its look angles steer the drone and `fire` sets it off. The observation does not
+carry the drone yet: a policy learns of one from the `kill` and `damage` events, whose `weapon` is
+13.
 
 ### 7.3 The fairness ceilings are on by default
 

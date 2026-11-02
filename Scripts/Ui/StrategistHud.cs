@@ -199,12 +199,24 @@ public partial class StrategistHud : CanvasLayer
 			: $"points {match.StrategistPoints} · units {live}/{SimConfig.MaxUnits} · {match.Phase}";
 
 		UnitManager.BarracksStatus status = units?.StatusOf(barracks, tick) ?? default;
+		// Forward deployment (docs/CONTROL_POINTS.md §2): its rally point on a node the
+		// side holds puts the units out there, which is worth saying where the queue is.
+		// TODO(control points 3, docs/CONTROL_POINTS.md §6): check on a display that this line and
+		// the drone warning on the node line fit their 520 px labels. Never looked at.
+		string deploy = status.DeployNode != ForwardDeploy.Door ? " · out at the held node" : string.Empty;
 		_production.Text = status.Queued > 0
 			? $"barracks: {Display(UnitCatalog.NameOf(status.Head))} {Mathf.RoundToInt(status.Progress * 100f)}%"
-				+ $" · queued {status.Queued}"
-			: "barracks: idle";
+				+ $" · queued {status.Queued}{deploy}"
+			: $"barracks: idle{deploy}";
 
 		_economy.Text = Economy(economy);
+
+		// What the ground force's drone nodes have built them (docs/CONTROL_POINTS.md §4.4):
+		// the one thing on the field that kills a tank in one hit, and worth a tank's distance.
+		if (CombatManager.Instance?.Drones is { CanLaunch: true } drones)
+		{
+			_economy.Text += $" · ground force has {drones.Ready} drone{(drones.Ready == 1 ? string.Empty : "s")} ready";
+		}
 		_defaultTactics.Text = $"new units: {(units?.AutonomyDefault == MicroAutonomy.On ? "Auto" : "Direct")}";
 
 		string placingName = StructureKinds.IsValid(placing) ? Display(StructureCatalog.NameOf(placing)) : null;

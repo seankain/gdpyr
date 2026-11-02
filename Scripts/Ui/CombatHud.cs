@@ -197,6 +197,21 @@ public partial class CombatHud : CanvasLayer
 			_ => "warmup",
 		};
 
+		// The drones the side's drone nodes have built, or the one being flown
+		// (docs/CONTROL_POINTS.md §4.4).
+		// TODO(control points 3, docs/CONTROL_POINTS.md §6): check on a display that the second
+		// line fits the round label's 48 px. Never looked at.
+		if (CombatManager.Instance is { } manager && combat.IsAlive)
+		{
+			int flying = manager.PilotedSlot(combat.PeerId);
+			string drone = DroneHud.Line(manager.Drones.Ready, manager.Drones.HeldNodes, manager.Drones.Progress,
+				flying >= 0, manager.DroneSecondsLeft(flying, tick));
+			if (drone.Length > 0)
+			{
+				_round.Text += $"\n{drone}";
+			}
+		}
+
 		bool dead = combat.IsDowned;
 		bool roundOver = match.Phase == RoundPhase.Ended;
 		_panel.Refresh(new DraftSituation(combat.IsAlive, combat.Team == Team.GroundForce, awaitingRole, roundOver,

@@ -56,6 +56,20 @@ public struct CommanderWorld
 
 	/// <summary>Where the ground force comes from: the centroid of its spawns.</summary>
 	public Vector3 Threat;
+
+	/// <summary>
+	/// Where production comes out while it is deployed forward (docs/CONTROL_POINTS.md §3):
+	/// the held node <see cref="Commander.ChooseMuster"/> picked, which the engine half
+	/// puts the barracks' rally point on. Read only while <see cref="HasMuster"/>.
+	/// </summary>
+	public Vector3 Muster;
+
+	/// <summary>
+	/// Production is deployed forward, so a squad with nothing to do waits at
+	/// <see cref="Muster"/> rather than in front of home — where the units joining it come
+	/// out. False is how every decision was made before forward deployment.
+	/// </summary>
+	public bool HasMuster;
 }
 
 /// <summary>What a commander squad is for, apart from the task it has now.</summary>
@@ -370,6 +384,74 @@ public sealed class Commander
 	public int AssaultSlots { get; private set; }
 
 	public CommandSquad SquadAt(int squad) => InRange(squad) ? _squads[squad] : default;
+
+	/// <summary>
+	/// Whether the next rifleman produced would join the garrison (<see cref="Route"/>):
+	/// it is at home and short of riflemen. While it is, production stays at the door.
+	/// </summary>
+	public bool GarrisonWantsProduction
+	{
+		get
+		{
+			ref CommandSquad garrison = ref _squads[GarrisonSlot];
+			bool home = garrison.Task != CommandTask.Attack;
+			return home && (!garrison.Active || garrison.Members - garrison.Marksmen < _traits.GarrisonUnits);
+		}
+	}
+
+	/// <summary>
+	/// The resource node the side's production should come out at
+	/// (docs/CONTROL_POINTS.md §3), as a zone index, or -1 for the barracks' door.
+	///
+	/// None while the garrison wants the next riflemen at home. Otherwise a node the side
+	/// holds, uncontested, with no remembered enemy within
+	/// <see cref="CommanderTraits.ThreatMeters"/>, and nearer the threat than home is —
+	/// forward, and quiet: production put out into a firefight arrives one at a time and
+	/// is shot one at a time. <paramref name="current"/>, the node chosen last (a node
+	/// index, -1 for none), is kept while it still qualifies, so the rally point does not
+	/// swing between two nodes on every decision; otherwise the qualifying node nearest the
+	/// threat.
+	/// </summary>
+	public int ChooseMuster(in CommanderWorld world, ZoneBoard zones, ContactMemory contacts, int current)
+	{
+		if (zones == null || GarrisonWantsProduction)
+		{
+			return -1;
+		}
+
+		float home = Flat(world.Home, world.Threat);
+		int best = -1;
+		float bestDistance = float.MaxValue;
+
+		for (int z = 0; z < zones.Count; z++)
+		{
+			Zone zone = zones.At(z);
+			if (zone.Kind != ZoneKind.ResourceNode || zone.Holder != NodeHolder.Strategist || zone.Contested
+				|| zone.EnemyStrength > 0f)
+			{
+				continue;
+			}
+
+			float distance = Flat(zone.Position, world.Threat);
+			if (distance >= home || EnemyNear(contacts, world.Tick, zone.Position, _traits.ThreatMeters) > 0f)
+			{
+				continue;
+			}
+
+			if (zone.Index == current)
+			{
+				return z;
+			}
+
+			if (distance < bestDistance)
+			{
+				best = z;
+				bestDistance = distance;
+			}
+		}
+
+		return best;
+	}
 
 	/// <summary>What the squad's running task asked for at the last decision.</summary>
 	public CommandIntent IntentOf(int squad) => InRange(squad) && _squads[squad].Active ? _contexts[squad].Intent : default;
@@ -1989,9 +2071,18 @@ public sealed class Commander
 		return best;
 	}
 
-	/// <summary>Where a squad with nothing to do waits: in front of home, towards the threat.</summary>
+	/// <summary>
+	/// Where a squad with nothing to do waits: in front of home, towards the threat — or,
+	/// while production is deployed forward, at the node it comes out at, which is where
+	/// the units that will fill it arrive (docs/CONTROL_POINTS.md §3).
+	/// </summary>
 	private Vector3 Reserve(in CommanderWorld world)
 	{
+		if (world.HasMuster)
+		{
+			return world.Muster;
+		}
+
 		Vector3 towards = world.Threat - world.Home;
 		towards.Y = 0f;
 		float length = towards.Length();

@@ -462,9 +462,10 @@ route, so there is no second behaviour to write.
 | `ClientSetAutonomy` / `ClientAutonomyDefault` | C→S | Reliable | per click | ~5 B + 4 B/unit / ~5 B |
 | `ServerAutonomyState` (strategist peers only) | S→C | Reliable | ≤ 5 Hz, on change | 3 B + 3 B/unit not at the default |
 | `ClientEmbark` / `ClientUnload` | C→S | Reliable | per click | ~8 B + 4 B/unit / ~4 B + 4 B/vehicle |
-| `ServerBarracksState` | S→C | Reliable | 5 Hz per barracks | ~8 B |
+| `ServerBarracksState` | S→C | Reliable | 5 Hz per barracks | ~9 B: queue, head, progress, and since forward deployment where its next unit comes out ([`CONTROL_POINTS.md`](CONTROL_POINTS.md) §2) |
 | `MatchState` (tickets, points) | S→C | Reliable | on change | ~22 B |
 | `ServerNodeState` | S→C | Reliable | 5 Hz per *changed* node | ~8 B |
+| `ServerDroneState` | S→C | Unreliable | 30 Hz | 4 B + 20 B per drone the peer may see: a strategist only those its sensors cover ([`CONTROL_POINTS.md`](CONTROL_POINTS.md) §4.3) |
 | `ServerGunState` / `ServerCanState` | S→C | Reliable | per transition | ~32 B / ~24 B |
 | `ServerSpawnStructure` / `ServerDespawnStructure` | S→C | Reliable | per structure per life | ~26 B / ~8 B |
 | `ServerStructureState` | S→C | Reliable | on a flag change, else 5 Hz while it changes | ~8 B |

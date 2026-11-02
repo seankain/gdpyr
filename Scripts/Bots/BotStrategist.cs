@@ -185,6 +185,7 @@ public sealed class BotStrategist
 				_roundStart = combat.Match.StartTick;
 				_commander.Clear();
 				_zones.Clear();
+				_musterNode = -1;
 				Array.Clear(_announced);
 			}
 
@@ -207,6 +208,45 @@ public sealed class BotStrategist
 	}
 
 	// ---- commander (--bot-ai htn, docs/HTN_BOTS.md §5.3) -------------------
+
+	/// <summary>The resource node production is deployed at (docs/CONTROL_POINTS.md §3), or -1 for the door.</summary>
+	private int _musterNode = -1;
+
+	/// <summary>Per barracks, the rally point this strategist last put there; what tells its own from somebody else's.</summary>
+	private readonly Vector3[] _rallySet = new Vector3[SimConfig.MaxBarracks];
+
+	/// <summary>The resource node the computer strategist's production comes out at, or -1. For the debug HUD.</summary>
+	public int MusterNode => _musterNode;
+
+	/// <summary>
+	/// Puts each of its barracks' rally points on the muster node, or back on the
+	/// barracks' own ground when there is none: the rally point is what forward
+	/// deployment reads (<see cref="ForwardDeploy"/>). A rally point somebody else moved —
+	/// a person sharing the chair — is theirs and is left alone until they put it back
+	/// home.
+	/// </summary>
+	private void Deploy(CombatManager combat, UnitManager units)
+	{
+		ResourceNode node = _musterNode >= 0 ? combat.Economy?.NodeAt(_musterNode) : null;
+		for (int i = 0; i < units.BarracksCount && i < _rallySet.Length; i++)
+		{
+			Barracks barracks = units.BarracksAt(i);
+			if (barracks == null || barracks.Team != Team.Strategist)
+			{
+				continue;
+			}
+
+			bool ours = barracks.RallyPoint == barracks.HomePoint || barracks.RallyPoint == _rallySet[i];
+			Vector3 rally = node?.GlobalPosition ?? barracks.HomePoint;
+			if (!ours || barracks.RallyPoint == rally)
+			{
+				continue;
+			}
+
+			units.ServerSetRally(_peerId, i, rally);
+			_rallySet[i] = rally;
+		}
+	}
 
 	/// <summary>
 	/// What a remembered contact is worth to the commander's estimates: its cost. The
@@ -267,7 +307,21 @@ public sealed class BotStrategist
 			Threat = threat,
 		};
 
+		// Forward deployment (docs/CONTROL_POINTS.md §3): chosen on what the last decision
+		// left the garrison as, and in place before this one, so that the squads it leaves
+		// with nothing to do wait where the units joining them will come out.
+		int muster = _commander.ChooseMuster(world, _zones, contacts, _musterNode);
+		_musterNode = muster >= 0 ? _zones.At(muster).Index : -1;
+		if (muster >= 0)
+		{
+			world.Muster = _zones.At(muster).Position;
+			world.HasMuster = true;
+		}
+
+		// TODO(control points 1, docs/CONTROL_POINTS.md §6): keep tanks back from the ground
+		// force while it has a drone ready (combat.Drones.CanLaunch): a tank's one defence is distance.
 		_commander.Decide(world, _commandUnits.AsSpan(0, count), _zones, contacts);
+		Deploy(combat, units);
 
 		int buyTime = _commander.BuyTimeZone;
 		Zone zone = _zones.At(buyTime);
@@ -357,7 +411,7 @@ public sealed class BotStrategist
 			for (int i = 0; i < units.BarracksCount; i++)
 			{
 				Barracks barracks = units.BarracksAt(i);
-				_zones.Add(ZoneKind.Barracks, i, barracks?.RallyPoint ?? Vector3.Zero, BarracksZoneMeters);
+				_zones.Add(ZoneKind.Barracks, i, barracks?.HomePoint ?? Vector3.Zero, BarracksZoneMeters);
 			}
 
 			for (int i = 0; i < spawns; i++)
@@ -407,7 +461,7 @@ public sealed class BotStrategist
 		_zones.AddEnemies(contacts, tick, ThreatWeightsFor(), explosives: 0);
 	}
 
-	/// <summary>How far round a barracks' rally point the barracks zone reaches: where its garrison stands.</summary>
+	/// <summary>How far round a barracks' home point the barracks zone reaches: where its garrison stands.</summary>
 	private const float BarracksZoneMeters = 20f;
 
 	/// <summary>How far round a ground spawn point its zone reaches.</summary>
@@ -417,7 +471,7 @@ public sealed class BotStrategist
 		PlayerManager players) => kind switch
 	{
 		ZoneKind.ResourceNode => economy?.NodeAt(index)?.GlobalPosition ?? Vector3.Zero,
-		ZoneKind.Barracks => units.BarracksAt(index)?.RallyPoint ?? Vector3.Zero,
+		ZoneKind.Barracks => units.BarracksAt(index)?.HomePoint ?? Vector3.Zero,
 		_ => players?.SpawnPositionAt(index) ?? Vector3.Zero,
 	};
 
@@ -1352,7 +1406,7 @@ public sealed class BotStrategist
 			Barracks barracks = units.BarracksAt(i);
 			if (barracks != null && barracks.Team == Team.Strategist)
 			{
-				return barracks.RallyPoint;
+				return barracks.HomePoint;
 			}
 		}
 

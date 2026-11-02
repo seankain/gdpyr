@@ -1,0 +1,25 @@
+{
+  "name": "a ground player who holds the drone node two minutes flies an FPV drone into a tank 50 m off and kills it, and gets none before",
+  "seeds": [1, 2],
+  "duration_ticks": 8700,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 0 },
+
+  "seats": [
+    { "id": "pilot", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/drone_after_capture.json" }
+  ],
+
+  "spawns": [
+    { "peer": "pilot", "at": [4, 1, -35], "look": [0, 0] },
+    { "unit": "tank", "team": "strategist", "at": [4, 1, -85], "order": "none" }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.node_captured[node=1,owner=1].count", "op": "==", "value": 1 },
+    { "metric": "events.unit_lost[tier=2].count", "op": "==", "value": 1 },
+    { "metric": "events.kill[weapon=13].count", "op": "==", "value": 1 },
+    { "metric": "events.damage[weapon=13].count", "op": "==", "value": 1 },
+    { "metric": "observation.pilot.self.alive.min", "op": "==", "value": 1 }
+  ]
+}

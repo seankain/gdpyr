@@ -38,8 +38,19 @@ public partial class Barracks : Node3D
 	/// </summary>
 	public Vector3 SpawnPosition => _spawnPoint?.GlobalPosition ?? GlobalPosition;
 
-	/// <summary>Where finished units are sent. Set by the strategist; defaults ahead of the door.</summary>
+	/// <summary>
+	/// Where finished units are sent. Set by the strategist; defaults ahead of the door.
+	/// On a resource node the strategist holds, it is also where they come out
+	/// (<see cref="ForwardDeploy"/>, docs/CONTROL_POINTS.md §2).
+	/// </summary>
 	public Vector3 RallyPoint { get; set; }
+
+	/// <summary>
+	/// The default rally point, ahead of the door, wherever the rally point has since been
+	/// moved: the barracks' own ground, which is what its garrison defends and what its
+	/// zone is centred on. Moving the rally point out to a node moves production, not home.
+	/// </summary>
+	public Vector3 HomePoint { get; private set; }
 
 	/// <summary>Flat, out of the door: the way everything it turns out walks away from the building.</summary>
 	public Vector3 Forward => _forward;
@@ -76,7 +87,8 @@ public partial class Barracks : Node3D
 			_right = new Vector3(-_forward.Z, 0f, _forward.X);
 		}
 
-		RallyPoint = SpawnPosition + (_forward * DefaultRallyDistance);
+		HomePoint = SpawnPosition + (_forward * DefaultRallyDistance);
+		RallyPoint = HomePoint;
 
 		// Children are ready before their parent, so the mounts have their numbers.
 		foreach (Node child in GetChildren())
