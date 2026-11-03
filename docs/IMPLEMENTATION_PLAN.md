@@ -624,6 +624,18 @@ listen-host or dedicated-server check by a person has been taken for any of them
 scenarios first ran in L5's suite, and L8's engine-side checks — the suite against obs-4, the
 legacy baseline's re-measure and a PPO smoke run — have not been taken.
 
+### M12 — Vehicles the ground force drives (~20 days) *planned; nothing built*
+
+A 4x4 technical — a sprung chassis, a mounted 12.7 mm gun, a passenger in the bed — and a
+helicopter with a passenger in its door, driven and flown by ground-force players from their own
+input frames and predicted on the driver's client as a character is; passengers fire their own
+weapons from their seats. A kiosk beside the weapon locker puts one of each on a pad outside the
+spawn bunker, and another 45 s or 90 s after it is lost. At 600 and 450 health, with bullets doing
+0.15 and 0.2, they take 200 and 113 rifle hits; a direct hit by the tank's round destroys either.
+Either kills a strategist's unit on foot that it strikes at 8 m/s or more, in its driver's name.
+The design, decisions (GV-D1–GV-D17) and phases (GV0–GV9) are
+[`GROUND_VEHICLES.md`](GROUND_VEHICLES.md); GV0–GV4 with GV6 are the 4x4 alone, about 14 days.
+
 **Total: ~29–37 engineering days to end of M8.**
 
 > **Renumbering, M6 onwards.** M6 and M7 were "Playtest instrumentation" and "Steam"; they are now
