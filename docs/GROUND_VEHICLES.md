@@ -1,6 +1,6 @@
 # gdpyr — Vehicles the ground force drives: a 4x4 and a helicopter
 
-**Status: plan; nothing is built.** Written against `6699b03`. The decisions (GV-D1–GV-D16, §3)
+**Status: plan; nothing is built.** Written against `6699b03`. The decisions (GV-D1–GV-D17, §3)
 are the defaults the plan is written against; each is one line to change, so flag any you disagree
 with before GV2 starts. The phases (GV0–GV9, §12) say what each builds, what checks it, and what is
 left for a person at the controls.
@@ -29,6 +29,7 @@ by looking); [`LOADOUT.md`](LOADOUT.md) §7.2 (the locker panel the kiosk's pane
 5. Vehicles are **spawned on a timer from a vehicle kiosk near the weapon locker**.
 6. A vehicle **tolerates a significant amount of small-arms fire** and is **destroyed by a direct
    hit from a tank**.
+7. **A collision above a certain speed kills a unit.**
 
 ## 2. What the code does today
 
@@ -46,6 +47,8 @@ Facts this plan stands on, each read in the source at `6699b03`.
 | The tank's round does 90 on a direct hit and up to 80 in a 4.5 m blast, one every 3 s. Nothing in the catalog does more than 100 on a direct hit but the drone, 800 | `Weapons/projectiles/cannon_76.tres`, `mortar_81.tres`, `fpv_drone.tres`; `Weapons/cannon/cannon.tres` |
 | Units aim at a player's `Hitbox.Center` and lead by `Character.Velocity`; the fog asks whether a sensor sees `Hitbox.Center` | `Scripts/Rts/UnitManager.cs:1058–1059`; `Scripts/Match/VisibilityService.cs:213` |
 | A unit's direct-hit query skips the shooter's own side, so the tank's round never strikes a strategist unit | `UnitManager.QuerySegment`, `:1727` |
+| The strategist's units on foot — rifleman, builder, sniper, heavy gunner — move at 4.5 m/s at most, are 0.4–0.45 m in radius and set no `BulletDamageScale` (so 1). Its technical, tank, supply truck and dropship are units marked `IsVehicle`. A unit's hitbox is an analytic capsule, and one killed through `UnitManager.Damage` credits its killer and emits `unit_lost` | `Units/*.tres`; `Scripts/Rts/UnitDefinition.cs:72`; `Scripts/Rts/Unit.cs:337`; `UnitManager.cs:1808` |
+| A weapon definition needs no round: the hammer has none and loads as `default` projectile stats | `Weapons/geopick/geopick.tres`; `Scripts/Core/WeaponCatalog.cs` (`Projectile?.ToStats() ?? default`) |
 | Three physics layers: World, Players, Units. Every player, and every unit on foot that is not riding, calls `MoveAndSlide` every tick, idle or not | `Scripts/Core/CollisionLayers.cs`; `project.godot` `[layer_names]`; `Scripts/Fps/State.cs:46`; `UnitManager.cs:643` → `Scripts/Rts/Unit.cs:443` |
 | The Test map's weapon locker is at (−79.45, 1.95, 91.38), inside the ground force's 30 × 30 × 7.1 m concrete bunker (`Scenes/Environment/Pillbox.tscn`, origin (−75.83, 0.5, 87.46)), whose one door — in its local +X wall — is 3.2 m wide and 4 m high. NETCODE.md §10.6 still gives the locker's earlier position, (8, 0.5, 11) | `Scenes/Test.tscn:422`, `:426`; the bunker's collision mesh |
 | The floor is a flat 240 × 240 m slab; its obstacles are 1.2 m low walls, 2.8–3 m blocks and the range posts | `Scenes/Test.tscn` |
@@ -66,7 +69,7 @@ Facts this plan stands on, each read in the source at `6699b03`.
 | GV-D5 | **Controls, with no new key and no new input bit.** Tap `E` beside a vehicle: the free seat whose door is nearest. Seated: tap `E` gets out, hold `E` moves to the next free seat. 4x4: `W`/`S` throttle, brake and reverse; `A`/`D` steer; `Space` handbrake; the mouse looks, and the camera follows the truck. Helicopter: `W`/`S`/`A`/`D` move, `Space`/`Ctrl` climb and descend, and the mouse turns it towards where the pilot looks. | The frame stays twelve bytes and every recorded frame keeps its meaning; U, T and G keep one action each. Steering by looking is the drone's, which players already know. |
 | GV-D6 | **Passengers fire their own primary and pistol** — sights, reload and swap too; not the hammer, a grenade or a drone. Each seat has a fire arc, outside which the trigger does nothing. A round fired from a seat never hits that vehicle or anybody in it. | The request. The arc keeps a passenger from shooting through the cab; the exclusion keeps a round at the arc's edge off its own hull. Grenades and the hammer from a moving seat are rules of their own (§15). |
 | GV-D7 | **Aim is stabilised, and a seated shooter's round leaves from where their client drew the seat.** The gunner's and a passenger's look are world angles, as on foot: the bounce moves the muzzle, not the aim. The server takes the origin from the vehicle's pose at the tick that shooter's client was drawing (§5.6). | At 18 m/s and 100 ms RTT the truck a passenger sees is 3.6 m behind the server's. Without it every round fired from a moving vehicle would leave 3.6 m from its tracer. |
-| GV-D8 | **Bodies are solid to vehicles; vehicles are not solid to bodies.** A vehicle collides with the world, structures and other vehicles. Players and units collide with vehicles: they cannot walk into one, and one that drives into them pushes them aside through their own `MoveAndSlide`. Contact hurts nobody. | A body that blocked a vehicle would let one rifleman stop a truck. A vehicle that passed through bodies both ways would let a player stand inside a hull that takes every round meant for them. And the driver's prediction never collides with an interpolated body. |
+| GV-D8 | **Bodies are solid to vehicles; vehicles are not solid to bodies.** A vehicle collides with the world, structures and other vehicles. Players and units collide with vehicles: they cannot walk into one, and one that drives into them pushes them aside through their own `MoveAndSlide`. Below GV-D17's speed, contact hurts nobody. | A body that blocked a vehicle would let one rifleman stop a truck. A vehicle that passed through bodies both ways would let a player stand inside a hull that takes every round meant for them. And the driver's prediction never collides with an interpolated body. |
 | GV-D9 | **Armour.** The 4x4: 600 health, bullets do 0.15. The helicopter: 450, bullets do 0.2. Explosives do their damage times the round's `VehicleDamageScale`. | 200 rifle hits to destroy the 4x4 and 113 the helicopter, against 25 for the strategist's technical and 40 for its dropship (§9). |
 | GV-D10 | **A direct hit by the tank's round destroys either.** `ProjectileDefinition` gains `VehicleImpactDamage`, used in place of `Damage` against a vehicle it strikes when above zero; `cannon_76.tres` sets 1,000. Its blast is unchanged, so a near miss does up to 80. | The request, as one number on the round that has it — the drone's 800 against the tank's 700 is the precedent (CONTROL_POINTS.md §4.3). The tank never strikes its own side's units (§2), so nothing else moves. |
 | GV-D11 | **Enclosed seats are shielded; exposed seats are not.** A driver's or pilot's capsule lies inside its hull box, so a round reaches the hull first, and a blast skips them. A gunner or a passenger is a player like any other above the bed or in the door. Friendly fire is as for players. | The hull's health is the driver's armour; the people shooting out of it are what can be picked off. |
@@ -75,6 +78,7 @@ Facts this plan stands on, each read in the source at `6699b03`.
 | GV-D14 | **Fog: the players' rule.** A strategist is told about a vehicle while the side's sensors see its hull's centre with a clear line, and about its occupants exactly when it is told about the vehicle. | One rule, the one players already have (NETCODE.md §6.2). |
 | GV-D15 | **Bots never drive or fly.** They are made robust to vehicles (§10). HTN ground bots may ride with a person (GV8, optional); legacy bots are unchanged. The computer strategist is unchanged: its units shoot at the occupants, and the hull takes it. | Bots that drive are a navigation system of their own (§15). Legacy bots are the baseline policies are measured against (TRAINING.md §3). |
 | GV-D16 | **Wire and agent API: additive.** One unreliable 30 Hz message and one request with its answer; the input frame and the 32-byte player record unchanged; `DemoFormat.Version` 4 → 5; the agent schema stays `gdpyr-agent-obs-4`; new ops and events only. | Every trained checkpoint keeps loading; an old demo is refused rather than misread. |
+| GV-D17 | **Running units over.** A crew vehicle whose hull strikes one of the strategist's units on foot at 8 m/s or more — measured where it touches, towards the unit — kills it, in the name of whoever is at the controls, or of the last one for 3 s after they leave them. Slower, the unit is pushed aside unhurt (GV-D8). The strategist's vehicles are never run over, the ground force is never hurt by contact, and the crew vehicle loses no speed and takes no damage. | The request. 8 m/s is faster than any unit on foot walks (4.5 m/s) and than the 4x4 reverses (6 m/s), so nothing dies walking into a parked truck or under one backing up, and the 4x4 has it about 2 s from rest. A tank killed by a truck would be absurd. A ram that changed the vehicle's motion would make the driver's prediction depend on units the client sees a round trip late. |
 
 ---
 
@@ -95,7 +99,8 @@ The server's tick (`PlayerManager.ServerTick`), with what is new:
 ```
 SimulatePlayers        a driver's frame is kept for its vehicle; every seated body gets LookOnly;
                        a gunner or passenger fires from the pose their client was drawing (§5.6)
-CrewVehicles.Tick      NEW: step every vehicle (its driver's frame, or none), MoveAndSlide, pose ring,
+CrewVehicles.Tick      NEW: step every vehicle (its driver's frame, or none), MoveAndSlide, pose ring;
+                       run over every unit on foot its hull struck at 8 m/s or more (§5.9);
                        then pin every seated body to its seat: position, velocity, hitbox
 UnitManager.Tick       units see and shoot seated players where they sit, leading by the vehicle's velocity
 EmplacementManager.Tick
@@ -131,8 +136,9 @@ query.
    longitudinal and lateral acceleration at the centre of mass's height, are the pitch and roll.
    Defaults: 1.6 Hz and a damping ratio of 0.3 — the chassis overshoots by about 37 % and is inside
    2 % of rest in about 1.3 s. Pitch and roll stay within ±35°: it does not roll over.
-2. **Traction**, with two or more wheels down. Throttle is `−MoveZ`: towards 18 m/s (0 to 18 in about
-   4.5 s), braking at 9 m/s² against the motion, reversing to 6 m/s, coasting down at 1 m/s².
+2. **Traction**, with two or more wheels down. Throttle is `−MoveZ` and sets the speed it drives
+   towards: full, 18 m/s (0 to 18 in about 4.5 s); a quarter, 4.5 m/s. Braking is 9 m/s² against the
+   motion, reverse goes to 6 m/s, and coasting slows it at 1 m/s².
    Steering moves at 2.5 rad/s towards `MoveX` × a limit that falls from 32° at rest to 9° at top
    speed. Yaw rate follows `v · tan(steer) / wheelbase`, cut back so the lateral acceleration it asks
    for stays under grip (9 m/s²); grip bleeds off sideways speed. `Space` is the handbrake: 6 m/s²,
@@ -144,7 +150,7 @@ query.
 Tests: dropped 0.3 m onto flat contacts the chassis overshoots at least once and settles within
 1.5 s — springy, and stable; with no input on flat ground its energy above rest never exceeds 101 %
 of its start and is under 1 % of it after 10 s; full throttle raises speed monotonically to
-18 ± 0.4 m/s with the nose up, braking puts it down, a turn rolls the body outward; no turn asks for
+18 ± 0.4 m/s with the nose up and a quarter holds 4.5 ± 0.2 m/s, braking puts the nose down, a turn rolls the body outward; no turn asks for
 more than grip; the handbrake slides; attitude stays within ±35° over 10,000 random inputs and
 contacts; with no contacts it falls at g and the throttle changes nothing; the same inputs give
 bit-identical states over 1,000 runs; position stays inside the wire's ±327.67 m.
@@ -253,20 +259,47 @@ inputs; within 3 cm, 0.5 m/s and 0.5° it is in sync; otherwise it replays. Test
 ### 5.8 Definitions
 
 - **`CrewVehicleDefinition`** (`Scripts/Fps/`, a `[GlobalClass]` resource): name, health, bullet scale,
-  respawn seconds, cap, collider, hull boxes, seats, gun, and drive or flight traits, with
-  `ToFourByFourTraits()` and `ToHelicopterTraits()`. `Vehicles/four_by_four.tres` (id 0) and
-  `Vehicles/helicopter.tres` (id 1); `Scripts/Core/CrewVehicleCatalog.cs`, append-only.
+  respawn seconds, cap, collider, hull boxes, seats, gun, the speed that runs a unit over
+  (`RamKillSpeedMetersPerSecond`, 8 m/s), and drive or flight traits, with `ToFourByFourTraits()`
+  and `ToHelicopterTraits()`. `Vehicles/four_by_four.tres` (id 0) and `Vehicles/helicopter.tres`
+  (id 1); `Scripts/Core/CrewVehicleCatalog.cs`, append-only.
 - **The mounted gun:** weapon id 14, `Weapons/vehicle_gun/vehicle_gun.tres`, appended to
   `WeaponCatalog.Paths` (32 allowed): the 12.7 mm round (`hmg_127`, 45), 450 rpm, a 100-round box, a
   5 s reload, reloading for ever (`Reserve = −1`, as every unit weapon and mounted gun does). It
   traverses 360° and elevates from −15° to +50° relative to the hull.
+- **The ram:** weapon id 15, `Weapons/ram/ram.tres`, appended: no round and no slot, as the hammer has
+  no round. It is there so that a unit run over is named on the stream, in the server's log and in
+  the kill counts as any other kill is.
 - **`ProjectileDefinition.VehicleImpactDamage`**, carried through `ProjectileStats` (GV-D10).
 - **`SimConfig.MaxCrewVehicles = 4`**: slots 0–3 on the wire; two kinds at a cap of one use two.
 
-Tests that read the files, as `TrainedUnitResourceTests` does: ids 0 and 1 are the two kinds, and
-weapon ids 0–13 are where they were; `cannon_76`'s vehicle impact is at least both vehicles' health
-and its blast at the face is less than either; 5.56 mm hits to destroy are at least 150 for the 4x4
-and 100 for the helicopter; the seats are GV-D2's.
+Tests that read the files, as `TrainedUnitResourceTests` does: ids 0 and 1 are the two kinds;
+weapon ids 0–13 are where they were, 14 is the gun and 15 the ram; `cannon_76`'s vehicle impact is
+at least both vehicles' health and its blast at the face is less than either; 5.56 mm hits to
+destroy are at least 150 for the 4x4 and 100 for the helicopter; the speed that runs a unit over is
+above every unit on foot's `MoveSpeed` and above the 4x4's reverse speed; the seats are GV-D2's.
+
+### 5.9 Running units over — `Scripts/Sim/Ramming.cs`, `Tests/RammingTests.cs`
+
+- **Contact:** a unit's capsule touches the hull when its axis passes within its radius of one of
+  the hull's boxes — §5.4's `Hitbox.SegmentIntersects`, with the capsule's radius as the sweep — or
+  starts inside one. The grown box overstates contact at a vertical edge by up to 0.17 m for a 0.4 m
+  capsule, less than one tick's travel at the 4x4's top speed.
+- **Speed** (`Ramming.ImpactSpeed`): the hull's velocity where it touches — the vehicle's velocity
+  plus what its yaw rate sweeps at that point, flat — taken towards the unit. Zero or less is no
+  impact. The unit's own velocity is left out: a rifleman walking into a parked truck walks into a
+  wall.
+- **Kills** (`Ramming.Kills`): at the definition's `RamKillSpeedMetersPerSecond` (8 m/s for both
+  kinds) or more, a unit on foot — not `IsVehicle` — dies; slower, it is pushed aside unhurt
+  (GV-D8). A strategist's vehicle never dies of it.
+- **Credit** (`Ramming.Credit`): the driver or pilot at the controls; the last one for 3 s after
+  they leave the seat; after that, nobody.
+
+Tests: a rifleman dead ahead of a 4x4 at 8 m/s dies and at 7.9 m/s does not; one its side grazes at
+18 m/s, with no speed towards it, does not; one swept by the tail of a truck spinning on its
+handbrake, at 8 m/s or more there, does; a parked truck kills nothing, whatever walks into it; full
+reverse, 6 m/s, kills nothing; a strategist's vehicle is never killed; a capsule further than its
+radius from every box is no contact, and one inside a box is; the credit's 3 s, inclusive.
 
 ---
 
@@ -348,6 +381,17 @@ stop on its handbrake; the helicopter's rotor spins down and, in the air, it com
   clear. Then `vehicle_destroyed`, the kind's timer starts, and the wreck burns — `PresentDestroyed`
   and EFFECTS.md §2.3's `vehicle` kind — and is removed two seconds later.
 - Nobody is credited with a kill for a crew vehicle: it was the ground force's own.
+- **Running units over** (GV-D17), in `CrewVehicleManager`'s tick right after each vehicle steps and
+  before `UnitManager.ServerTick`, so a unit is struck where it stood, before its own `MoveAndSlide`
+  pushes it out of the hull: every unit on the field that is not a vehicle, within the hull's
+  bounding radius plus 1 m, is tested by §5.9. One struck fast enough goes to a new
+  `CombatManager.RamUnit`, which deals it its health through `DamageUnit` — as an explosive, so that
+  no armour scale can leave it standing — with weapon 15 and the credited driver as the attacker.
+  `Damage`, `Kill`, `unit_lost`, the driver's hit marker and kill count are then the ordinary ones,
+  and a `vehicle_rammed` event records the speed. With nobody credited the kill is nobody's
+  (`OwnerId.None`, no kill counted). A destroyed vehicle does not move and runs nothing over. The
+  cost is at most 64 units × 4 boxes a vehicle a tick, and the distance check rejects nearly all of
+  them.
 
 ### 6.6 The kiosk
 
@@ -380,6 +424,8 @@ stop on its handbrake; the helicopter's rotor spins down and, in the air, it com
 | `CombatManager.TryApplyLockerKit`, `KitRequest.Check`, `ServerResupply` | refused, or nothing, while seated |
 | `EmplacementSim.Resolve`, `EmplacementManager.Resolve` | §5.3 |
 | `DroneSim.MayLaunch` | refused while seated |
+| `CombatManager.RamUnit` (new), from `CrewVehicleManager`'s tick before `UnitManager.ServerTick` | §6.5's running over, through `DamageUnit` |
+| `WeaponCatalog.Paths` | ids 14, the gun, and 15, the ram, appended |
 | `fps_controller.Hitbox` (`:135`) | the seat's capsule while seated |
 | `HumanoidRig`, `BodyPose` | `Seated`: the crouch pose until a sitting clip is chosen from the Universal Animation Library |
 | `VisibilityService` | vehicles are seen as players are, and their occupants with them |
@@ -425,7 +471,9 @@ state in a message that is going out anyway.
 
 `ClientRequestVehicle(byte kind)` (reliable, ~3 B) and `ServerKioskResult(byte refusal)` (reliable,
 to the requester, ~3 B), the locker's `ClientLockerLoadout`/`ServerKitResult` pair. Getting in,
-changing seat and getting out are the use key in the input frame: nothing new on the wire.
+changing seat and getting out are the use key in the input frame: nothing new on the wire. Nor for
+running a unit over: its death rides the unit snapshot and the driver's hit marker
+`ServerHitConfirm`, as a shot's do.
 
 ### 7.3 Fog
 
@@ -500,9 +548,10 @@ reconciled while seated (§6.7); its health, ammunition and kit apply as before.
   the refusal at its foot (`refused (not_ready): ready in 0:42`); it closes on a vehicle taken, death,
   leaving the reach, the round's end, `E` and `Esc`, and holds `InputFocus.Menu` while open, so the
   sampler sends neutral frames, as for the locker.
-- **Debug HUD:** `vehicles 2 · 3 aboard · 4x4 out · helicopter 0:42 · mispredicted 0.4/s · replay 9`.
+- **Debug HUD:** `vehicles 2 · 3 aboard · 4x4 out · helicopter 0:42 · mispredicted 0.4/s · replay 9 · run over 3`.
 - **Presentation:** greybox boxes, cylinders for wheels and discs for rotors, in the ground force's
-  colour; a seated body in its pose; a wreck burning as a unit vehicle's does.
+  colour; a seated body in its pose; a wreck burning as a unit vehicle's does. A unit run over falls
+  as a shot one does, a round trip after the driver struck it, and the driver gets a hit marker.
 
 ---
 
@@ -536,8 +585,13 @@ The least time each survives one weapon at that weapon's own rate, every round h
 | a barracks gun, 450 rpm, no magazine | 12 s | 6.7 s |
 | a tank | its first direct hit; it fires every 3 s | the same |
 
-Every number is a playtest dial: `Vehicles/*.tres` (health, bullet scale, timers, cap, the drive and
-flight traits), `Weapons/vehicle_gun/vehicle_gun.tres`, and `cannon_76.tres`'s one new field.
+**Running a unit over** takes 8 m/s at the hull where it touches, whatever the unit's health. The 4x4
+has it about 2 s and 8 m from rest, and never in reverse; the helicopter only with its cabin or tail
+boom low enough to touch one.
+
+Every number is a playtest dial: `Vehicles/*.tres` (health, bullet scale, timers, cap, the speed that
+runs a unit over, the drive and flight traits), `Weapons/vehicle_gun/vehicle_gun.tres`, and
+`cannon_76.tres`'s one new field.
 
 ---
 
@@ -551,6 +605,9 @@ flight traits), `Weapons/vehicle_gun/vehicle_gun.tres`, and `cannon_76.tres`'s o
 - **The strategist's units:** unchanged. They target the players inside, lead by the vehicle's
   velocity (the pin), and their rounds meet the hull. A tank engages a driver as it would anybody.
 - **The computer strategist:** unchanged. Seated players are contacts where their vehicle is.
+- **Nothing gets out of a vehicle's way.** A unit on foot struck fast enough dies under either AI
+  (GV-D17); no unit sees a crew vehicle coming or steps aside (§15). A person in the strategist's
+  chair can move them.
 - **GV8, optional — HTN ground bots ride with a person:** a bot within 15 m of a stopped vehicle with
   a person driving and a free gunner's or passenger's seat, and nothing in sight, gets in, gunner
   first; it fights from the seat with its existing aim and fire, its movement goals ignored; it gets
@@ -566,8 +623,10 @@ flight traits), `Weapons/vehicle_gun/vehicle_gun.tres`, and `cannon_76.tres`'s o
 - **Events**, appended after `Resupply = 22`: `vehicle_requested` {peer, kind, refusal},
   `vehicle_spawned` {vehicle, kind, peer, x, z}, `vehicle_entered` {peer, vehicle, seat},
   `vehicle_exited` {peer, vehicle, seat, x, z}, `vehicle_damaged` {attacker, vehicle, weapon, dealt,
-  health}, `vehicle_destroyed` {attacker, vehicle, weapon, x, z}. `EpisodeMetrics` mirrors them;
-  `AgentEventTests`' `Last` assertion moves.
+  health}, `vehicle_destroyed` {attacker, vehicle, weapon, x, z}, `vehicle_rammed` {vehicle, unit,
+  speed, x, z}. A unit run over also has the ordinary `damage` and `kill`, naming weapon 15, and
+  `unit_lost`, naming the driver. `EpisodeMetrics` mirrors them; `AgentEventTests`' `Last` assertion
+  moves.
 - **Observation:** `gdpyr-agent-obs-4`, unchanged. A seated seat's `self` is at its seat with its
   vehicle's velocity. Getting in, driving and getting out are the frame's buttons and axes, which a
   policy already sends. A vehicle block in the vector would be `obs-5` (§15).
@@ -591,6 +650,8 @@ New scenarios, one metric per assertion:
 | `vehicle_passenger_fires` | a 4x4 at full speed past an infantry unit 25 m off its line; a passenger firing at it | `damage[attacker=@passenger].count >= 3` |
 | `heli_flies_and_lands` | a pilot and a passenger on the pad: climb 5 s, forward 4 s, down, both out | `vehicle_exited.count == 2`, both ≥ 40 m from the pad |
 | `heli_wreck_at_height` | a helicopter hovering 15 m up with two aboard at 10 health, a rifleman 30 m off | `vehicle_destroyed.count == 1`; `kill.count == 2` |
+| `vehicle_rams_infantry` | a seated driver 60 m from three strategist riflemen standing abreast, 0.8 m apart, across its path; full throttle | `vehicle_rammed.count == 3`; `kill[weapon=15].count == 3`; `unit_lost.count == 3` |
+| `vehicle_pushes_slowly` | the same riflemen 15 m ahead; a quarter throttle, 4.5 m/s | `vehicle_rammed.count == 0`; `unit_lost.count == 0` |
 
 A harness seat has no client, so `vehicle_passenger_fires` checks firing from a moving seat, not
 §5.6's rewind: that needs a client on a link, GV4's check. The stream names a strategist's round by
@@ -613,11 +674,11 @@ with `--fixed-fps 60`, at the start commit. The last recorded suite is 33 of 41
 (CONTROL_POINTS.md §5.4), six of its eight failures older than the branch it was taken on; GV7
 compares against this run, not that one.
 
-### GV1 — The rules, engine-free (2½ days)
+### GV1 — The rules, engine-free (3 days)
 
 All of §5. **Done when** each fact in §5 passes and each of these, broken, fails one: no bump stop, a
 damping ratio of 0, an enclosed capsule poking out of its hull, the timer counted from the spawn, the
-view tick unclamped. Nothing in the game calls any of it yet.
+view tick unclamped, a ram that kills at any speed. Nothing in the game calls any of it yet.
 
 ### GV2 — The 4x4 on the authority (3 days)
 
@@ -638,14 +699,15 @@ relied on here and checked here: a body is pushed out of a hull that moved into 
 the strip; a passenger's view is smooth; a strategist sees a vehicle only when the side's sensors do;
 a client that joins sees the vehicles and who is in them.
 
-### GV4 — Combat from and against vehicles (2½ days)
+### GV4 — Combat from and against vehicles (3 days)
 
-§6.4, §6.5, §5.6 in the game, `VehicleImpactDamage`, wrecks, the explosion, events, and §10's
-robustness. **Done when**, on the same dedicated server: at full speed a passenger's tracer and the
-server's round leave within 0.3 m of each other (both origins logged by projectile id); a tank's
-direct hit wrecks a 4x4, its driver gets out at 50 health, and its exposed crew take the shell's
-blast as well; a rifleman's rounds at the driver stop at the hull; the gun's box counts down on the
-tick the gunner fires.
+§6.4, §6.5 — running units over included — §5.6 in the game, `VehicleImpactDamage`, wrecks, the
+explosion, events, and §10's robustness. **Done when**, on the same dedicated server: at full speed a
+passenger's tracer and the server's round leave within 0.3 m of each other (both origins logged by
+projectile id); a tank's direct hit wrecks a 4x4, its driver gets out at 50 health, and its exposed
+crew take the shell's blast as well; a rifleman's rounds at the driver stop at the hull; the gun's
+box counts down on the tick the gunner fires; a 4x4 at full speed through a line of riflemen kills
+each one it strikes, in its driver's name, and at walking pace pushes them aside unhurt.
 
 ### GV5 — The helicopter (2 days)
 
@@ -663,7 +725,7 @@ and takes it again, and is refused with a reason at every gate in §5.5 they can
 
 ### GV7 — Agent API, harness, scenarios and demos (2 days)
 
-§11 and §7.4; the eight scenarios; the whole suite against GV0's run. **Done when** the new scenarios
+§11 and §7.4; the ten scenarios; the whole suite against GV0's run. **Done when** the new scenarios
 pass over their seeds and the old ones report what they did at GV0, within the engine's run-to-run
 spread (AGENT_API.md §3).
 
@@ -678,7 +740,7 @@ README (controls, a paragraph), NETCODE.md (§1's table, §7's table, a §10.11 
 §10.6's stale locker position), IMPLEMENTATION_PLAN.md M12, AGENT_API.md (ops, events, spawns),
 DEMOS.md (version 5), EFFECTS.md (§1's table), and this document's status.
 
-**About 19 days in all.** GV0–GV4 with GV6, about 13, are the 4x4 alone and can ship first.
+**About 20 days in all.** GV0–GV4 with GV6, about 14, are the 4x4 alone and can ship first.
 
 ---
 
@@ -692,6 +754,7 @@ DEMOS.md (version 5), EFFECTS.md (§1's table), and this document's status.
 | Drivers and pilots are shielded | §5.4's containment fact | `dotnet test` |
 | Passengers fire from a moving seat | `vehicle_passenger_fires`; GV4's origin log over a link | Godot headless; a person, dedicated server |
 | The kiosk's timer and cap | §5.5's facts; `vehicle_kiosk_cap` | `dotnet test`; Godot headless |
+| A collision at 8 m/s or more kills a unit on foot; a slower one does not | §5.9's facts; `vehicle_rams_infantry`, `vehicle_pushes_slowly` | `dotnet test`; Godot headless |
 | Driving feels like driving | GV3's error, misprediction and replay numbers | a person, dedicated server with `tc netem` |
 
 ---
@@ -707,13 +770,17 @@ DEMOS.md (version 5), EFFECTS.md (§1's table), and this document's status.
 | The barracks mortar aims at a point in the air | shells bursting overhead, or no solution found | checked in GV5; if it misbehaves, the mortar skips airborne players |
 | A truck parked in the bunker's door shuts the spawn in | nobody leaves the bunker | anybody can drive it away with `E`; it is removed after 60 s empty |
 | The vehicles decide rounds | the strategist stops winning against people in them | the cap, the timers and the armour are files (§9); one helicopter at 90 s is the first dial |
+| Running infantry over decides rounds | most of the strategist's infantry losses are `kill[weapon=15]` | one number per kind (`RamKillSpeedMetersPerSecond`), then the 4x4's top speed and acceleration; units that step aside are §15's |
 | Mixed builds | misrouted RPCs | ship together (§7.5) |
 
 ---
 
 ## 15. Not in this plan
 
-- **Ramming and running people over**; damage from any collision.
+- **Damage from collisions** to players or to a crew vehicle itself, and **ramming the strategist's
+  vehicles**, which a crew vehicle pushes aside (GV-D8, GV-D17).
+- **Units that get out of a vehicle's way**, and a ram that does more than kill — damage scaled
+  with speed below the threshold, a body thrown.
 - **Repair and rearming** at the kiosk.
 - **Bots that drive or fly**; the computer strategist answering vehicles — tanks preferring them,
   units shooting at empty ones.
