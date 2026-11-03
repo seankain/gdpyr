@@ -1,0 +1,45 @@
+[gd_resource type="Resource" script_class="CrewVehicleDefinition" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Fps/CrewVehicleDefinition.cs" id="1_crewdef"]
+
+[resource]
+script = ExtResource("1_crewdef")
+Name = &"helicopter"
+Kind = 1
+MaxHealth = 450.0
+BulletDamageScale = 0.2
+RespawnSeconds = 90.0
+Cap = 1
+RamKillSpeedMetersPerSecond = 8.0
+ColliderCentre = Vector3(0, 1.2, -0.3)
+ColliderHalfExtents = Vector3(0.9, 1.2, 1.5)
+ColliderBevelMeters = 0.3
+HullCentres = PackedVector3Array(0, 1.4, -0.3, 0, 1.7, 3.6)
+HullHalfExtents = PackedVector3Array(0.9, 1, 1.5, 0.25, 0.3, 2.4)
+SeatRoles = PackedInt32Array(0, 2)
+SeatEnclosed = PackedInt32Array(1, 0)
+SeatCapsuleBottoms = PackedVector3Array(0.4, 1, -1.1, -1.25, 0.9, -0.2)
+SeatCapsuleTops = PackedVector3Array(0.4, 1.6, -1.1, -1.25, 1.5, -0.2)
+SeatCapsuleRadii = PackedFloat32Array(0.3, 0.3)
+SeatEyes = PackedVector3Array(0.4, 1.8, -1.1, -1.25, 1.7, -0.2)
+SeatDoors = PackedVector3Array(1.5, 0, -1.1, -1.7, 0, -0.2)
+SeatExits = PackedVector3Array(1.7, 0, -1.1, -1.9, 0, -0.2)
+SeatArcYawDegrees = PackedVector2Array(0, 0, 15, 165)
+SeatArcPitchDegrees = PackedVector2Array(0, 0, -70, 20)
+GunWeaponId = -1
+SpinUpSeconds = 2.5
+SpinDownSeconds = 4.0
+LiftRotor = 0.6
+MaxForwardSpeed = 22.0
+MaxSideSpeed = 10.0
+FlightAcceleration = 5.0
+ClimbSpeed = 5.0
+DescentSpeed = 6.0
+VerticalAcceleration = 8.0
+TurnRateDegrees = 90.0
+CeilingMeters = 25.0
+UnpilotedDescentSpeed = 4.0
+UnpilotedDrag = 2.0
+MaxTiltDegrees = 20.0
+TiltResponse = 6.0
+Color = Color(0.25, 0.45, 0.75, 1)

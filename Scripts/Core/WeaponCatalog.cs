@@ -36,6 +36,8 @@ public static class WeaponCatalog
 		"res://Weapons/lmg/lmg.tres",           // 11 — heavy gunner
 		"res://Weapons/grenade/grenade.tres",   // 12 — hand grenade, thrown
 		"res://Weapons/drone/drone.tres",       // 13 — FPV drone's warhead, a node perk
+		"res://Weapons/vehicle_gun/vehicle_gun.tres", // 14 — the 4x4's mounted gun
+		"res://Weapons/ram/ram.tres",           // 15 — a crew vehicle running a unit over
 	};
 
 	public const byte Hammer = 0;
@@ -104,6 +106,20 @@ public static class WeaponCatalog
 	/// its id is what the kill stream names a drone kill by.
 	/// </summary>
 	public const byte FpvDrone = 13;
+
+	/// <summary>
+	/// The 4x4's mounted gun (docs/GROUND_VEHICLES.md §5.8): the 12.7 mm round out of a
+	/// hundred-round box, reloading for ever, as every mounted gun does. Not carried: its
+	/// trigger is the gunner's while they are at it.
+	/// </summary>
+	public const byte VehicleGun = 14;
+
+	/// <summary>
+	/// A crew vehicle running one of the strategist's units over (GV-D17). No round and no
+	/// slot, as the hammer has no round: it is here so that a unit run over is named on
+	/// the event stream, in the server's log and in the kill counts as any other kill is.
+	/// </summary>
+	public const byte Ram = 15;
 
 	/// <summary>
 	/// No primary (docs/LOADOUT.md L-D1): the large slot's id when a kit carries none.

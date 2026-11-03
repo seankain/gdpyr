@@ -48,10 +48,19 @@ public readonly struct ProjectileStats
 	/// <summary>The same share for a structure. One for every round but the hand grenade.</summary>
 	public readonly float StructureDamageScale;
 
+	/// <summary>
+	/// What a direct hit does to a crew vehicle it strikes, in place of <see cref="Damage"/>,
+	/// when above zero (docs/GROUND_VEHICLES.md GV-D10): the tank's round, which destroys
+	/// a 4x4 or a helicopter outright. Zero for every other round, which strikes a crew
+	/// vehicle as it strikes anything. The blast is unchanged either way.
+	/// </summary>
+	public readonly float VehicleImpactDamage;
+
 	public ProjectileStats(in ProjectileParams physics, float muzzleVelocity, float damage,
 		float explosionRadiusMeters = 0f, float explosionDamage = 0f,
 		float lifetimeSeconds = SimConfig.MaxProjectileLifetimeSeconds, float sweepRadiusMeters = 0f,
-		bool fused = false, float vehicleDamageScale = 1f, float structureDamageScale = 1f)
+		bool fused = false, float vehicleDamageScale = 1f, float structureDamageScale = 1f,
+		float vehicleImpactDamage = 0f)
 	{
 		Physics = physics;
 		MuzzleVelocity = MathF.Max(muzzleVelocity, 0f);
@@ -63,7 +72,11 @@ public readonly struct ProjectileStats
 		Fused = fused;
 		VehicleDamageScale = MathF.Max(vehicleDamageScale, 0f);
 		StructureDamageScale = MathF.Max(structureDamageScale, 0f);
+		VehicleImpactDamage = float.IsFinite(vehicleImpactDamage) ? MathF.Max(vehicleImpactDamage, 0f) : 0f;
 	}
+
+	/// <summary>A direct hit's damage on a crew vehicle (GV-D10): <see cref="VehicleImpactDamage"/> when the round has one, else <see cref="Damage"/>.</summary>
+	public float DirectDamageAgainstCrewVehicle => VehicleImpactDamage > 0f ? VehicleImpactDamage : Damage;
 
 	public bool IsExplosive => ExplosionRadiusMeters > 0f && ExplosionDamage != 0f;
 

@@ -1,0 +1,56 @@
+[gd_resource type="Resource" script_class="CrewVehicleDefinition" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Fps/CrewVehicleDefinition.cs" id="1_crewdef"]
+
+[resource]
+script = ExtResource("1_crewdef")
+Name = &"4x4"
+Kind = 0
+MaxHealth = 600.0
+BulletDamageScale = 0.15
+RespawnSeconds = 45.0
+Cap = 1
+RamKillSpeedMetersPerSecond = 8.0
+ColliderCentre = Vector3(0, 0.5, 0)
+ColliderHalfExtents = Vector3(0.95, 0.95, 2.4)
+ColliderBevelMeters = 0.25
+HullCentres = PackedVector3Array(0, 0.5, -0.4, 0, 0.05, -1.8, 0, -0.1, 1.4, 0, 1.2, 0.75)
+HullHalfExtents = PackedVector3Array(0.95, 0.95, 0.8, 0.95, 0.5, 0.6, 0.95, 0.35, 1, 0.4, 0.3, 0.05)
+SeatRoles = PackedInt32Array(0, 1, 2)
+SeatEnclosed = PackedInt32Array(1, 0, 0)
+SeatCapsuleBottoms = PackedVector3Array(-0.45, 0, -0.3, 0, 0.6, 1.4, 0.5, 0.6, 2)
+SeatCapsuleTops = PackedVector3Array(-0.45, 0.65, -0.3, 0, 1.7, 1.4, 0.5, 1.7, 2)
+SeatCapsuleRadii = PackedFloat32Array(0.3, 0.35, 0.35)
+SeatEyes = PackedVector3Array(-0.45, 0.85, -0.3, 0, 1.85, 1.4, 0.5, 1.85, 2)
+SeatDoors = PackedVector3Array(-1.5, -0.7, -0.4, 0, -0.7, 3, 1.5, -0.7, 1.6)
+SeatExits = PackedVector3Array(-1.6, -0.7, -0.4, 0.6, -0.7, 3.2, 1.6, -0.7, 1.8)
+SeatArcYawDegrees = PackedVector2Array(0, 0, -180, 180, 45, 315)
+SeatArcPitchDegrees = PackedVector2Array(0, 0, -15, 50, -30, 60)
+GunWeaponId = 14
+GunMount = Vector3(0, 1.25, 0.95)
+GunBarrelMeters = 1.1
+GunTraverseDegrees = 180.0
+GunElevationDegrees = Vector2(-15, 50)
+WheelbaseMeters = 3.0
+HalfTrackMeters = 0.85
+WheelRadiusMeters = 0.4
+SpringRestMeters = 0.4
+SpringTravelMeters = 0.25
+SpringFrequencyHz = 1.6
+DampingRatio = 0.3
+CentreOfMassHeightMeters = 0.55
+PitchGyrationMeters = 1.5
+RollGyrationMeters = 0.85
+MaxSpeed = 18.0
+ReverseSpeed = 6.0
+DriveAcceleration = 4.0
+BrakeDeceleration = 9.0
+CoastDeceleration = 1.0
+HandbrakeDeceleration = 6.0
+HandbrakeGripScale = 0.333333
+GripAcceleration = 9.0
+SteerRate = 2.5
+SteerLimitAtRestDegrees = 32.0
+SteerLimitAtTopDegrees = 9.0
+AirborneRateDamping = 2.0
+Color = Color(0.25, 0.45, 0.75, 1)

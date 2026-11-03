@@ -83,6 +83,14 @@ public partial class ProjectileDefinition : Resource
 	[Export]
 	public float StructureDamageScale = 1f;
 
+	/// <summary>
+	/// A direct hit's damage on a crew vehicle — the ground force's 4x4 or helicopter — in
+	/// place of <see cref="Damage"/>, when above zero (docs/GROUND_VEHICLES.md GV-D10). The
+	/// tank's round sets it high enough to destroy either; its blast is unchanged.
+	/// </summary>
+	[Export]
+	public float VehicleImpactDamage;
+
 	[ExportCategory("Tracer")]
 
 	[Export]
@@ -115,5 +123,6 @@ public partial class ProjectileDefinition : Resource
 		SweepRadiusMeters,
 		Fused,
 		VehicleDamageScale,
-		StructureDamageScale);
+		StructureDamageScale,
+		VehicleImpactDamage);
 }
