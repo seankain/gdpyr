@@ -46,6 +46,11 @@ public partial class LocalInputSampler : Node
 
 	private bool _enabled;
 
+	/// <summary>The driven 4x4's heading at the last sample, while there was one (docs/GROUND_VEHICLES.md §8.4).</summary>
+	private float _hullYaw;
+
+	private bool _followingHull;
+
 	public override void _Ready()
 	{
 		// A dedicated server has no device to sample and no window to capture.
@@ -75,6 +80,25 @@ public partial class LocalInputSampler : Node
 
 	public InputFrame Sample(uint tick)
 	{
+		// Driving the 4x4, the look turns with the truck, so the chase camera stays behind
+		// it however the player steers: the hull's turn since the last sample is added to
+		// the yaw before the mouse's. The device end of the boundary, as the zoom's scale
+		// is — the truck's step never reads the look (docs/GROUND_VEHICLES.md §8.4).
+		if (CrewSeatView.TryDrivenHullYaw(out float hullYaw))
+		{
+			if (_followingHull)
+			{
+				Yaw += Mathf.AngleDifference(_hullYaw, hullYaw);
+			}
+
+			_hullYaw = hullYaw;
+			_followingHull = true;
+		}
+		else
+		{
+			_followingHull = false;
+		}
+
 		// Paused means neutral input, not "no input frame": the server keeps
 		// simulating either way, and a missing frame reads to it as packet loss. The
 		// console counts as paused for the same reason it counts as anything: the

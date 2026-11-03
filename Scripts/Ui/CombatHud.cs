@@ -225,7 +225,7 @@ public partial class CombatHud : CanvasLayer
 
 		// The panel takes the middle of the screen, where the prompt is; what the prompt
 		// would say there is what the panel is for.
-		_prompt.Text = dead || awaitingRole || _panel.IsOpen ? string.Empty : JoinLines(emplacements?.PromptFor(combat),
+		_prompt.Text = dead || awaitingRole || _panel.IsOpen ? string.Empty : JoinLines(emplacements?.PromptFor(combat, tick),
 			ResupplyLine(combat, emplacements, tick));
 	}
 

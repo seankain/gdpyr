@@ -10,7 +10,9 @@ namespace Gdpyr.Fps;
 /// <summary>
 /// Fifth autoload: the ground force's heavy guns and the cans that feed them
 /// (docs/IMPLEMENTATION_PLAN.md §M5), and the weapon lockers at their spawn
-/// (docs/LOADOUT.md L-D8) — everything the use key does.
+/// (docs/LOADOUT.md L-D8) — everything the use key does. A press beside or inside a
+/// crew vehicle is resolved here too, by the same table, and handed to
+/// <see cref="CrewVehicleManager"/> to act on (docs/GROUND_VEHICLES.md §5.3).
 ///
 /// The guns and the cans are map nodes; this owns what is happening to them. The
 /// server is the only authority, as everywhere else: it reads the use bit out of
@@ -210,8 +212,9 @@ public partial class EmplacementManager : Node
 			return UseAction.None;
 		}
 
-		UseAction action = Resolve(combat, combat.Use.Sample(input), out int gunIndex, out int canIndex);
-		Act(combat, action, gunIndex, canIndex, tick);
+		UseAction action = Resolve(combat, combat.Use.Sample(input), out int gunIndex, out int canIndex,
+			out int vehicleSlot);
+		Act(combat, action, gunIndex, canIndex, vehicleSlot, tick);
 		return action;
 	}
 
@@ -232,7 +235,7 @@ public partial class EmplacementManager : Node
 		}
 
 		EnsureStarted();
-		return Resolve(combat, combat.Use.Sample(input), out _, out _);
+		return Resolve(combat, combat.Use.Sample(input), out _, out _, out _);
 	}
 
 	/// <summary>
@@ -240,18 +243,28 @@ public partial class EmplacementManager : Node
 	/// caller whether or not they are alive, so it stays in step with the frames; a press
 	/// from a corpse simply means nothing.
 	/// </summary>
-	private UseAction Resolve(PlayerCombat combat, UseIntent intent, out int gunIndex, out int canIndex)
+	private UseAction Resolve(PlayerCombat combat, UseIntent intent, out int gunIndex, out int canIndex,
+		out int vehicleSlot)
 	{
 		gunIndex = -1;
 		canIndex = -1;
+		vehicleSlot = -1;
 		if (intent == UseIntent.None || !combat.IsAlive)
 		{
 			return UseAction.None;
 		}
 
+		// Seated, the key is about the seat and nothing outside the vehicle is in reach
+		// (docs/GROUND_VEHICLES.md §5.3): the table answers before it looks at anything else.
+		CrewVehicleManager crew = CrewVehicleManager.Instance;
+		bool seated = crew != null && crew.IsSeated(combat.PeerId);
+
 		Vector3 at = combat.Character.SimPosition;
 		gunIndex = NearestGun(at, combat.PeerId, out float gunDistance);
 		canIndex = NearestCan(at, out float canDistance);
+		float vehicleDistance = float.MaxValue;
+		vehicleSlot = seated || crew == null ? -1 : crew.NearestEnterable(at, combat.PeerId, out vehicleDistance);
+		float nearestItem = Mathf.Min(gunDistance, canDistance);
 
 		var situation = new UseSituation(
 			intent,
@@ -260,13 +273,15 @@ public partial class EmplacementManager : Node
 			gunIndex >= 0,
 			canIndex >= 0 && canDistance <= gunDistance,
 			combat.Character.IsOnFloor(),
-			LockerInReach(at, Mathf.Min(gunDistance, canDistance)));
+			LockerInReach(at, Mathf.Min(nearestItem, vehicleDistance)),
+			seated,
+			vehicleSlot >= 0 && vehicleDistance < nearestItem);
 
 		return EmplacementSim.Resolve(situation);
 	}
 
 	/// <summary>Carries out a decision. Server-side; each branch is one reliable message.</summary>
-	private void Act(PlayerCombat combat, UseAction action, int gunIndex, int canIndex, uint tick)
+	private void Act(PlayerCombat combat, UseAction action, int gunIndex, int canIndex, int vehicleSlot, uint tick)
 	{
 		switch (action)
 		{
@@ -304,6 +319,20 @@ public partial class EmplacementManager : Node
 				// or on a listen host by the caller, for the host's own player — and the kit
 				// chosen in it arrives as a request (CombatManager.TryApplyLockerKit). The
 				// press is still resolved here, so that at a locker it is not a can or a gun.
+				break;
+
+			// A crew vehicle's seats (docs/GROUND_VEHICLES.md §6.3): not predicted, so the
+			// server's word on them is the only one (GV-D4).
+			case UseAction.EnterVehicle:
+				CrewVehicleManager.Instance?.Enter(combat, vehicleSlot);
+				break;
+
+			case UseAction.ExitVehicle:
+				CrewVehicleManager.Instance?.Exit(combat.PeerId, tick);
+				break;
+
+			case UseAction.ChangeSeat:
+				CrewVehicleManager.Instance?.ChangeSeat(combat.PeerId);
 				break;
 		}
 	}
@@ -539,11 +568,17 @@ public partial class EmplacementManager : Node
 	/// computed from the same reach against the same nodes, and being wrong about it
 	/// costs a prompt.
 	/// </summary>
-	public string PromptFor(PlayerCombat combat)
+	public string PromptFor(PlayerCombat combat, uint tick)
 	{
 		if (combat?.Character == null || !combat.IsAlive || !_started)
 		{
 			return string.Empty;
+		}
+
+		CrewVehicleManager crew = CrewVehicleManager.Instance;
+		if (crew != null && crew.IsSeated(combat.PeerId))
+		{
+			return crew.SeatedPrompt(combat.PeerId, tick);
 		}
 
 		if (TryMounted(combat.PeerId, out Emplacement mounted))
@@ -566,10 +601,18 @@ public partial class EmplacementManager : Node
 		Vector3 at = combat.Character.SimPosition;
 		int gun = NearestGun(at, combat.PeerId, out float gunDistance);
 		int can = NearestCan(at, out float canDistance);
+		float vehicleDistance = float.MaxValue;
+		int vehicle = crew?.NearestEnterable(at, combat.PeerId, out vehicleDistance) ?? -1;
+		float nearestItem = Mathf.Min(gunDistance, canDistance);
 
-		if (LockerInReach(at, Mathf.Min(gunDistance, canDistance)))
+		if (LockerInReach(at, Mathf.Min(nearestItem, vehicleDistance)))
 		{
 			return "[E] weapon locker";
+		}
+
+		if (vehicle >= 0 && vehicleDistance < nearestItem)
+		{
+			return crew.EnterPrompt(vehicle, at);
 		}
 
 		if (can >= 0 && (gun < 0 || canDistance <= gunDistance))

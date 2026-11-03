@@ -26,9 +26,30 @@ public static class CollisionLayers
 	/// </summary>
 	public const uint Units = 1 << 2;
 
-	/// <summary>What a character body collides with: the level, each other, and units.</summary>
-	public const uint CharacterMask = World | Players | Units;
+	/// <summary>
+	/// Layer 4: the ground force's crew vehicles (docs/GROUND_VEHICLES.md §6.1). Their
+	/// own layer for the reason players and units have one — a round meets a hull in
+	/// engine-free code, against its boxes, so a projectile's world query must not find
+	/// the collider — and because bodies and vehicles are solid to each other one way
+	/// only (GV-D8): a body collides with a hull, a hull does not collide with a body.
+	/// </summary>
+	public const uint Vehicles = 1 << 3;
+
+	/// <summary>
+	/// What a character body collides with: the level, each other, units, and crew
+	/// vehicles — it cannot walk into one, and one that drives into it pushes it aside
+	/// through its own <c>MoveAndSlide</c> (GV-D8).
+	/// </summary>
+	public const uint CharacterMask = World | Players | Units | Vehicles;
 
 	/// <summary>What a unit body collides with. The same set: units are bodies too.</summary>
-	public const uint UnitMask = World | Players | Units;
+	public const uint UnitMask = World | Players | Units | Vehicles;
+
+	/// <summary>
+	/// What a crew vehicle collides with: the level, structures (which are on the world
+	/// layer once built) and other crew vehicles — not bodies, which would let one
+	/// rifleman stop a truck, and which the driver's prediction only knows a round trip
+	/// late (GV-D8).
+	/// </summary>
+	public const uint VehicleMask = World | Vehicles;
 }

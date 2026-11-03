@@ -10,6 +10,7 @@
 [ext_resource type="Script" uid="uid://d30qp6prc0xvt" path="res://Scripts/Rts/DefenseMount.cs" id="8_defense"]
 [ext_resource type="Script" uid="uid://d1v3u2uki6be7" path="res://Scripts/Fps/WeaponLocker.cs" id="9_locker"]
 [ext_resource type="PackedScene" uid="uid://cl1bqr2cnooqw" path="res://Scenes/Environment/Pillbox.tscn" id="10_kq4yt"]
+[ext_resource type="PackedScene" path="res://Scenes/Environment/VehicleTestStrip.tscn" id="11_strip"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_xaant"]
 sky_top_color = Color(0.335715, 0.270978, 1, 1)
@@ -425,3 +426,6 @@ script = ExtResource("9_locker")
 
 [node name="Pillbox" parent="." unique_id=1295239688 instance=ExtResource("10_kq4yt")]
 transform = Transform3D(-0.7202122, 0, -0.69375384, 0, 1, 0, 0.69375384, 0, -0.7202122, -75.83365, 0.5, 87.4643)
+
+[node name="VehicleTestStrip" parent="." instance=ExtResource("11_strip")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -104, 0.5, 52.5)

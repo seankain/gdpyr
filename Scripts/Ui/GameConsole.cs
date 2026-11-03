@@ -373,6 +373,11 @@ public partial class GameConsole : CanvasLayer
 		_commands.Register("explode", ExplodeUsage, "draw an explosion where the camera looks, on this screen only",
 			Explode);
 
+		// A crew vehicle in front of you, offline or on a listen host, for driving one
+		// before the kiosk hands them out (docs/GROUND_VEHICLES.md §12, GV2).
+		_commands.Register("vehicle", "vehicle <4x4|helicopter|clear>",
+			"put a 4x4 or a helicopter in front of you, or take every one away", Vehicle);
+
 		_commands.Register("clear", "clear", "empty the scrollback", _ =>
 		{
 			_lines.Clear();
@@ -418,6 +423,49 @@ public partial class GameConsole : CanvasLayer
 
 		combat.RequestLoadout(kit);
 		return ConsoleResult.Say(KitLine(local.PendingLoadout));
+	}
+
+	private static ConsoleResult Vehicle(IReadOnlyList<string> args)
+	{
+		if (args.Count != 1)
+		{
+			return ConsoleResult.Failed("vehicle <4x4|helicopter|clear>");
+		}
+
+		if (Fps.CrewVehicleManager.Instance is not { } crew)
+		{
+			return ConsoleResult.Failed("no crew vehicles in this process");
+		}
+
+		if (string.Equals(args[0], "clear", StringComparison.OrdinalIgnoreCase))
+		{
+			if (Net.NetworkManager.Instance is not { IsClient: false })
+			{
+				return ConsoleResult.Failed("vehicles are the server's: offline or on a listen host");
+			}
+
+			int count = crew.Count;
+			crew.ClearAll();
+			return ConsoleResult.Say($"{count} removed");
+		}
+
+		byte kind = byte.MaxValue;
+		for (byte id = 0; id < CrewVehicleCatalog.Count; id++)
+		{
+			if (string.Equals(args[0], CrewVehicleCatalog.NameOf(id), StringComparison.OrdinalIgnoreCase))
+			{
+				kind = id;
+			}
+		}
+
+		if (kind == byte.MaxValue)
+		{
+			return ConsoleResult.Failed("vehicle <4x4|helicopter|clear>");
+		}
+
+		return crew.SpawnInFrontOf(Match.CombatManager.Instance?.Local, kind, out string message)
+			? ConsoleResult.Say(message)
+			: ConsoleResult.Failed(message);
 	}
 
 	private static readonly string ExplodeUsage =

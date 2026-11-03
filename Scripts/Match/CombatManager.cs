@@ -329,6 +329,15 @@ public partial class CombatManager : Node
 			_hud?.OpenLocker(combat);
 		}
 
+		// In a crew vehicle's seat nothing is in a player's hands yet: the sights come
+		// down, and no trigger, grenade or drone does anything (docs/GROUND_VEHICLES.md
+		// §6.3). Firing from the gun and the passengers' seats is GV4's (§6.4).
+		if (CrewVehicleManager.Instance is { } crew && crew.IsSeated(peerId))
+		{
+			Ads.Step(ref combat.Aim, AimStats.None, input);
+			return;
+		}
+
 		// An FPV drone off the side's shelf, on its key's press (docs/CONTROL_POINTS.md §4).
 		// Never from behind a mounted gun, whose trigger is the gun's.
 		bool behindGun = emplacements != null && emplacements.TryMounted(peerId, out _);
@@ -1496,6 +1505,10 @@ public partial class CombatManager : Node
 		EmplacementManager.Instance?.ResetAll();
 		UnitManager.Instance?.ClearUnits();
 
+		// Every crew vehicle off the field, its riders put down where they sat before the
+		// respawns below put them back on their spawns (docs/GROUND_VEHICLES.md §6.6).
+		CrewVehicleManager.Instance?.ClearAll();
+
 		// A fresh round asks the people here which side they want to play it on,
 		// before anybody is put back on the field (docs/IMPLEMENTATION_PLAN.md §M3).
 		// The bots are not asked and are simply put back; the director will re-plan
@@ -1868,6 +1881,14 @@ public partial class CombatManager : Node
 		if (EmplacementManager.Instance?.PredictUse(combat, input) == UseAction.OpenLocker)
 		{
 			_hud?.OpenLocker(combat);
+		}
+
+		// The server's rule for a seated player, over the same frames: sights down and
+		// nothing fired (docs/GROUND_VEHICLES.md §6.3).
+		if (CrewVehicleManager.Instance is { } crew && crew.IsSeated(combat.PeerId))
+		{
+			Ads.Step(ref combat.Aim, AimStats.None, input);
+			return;
 		}
 
 		// Mounting is not predicted — it is one round trip, once, and a rejected

@@ -94,6 +94,14 @@ public partial class fps_controller : CharacterBody3D, IHumanoidPoseSource
 	public Vector3 SimPosition => _simPosition;
 
 	/// <summary>
+	/// In a crew vehicle's seat (docs/GROUND_VEHICLES.md §6.3): off every collision layer
+	/// and mask, as a corpse is, its movement states not run, and pinned to the seat by
+	/// <see cref="PinToSeat"/> each tick after the vehicles step. Set and cleared by
+	/// <see cref="CrewVehicleManager"/> alone.
+	/// </summary>
+	public bool IsSeated { get; private set; }
+
+	/// <summary>
 	/// A movement state's authored speed [m/s], before <see cref="MoveSpeedScale"/>
 	/// (Scenes/fps_controller.tscn): what the loadout panel scales by a kit's weight to
 	/// say how fast it walks and sprints (docs/LOADOUT.md §7.2). 0 for a state this
@@ -136,6 +144,13 @@ public partial class fps_controller : CharacterBody3D, IHumanoidPoseSource
 	{
 		get
 		{
+			// In a crew vehicle's seat the body is the seat's capsule, placed on the hull as
+			// it stands this tick (docs/GROUND_VEHICLES.md §6.3).
+			if (IsSeated)
+			{
+				return _seatHitbox;
+			}
+
 			if (_collisionShape?.Shape is not CapsuleShape3D capsule)
 			{
 				return HitCapsule.FromFeet(SimPosition, 2f, 0.5f);
@@ -159,6 +174,7 @@ public partial class fps_controller : CharacterBody3D, IHumanoidPoseSource
 	private bool _corpse;
 	private bool _fogHidden;
 	private HumanoidRig _body;
+	private HitCapsule _seatHitbox;
 	private BodyArmourTier _vestTier;
 	private MeshInstance3D _vestBand;
 
@@ -238,6 +254,18 @@ public partial class fps_controller : CharacterBody3D, IHumanoidPoseSource
 		ApplyLook(frame.YawRadians, frame.PitchRadians);
 		YawRate = Mathf.AngleDifference(previousYaw, Yaw) / dt;
 
+		// Seated, the body goes where the seat does (CrewVehicleManager pins it after the
+		// vehicles step) and the movement states are not run: it neither walks nor falls.
+		// The look is still the frame's, and so are the buttons the next tick's edges are
+		// measured from — the use key is how a seated player gets out
+		// (docs/GROUND_VEHICLES.md §6.3).
+		if (IsSeated)
+		{
+			_previousButtons = frame.Buttons;
+			GlobalPosition = _simPosition + _visualOffset;
+			return;
+		}
+
 		_stateMachine.Tick(new InputContext(frame, _previousButtons, dt), dt);
 
 		_previousButtons = frame.Buttons;
@@ -276,7 +304,7 @@ public partial class fps_controller : CharacterBody3D, IHumanoidPoseSource
 	public void SetDeadPresentation(bool dead, bool killed = false)
 	{
 		_deadPresentation = dead;
-		CollisionLayer = dead ? 0u : CollisionLayers.Players;
+		CollisionLayer = dead || IsSeated ? 0u : CollisionLayers.Players;
 
 		if (!dead)
 		{
@@ -369,6 +397,14 @@ public partial class fps_controller : CharacterBody3D, IHumanoidPoseSource
 	public BodyPose ReadPose()
 	{
 		State state = _stateMachine?.CurrentState;
+
+		// Seated is drawn as the crouch until a sitting clip is chosen
+		// (docs/GROUND_VEHICLES.md §6.7); whatever state the body got in from is held, not shown.
+		if (IsSeated)
+		{
+			return new BodyPose { Crouched = true, AimPitch = Pitch };
+		}
+
 		return new BodyPose
 		{
 			Crouched = state is PlayerCrouchingState or PlayerSlidingState,
@@ -460,6 +496,63 @@ public partial class fps_controller : CharacterBody3D, IHumanoidPoseSource
 		Vector3 error = renderPositionBeforeCorrection - _simPosition;
 		_visualOffset = error.Length() > SimConfig.MaxSmoothedErrorMeters ? Vector3.Zero : error;
 		GlobalPosition = _simPosition + _visualOffset;
+	}
+
+	// ---- a crew vehicle's seat (docs/GROUND_VEHICLES.md §6.3) ---------------
+
+	/// <summary>
+	/// Into a seat: off the players' layer and every mask, so a body that is wherever the
+	/// seat is pushes nothing and is pushed by nothing; the correction offset dropped,
+	/// because a seat is a place to be put, not a walk to smooth. The movement state the
+	/// body got in from is held, and resumes when it gets out.
+	/// </summary>
+	public void SetSeated(bool seated)
+	{
+		IsSeated = seated;
+		_visualOffset = Vector3.Zero;
+
+		if (seated)
+		{
+			CollisionLayer = 0u;
+			CollisionMask = 0u;
+			return;
+		}
+
+		CollisionLayer = _deadPresentation ? 0u : CollisionLayers.Players;
+		CollisionMask = CollisionLayers.CharacterMask;
+		_seatHitbox = default;
+	}
+
+	/// <summary>
+	/// Where the seat is this tick: the body placed so its eye is at
+	/// <paramref name="eye"/>, moving at <paramref name="velocity"/> — what a unit leads it
+	/// by — with <paramref name="seatCapsule"/> as its hitbox.
+	/// </summary>
+	public void PinToSeat(Vector3 eye, Vector3 velocity, in HitCapsule seatCapsule)
+	{
+		_seatHitbox = seatCapsule;
+
+		// The eye is the camera, wherever this body's animation has it: measured, so the
+		// pin needs no copy of the scene's numbers.
+		GlobalPosition = _simPosition;
+		Vector3 eyeOffset = camera != null ? camera.GlobalPosition - GlobalPosition : Vector3.Up * 1.5f;
+
+		_simPosition = eye - eyeOffset;
+		GlobalPosition = _simPosition + _visualOffset;
+		Velocity = velocity;
+	}
+
+	/// <summary>
+	/// Out of the seat, standing at <paramref name="feet"/>: back on its layer — unless it
+	/// is a corpse, which falls from where it sat — and colliding again, looking where it
+	/// looked. A placement, not a walk: nothing to smooth.
+	/// </summary>
+	public void LeaveSeat(Vector3 feet, Vector3 velocity)
+	{
+		SetSeated(false);
+		_simPosition = feet;
+		GlobalPosition = feet;
+		Velocity = velocity;
 	}
 
 	// ---- movement, called by the FSM states --------------------------------

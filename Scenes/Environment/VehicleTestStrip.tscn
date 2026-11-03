@@ -1,0 +1,30 @@
+[gd_scene format=3]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_strip"]
+albedo_color = Color(0.78, 0.62, 0.16, 1)
+roughness = 0.85
+
+[node name="VehicleTestStrip" type="Node3D"]
+
+[node name="Bump1" type="CSGPolygon3D" parent="."]
+use_collision = true
+collision_mask = 0
+polygon = PackedVector2Array(0, 0, 1, 0.3, 1.5, 0.3, 2.5, 0)
+depth = 5.0
+material = SubResource("StandardMaterial3D_strip")
+
+[node name="Bump2" type="CSGPolygon3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10, 0, 0)
+use_collision = true
+collision_mask = 0
+polygon = PackedVector2Array(0, 0, 1, 0.3, 1.5, 0.3, 2.5, 0)
+depth = 5.0
+material = SubResource("StandardMaterial3D_strip")
+
+[node name="Ramp" type="CSGPolygon3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 22, 0, 0)
+use_collision = true
+collision_mask = 0
+polygon = PackedVector2Array(0, 0, 6, 1, 8, 1, 8, 0)
+depth = 5.0
+material = SubResource("StandardMaterial3D_strip")

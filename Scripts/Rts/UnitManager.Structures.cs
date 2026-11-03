@@ -657,6 +657,16 @@ public partial class UnitManager
 			}
 		}
 
+		// Nor round a crew vehicle (docs/GROUND_VEHICLES.md §6.7): it is the ground force's
+		// to drive away, and a wall that finished through a truck would decide which of
+		// them is solid.
+		if (Fps.CrewVehicleManager.Instance is { } crew && crew.Obstructs(footprint, structure.Pose.Base.Y,
+			structure.Pose.Base.Y + structure.Shape.Height))
+		{
+			structure.SetObstructed(true);
+			return;
+		}
+
 		for (int i = 0; i < _ordered.Count; i++)
 		{
 			Unit unit = _ordered[i];

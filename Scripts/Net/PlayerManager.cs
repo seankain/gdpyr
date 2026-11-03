@@ -779,6 +779,12 @@ public partial class PlayerManager : Node
 
 		SimulatePlayers(net);
 
+		// The crew vehicles on their drivers' frames, then every seated body pinned to
+		// its seat: after the roster loop, which is where a driver's frame is kept and a
+		// use press seats or unseats somebody, and before the units, which then see and
+		// lead the seated where they sit (docs/GROUND_VEHICLES.md §4).
+		CrewVehicleManager.Instance?.ServerTick(net.Tick);
+
 		// Units first, then combat: a round a unit fired on this tick has to be in
 		// the air before the projectiles are stepped and resolved, or every unit's
 		// shot would be a tick late (docs/IMPLEMENTATION_PLAN.md §M3).
@@ -867,10 +873,13 @@ public partial class PlayerManager : Node
 		CombatManager combat = CombatManager.Instance;
 
 		// A drone's pilot steers it with this frame as they sent it (docs/CONTROL_POINTS.md
-		// §4); the server keeps the latest for the tick the drones fly.
+		// §4); the server keeps the latest for the tick the drones fly. A crew vehicle's
+		// driver steers it the same way, on the tick the vehicles step
+		// (docs/GROUND_VEHICLES.md §4); their body is pinned to the seat and only looks.
 		if (authoritative)
 		{
 			combat?.NoteDroneInput(player.PeerId, frame);
+			CrewVehicleManager.Instance?.NoteInput(player.PeerId, frame);
 		}
 
 		// A dead player keeps their look and loses everything else, on the server and
@@ -1370,6 +1379,7 @@ public partial class PlayerManager : Node
 		// whether they are worth anything.
 		_bots?.ServerTick(net.Tick);
 		SimulatePlayers(net);
+		CrewVehicleManager.Instance?.ServerTick(net.Tick);
 		UnitManager.Instance?.ServerTick(net.Tick);
 		EmplacementManager.Instance?.ServerTick(net.Tick);
 		CombatManager.Instance?.ServerPostTick(net.Tick);

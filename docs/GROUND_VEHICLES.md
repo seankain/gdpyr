@@ -1,7 +1,9 @@
 # gdpyr — Vehicles the ground force drives: a 4x4 and a helicopter
 
-**Status: GV0's baseline measured and GV1's engine-free rules built (§12); nothing in the game calls
-them yet.** Written against `6699b03`. The
+**Status: GV0's baseline measured, GV1's engine-free rules built, and GV2's 4x4 on the authority
+(§12): offline and on a listen host, the console puts a 4x4 or a helicopter down and its own player
+gets in, drives, changes seat and gets out. Nothing is on the wire yet (GV3).** Written against
+`6699b03`. The
 decisions (GV-D1–GV-D17, §3) are the defaults the plan is written against; each is one line to
 change, so flag any you disagree with before GV2 starts. The phases (GV0–GV9, §12) say what each builds, what checks it, and what is
 left for a person at the controls.
@@ -408,7 +410,8 @@ stop on its handbrake; the helicopter's rotor spins down and, in the air, it com
 - **`ServerResetRound` and `RestartRound`** clear every vehicle and make both kinds ready.
 - **A test strip**, built in GV2: two 0.3 m bumps and a 1 m ramp on open ground beside the pads, on
   the World layer, out of the `navmesh` group, where no unit paths. The floor is otherwise flat, and
-  would show the springs only as squat, dive and roll.
+  would show the springs only as squat, dive and roll. GV2 put it 14 m south of the bunker rather
+  than beside the pads, which are GV6's (§12, GV2).
 
 ### 6.7 Every consumer
 
@@ -813,6 +816,128 @@ person drives, bounces over the strip, slides on the handbrake, gets in, changes
 and players and units cannot walk into the hull and are pushed aside by it. Two engine behaviours are
 relied on here and checked here: a body is pushed out of a hull that moved into it by its own
 `MoveAndSlide`, and a bevelled hull in `MotionMode.Floating` does not catch on wall ends at 18 m/s.
+
+**Built on `9962a7b`**, with GV0's .NET SDK and Godot.
+
+- **New:** `Scripts/Fps/CrewVehicle.cs` — the body: a `CharacterBody3D` in `MotionMode.Floating` on
+  layer 4, its bevelled convex collider, four wheel rays (the 4x4) or one height ray (the
+  helicopter), the pure step through `MoveAndSlide`, the pose ring, and the greybox presentation.
+  `Scripts/Fps/CrewVehicleManager.cs` — the sixth autoload: four slots, the seats, the tick, the pin,
+  getting in, changing seat and getting out, the prompts and the console's spawn.
+  `Scripts/Fps/CrewSeatView.cs` — the local player's view from a seat: a chase camera on a
+  `SpringArm3D` at the controls, first person through the body's own camera elsewhere.
+  `Scenes/Environment/VehicleTestStrip.tscn`, instanced on `Scenes/Test.tscn`.
+- **Changed:** `CollisionLayers` (`Vehicles`, `VehicleMask`; `CharacterMask` and `UnitMask` gain
+  Vehicles), `project.godot` (layer 4's name, the autoload), `Scenes/fps_controller.tscn`'s mask (7 →
+  15); `fps_controller` (seated: on no layer and no mask, its movement states not run, pinned to the
+  seat with the vehicle's velocity, the seat's capsule as its hitbox, drawn crouched); `PlayerManager`
+  (the vehicles' tick between the players and the units, offline and on a server; a driver's frame
+  kept); `CombatManager` (seated, the sights come down and nothing fires, on both ends; a new round
+  clears every vehicle); `EmplacementManager` (the use key's `Seated` and `VehicleInReach`, its three
+  actions, the prompts); `LocalInputSampler` (the driven 4x4's turn added to the look); `GameConsole`
+  (`vehicle <4x4|helicopter|clear>`); the debug HUD's `vehicles` row; and the consumers §6.7 names —
+  the dropship's landing and 2 m checks, a rider's exit and a deployed unit's clearance gain
+  Vehicles, and a structure with a vehicle on its footprint does not finish.
+- **Two defects found by the engine checks below, and fixed:**
+  - **The collider was not bevelled on its edges.** GV1's `CrewLayout.BevelledBox` pulled one
+    coordinate of each corner point in by the bevel; the hull of those points cuts the eight
+    corners and keeps every edge sharp between them, so a truck at 18 m/s caught on a wall end it
+    overlapped by 0.1 m exactly as one with no bevel did. Each point now pulls two coordinates in,
+    and the hull is the box with its twelve edges cut at 45°. New tests:
+    `TheCollidersTwelveEdges_AreBevelled_NotOnlyItsCorners` (three boxes) and
+    `ABevelOfNothing_IsTheBox`; the three cases of the first fail on the old shape.
+  - **A truck stopped by a wall kept its speed.** `MoveAndSlide` in floating mode stops a motion
+    within `WallMinSlideAngle` of head-on and leaves `Velocity` as it was, so the step was handed back
+    18 m/s for a truck standing at a wall — one its driver could not have got into, and that GV4's
+    ram would have read as moving. `CrewVehicle.Move` hands back `GetRealVelocity()`.
+- **Tests:** `dotnet test` **2,868 of 2,868 pass**, 4 of them new. The test project's one warning is
+  still GV0's CS0649.
+- **Builds:** `Gdpyr.csproj`, `tools/Gdpyr.Playtest` and `tools/Gdpyr.AgentClient`, 0 warnings and 0
+  errors each, rebuilt from clean.
+- **Engine checks:** `scripts/crew-vehicle-checks.sh` runs `tools/EngineChecks/CrewVehicleChecks.cs`
+  headless, at `--fixed-fps 60`, on a copy of the tree with it added as an autoload — the game never
+  compiles or loads it. **`physics`, 66 of 66 facts**: a world built in the check, with the real
+  `CrewVehicle`, `fps_controller` and `Unit`. **`game`, 37 of 37**: a listen host on `Test.tscn`,
+  its own player driven through the input map (`Input.ActionPress`, read by the sampler as a
+  person's keys are) and the console's own `Submit`.
+- **The scenario suite**, the GV0 way (`--fixed-fps 60` through `GODOT`): **33 of 41**, the same
+  eight failing as at GV0, `htn_squad_retreats` among them as in GV0's first run. Against GV0's two
+  runs, two scenarios report anything different, and neither difference is GV2's: run beside each
+  other on an untouched worktree of `9962a7b` and on this tree, twice each,
+  `technical_wreck_ejects` fails with the same values at a tick that moves from run to run on both
+  (1673 and 1677 untouched, 1737 and 1827 here, 1622 in both GV0 runs, 1623 in this suite), and
+  `tactics_sniper_overwatch`'s `unit_task[goal=23]` reads 1..4 here and 1..7 untouched, both below
+  GV0's 2..6 — the spread GV0 names for it.
+
+Measured by the `physics` check:
+
+| | |
+|---|---|
+| Parked on flat ground | 0.703 m ride height, the rules' `RideHeightMeters`; the collider touches nothing |
+| Over the two 0.3 m bumps at 5 m/s | pitch −7.1° to +7.2°; never fewer than two wheels down; the collider touches a bump on 13 ticks — 0.3 m bumps against 0.25 m of clearance between the axles |
+| Over the bumps at 12 m/s | pitch −3.7° to +4.3°; fewer than two wheels down on 60 ticks; the collider touches on 5 |
+| Off the 1 m ramp at 12 m/s | pitch −2.8° to +19.1°; fewer than two wheels down on 53 ticks, 48 of them in one jump; settled for good, at its ride height, 2.2 s after its centre passes the drop |
+| Off the ramp at 5 m/s | at walking pace it high-centres on the drop: all four wheels off, the collider sliding over the edge, the nose down to the ±35° stop, a hard landing; slowest 4.1 m/s; settled for good 3.2 s after its centre passes the drop |
+| Full lock from 12 m/s | 63° in 1.5 s, no sideways slip; on the handbrake 59°, sliding at up to 4.0 m/s sideways |
+| A wall's end at 18 m/s, overlapping the hull by 0.1 / 0.2 / 0.3 / 0.5 m | shipped bevel (0.25 m): past at 16.1 and 15.5 m/s; stopped dead at 0.3 and 0.5. No bevel: stopped dead at all four |
+| A player or a rifleman on a 4x4's line, at 5 and 15 m/s | in the hull by one tick's travel (0.08, 0.25 m) after the truck moves; 0.000–0.003 m after its own `MoveAndSlide`; carried ahead of the truck; the truck's speed untouched |
+| The same 0.8 m off the line | 0.000–0.007 m after its own move, once 0.067 m (a player at 15 m/s, against the bevel); pushed 0.5–0.7 m aside, off the bevel |
+| A player or a rifleman walking into a parked 4x4's side for 2.5 s | stops at the hull — 1.45 m and 1.35 m from its centre line, its half-width plus their radius — the truck unmoved |
+
+Measured by the `game` check: from rest, four seconds of `W` reach 16.0 m/s and 32.1 m, the seated
+body carried the same 32.1 m with the truck's velocity and its hitbox in the cab; `D` and `Space`
+for a second slide it at up to 5.3 m/s sideways while the hull turns 39.9° and the look 39.2°; `Space`
+stops it; three holds of `E` move the player to the gun, the bed and back to the wheel — at the gun
+the body's eye is the seat's, and with nobody at the wheel the truck stays parked; a tap of `E` puts
+them at the driver's exit point, 0.65 m from the hull, back on their layer, on the floor; walking into
+it for 2 s leaves them 0.50 m from the hull and the truck unmoved. The helicopter climbs to 14.9 m in
+3 s of `Space`, refuses `E` there with `too high to get out`, comes down on `Ctrl`, and lets its pilot
+out on the ground.
+
+Each guard, broken on the check's copy and the `physics` check run, and what failed:
+
+| Broken | Failed |
+|---|---|
+| no bevel in `four_by_four.tres` | 6: both wall ends the shipped hull slides off, and the four bodies 0.8 m off its line it pushes aside |
+| GV1's corner-only `BevelledBox` | the same 6; and, in `dotnet test`, the three bevel cases |
+| `Velocity` handed back instead of the real velocity | 3: a truck driven into a wall's face reads 18 m/s, with the bevel and without; and the 5 m/s strip run does not settle |
+| `CharacterMask` and `UnitMask` without Vehicles, and the scene's mask back to 7 | 22: every body ends up inside the hull, none is pushed, and both walk into a parked one |
+
+What the phase left open, and what GV2 chose:
+
+- **Only the authority's own player is seated until GV3** (`CrewVehicleManager.CanBeSeated`). No
+  vehicle is on the wire, so a remote client would be put in a seat on a truck it cannot see and
+  corrected onto it every snapshot. Bots never are (GV-D15). A remote client's body still meets a
+  hull on the server it cannot see: corrections, until GV3 puts the hull on its screen.
+- **A seated body's movement states are not run**, rather than handed a look-only frame: on no mask
+  it would fall through the floor between pins, and the use key's tap is a release, which needs the
+  previous frame's buttons that a look-only frame strips. Its look is the frame's; it is placed with
+  its camera at the seat's eye, so the gunner and a passenger look out through their own camera.
+  The state it got in from is held, and resumes when it gets out.
+- **Nothing is fired from a seat yet:** every seat lowers the sights and fires nothing, no grenade
+  and no drone, on both ends. The gun and the passengers' weapons are GV4's (§6.4).
+- **Nor is a hull shot yet.** Its boxes are not in `FirstContact` until GV4, so a round meets a seated
+  player's capsule as it would anybody's, the driver's inside the cab included, and the hull takes
+  nothing. The units see, lead and shoot the seated where they sit, through the pin.
+- **The fog does not know about vehicles yet** (GV3, §7.3): a listen-host strategist sees every one.
+- **The helicopter** is put down, flown and landed through the same body and its own step, which
+  costs one ray: the console offers it, and refusing to get out above 4 m is §5.3's rule. GV5 still
+  owns looking at it, the bunker's roof, the mortar against it and the door's arc.
+- **An exit point** is checked as VEHICLES.md §5.4 says, without the navigation mesh, which a
+  player does not walk on; the reachability line runs a metre above the ground under the vehicle,
+  not above its origin, which for the 4x4 is 0.7 m up already.
+- **The prompts** are §8.5's, but the gunner's line has no box count until the gun is GV4's, and
+  `no room to get out` and `too high to get out` show for two seconds after the press refused.
+- **The test strip** is at x −104 to −70, z 47.5 to 52.5 (a CSG polygon extrudes along −Z from its
+  origin, which is at z 52.5): bumps at x −104 and −94, the ramp rising to 1 m over x −82 to −76 and
+  dropping at −74, 14 m south of the bunker's southern corner, (−75.4, 66.3). **For GV6:** the
+  bunker's door is in its +X face, its outward axis (−0.72, 0, 0.69), its sill at 0.92 m; 8 m out is
+  (−92.4, 103.4), but 25 m out is (−104.6, 115.2) — outside `CrewField`'s 115 m, and 4.3 m from the
+  perimeter wall's inner face — so the helicopter's pad cannot be on the door's axis at 25 m.
+- **The console** also has `vehicle clear`, which takes every vehicle away.
+- **Left for a person at the controls**: everything drawn — the greybox, the wheels and the chassis
+  over the strip, the chase camera and its spring arm, first person from the gun and the bed — has
+  been driven headless and never looked at (`TODO(GV2…)` in `CrewVehicle.cs` and `CrewSeatView.cs`).
 
 ### GV3 — The wire, the fog and prediction (3 days)
 

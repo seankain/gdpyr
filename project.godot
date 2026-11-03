@@ -26,6 +26,7 @@ NetworkManager="*res://Scripts/Net/NetworkManager.cs"
 CombatManager="*res://Scripts/Match/CombatManager.cs"
 UnitManager="*res://Scripts/Rts/UnitManager.cs"
 EmplacementManager="*res://Scripts/Fps/EmplacementManager.cs"
+CrewVehicleManager="*res://Scripts/Fps/CrewVehicleManager.cs"
 PlayerManager="*res://Scripts/Net/PlayerManager.cs"
 GameConsole="*res://Scripts/Ui/GameConsole.cs"
 
@@ -283,6 +284,7 @@ rts_toggle_keys={
 3d_physics/layer_1="World"
 3d_physics/layer_2="Players"
 3d_physics/layer_3="Units"
+3d_physics/layer_4="Vehicles"
 
 [navigation]
 
