@@ -30,6 +30,11 @@ dedicated-server authoritative.
   journal, and what playback does with it
 - [`docs/VEHICLES.md`](docs/VEHICLES.md) — vehicles that carry units: the technical with seats,
   boarding and unloading, and a vertical take-off and landing dropship
+- [`docs/GROUND_VEHICLES.md`](docs/GROUND_VEHICLES.md) — vehicles the ground force drives, planned
+  and not built: a 4x4 with sprung suspension, a mounted gun and a passenger in the bed, and a
+  helicopter with a passenger in its door, predicted on the driver's client; passengers fire their
+  own weapons; a kiosk beside the weapon locker hands one of each out on a respawn timer; 200 rifle
+  hits destroy the 4x4, one direct hit from a tank either
 - [`docs/LOADOUT.md`](docs/LOADOUT.md) — the ground force's loadout: a locker panel for
   the primary, spare magazines or grenades and body armour, weight that sets movement speed, and
   resupply at the locker; L0–L8, all built — how much bots fire in a life,
