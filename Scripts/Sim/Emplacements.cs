@@ -45,6 +45,25 @@ public enum UseAction : byte
 	/// act on: the kit it chooses there reaches the server as a request, not as input.
 	/// </summary>
 	OpenLocker,
+
+	/// <summary>
+	/// Get into the crew vehicle in reach, at the free seat whose door is nearest
+	/// (docs/GROUND_VEHICLES.md §5.3). Not predicted: the server seats the player, and the
+	/// next vehicle record says so (GV-D4).
+	/// </summary>
+	EnterVehicle,
+
+	/// <summary>Get out of the seat, at the first clear exit point (§6.3).</summary>
+	ExitVehicle,
+
+	/// <summary>Move to the next free seat, in seat order (§5.3).</summary>
+	ChangeSeat,
+
+	/// <summary>
+	/// Open the vehicle kiosk's panel (§6.6): the owning client's to act on, as the
+	/// locker's is — the vehicle it asks for reaches the server as a request.
+	/// </summary>
+	OpenKiosk,
 }
 
 /// <summary>A press of the use key, as the two ends of the prediction both read it.</summary>
@@ -150,8 +169,28 @@ public readonly struct UseSituation
 	/// </summary>
 	public readonly bool LockerInReach;
 
+	/// <summary>
+	/// In a crew vehicle's seat (docs/GROUND_VEHICLES.md §5.3). Seated, the key is about
+	/// the seat and nothing else is in reach.
+	/// </summary>
+	public readonly bool Seated;
+
+	/// <summary>
+	/// A crew vehicle's hull box is within <see cref="SimConfig.EmplacementReachMeters"/>,
+	/// and nearer than any locker, kiosk, gun or can that is.
+	/// </summary>
+	public readonly bool VehicleInReach;
+
+	/// <summary>
+	/// The vehicle kiosk's footprint is within <see cref="SimConfig.LockerReachMeters"/>
+	/// (<see cref="LockerSupply.FootprintDistance"/>), and nearer than any locker, gun, can
+	/// or hull that is.
+	/// </summary>
+	public readonly bool KioskInReach;
+
 	public UseSituation(UseIntent intent, CarryKind carrying, bool mounted, bool gunInReach, bool canInReach,
-		bool onGround, bool lockerInReach = false)
+		bool onGround, bool lockerInReach = false, bool seated = false, bool vehicleInReach = false,
+		bool kioskInReach = false)
 	{
 		Intent = intent;
 		Carrying = carrying;
@@ -160,6 +199,9 @@ public readonly struct UseSituation
 		CanInReach = canInReach;
 		OnGround = onGround;
 		LockerInReach = lockerInReach;
+		Seated = seated;
+		VehicleInReach = vehicleInReach;
+		KioskInReach = kioskInReach;
 	}
 }
 
@@ -190,6 +232,14 @@ public static class EmplacementSim
 
 		bool hold = situation.Intent == UseIntent.Hold;
 
+		// In a crew vehicle's seat the key is about the seat: a tap gets out, a hold moves
+		// to the next free seat, and nothing outside the vehicle is in reach
+		// (docs/GROUND_VEHICLES.md §5.3).
+		if (situation.Seated)
+		{
+			return hold ? UseAction.ChangeSeat : UseAction.ExitVehicle;
+		}
+
 		if (situation.Mounted)
 		{
 			// Holding the key behind a gun takes it with you: it is the one way to
@@ -217,6 +267,20 @@ public static class EmplacementSim
 		if (situation.LockerInReach)
 		{
 			return hold ? UseAction.None : UseAction.OpenLocker;
+		}
+
+		// The kiosk is the locker's twin beside it: a tap opens its panel, and a hold has
+		// nothing to carry off.
+		if (situation.KioskInReach)
+		{
+			return hold ? UseAction.None : UseAction.OpenKiosk;
+		}
+
+		// Empty-handed and on the ground beside a hull, a tap gets in. A hold does
+		// nothing: there is no carrying a truck away.
+		if (situation.VehicleInReach)
+		{
+			return !hold && situation.OnGround ? UseAction.EnterVehicle : UseAction.None;
 		}
 
 		if (situation.CanInReach)

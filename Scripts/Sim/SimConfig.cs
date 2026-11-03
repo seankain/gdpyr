@@ -245,6 +245,14 @@ public static class SimConfig
 	public const int MaxPassengers = 8;
 
 	/// <summary>
+	/// Crew vehicles — the ground force's 4x4s and helicopters — alive at once
+	/// (docs/GROUND_VEHICLES.md §5.8). A vehicle is named on the wire by its slot, 0 to
+	/// 3, in the vehicle message (§7.1), so this is the width of that name; two kinds at
+	/// a cap of one each use two of them.
+	/// </summary>
+	public const int MaxCrewVehicles = 4;
+
+	/// <summary>
 	/// Barracks one map may carry. A barracks is named by its index in the map's
 	/// <c>barracks</c> group on the wire, exactly as a resource node is, so this is
 	/// the width of that name rather than a level-design opinion — and it is the

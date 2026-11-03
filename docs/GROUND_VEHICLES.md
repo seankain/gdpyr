@@ -1,6 +1,7 @@
 # gdpyr — Vehicles the ground force drives: a 4x4 and a helicopter
 
-**Status: plan; GV0's baseline measured (§12), nothing built.** Written against `6699b03`. The
+**Status: GV0's baseline measured and GV1's engine-free rules built (§12); nothing in the game calls
+them yet.** Written against `6699b03`. The
 decisions (GV-D1–GV-D17, §3) are the defaults the plan is written against; each is one line to
 change, so flag any you disagree with before GV2 starts. The phases (GV0–GV9, §12) say what each builds, what checks it, and what is
 left for a person at the controls.
@@ -729,6 +730,78 @@ The eight that fail in either run are CONTROL_POINTS.md §5.4's eight:
 All of §5. **Done when** each fact in §5 passes and each of these, broken, fails one: no bump stop, a
 damping ratio of 0, an enclosed capsule poking out of its hull, the timer counted from the spawn, the
 view tick unclamped, a ram that kills at any speed. Nothing in the game calls any of it yet.
+
+**Built on `59f08dc`**, with the .NET SDK and Godot of GV0.
+
+- **New rules**, in `Scripts/Sim`: `FourByFour.cs`, `Helicopter.cs`, `CrewSeats.cs` (the kinds, seat
+  roles, arcs, seats, hull boxes, `CrewLayout`, the seat rules and `CrewField`, the field bounds both
+  steps keep to), `VehicleKiosk.cs`, `PoseHistory.cs` (with `CrewPose`), `CrewLedger.cs` and
+  `Ramming.cs`. `HitObb`, its slab test, `DistanceTo` and `ClosestPoint` are in `Hitbox.cs`. The
+  use key's four actions and three situations are appended in `Emplacements.cs`, as optional
+  constructor arguments, so no caller changes.
+- **Definitions:** `Scripts/Fps/CrewVehicleDefinition.cs`, `Scripts/Core/CrewVehicleCatalog.cs` (not
+  loaded yet), `Vehicles/four_by_four.tres`, `Vehicles/helicopter.tres`,
+  `Weapons/vehicle_gun/vehicle_gun.tres` (id 14), `Weapons/ram/ram.tres` (id 15),
+  `ProjectileDefinition.VehicleImpactDamage` through `ProjectileStats` (`cannon_76.tres`: 1,000), and
+  `SimConfig.MaxCrewVehicles = 4`. The nine new scripts' `.uid` files are committed, as Godot 4.6
+  generated them; the four #67 left without one are not.
+- **Tests:** `dotnet test` **2,864 of 2,864 pass**, 148 of them new: `FourByFourTests` (21),
+  `HelicopterTests` (15), `CrewSeatTests` (30), `HitboxTests` (+18), `VehicleKioskTests` (13),
+  `PoseHistoryTests` (7), `CrewLedgerTests` (13), `RammingTests` (10) and `CrewVehicleResourceTests`
+  (21), with `Tests/CrewVehicleFiles.cs` reading the vehicle files. The test project's one warning is
+  still GV0's CS0649.
+- **Builds:** `Gdpyr.csproj`, `tools/Gdpyr.Playtest` and `tools/Gdpyr.AgentClient`, 0 warnings and
+  0 errors each, rebuilt from clean.
+- **Godot 4.6, headless**, on a copy of the tree: imported, solutions built, and a script loaded the
+  two vehicles, the gun, the ram and `cannon_76.tres` and printed every array and number above as
+  authored. The editor scan's seven "autoload is not compiling" errors are there on the unchanged
+  tree too.
+
+Each guard, broken by hand and the whole suite run, and what failed:
+
+| Broken | Failed |
+|---|---|
+| no bump stop (`BumpStopStiffnessScale` 1) | `AHardLanding_IsCaughtByTheBumpStop_BeforeTheEndOfTheTravel`, `TheLastFiveCentimetresOfTravel_AreTenTimesAsStiff` |
+| a damping ratio of 0 | 8, among them both settling facts and `WithNoInputOnFlatGround_ItsEnergyNeverGrows_AndIsGoneIn10Seconds` |
+| the driver's capsule top raised to 1.3 m, out of the cab | `EveryEnclosedSeatsCapsule_LiesInsideAHullBox_ByFiveCentimetresOnEveryAxis`, `NoSegmentFromOutside_ReachesAnEnclosedSeat_BeforeTheHull` |
+| the timer started by the spawn, not the loss | `TheTimer_RunsFromTheLoss_NotTheSpawn`, `ANewRound_MakesItReadyAgain` |
+| the view tick unclamped | `TheViewTick_IsClampedToTheRing`, `TheViewTicksPose_IsAlwaysInTheRing` |
+| a ram that kills at any speed | 4, among them `ARiflemanDeadAhead_DiesAt8MetresASecond_AndNotAt7Point9` and `AParkedTruck_KillsNothing_WhateverWalksIntoIt` |
+
+Measured on the default 4x4, on flat ground: dropped 0.3 m it settles inside 2 % in 1.13 s; 3 cm up,
+it overshoots by 32–42 % and settles in 1.0–1.45 s (the test's bounds); dropped 0.6 m its springs
+reach 0.237 m of their 0.25 m travel, and 0.267 m — past it — without the bump stop; full throttle
+reaches 17.6 m/s at 4.38 s; at 12 m/s on full lock it rolls 3.9° outward (5.3° at the peak) with no
+sideways slip, and on the handbrake slides at up to 4.1 m/s sideways.
+
+What the plan left open, and what GV1 chose:
+
+- **Numbers §5.1 does not give**, in `four_by_four.tres` and `FourByFourTraits.Default`: wheelbase
+  3.0 m, track 1.7 m, wheel radius 0.4 m, a spring 0.40 m long with 0.25 m of travel, the load
+  transfer's height 0.55 m, and pitch and roll radii of gyration of 1.5 and 0.85 m — the lever arms,
+  so all three modes ride at 1.6 Hz and 0.3. At 0.9 m the inner wheels left the ground in a turn at
+  grip and the body rolled to the 35° stop. The helicopter's: vertical acceleration 8 m/s², the
+  unpiloted drag 2 m/s², and a tilt that follows its acceleration at 6 /s.
+- **The handbrake** keeps the yaw rate's cut at full grip and gives a third of it to the sideways
+  bleed, so it slides; a cut at a third would turn less and slide no more.
+- **No lift below 60 %** stops a climb and a hold, not a descent: in the air without lift, piloted or
+  not, the helicopter comes down at the unpiloted 4 m/s. Read as a fall, an unpiloted one at 20 m
+  would pass 4 m/s 1.6 s after its pilot left. Grounded, it neither slides nor turns.
+- **Both steps keep their body in the field** (`CrewField`: ±115 m across, −50 to 100 m up), which is
+  the helicopter's §5.2 clamp and the 4x4's "inside the wire's ±327.67 m".
+- **Seats and hulls are parallel packed arrays** in the `.tres`, not sub-resources, so the containment
+  and arc facts are checked against the files that ship without the engine. The geometry is a
+  greybox's: the 4x4's driver sits 0.15 m or more inside the cab on every side, its gunner and bed
+  passenger stand in the bed with their top 0.4 m clear of every box, and the helicopter's
+  passenger sits outside the cabin's left face. Arcs: the bed 45°–315° from the nose and −30° to
+  60°; the door 15°–165° to the left and −70° to 20°.
+- **`CrewLedger`** takes the character's `PredictionLedger`, whose input ring it reads, and answers a
+  first record after getting in with `Snap` carrying the ticks to replay (`ack + 1` to the newest
+  input); `LastReplayLength` counts them. An acknowledgement the ring has outrun snaps with nothing
+  to replay.
+- **A kind whose pad failed its check** is refused `invalid`: the kiosk does not offer it.
+- **`PoseHistory.ViewTick`** clamps each reported latency before adding them; a test with
+  `int.MaxValue` found the sum wrapping.
 
 ### GV2 — The 4x4 on the authority (3 days)
 
