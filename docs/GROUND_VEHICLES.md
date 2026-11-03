@@ -1,8 +1,8 @@
 # gdpyr — Vehicles the ground force drives: a 4x4 and a helicopter
 
-**Status: plan; nothing is built.** Written against `6699b03`. The decisions (GV-D1–GV-D17, §3)
-are the defaults the plan is written against; each is one line to change, so flag any you disagree
-with before GV2 starts. The phases (GV0–GV9, §12) say what each builds, what checks it, and what is
+**Status: plan; GV0's baseline measured (§12), nothing built.** Written against `6699b03`. The
+decisions (GV-D1–GV-D17, §3) are the defaults the plan is written against; each is one line to
+change, so flag any you disagree with before GV2 starts. The phases (GV0–GV9, §12) say what each builds, what checks it, and what is
 left for a person at the controls.
 
 This is not [`VEHICLES.md`](VEHICLES.md). That plan's technical and dropship are the strategist's
@@ -54,7 +54,7 @@ Facts this plan stands on, each read in the source at `6699b03`.
 | The floor is a flat 240 × 240 m slab; its obstacles are 1.2 m low walls, 2.8–3 m blocks and the range posts | `Scenes/Test.tscn` |
 | The ground force's keys: W A S D, Space, Ctrl, Shift, 1 2 3, R, V, E, G, Q, F1–F3, both mouse buttons. U, T and G are each asserted to carry one action | `project.godot`; `Tests/VehicleControlsTests.cs`; `GrenadeTests.TheGrenadeKeyIsBound` |
 | There is no fall damage: a player's health changes only in `CombatManager.Damage`, which only rounds, blasts and swings reach | `CombatManager.cs:1226`, `:1238` |
-| No `dotnet` and no Godot were available where this plan was written: nothing in it has been run | — |
+| No `dotnet` and no Godot were available where this plan was written: nothing in it has been run. GV0 (§12) has since run the existing tests and scenarios at `3a43127` | — |
 
 ---
 
@@ -673,6 +673,56 @@ did.
 with `--fixed-fps 60`, at the start commit. The last recorded suite is 33 of 41
 (CONTROL_POINTS.md §5.4), six of its eight failures older than the branch it was taken on; GV7
 compares against this run, not that one.
+
+**Measured at `3a43127`**, whose code is `6699b03`'s: the commits between them change only
+README.md, IMPLEMENTATION_PLAN.md and this document. .NET SDK 8.0.133 (Ubuntu 24.04's
+`dotnet-sdk-8.0`); Godot `4.6.stable.mono.official.89cea1439`, the project imported once with
+`--headless --import`. The harness starts the server with no frame-rate option (`ServerProcess`), so
+`--fixed-fps 60` went in through `GODOT`, a wrapper that runs `godot --fixed-fps 60 "$@"`.
+
+- `dotnet test Tests/Gdpyr.Tests.csproj`: **2,716 of 2,716 pass.** The test project builds with one
+  warning, CS0649 at `Tests/MarksmanTests.cs:53` (`Rig.HasTarget` is never assigned); the phases'
+  0-warning rule covers the three builds below, not the tests.
+- `dotnet build` of `Gdpyr.csproj`, `tools/Gdpyr.Playtest` and `tools/Gdpyr.AgentClient`: 0
+  warnings, 0 errors each.
+- `./scripts/playtest.sh Tests/Scenarios/*.json`, run twice: **33 of 41 pass, then 34 of 41**, in
+  673 s and 681 s of scenario wall time. The harness's output from both runs is in
+  [`baselines/gv0-3a43127-run1.txt`](baselines/gv0-3a43127-run1.txt) and
+  [`-run2.txt`](baselines/gv0-3a43127-run2.txt). Those two files are what GV7 compares against.
+
+The eight that fail in either run are CONTROL_POINTS.md §5.4's eight:
+
+| Scenario | Run 1 | Run 2 | Claims that fail |
+|---|---|---|---|
+| `locker_launcher_vs_tank` | fail | fail | no kit taken (`loadouts_applied` 0), so no launcher damage |
+| `locker_resupply` | fail | fail | no `resupply` event; reserve ends at 90, not 150 |
+| `locker_resupply_under_fire` | fail | fail | no armour `resupply`; the vest ends at 20, not 60 |
+| `htn_locker_runner_kit` | fail (seed 1) | fail (seed 3) | `events.kit.count` 0 |
+| `htn_strategist_digs_in` | fail | fail | seed 2: no sandbags placed or built at home (`x>80`) |
+| `tactics_move_to_node` | fail | fail | `squad_drill` phase 5 in 0 of 3 seeds |
+| `technical_wreck_ejects` | fail | fail | seed 2: no wreck, nobody out |
+| `htn_squad_retreats` | fail (1 of 4 seeds fell back) | **pass** (3 of 4) | needs 2 of 4 |
+
+- **The three `locker_*` failures are caused by the locker's move**, which CONTROL_POINTS.md §5.4
+  only guessed at. `0a75fc4` moved `WeaponLocker1` from (8, 0.5, 11) to (−79.45, 1.95, 91.38), in
+  the bunker. These three scenarios still spawn their player at (8, 1, 7.75–10.25), beside where the
+  locker used to be and 119–121 m from where it is now, so no kit is taken and no resupply is paid.
+  `locker_kit_refused` passes for the same reason: its claim is a `not_at_locker` refusal, and it now
+  gets one at 121 m instead of 3 m. The fix is to move those spawns to the locker; that is outside
+  this plan. GV7's kiosk scenarios must place players by the locker's current position.
+- The other five failures are not investigated here.
+- **Run-to-run spread.** 37 of the 41 scenarios report every claim's value identically in both runs.
+  The four that do not: `htn_squad_retreats`, as in the table; `htn_locker_runner_kit`, which fails
+  in a different seed each run; `tactics_sniper_overwatch`, `unit_task[goal=21]` 2..9 then 8..11 and
+  `[goal=23]` 2..6 then 5..7; and `tactics_react_to_fire`, `chair.units.58.last` 0.007..0.019 then
+  0.013..0.019. All four rest on what bots or units decide, over three or four seeds. GV7 counts a
+  difference in these four, within the ranges above, as spread (AGENT_API.md §3), and any other
+  difference as a change to explain.
+- Importing the project in Godot 4.6 rewrites 78 committed `.import` files with keys the editor now
+  writes (`compress/uastc_level`, `process/channel_remap/*`, …). It also creates `.uid` files for
+  the four scripts #67 added without one (`Scripts/Effects/*.cs`, `Scripts/Sim/Explosions.cs`).
+  Neither is committed here. GV1 is the first phase that adds scripts, and it should commit their
+  `.uid` files, as every other script in `Scripts/` has.
 
 ### GV1 — The rules, engine-free (3 days)
 
