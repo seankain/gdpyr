@@ -56,6 +56,7 @@ public partial class CrewVehicle : CharacterBody3D
 	private readonly Node3D[] _wheelNodes = new Node3D[FourByFourSim.Wheels];
 	private Node3D _rotor;
 	private Node3D _tailRotor;
+	private Node3D _gun;
 	private float _rotorAngle;
 
 	/// <summary>Which of <see cref="SimConfig.MaxCrewVehicles"/> it is: what the vehicle record names on the wire (§7.1).</summary>
@@ -87,6 +88,24 @@ public partial class CrewVehicle : CharacterBody3D
 	public float Health { get; set; }
 
 	public bool Destroyed { get; set; }
+
+	/// <summary>Server: the tick it was destroyed on, which the wreck burns from (GV-D12); 0 while it is not.</summary>
+	public uint DestroyedTick { get; set; }
+
+	/// <summary>Its mounted gun (§5.8); null for a kind with none, the helicopter.</summary>
+	public CrewGun Gun { get; private set; }
+
+	/// <summary>
+	/// Server: whoever was last at the controls, and the tick they left them — 0 while
+	/// they still are: who a unit run over is credited to for three seconds after the
+	/// seat empties (§5.9).
+	/// </summary>
+	public int LastDriverPeerId { get; private set; }
+
+	public uint DriverLeftTick { get; private set; }
+
+	/// <summary>Server: units it has run over since it was put on the field (§6.5). For the debug HUD.</summary>
+	public int RunOver { get; set; }
 
 	/// <summary>Its pose over the last half second (§5.6): what a seated shooter's round will leave from.</summary>
 	public PoseHistory Poses { get; } = new();
@@ -131,6 +150,9 @@ public partial class CrewVehicle : CharacterBody3D
 	/// <summary>Its velocity, as the step last left it.</summary>
 	public Vector3 SimVelocity => Kind == CrewVehicleKind.Helicopter ? Flight.Velocity : Drive.Velocity;
 
+	/// <summary>How fast it is turning [rad/s], as the step last left it: what sweeps its corners into a unit (§5.9).</summary>
+	public float YawRate => Kind == CrewVehicleKind.Helicopter ? Flight.YawRate : Drive.YawRate;
+
 	/// <summary>Its speed, all three axes [m/s]: what getting in is measured against (§5.3).</summary>
 	public float Speed => SimVelocity.Length();
 
@@ -161,6 +183,7 @@ public partial class CrewVehicle : CharacterBody3D
 			DriveTraits = definition.ToFourByFourTraits(),
 			FlightTraits = definition.ToHelicopterTraits(),
 			Health = definition.MaxHealth,
+			Gun = definition.HasGun ? new CrewGun(definition) : null,
 		};
 
 		vehicle.Drive = FourByFourState.At(position, yaw);
@@ -310,6 +333,8 @@ public partial class CrewVehicle : CharacterBody3D
 			DriverSeated = DriverPeerId != 0,
 			Health = CrewVehicleCodec.HealthToU16(Health),
 			DriverInputTick = DriverPeerId != 0 ? DriverInputTick : 0,
+			GunRounds = Gun == null ? (byte)0 : (byte)Mathf.Clamp(Gun.Box.Ammo, 0, byte.MaxValue),
+			GunReloading = Gun != null && Gun.Box.IsReloading,
 		};
 
 		if (Kind == CrewVehicleKind.Helicopter)
@@ -331,16 +356,30 @@ public partial class CrewVehicle : CharacterBody3D
 
 	/// <summary>
 	/// Client: what a record says that is not where it is — its health, whether it is a
-	/// wreck, who sits where, how fast it is going, its steering or rotor. The pose is the
-	/// interpolator's (<see cref="PlaceAt"/>) or the prediction's (<see cref="Restore"/>).
+	/// wreck, who sits where, how fast it is going, its steering or rotor, and its gun's
+	/// box unless this client is behind the gun and keeps its own (<paramref name="keepGun"/>,
+	/// NETCODE.md §10.2). The pose is the interpolator's (<see cref="PlaceAt"/>) or the
+	/// prediction's (<see cref="Restore"/>). A record that turns it into a wreck draws the
+	/// wreck going up; the first record this client has of one does not (EFFECTS.md §2.3).
 	/// </summary>
-	public void ApplyRecord(in CrewVehicleRecord record, bool withMotion)
+	public void ApplyRecord(in CrewVehicleRecord record, bool withMotion, bool keepGun = false, bool first = false)
 	{
+		bool wasDestroyed = Destroyed;
 		Health = record.Health;
 		Destroyed = record.Destroyed;
 		for (int seat = 0; seat < Occupants.Length; seat++)
 		{
 			Occupants[seat] = seat < Seats.Length ? record.SeatPeer(seat) : 0;
+		}
+
+		if (Gun != null && !keepGun)
+		{
+			Gun.Box.Ammo = record.GunRounds;
+		}
+
+		if (Destroyed && !wasDestroyed)
+		{
+			PresentDestroyed(effect: !first);
 		}
 
 		if (!withMotion)
@@ -426,6 +465,21 @@ public partial class CrewVehicle : CharacterBody3D
 		}
 	}
 
+	/// <summary>
+	/// The gun drawn pointing along <paramref name="local"/>, a direction in the hull's own
+	/// frame: where its gunner's look puts it (§6.4). Presentation only.
+	/// </summary>
+	public void PointGun(Vector3 local)
+	{
+		if (_gun == null || !(local.LengthSquared() > 1e-8f))
+		{
+			return;
+		}
+
+		Aim.Angles(local, out float yaw, out float pitch);
+		_gun.Rotation = new Vector3(pitch, yaw, 0f);
+	}
+
 	/// <summary>Client: hides it from a strategist the fog no longer tells about it (§7.3). Presentation only; it is still solid.</summary>
 	public void SetFogHidden(bool hidden)
 	{
@@ -470,6 +524,55 @@ public partial class CrewVehicle : CharacterBody3D
 
 	/// <summary>How many seats have somebody in them.</summary>
 	public int Aboard => CrewSeats.Occupied(Occupants, Seats.Length);
+
+	/// <summary>
+	/// Server: who is at the controls now, after a seat changed (§5.9's credit): somebody
+	/// new takes it; nobody, after somebody, starts their three seconds.
+	/// </summary>
+	public void NoteDriver(int driverPeerId, uint tick)
+	{
+		if (driverPeerId != 0)
+		{
+			LastDriverPeerId = driverPeerId;
+			DriverLeftTick = 0;
+			return;
+		}
+
+		if (LastDriverPeerId != 0 && DriverLeftTick == 0)
+		{
+			DriverLeftTick = tick;
+		}
+	}
+
+	/// <summary>Whose a unit run over on <paramref name="tick"/> is (<see cref="Ramming.Credit"/>): a peer id, or 0.</summary>
+	public int RamCredit(uint tick) => Ramming.Credit(DriverPeerId, LastDriverPeerId, DriverLeftTick, tick);
+
+	/// <summary>Its hull's boxes with the vehicle at <paramref name="pose"/>, into <paramref name="into"/>; how many.</summary>
+	public int PlaceHull(in CrewPose pose, Span<HitObb> into)
+	{
+		int count = Math.Min(Hull.Length, into.Length);
+		for (int i = 0; i < count; i++)
+		{
+			into[i] = Hull[i].Place(pose);
+		}
+
+		return count;
+	}
+
+	/// <summary>The most any of its hull's boxes reaches from its origin [m]: the ring a unit is looked for in.</summary>
+	public float HullRadius
+	{
+		get
+		{
+			float radius = 0f;
+			for (int i = 0; i < Hull.Length; i++)
+			{
+				radius = Mathf.Max(radius, Hull[i].Center.Length() + Hull[i].HalfExtents.Length());
+			}
+
+			return radius;
+		}
+	}
 
 	public bool HasFreeSeat => CrewSeats.HasFreeSeat(Occupants, Seats.Length);
 
@@ -551,6 +654,50 @@ public partial class CrewVehicle : CharacterBody3D
 		}
 	}
 
+	// TODO(GV4, docs/GROUND_VEHICLES.md §12): check on a display: the wreck going up and burning, the
+	// gun turning with its gunner, tracers leaving the gun and the bed of a moving 4x4, the bed's
+	// "no shot". Driven headless by scripts/crew-vehicle-checks.sh combat, never looked at.
+	/// <summary>
+	/// The wreck (GV-D12, EFFECTS.md §2.3): its hull drawn burnt, and — unless this peer is
+	/// only now hearing of a wreck that went up before it was told about it — the
+	/// vehicle's explosion at the middle of the hull, as a unit vehicle's wreck is drawn.
+	/// Presentation only, and nothing on a peer that draws nothing.
+	/// </summary>
+	public void PresentDestroyed(bool effect = true)
+	{
+		if (_visual == null)
+		{
+			return;
+		}
+
+		var burnt = new StandardMaterial3D { AlbedoColor = new Color(0.08f, 0.08f, 0.08f), Roughness = 1f };
+		foreach (Node child in _visual.GetChildren())
+		{
+			if (child is MeshInstance3D mesh)
+			{
+				mesh.MaterialOverride = burnt;
+			}
+		}
+
+		if (!effect || Gdpyr.Effects.ExplosionEffects.Instance is not { } effects || Hull.Length == 0)
+		{
+			return;
+		}
+
+		// From the bottom of the hull's lowest box, as tall as the boxes stand together.
+		float bottom = float.MaxValue;
+		float top = float.MinValue;
+		for (int i = 0; i < Hull.Length; i++)
+		{
+			bottom = Mathf.Min(bottom, Hull[i].Center.Y - Hull[i].HalfExtents.Y);
+			top = Mathf.Max(top, Hull[i].Center.Y + Hull[i].HalfExtents.Y);
+		}
+
+		Vector3 centre = CrewLayout.HullCentre(Hull);
+		effects.SpawnWreck(Pose.ToWorld(new Vector3(centre.X, bottom, centre.Z)), top - bottom, FlatRadius,
+			Definition.Color);
+	}
+
 	private void BuildPresentation()
 	{
 		var body = new StandardMaterial3D { AlbedoColor = Definition.Color, Roughness = 0.7f };
@@ -577,6 +724,7 @@ public partial class CrewVehicle : CharacterBody3D
 		if (Definition.HasGun)
 		{
 			var mount = new Node3D { Name = "Gun", Position = Definition.GunMount };
+			_gun = mount;
 			mount.AddChild(new MeshInstance3D
 			{
 				Mesh = new BoxMesh { Size = new Vector3(0.18f, 0.22f, 0.4f) },

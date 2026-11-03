@@ -121,7 +121,26 @@ public class KitRequestTests
 		Assert.Equal(KitRefusal.NotAtLocker, refusal);
 		Assert.True(KitRequest.TryRead(0, out refusal));
 		Assert.Equal(KitRefusal.None, refusal);
-		Assert.False(KitRequest.TryRead(7, out _));
+		Assert.True(KitRequest.TryRead(7, out refusal));
+		Assert.Equal(KitRefusal.Seated, refusal);
+		Assert.False(KitRequest.TryRead(8, out _));
 		Assert.False(KitRequest.TryRead(255, out _));
+	}
+
+	[Fact]
+	public void NothingFromTheLockerReachesACrewVehicleSeat_AsTheBodysStateAfterBeingBehindAGun()
+	{
+		// docs/GROUND_VEHICLES.md §6.4. Appended to the wire byte, so every refusal before
+		// it keeps its number; checked with the body's other states, before where it stands.
+		Assert.Equal(7, (int)KitRefusal.Seated);
+		Assert.Equal("seated", KitRequest.CodeOf(KitRefusal.Seated));
+		Assert.Equal(KitRefusal.Seated, KitRequest.Check(new KitSituation(true, false, CarryKind.None, 0f, true,
+			1000, 0, seated: true)));
+		Assert.Equal(KitRefusal.Mounted, KitRequest.Check(new KitSituation(true, true, CarryKind.None, 0f, true,
+			1000, 0, seated: true)));
+		Assert.Equal(KitRefusal.Seated, KitRequest.Check(new KitSituation(true, false, CarryKind.None, 50f, true,
+			1000, 0, seated: true)));
+		Assert.Equal(KitRefusal.None, KitRequest.Check(new KitSituation(true, false, CarryKind.None, 0f, true,
+			1000, 0, seated: false)));
 	}
 }

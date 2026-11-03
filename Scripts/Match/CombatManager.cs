@@ -106,6 +106,37 @@ public partial class CombatManager : Node
 	private readonly Wreck[] _wrecks = new Wreck[SimConfig.MaxUnits];
 	private int _wreckCount;
 
+	/// <summary>A crew vehicle destroyed this tick, and by what (docs/GROUND_VEHICLES.md GV-D12).</summary>
+	private struct CrewWreck
+	{
+		public int Slot;
+		public int AttackerOwnerId;
+		public byte Weapon;
+		public bool KillsAll;
+		public Vector3 At;
+	}
+
+	/// <summary>The crew vehicles destroyed this tick, for <see cref="ResolveCrewWrecks"/>. Pre-sized.</summary>
+	private readonly CrewWreck[] _crewWrecks = new CrewWreck[SimConfig.MaxCrewVehicles];
+	private int _crewWreckCount;
+	private readonly int[] _ejectedPeers = new int[CrewLayout.MaxSeats];
+	private readonly bool[] _ejectedPlaced = new bool[CrewLayout.MaxSeats];
+
+	/// <summary>
+	/// Client: a predicted round adopted by the server's spawn of it — the server's id, the
+	/// origin this client's tracer left from and the one the server's round did. What an
+	/// engine check compares a seated shooter's two origins by (docs/GROUND_VEHICLES.md
+	/// §12, GV4); nothing in the game listens.
+	/// </summary>
+	public event Action<uint, uint, Vector3, Vector3> PredictionAdopted;
+
+	/// <summary>
+	/// Server: a round fired from a crew vehicle's seat — the round's id, its shooter, the
+	/// tick it was fired on and the view tick its origin was taken from (§5.6). For the
+	/// same engine check; nothing in the game listens.
+	/// </summary>
+	public event Action<uint, int, uint, float> SeatedRoundFired;
+
 	private ProjectileSim _projectiles;
 	private GameModeDefinition _gameMode;
 	private ProjectileView _view;
@@ -329,12 +360,13 @@ public partial class CombatManager : Node
 			_hud?.OpenLocker(combat);
 		}
 
-		// In a crew vehicle's seat nothing is in a player's hands yet: the sights come
-		// down, and no trigger, grenade or drone does anything (docs/GROUND_VEHICLES.md
-		// §6.3). Firing from the gun and the passengers' seats is GV4's (§6.4).
-		if (CrewVehicleManager.Instance is { } crew && crew.IsSeated(peerId))
+		// In a crew vehicle's seat (docs/GROUND_VEHICLES.md §6.4): from the hull as the
+		// player's client was drawing it when it sampled this frame (§5.6). Never a
+		// grenade, a drone or the hammer.
+		if (CrewVehicleManager.Instance is { } crew && crew.TrySeat(peerId, out CrewVehicle vehicle, out int seat))
 		{
-			Ads.Step(ref combat.Aim, AimStats.None, input);
+			SimulateSeated(combat, vehicle, seat, vehicle.Poses.Sample(ViewTickOf(combat, tick)), input, tick,
+				authoritative: true);
 			return;
 		}
 
@@ -415,6 +447,11 @@ public partial class CombatManager : Node
 		// (docs/VEHICLES.md §5.5). Before the economy and the fog, which then see them
 		// where they landed.
 		ResolveWrecks(tick);
+
+		// The crew vehicles' wrecks, right after the strategist's and for the same reasons
+		// (docs/GROUND_VEHICLES.md §6.5): every kill of the tick is in, and nobody's fate
+		// depends on where they are in a damage loop.
+		ResolveCrewWrecks(tick);
 		ServerRespawns(tick);
 
 		// After every hit of the tick, so a hit on this tick locks this tick's resupply
@@ -457,7 +494,10 @@ public partial class CombatManager : Node
 		}
 	}
 
-	private void Fire(PlayerCombat combat, uint tick)
+	private void Fire(PlayerCombat combat, uint tick) => Fire(combat, tick, combat.Character.EyePosition);
+
+	/// <summary>The equipped weapon's round, from <paramref name="origin"/>: the eye on foot, a seat's eye in a vehicle. Its id, or 0.</summary>
+	private uint Fire(PlayerCombat combat, uint tick, Vector3 origin)
 	{
 		byte definitionId = combat.EquippedDefinitionId;
 
@@ -470,8 +510,106 @@ public partial class CombatManager : Node
 		// Lag compensation, the cheap way (docs/NETCODE.md §4.3): the round starts its
 		// life the shooter's one-way latency further along, so it arrives where they
 		// aimed rather than where they would have had to lead to allow for the link.
-		SpawnProjectile(tick, OwnerId.ForPeer(combat.PeerId), definitionId, combat.Character.EyePosition,
-			direction, combat.LagCompensationTicks);
+		return SpawnProjectile(tick, OwnerId.ForPeer(combat.PeerId), definitionId, origin, direction,
+			combat.LagCompensationTicks);
+	}
+
+	/// <summary>
+	/// The tick <paramref name="combat"/>'s client was drawing when it sampled the frame
+	/// the server steps on <paramref name="tick"/> (docs/GROUND_VEHICLES.md §5.6): what its
+	/// input packet said, or — for a client that has not said — an estimate from its
+	/// latency, its buffer and the interpolation delay. <paramref name="tick"/> itself for a
+	/// player with no client across a link.
+	/// </summary>
+	private static float ViewTickOf(PlayerCombat combat, uint tick)
+	{
+		PlayerManager players = PlayerManager.Instance;
+		return PoseHistory.ViewTick(tick, players?.DrawnTickOf(combat.PeerId) ?? float.NaN, combat.LagCompensationTicks,
+			players?.InputBufferDepthOf(combat.PeerId) ?? 0f, players?.HasRemoteClient(combat.PeerId) ?? false);
+	}
+
+	/// <summary>
+	/// One tick of a seated player's weapons (docs/GROUND_VEHICLES.md §6.4), on the
+	/// authority and on their own client alike, over the same frame: the hull at
+	/// <paramref name="pose"/> is the server's at their view tick there, and the hull as
+	/// this client draws it here — the same place, a link apart (§5.6).
+	///
+	/// The driver's and the pilot's sights come down and nothing fires. The gunner's
+	/// trigger is the vehicle's gun, aimed by their look clamped to its mount. A
+	/// passenger has their own pistol and primary, sights, reload and swap, with the
+	/// trigger dead while they look outside the seat's arc; their round leaves from the
+	/// seat's eye. Nobody seated throws a grenade, launches a drone or swings the hammer
+	/// (<see cref="CrewSeats.SeatButtons"/>).
+	/// </summary>
+	private void SimulateSeated(PlayerCombat combat, CrewVehicle vehicle, int seatIndex, in CrewPose pose,
+		in InputContext input, uint tick, bool authoritative)
+	{
+		CrewSeat seat = vehicle.Seats[seatIndex];
+		if (seat.Role == SeatRole.Gunner && vehicle.Gun is { } gun)
+		{
+			Ads.Step(ref combat.Aim, AimStats.None, input);
+			gun.Pose = pose;
+			uint round = FireMounted(combat, gun, SeatInput(input, SeatRole.Gunner, insideArc: true), tick, authoritative);
+			if (round != 0)
+			{
+				SeatedRoundFired?.Invoke(round, combat.PeerId, tick, ViewTickOf(combat, tick));
+			}
+
+			return;
+		}
+
+		if (seat.Role != SeatRole.Passenger)
+		{
+			Ads.Step(ref combat.Aim, AimStats.None, input);
+			return;
+		}
+
+		fps_controller character = combat.Character;
+		CrewSeats.RelativeAim(pose, character.Yaw, character.Pitch, out float yaw, out float pitch);
+		InputContext seated = SeatInput(input, SeatRole.Passenger, CrewSeats.MayFire(seat, yaw, pitch));
+
+		int slots = CrewSeats.PassengerSlots(combat.OccupiedSlots);
+		combat.Slot = WeaponSim.SelectSlot(CrewSeats.PassengerSlot(combat.Slot, combat.OccupiedSlots), seated, slots);
+		Ads.Step(ref combat.Aim, combat.EquippedAim, seated);
+
+		WeaponStats stats = combat.EquippedStats;
+		WeaponAction action = WeaponSim.Step(ref combat.Equipped, stats, seated, tick);
+		if (!authoritative && action != WeaponAction.None)
+		{
+			combat.LastPredictedWeaponTick = tick;
+		}
+
+		if (action != WeaponAction.Fire || stats.IsMelee)
+		{
+			return;
+		}
+
+		Vector3 eye = pose.ToWorld(seat.Eye);
+		if (!authoritative)
+		{
+			PredictShot(combat, stats, tick, eye);
+			return;
+		}
+
+		combat.ShotsFired++;
+		if (combat.Slot == SimConfig.LargeSlot)
+		{
+			combat.PrimaryRoundsThisLife++;
+		}
+
+		uint id = Fire(combat, tick, eye);
+		if (id != 0)
+		{
+			SeatedRoundFired?.Invoke(id, combat.PeerId, tick, ViewTickOf(combat, tick));
+		}
+	}
+
+	/// <summary>The frame as a seat's weapons see it (<see cref="CrewSeats.SeatButtons"/>); the previous tick's buttons as they were.</summary>
+	private static InputContext SeatInput(in InputContext input, SeatRole role, bool insideArc)
+	{
+		InputFrame frame = input.Frame;
+		frame.Buttons = CrewSeats.SeatButtons(role, frame.Buttons, insideArc);
+		return new InputContext(frame, input.PreviousButtons, input.Dt);
 	}
 
 	/// <summary>
@@ -499,41 +637,43 @@ public partial class CombatManager : Node
 	/// it may be pointed: the muzzle rather than the gunner's eye, and inside the
 	/// traverse arc the gun was deployed at rather than wherever they are looking.
 	/// </summary>
-	private void FireMounted(PlayerCombat combat, Emplacement gun, in InputContext input, uint tick,
+	private uint FireMounted(PlayerCombat combat, IGunMount gun, in InputContext input, uint tick,
 		bool authoritative)
 	{
 		WeaponStats stats = gun.Stats;
 
 		// The gunner's client steps the same belt the server does and keeps its own
-		// count: ServerGunState will not overwrite it while this peer is the gunner,
+		// count: the server's will not overwrite it while this peer is the gunner,
 		// because the server's number is a round trip old (docs/NETCODE.md §10.2).
-		WeaponAction action = WeaponSim.Step(ref gun.Weapon, stats, input, tick);
+		WeaponAction action = WeaponSim.Step(ref gun.Belt, stats, input, tick);
 
 		if (action != WeaponAction.Fire)
 		{
-			return;
+			return 0;
 		}
 
 		combat.ShotsFired++;
 
-		Vector3 aim = EmplacementSim.Traverse(combat.Character.Yaw, combat.Character.Pitch, gun.DeployYaw);
-		Vector3 direction = WeaponSim.FireDirection(gun.Weapon, stats, combat.PeerId, aim);
+		Vector3 aim = gun.AimFor(combat.Character.Yaw, combat.Character.Pitch);
+		Vector3 direction = WeaponSim.FireDirection(gun.Belt, stats, combat.PeerId, aim);
+		Vector3 muzzle = gun.MuzzleFor(aim);
 
 		if (authoritative)
 		{
-			SpawnProjectile(tick, OwnerId.ForPeer(combat.PeerId), gun.WeaponDefinitionId, gun.MuzzlePosition,
-				direction, combat.LagCompensationTicks);
-			return;
+			return SpawnProjectile(tick, OwnerId.ForPeer(combat.PeerId), gun.WeaponDefinitionId, muzzle, direction,
+				combat.LagCompensationTicks);
 		}
 
 		ShotsFired++;
 
 		uint id = PredictedIdBit | _nextPredictedId++;
-		if (_projectiles.TrySpawn(id, tick, OwnerId.ForPeer(combat.PeerId), gun.WeaponDefinitionId,
-			gun.MuzzlePosition, direction, 0, out _))
+		if (_projectiles.TrySpawn(id, tick, OwnerId.ForPeer(combat.PeerId), gun.WeaponDefinitionId, muzzle,
+			direction, 0, out _))
 		{
 			_predicted.Add((id, tick));
 		}
+
+		return 0;
 	}
 
 	/// <summary>
@@ -650,8 +790,25 @@ public partial class CombatManager : Node
 				tick), attacker.Team, origin, point, unitVictim, 0f, tick);
 		}
 
+		// A hull stops a swing as it stops a round, so nobody reaches a driver through the
+		// cab's door (docs/GROUND_VEHICLES.md GV-D11), and takes it as a bullet.
+		Vector3 hullPoint = to;
+		CrewVehicle hullVictim = CrewVehicleManager.Instance?.QuerySegment(origin, to, stats.SweepRadiusMeters,
+			OwnerId.ForPeer(attacker.PeerId), ref nearest, out hullPoint);
+		if (hullVictim != null)
+		{
+			victim = null;
+			unitVictim = null;
+			point = hullPoint;
+		}
+
 		HitFlags flags = HitFlags.Melee;
-		if (victim != null)
+		if (hullVictim != null)
+		{
+			flags |= DamageCrewVehicle(hullVictim, stats.Damage, explosive: false, roundVehicleScale: 1f, attacker,
+				OwnerId.ForPeer(attacker.PeerId), attacker.EquippedDefinitionId, tick);
+		}
+		else if (victim != null)
 		{
 			flags |= Damage(victim, stats.Damage, explosive: false, attacker, OwnerId.ForPeer(attacker.PeerId),
 				attacker.EquippedDefinitionId, tick);
@@ -714,7 +871,7 @@ public partial class CombatManager : Node
 		}
 
 		bool contact = FirstContact(segment, ownerId, ownerTeam, tick, out Vector3 point, out PlayerCombat victim,
-			out Unit unitVictim, out Structure structureVictim);
+			out Unit unitVictim, out Structure structureVictim, out CrewVehicle crewVictim);
 
 		// Every round the other side's units see go by, hit or not, up to where it
 		// stopped (docs/TACTICS.md §4.1).
@@ -752,12 +909,18 @@ public partial class CombatManager : Node
 			flags |= DamageStructure(structureVictim, stats.Damage, stats.IsExplosive, stats.StructureDamageScale,
 				attacker, ownerId, weapon, tick);
 		}
+		else if (crewVictim != null)
+		{
+			// The tank's round has a number of its own for a hull it strikes (GV-D10).
+			flags |= DamageCrewVehicle(crewVictim, CrewCombat.DirectDamage(stats), stats.IsExplosive,
+				stats.VehicleDamageScale, attacker, ownerId, weapon, tick);
+		}
 
 		if (stats.IsExplosive)
 		{
 			flags |= HitFlags.Exploded;
 			flags |= Explode(point, stats, attacker, ownerId, ownerTeam, weapon, victim, unitVictim, structureVictim,
-				tick);
+				crewVictim, tick);
 		}
 
 		PublishHit(new ProjectileHit
@@ -781,20 +944,25 @@ public partial class CombatManager : Node
 	/// something with a body was hit, and none when it was the world.
 	/// </summary>
 	private bool FirstContact(in ProjectileSegment segment, int ownerId, Team ownerTeam, uint tick,
-		out Vector3 point, out PlayerCombat victim, out Unit unitVictim, out Structure structureVictim)
+		out Vector3 point, out PlayerCombat victim, out Unit unitVictim, out Structure structureVictim,
+		out CrewVehicle crewVictim)
 	{
 		float nearest = WorldHitFraction(segment.From, segment.To, out point, out bool blocked);
 		victim = null;
 		unitVictim = null;
 		structureVictim = null;
+		crewVictim = null;
+		CrewVehicleManager crew = CrewVehicleManager.Instance;
 
 		for (int i = 0; i < _ordered.Count; i++)
 		{
 			PlayerCombat target = _ordered[i];
 
 			// The shooter's own capsule contains the muzzle, so a round would kill its
-			// owner on the tick it was fired.
-			if (OwnerId.ForPeer(target.PeerId) == ownerId || !target.IsAlive)
+			// owner on the tick it was fired. Nor does a round fired from a seat hit
+			// anybody in that vehicle (docs/GROUND_VEHICLES.md GV-D6).
+			if (OwnerId.ForPeer(target.PeerId) == ownerId || !target.IsAlive
+				|| (crew != null && crew.RidesWithOwner(target.PeerId, ownerId)))
 			{
 				continue;
 			}
@@ -844,6 +1012,24 @@ public partial class CombatManager : Node
 			}
 		}
 
+		// The crew vehicles' hulls, the same way (docs/GROUND_VEHICLES.md §6.5): a driver's
+		// or pilot's capsule lies inside its hull box, so a round from outside reaches the
+		// hull first, by a strictly smaller fraction (§5.4). Not the shooter's own vehicle.
+		if (crew != null)
+		{
+			crewVictim = crew.QuerySegment(segment.From, segment.To, segment.SweepRadius, ownerId, ref nearest,
+				out Vector3 hullPoint);
+
+			if (crewVictim != null)
+			{
+				victim = null;
+				unitVictim = null;
+				structureVictim = null;
+				blocked = true;
+				point = hullPoint;
+			}
+		}
+
 		return blocked;
 	}
 
@@ -862,7 +1048,7 @@ public partial class CombatManager : Node
 		Vector3 point = segment.To;
 		bool stopped = false;
 		if (!segment.Resting && FirstContact(segment, segment.OwnerPeerId, ownerTeam, tick, out Vector3 contact,
-			out _, out _, out _))
+			out _, out _, out _, out _))
 		{
 			stopped = true;
 			point = Settle(segment, contact);
@@ -922,7 +1108,7 @@ public partial class CombatManager : Node
 		int ownerId = segment.OwnerPeerId;
 		PlayerCombat attacker = Find(OwnerId.PeerOf(ownerId));
 		HitFlags flags = HitFlags.Exploded | Explode(point, stats, attacker, ownerId, ownerTeam,
-			WeaponOnStream(attacker, segment.DefinitionId), null, null, null, tick);
+			WeaponOnStream(attacker, segment.DefinitionId), null, null, null, null, tick);
 		UnitManager.Instance?.NoteBlast(new FireSource(segment.Origin, ownerId, segment.DefinitionId, segment.Id),
 			ownerTeam, point, stats.ExplosionRadiusMeters, FireKind.Hit, tick);
 		NoteBlastAtBots(ownerTeam, point, stats.ExplosionRadiusMeters, tick);
@@ -974,14 +1160,20 @@ public partial class CombatManager : Node
 	/// deliberate: a launcher that is safe at point blank is a shotgun.
 	/// </summary>
 	private HitFlags Explode(Vector3 point, in ProjectileStats stats, PlayerCombat attacker, int attackerOwnerId,
-		Team attackerTeam, byte weapon, PlayerCombat direct, Unit directUnit, Structure directStructure, uint tick)
+		Team attackerTeam, byte weapon, PlayerCombat direct, Unit directUnit, Structure directStructure,
+		CrewVehicle directCrew, uint tick)
 	{
 		HitFlags flags = HitFlags.None;
+		CrewVehicleManager crew = CrewVehicleManager.Instance;
 
 		for (int i = 0; i < _ordered.Count; i++)
 		{
 			PlayerCombat target = _ordered[i];
-			if (target == direct || !target.IsAlive || !target.History.TrySampleOrLatest(tick, out HitCapsule capsule))
+
+			// A driver or a pilot is inside the hull, which takes the blast for them
+			// (docs/GROUND_VEHICLES.md GV-D11); a gunner or a passenger stands in it.
+			if (target == direct || !target.IsAlive || (crew != null && crew.ShieldedFromBlast(target.PeerId))
+				|| !target.History.TrySampleOrLatest(tick, out HitCapsule capsule))
 			{
 				continue;
 			}
@@ -1036,7 +1228,147 @@ public partial class CombatManager : Node
 			}
 		}
 
+		// The crew vehicles, by the face of the nearest hull box, the direct victim left
+		// out (docs/GROUND_VEHICLES.md §6.5). Whoever's: friendly fire is as for players,
+		// and a blast spares no player, its own thrower included.
+		for (int slot = 0; crew != null && slot < SimConfig.MaxCrewVehicles; slot++)
+		{
+			CrewVehicle vehicle = crew.VehicleAt(slot);
+			if (vehicle == null || vehicle == directCrew || vehicle.Destroyed)
+			{
+				continue;
+			}
+
+			float damage = stats.SplashDamageAt(crew.BlastDistance(vehicle, point));
+			if (damage > 0f)
+			{
+				flags |= DamageCrewVehicle(vehicle, damage, explosive: true, stats.VehicleDamageScale, attacker,
+					attackerOwnerId, weapon, tick);
+			}
+		}
+
 		return flags;
+	}
+
+	/// <summary>
+	/// Applies a hit to a crew vehicle (docs/GROUND_VEHICLES.md §6.5, GV-D9): what its
+	/// armour lets through (<see cref="CrewCombat.DamageTaken"/>), and the round's own share
+	/// against a vehicle. Nothing dealt is no marker and no event, as for a unit's armour
+	/// (NETCODE.md §10.6). One it destroys is written down as a wreck, which throws its
+	/// crew out once every kill of the tick is in (<see cref="ResolveCrewWrecks"/>).
+	/// Nobody is credited with a kill for it: it was the ground force's own.
+	/// </summary>
+	private HitFlags DamageCrewVehicle(CrewVehicle vehicle, float amount, bool explosive, float roundVehicleScale,
+		PlayerCombat attacker, int attackerOwnerId, byte weapon, uint tick)
+	{
+		if (vehicle == null || vehicle.Destroyed || amount <= 0f)
+		{
+			return HitFlags.None;
+		}
+
+		float dealt = Mathf.Min(
+			CrewCombat.DamageTaken(amount, explosive, vehicle.Definition.BulletDamageScale, roundVehicleScale),
+			vehicle.Health);
+		if (dealt <= 0f)
+		{
+			return HitFlags.None;
+		}
+
+		vehicle.Health -= dealt;
+		bool killed = vehicle.Health <= 0f;
+		ConfirmHit(attacker, null, killed);
+		AgentEventBus.Emit(AgentEventKind.VehicleDamaged, tick, attackerOwnerId, vehicle.Slot, weapon, dealt,
+			Mathf.Max(vehicle.Health, 0f));
+
+		if (!killed)
+		{
+			return HitFlags.None;
+		}
+
+		vehicle.Health = 0f;
+		vehicle.Destroyed = true;
+		vehicle.DestroyedTick = tick;
+		if (_crewWreckCount < _crewWrecks.Length)
+		{
+			_crewWrecks[_crewWreckCount++] = new CrewWreck
+			{
+				Slot = vehicle.Slot,
+				AttackerOwnerId = attackerOwnerId,
+				Weapon = weapon,
+				// The helicopter's height as its last ray found it; nought for a 4x4.
+				KillsAll = CrewCombat.WreckKillsAll(vehicle.Kind,
+					vehicle.Kind == CrewVehicleKind.Helicopter ? vehicle.HeightAboveGround : 0f),
+				At = vehicle.Pose.Position,
+			};
+		}
+
+		vehicle.PresentDestroyed();
+		GD.Print($"[combat] the {vehicle.KindName} in slot {vehicle.Slot} destroyed by {DescribeOwner(attackerOwnerId)}");
+		return HitFlags.Killed;
+	}
+
+	/// <summary>
+	/// Everybody out of every crew vehicle destroyed this tick (docs/GROUND_VEHICLES.md
+	/// GV-D12, §6.5): each at an exit point and dealt <see cref="CrewCombat.WreckDamage"/>
+	/// as an explosive, the vest its share, in the killer's name — or killed outright where
+	/// they sat when the wreck is a helicopter more than 4 m up, or nowhere is clear for
+	/// them. Then <c>vehicle_destroyed</c>. The wreck burns where it is and is taken away
+	/// two seconds later (<c>CrewVehicleManager.ServerTick</c>). No hit message: no round hit them.
+	/// </summary>
+	private void ResolveCrewWrecks(uint tick)
+	{
+		CrewVehicleManager crew = CrewVehicleManager.Instance;
+		for (int w = 0; crew != null && w < _crewWreckCount; w++)
+		{
+			CrewWreck wreck = _crewWrecks[w];
+			PlayerCombat attacker = OwnerId.IsPeer(wreck.AttackerOwnerId)
+				? Find(OwnerId.PeerOf(wreck.AttackerOwnerId))
+				: null;
+
+			int count = crew.EjectFromWreck(wreck.Slot, wreck.KillsAll, _ejectedPeers, _ejectedPlaced);
+			for (int i = 0; i < count; i++)
+			{
+				PlayerCombat victim = Find(_ejectedPeers[i]);
+				if (victim == null || !victim.IsAlive)
+				{
+					continue;
+				}
+
+				Damage(victim, CrewCombat.WreckDamageTo(_ejectedPlaced[i], victim.Health, victim.Vest.Points),
+					explosive: true, attacker, wreck.AttackerOwnerId, wreck.Weapon, tick);
+			}
+
+			AgentEventBus.Emit(AgentEventKind.VehicleDestroyed, tick, wreck.AttackerOwnerId, wreck.Slot, wreck.Weapon,
+				wreck.At.X, wreck.At.Z);
+		}
+
+		_crewWreckCount = 0;
+	}
+
+	/// <summary>
+	/// A unit on foot a crew vehicle struck fast enough (docs/GROUND_VEHICLES.md GV-D17,
+	/// §6.5), from <c>CrewVehicleManager</c>'s tick: dealt its health through
+	/// <see cref="DamageUnit"/>, as an explosive so no armour scale leaves it standing,
+	/// with weapon 15, the ram, and <paramref name="creditPeerId"/> as the attacker — or
+	/// nobody's, with no kill counted. <c>damage</c>, <c>kill</c>, <c>unit_lost</c>, the
+	/// driver's marker and kill count are then the ordinary ones, and
+	/// <c>vehicle_rammed</c> records the speed.
+	/// </summary>
+	public void RamUnit(Unit unit, int vehicleSlot, int creditPeerId, float impactSpeed, uint tick)
+	{
+		if (unit == null || !unit.IsAlive)
+		{
+			return;
+		}
+
+		PlayerCombat attacker = creditPeerId != 0 ? Find(creditPeerId) : null;
+		int ownerId = attacker != null ? OwnerId.ForPeer(creditPeerId) : OwnerId.None;
+		Vector3 at = unit.GlobalPosition;
+		DamageUnit(unit, unit.Health, explosive: true, vehicleScale: 1f, attacker, ownerId, WeaponCatalog.Ram, tick);
+		AgentEventBus.Emit(AgentEventKind.VehicleRammed, tick, vehicleSlot, unit.UnitId, attacker?.PeerId ?? 0,
+			impactSpeed, at.X, at.Z);
+		GD.Print($"[combat] {UnitCatalog.NameOf(unit.DefinitionId)} {unit.UnitId} run over at {impactSpeed:0.0} m/s by"
+			+ $" the vehicle in slot {vehicleSlot}, credited to {DescribeOwner(ownerId)}");
 	}
 
 	/// <summary>
@@ -1211,6 +1543,7 @@ public partial class CombatManager : Node
 	public void ClearWrecks()
 	{
 		_wreckCount = 0;
+		_crewWreckCount = 0;
 	}
 
 	/// <summary>How far the shooter was from a unit it killed. Zero when a unit or the world did it.</summary>
@@ -1383,7 +1716,10 @@ public partial class CombatManager : Node
 		for (int i = 0; i < _ordered.Count; i++)
 		{
 			PlayerCombat combat = _ordered[i];
+
+			// Nothing from the locker reaches a crew vehicle's seat (docs/GROUND_VEHICLES.md §6.4).
 			if (!combat.IsAlive || combat.Character == null
+				|| CrewVehicleManager.Instance?.IsSeated(combat.PeerId) == true
 				|| !LockerSupply.InReach(lockers.LockerDistance(combat.Character.SimPosition)))
 			{
 				continue;
@@ -1883,11 +2219,11 @@ public partial class CombatManager : Node
 			_hud?.OpenLocker(combat);
 		}
 
-		// The server's rule for a seated player, over the same frames: sights down and
-		// nothing fired (docs/GROUND_VEHICLES.md §6.3).
-		if (CrewVehicleManager.Instance is { } crew && crew.IsSeated(combat.PeerId))
+		// The server's rule for a seated player, over the same frames, from the hull as this
+		// client draws it — where the player sees their seat (docs/GROUND_VEHICLES.md §6.4).
+		if (CrewVehicleManager.Instance is { } crew && crew.TrySeat(combat.PeerId, out CrewVehicle vehicle, out int seat))
 		{
-			Ads.Step(ref combat.Aim, AimStats.None, input);
+			SimulateSeated(combat, vehicle, seat, vehicle.DrawnPose, input, tick, authoritative: false);
 			return;
 		}
 
@@ -1926,25 +2262,35 @@ public partial class CombatManager : Node
 			return;
 		}
 
-		combat.ShotsFired++;
-		ShotsFired++;
-
 		if (stats.IsMelee)
 		{
 			// Nothing to predict: a swing's only feedback is the server's hit message.
+			combat.ShotsFired++;
+			ShotsFired++;
 			return;
 		}
 
-		// The same cone the server will apply, from the same shot index: the weapon
-		// step above advanced both ends identically, so the tracer this puts up is
-		// the line the authoritative round will fly down
-		// (docs/IMPLEMENTATION_PLAN.md §7).
+		PredictShot(combat, stats, tick, combat.Character.EyePosition);
+	}
+
+	/// <summary>
+	/// The owning client's tracer for a shot it just stepped, from <paramref name="origin"/>:
+	/// the eye on foot, the seat's eye in a vehicle. The same cone the server will apply,
+	/// from the same shot index — the weapon step advanced both ends identically — so the
+	/// tracer this puts up is the line the authoritative round will fly down
+	/// (docs/IMPLEMENTATION_PLAN.md §7).
+	/// </summary>
+	private void PredictShot(PlayerCombat combat, in WeaponStats stats, uint tick, Vector3 origin)
+	{
+		combat.ShotsFired++;
+		ShotsFired++;
+
 		Vector3 direction = WeaponSim.FireDirection(combat.Equipped, stats, combat.PeerId,
 			combat.Character.AimDirection);
 
 		uint id = PredictedIdBit | _nextPredictedId++;
-		if (_projectiles.TrySpawn(id, tick, OwnerId.ForPeer(combat.PeerId), combat.EquippedDefinitionId,
-			combat.Character.EyePosition, direction, 0, out _))
+		if (_projectiles.TrySpawn(id, tick, OwnerId.ForPeer(combat.PeerId), combat.EquippedDefinitionId, origin,
+			direction, 0, out _))
 		{
 			_predicted.Add((id, tick));
 		}
@@ -2121,12 +2467,18 @@ public partial class CombatManager : Node
 
 			// A grenade thrown on the tick a rifle fired is two predictions in one
 			// window; each is adopted by the spawn of its own kind.
-			if (_projectiles.TryGet(id, out Projectile predicted) && predicted.DefinitionId != spawn.DefinitionId)
+			bool flying = _projectiles.TryGet(id, out Projectile predicted);
+			if (flying && predicted.DefinitionId != spawn.DefinitionId)
 			{
 				continue;
 			}
 
 			_predicted.RemoveAt(i);
+			if (flying)
+			{
+				PredictionAdopted?.Invoke(spawn.Id, predictedTick, predicted.Origin, spawn.Origin);
+			}
+
 			return _projectiles.Rekey(id, spawn.Id);
 		}
 
@@ -2349,7 +2701,8 @@ public partial class CombatManager : Node
 			emplacements?.LockerDistance(combat.Character.SimPosition) ?? float.PositiveInfinity,
 			WeaponCatalog.IsValidKit(kit),
 			tick,
-			combat.LastKitTick);
+			combat.LastKitTick,
+			seated: CrewVehicleManager.Instance?.IsSeated(combat.PeerId) == true);
 
 		refusal = KitRequest.Check(situation);
 		if (refusal != KitRefusal.None)

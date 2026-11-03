@@ -250,7 +250,8 @@ player's vest. The units do nothing with it (§13).
 | `ServerKitResult` (new, to the requester) | S→C | Reliable | per request | ~4 B |
 
 `ServerKitResult` carries applied or the refusal (`dead`, `not_at_locker`, `mounted`, `carrying`,
-`invalid`, `too_soon`); the panel closes on the first and shows the second.
+`invalid`, `too_soon`, and from GROUND_VEHICLES.md's GV4 `seated`, appended as 7: nothing from the
+locker reaches a crew vehicle's seat); the panel closes on the first and shows the second.
 
 ### 6.3 Demos
 

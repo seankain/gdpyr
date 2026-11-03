@@ -27,6 +27,9 @@ public enum KitRefusal : byte
 
 	/// <summary>Another kit was taken less than <see cref="KitRequest.MinIntervalTicks"/> ago.</summary>
 	TooSoon = 6,
+
+	/// <summary>In a crew vehicle's seat (docs/GROUND_VEHICLES.md §6.4): nothing from the locker reaches a seat.</summary>
+	Seated = 7,
 }
 
 /// <summary>What the server knows about a player asking for a kit at a locker.</summary>
@@ -50,9 +53,13 @@ public readonly struct KitSituation
 	/// <summary>The tick this player last took a kit at a locker; 0 for never.</summary>
 	public readonly uint LastKitTick;
 
+	/// <summary>In a crew vehicle's seat (docs/GROUND_VEHICLES.md §6.4).</summary>
+	public readonly bool Seated;
+
 	public KitSituation(bool alive, bool mounted, CarryKind carrying, float lockerDistance, bool validKit, uint tick,
-		uint lastKitTick)
+		uint lastKitTick, bool seated = false)
 	{
+		Seated = seated;
 		Alive = alive;
 		Mounted = mounted;
 		Carrying = carrying;
@@ -92,7 +99,7 @@ public static class KitRequest
 	/// <summary>Each refusal as the agent API and the log spell it, by <see cref="KitRefusal"/>.</summary>
 	private static readonly string[] Codes =
 	{
-		"applied", "dead", "not_at_locker", "mounted", "carrying", "invalid", "too_soon",
+		"applied", "dead", "not_at_locker", "mounted", "carrying", "invalid", "too_soon", "seated",
 	};
 
 	/// <summary>
@@ -116,6 +123,11 @@ public static class KitRequest
 		if (situation.Mounted)
 		{
 			return KitRefusal.Mounted;
+		}
+
+		if (situation.Seated)
+		{
+			return KitRefusal.Seated;
 		}
 
 		if (situation.Carrying != CarryKind.None)

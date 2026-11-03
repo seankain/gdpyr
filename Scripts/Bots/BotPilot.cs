@@ -1459,6 +1459,13 @@ public sealed partial class BotPilot
 			return true;
 		}
 
+		// Every crew vehicle is the ground force's, and a blast hurts its hull whoever set
+		// it off (docs/GROUND_VEHICLES.md §10).
+		if (team == Team.GroundForce && CrewVehicleManager.Instance?.HullNear(target, reach) == true)
+		{
+			return true;
+		}
+
 		CombatManager combat = CombatManager.Instance;
 		for (int i = 0; combat != null && i < combat.PlayerCount; i++)
 		{
@@ -1484,6 +1491,14 @@ public sealed partial class BotPilot
 		if (combat == null)
 		{
 			return false;
+		}
+
+		// A friendly hull in the shot is a teammate in the way: the round would stop at it
+		// and hurt it (docs/GROUND_VEHICLES.md §10).
+		if (team == Team.GroundForce
+			&& CrewVehicleManager.Instance?.HullInLine(from, to, FriendlySweepRadiusMeters) == true)
+		{
+			return true;
 		}
 
 		for (int i = 0; i < combat.PlayerCount; i++)

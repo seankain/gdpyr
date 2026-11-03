@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using Gdpyr.Core;
 using Gdpyr.Match;
 using Gdpyr.Net;
+using Gdpyr.Rts;
 using Gdpyr.Sim;
+using Gdpyr.Sim.Agent;
 using Godot;
 
 namespace Gdpyr.Fps;
@@ -118,6 +120,9 @@ public partial class CrewVehicleManager : Node
 	private CrewLedger _crewLedger;
 	private int _drivenSlot = -1;
 
+	/// <summary>A hull's boxes placed for one query: no allocation per round or per unit.</summary>
+	private readonly HitObb[] _hullScratch = new HitObb[CrewLayout.MaxHullBoxes];
+
 	private PhysicsRayQueryParameters3D _ray;
 	private PhysicsShapeQueryParameters3D _shape;
 	private readonly Godot.Collections.Array<Rid> _shapeExclude = new();
@@ -192,6 +197,9 @@ public partial class CrewVehicleManager : Node
 	public uint NewestRecordTick(int slot) =>
 		slot >= 0 && slot < _interpolators.Length && _interpolators[slot] is { Count: > 0 } buffer ? buffer.NewestTick : 0;
 
+	/// <summary>Client: the tick every puppet was last drawn at — the render clock, smoothed (§8.1).</summary>
+	public float DrawnRenderTick { get; private set; }
+
 	/// <summary>The slot of the vehicle this client predicts, or −1 (§8.2).</summary>
 	public int DrivenSlot => _drivenSlot;
 
@@ -233,10 +241,11 @@ public partial class CrewVehicleManager : Node
 
 	/// <summary>
 	/// Puts a vehicle of <paramref name="kind"/> on the field at rest, its origin at
-	/// <paramref name="origin"/>, facing <paramref name="yaw"/>. Server only. The slot it
-	/// took, or −1 when every slot is taken or the kind is unknown.
+	/// <paramref name="origin"/>, facing <paramref name="yaw"/>, for <paramref name="askedBy"/>
+	/// (a peer, or 0). Server only. The slot it took, or −1 when every slot is taken or the
+	/// kind is unknown.
 	/// </summary>
-	public int Spawn(byte kind, Vector3 origin, float yaw)
+	public int Spawn(byte kind, Vector3 origin, float yaw, int askedBy = 0)
 	{
 		if (NetworkManager.Instance is { IsClient: true } || CrewVehicleCatalog.Definition(kind) is not { } definition)
 		{
@@ -252,6 +261,8 @@ public partial class CrewVehicleManager : Node
 		CrewVehicle vehicle = CrewVehicle.Create(definition, slot, origin, yaw);
 		_vehicles[slot] = vehicle;
 		_root.AddChild(vehicle);
+		AgentEventBus.Emit(AgentEventKind.VehicleSpawned, NetworkManager.Instance?.Tick ?? 0, slot, kind, askedBy,
+			origin.X, origin.Z);
 		GD.Print($"[vehicles] {vehicle.KindName} in slot {slot} at ({origin.X:0.0}, {origin.Y:0.0}, {origin.Z:0.0})");
 		return slot;
 	}
@@ -330,8 +341,19 @@ public partial class CrewVehicleManager : Node
 		for (int slot = 0; slot < _vehicles.Length; slot++)
 		{
 			CrewVehicle vehicle = VehicleAt(slot);
-			if (vehicle == null || vehicle.Destroyed)
+			if (vehicle == null)
 			{
+				continue;
+			}
+
+			// A wreck burns where it stopped, and is taken away two seconds after (GV-D12).
+			if (vehicle.Destroyed)
+			{
+				if (tick - vehicle.DestroyedTick >= (uint)CrewCombat.WreckBurnTicks)
+				{
+					Remove(slot);
+				}
+
 				continue;
 			}
 
@@ -349,11 +371,77 @@ public partial class CrewVehicleManager : Node
 			// frame the vehicle was stepped on: on the tick they got in it was a parked one,
 			// and their replay starts after it all the same.
 			vehicle.DriverInputTick = driver != 0 ? PlayerManager.Instance?.ConsumedInputTickOf(driver) ?? tick : 0;
+
+			// Where it now is, before the units' own moves push them out of it (§6.5).
+			RunOver(vehicle, tick);
 		}
 
 		_frames.Clear();
 		PinSeated();
 	}
+
+	/// <summary>
+	/// Every unit on foot the hull has struck this tick fast enough to kill (GV-D17, §5.9):
+	/// tested where the vehicle now is and where the unit still stands, before its own
+	/// <c>MoveAndSlide</c> pushes it aside. Within the hull's reach and a metre; at
+	/// <see cref="CrewVehicleDefinition.RamKillSpeedMetersPerSecond"/> or more where it
+	/// touches, towards the unit. The vehicle's motion is not changed by any of it.
+	/// </summary>
+	private void RunOver(CrewVehicle vehicle, uint tick)
+	{
+		UnitManager units = UnitManager.Instance;
+		CombatManager combat = CombatManager.Instance;
+		if (units == null || combat == null)
+		{
+			return;
+		}
+
+		float killSpeed = vehicle.Definition.RamKillSpeedMetersPerSecond;
+		Vector3 velocity = vehicle.SimVelocity;
+		float yawRate = vehicle.YawRate;
+		float reach = vehicle.HullRadius + 1f;
+
+		// No point of the hull moves faster than its flat speed and what its turn sweeps at
+		// the far corner: when that would not kill, nothing need be looked at. Asked of the
+		// one rule, so the threshold is in one place.
+		float fastest = new Vector2(velocity.X, velocity.Z).Length() + (Mathf.Abs(yawRate) * vehicle.HullRadius);
+		if (!Ramming.Kills(fastest, killSpeed, unitIsVehicle: false))
+		{
+			return;
+		}
+
+		CrewPose pose = vehicle.Pose;
+		int boxes = vehicle.PlaceHull(pose, _hullScratch);
+		for (int i = 0; i < units.SlotCount; i++)
+		{
+			Unit unit = units.UnitAt(i);
+			if (unit == null || !unit.IsOnField || !unit.IsAlive || unit.Team == Team.GroundForce
+				|| unit.Definition?.IsVehicle == true)
+			{
+				continue;
+			}
+
+			HitCapsule capsule = unit.Hitbox;
+			Vector3 offset = capsule.Center - pose.Position;
+			if (new Vector2(offset.X, offset.Z).Length() > reach + capsule.Radius)
+			{
+				continue;
+			}
+
+			float speed = Ramming.ImpactSpeed(_hullScratch.AsSpan(0, boxes), capsule, pose.Position, velocity, yawRate);
+			if (!Ramming.Kills(speed, killSpeed, unitIsVehicle: false))
+			{
+				continue;
+			}
+
+			vehicle.RunOver++;
+			RunOverTotal++;
+			combat.RamUnit(unit, vehicle.Slot, vehicle.RamCredit(tick), speed, tick);
+		}
+	}
+
+	/// <summary>Units run over by every vehicle since this process started. For the debug HUD.</summary>
+	public int RunOverTotal { get; private set; }
 
 	/// <summary>
 	/// What a vehicle with nobody at the controls is stepped on (§6.2): the 4x4 on its
@@ -392,6 +480,19 @@ public partial class CrewVehicleManager : Node
 		CrewPose pose = vehicle.Pose;
 		CrewSeat placed = vehicle.Seats[seat];
 		character.PinToSeat(pose.ToWorld(placed.Eye), vehicle.SimVelocity, pose.Place(placed.Capsule));
+		AimGun(character, vehicle, seat, pose);
+	}
+
+	/// <summary>The gun on its mount turned to where its gunner looks, on the hull at <paramref name="pose"/>. Presentation only.</summary>
+	private static void AimGun(fps_controller character, CrewVehicle vehicle, int seat, in CrewPose pose)
+	{
+		if (vehicle.Gun is not { } gun || vehicle.Seats[seat].Role != SeatRole.Gunner)
+		{
+			return;
+		}
+
+		gun.Pose = pose;
+		vehicle.PointGun(pose.DirectionToLocal(gun.AimFor(character.Yaw, character.Pitch)));
 	}
 
 	/// <summary>
@@ -538,12 +639,29 @@ public partial class CrewVehicleManager : Node
 		vehicle.Occupants[seat] = combat.PeerId;
 		_seated[combat.PeerId] = new SeatRef(slot, seat);
 		_exitRefusals.Remove(combat.PeerId);
+		SeatTaken(vehicle, seat);
 
 		combat.Character.SetSeated(true);
 		Pin(combat.Character, vehicle, seat);
+		AgentEventBus.Emit(AgentEventKind.VehicleEntered, NetworkManager.Instance?.Tick ?? 0, combat.PeerId, slot,
+			(int)vehicle.Seats[seat].Role);
 
 		GD.Print($"[vehicles] peer {combat.PeerId} in the {vehicle.KindName}'s {SeatName(vehicle, seat)} (slot {slot})");
 		return true;
+	}
+
+	/// <summary>
+	/// After a seat changed hands on the authority: who is at the controls, for the
+	/// credit of a unit run over (§5.9); and a new gunner's box counted from their first
+	/// round, as their client counts it (<see cref="CrewGun.NewGunner"/>).
+	/// </summary>
+	private static void SeatTaken(CrewVehicle vehicle, int seat)
+	{
+		vehicle.NoteDriver(vehicle.DriverPeerId, NetworkManager.Instance?.Tick ?? 0);
+		if (seat >= 0 && seat < vehicle.Seats.Length && vehicle.Seats[seat].Role == SeatRole.Gunner)
+		{
+			vehicle.Gun?.NewGunner();
+		}
 	}
 
 	/// <summary>A hold of the use key (§5.3): to the next free seat in seat order, if there is one.</summary>
@@ -564,6 +682,7 @@ public partial class CrewVehicleManager : Node
 		vehicle.Occupants[next] = peerId;
 		_seated[peerId] = new SeatRef(vehicle.Slot, next);
 		_frames.Remove(peerId);
+		SeatTaken(vehicle, next);
 
 		if (CombatManager.Instance?.Find(peerId)?.Character is { } character)
 		{
@@ -595,18 +714,8 @@ public partial class CrewVehicleManager : Node
 			return false;
 		}
 
-		CrewPose pose = vehicle.Pose;
-		Vector3 vehicleGround = vehicle.GroundBelow();
-		int candidates = CrewSeats.ExitCandidateCount(vehicle.Seats.Length, vehicle.FlatRadius, PlayerRadiusMeters);
-		for (int ordinal = 0; ordinal < candidates; ordinal++)
+		if (FindExit(vehicle, seat, out Vector3 feet, out int ordinal))
 		{
-			Vector3 candidate = CrewSeats.ExitCandidate(vehicle.Seats, seat, ordinal, pose, vehicle.FlatRadius,
-				PlayerRadiusMeters);
-			if (!IsExitClear(vehicle, vehicleGround, candidate, out Vector3 feet))
-			{
-				continue;
-			}
-
 			Release(peerId, feet, Vector3.Zero);
 			GD.Print($"[vehicles] peer {peerId} out of the {vehicle.KindName} at ({feet.X:0.0}, {feet.Y:0.0}, {feet.Z:0.0})"
 				+ $" (candidate {ordinal})");
@@ -615,6 +724,74 @@ public partial class CrewVehicleManager : Node
 
 		_exitRefusals[peerId] = new ExitRefusal(tick, tooHigh: false);
 		return false;
+	}
+
+	/// <summary>
+	/// The first place the occupant of <paramref name="seat"/> can be put down (§6.3):
+	/// this seat's exit point, the other seats', then the ring — the first that passes
+	/// VEHICLES.md §5.4's checks. False with nowhere clear.
+	/// </summary>
+	private bool FindExit(CrewVehicle vehicle, int seat, out Vector3 feet, out int ordinal)
+	{
+		CrewPose pose = vehicle.Pose;
+		Vector3 vehicleGround = vehicle.GroundBelow();
+		int candidates = CrewSeats.ExitCandidateCount(vehicle.Seats.Length, vehicle.FlatRadius, PlayerRadiusMeters);
+		for (ordinal = 0; ordinal < candidates; ordinal++)
+		{
+			Vector3 candidate = CrewSeats.ExitCandidate(vehicle.Seats, seat, ordinal, pose, vehicle.FlatRadius,
+				PlayerRadiusMeters);
+			if (IsExitClear(vehicle, vehicleGround, candidate, out feet))
+			{
+				return true;
+			}
+		}
+
+		feet = pose.Position;
+		ordinal = -1;
+		return false;
+	}
+
+	/// <summary>
+	/// Everybody out of a wreck (GV-D12, §6.5), from <c>CombatManager.ResolveCrewWrecks</c>:
+	/// each at the first clear place for their seat, or — when the wreck kills everybody
+	/// aboard, a helicopter higher than 4 m, or nowhere is clear for them — where they
+	/// sat. Writes who and whether each was put down; how many. The damage is the caller's,
+	/// once they are out, so a body killed by it falls from where it was put.
+	/// </summary>
+	public int EjectFromWreck(int slot, bool killsAll, Span<int> peers, Span<bool> placed)
+	{
+		CrewVehicle vehicle = VehicleAt(slot);
+		if (vehicle == null)
+		{
+			return 0;
+		}
+
+		int count = 0;
+		for (int seat = 0; seat < vehicle.Seats.Length && count < peers.Length; seat++)
+		{
+			int peer = vehicle.Occupants[seat];
+			if (peer == 0)
+			{
+				continue;
+			}
+
+			Vector3 feet = Vector3.Zero;
+			bool clear = !killsAll && FindExit(vehicle, seat, out feet, out _);
+			if (clear)
+			{
+				Release(peer, feet, Vector3.Zero);
+			}
+			else
+			{
+				ReleaseInPlace(peer);
+			}
+
+			peers[count] = peer;
+			placed[count] = clear;
+			count++;
+		}
+
+		return count;
 	}
 
 	/// <summary>
@@ -702,9 +879,12 @@ public partial class CrewVehicleManager : Node
 			return;
 		}
 
+		int role = -1;
 		if (VehicleAt(seat.Slot) is { } vehicle && vehicle.Occupants[seat.Seat] == peerId)
 		{
 			vehicle.Occupants[seat.Seat] = 0;
+			role = (int)vehicle.Seats[seat.Seat].Role;
+			vehicle.NoteDriver(vehicle.DriverPeerId, NetworkManager.Instance?.Tick ?? 0);
 		}
 
 		_frames.Remove(peerId);
@@ -714,6 +894,94 @@ public partial class CrewVehicleManager : Node
 		{
 			character.LeaveSeat(feet, velocity);
 		}
+
+		AgentEventBus.Emit(AgentEventKind.VehicleExited, NetworkManager.Instance?.Tick ?? 0, peerId, seat.Slot, role,
+			feet.X, feet.Z);
+	}
+
+	// ---- combat (§6.4, §6.5), asked for by CombatManager ------------------------------
+
+	/// <summary>
+	/// The first hull a round's segment reaches nearer than <paramref name="nearest"/>, a
+	/// fraction along it (§6.5): every vehicle on the field but a wreck, and but the one
+	/// the round's owner is sitting in — a round fired from a seat never hits that vehicle
+	/// (GV-D6). Asked after the players, units and structures, against the same fraction,
+	/// so whichever the round reaches first wins. Its hull is where the authority has it
+	/// now, as a unit's capsule is (§15: no rewound hits against vehicles).
+	/// </summary>
+	public CrewVehicle QuerySegment(Vector3 from, Vector3 to, float sweepRadius, int ownerId, ref float nearest,
+		out Vector3 point)
+	{
+		point = to;
+		int own = OwnSlotOf(ownerId);
+		CrewVehicle hit = null;
+		for (int slot = 0; slot < _vehicles.Length; slot++)
+		{
+			CrewVehicle vehicle = VehicleAt(slot);
+			if (vehicle == null || vehicle.Destroyed || slot == own)
+			{
+				continue;
+			}
+
+			int boxes = vehicle.PlaceHull(vehicle.Pose, _hullScratch);
+			if (CrewCombat.FirstHit(_hullScratch.AsSpan(0, boxes), from, to, sweepRadius, ref nearest, out _))
+			{
+				hit = vehicle;
+				point = from + ((to - from) * nearest);
+			}
+		}
+
+		return hit;
+	}
+
+	/// <summary>How far a blast at <paramref name="point"/> is from the face of a vehicle's hull (§6.5).</summary>
+	public float BlastDistance(CrewVehicle vehicle, Vector3 point)
+	{
+		int boxes = vehicle.PlaceHull(vehicle.Pose, _hullScratch);
+		return CrewCombat.BlastDistance(_hullScratch.AsSpan(0, boxes), point);
+	}
+
+	/// <summary>The slot of the vehicle a round's owner is sitting in, or −1: only a seated player's rounds have one.</summary>
+	private int OwnSlotOf(int ownerId) =>
+		OwnerId.IsPeer(ownerId) && _seated.TryGetValue(OwnerId.PeerOf(ownerId), out SeatRef own) ? own.Slot : -1;
+
+	/// <summary>
+	/// Whether <paramref name="peerId"/> is in the vehicle a round's owner is sitting in, the
+	/// owner themselves included: who a round fired from a seat never hits (GV-D6).
+	/// </summary>
+	public bool RidesWithOwner(int peerId, int ownerId)
+	{
+		int own = OwnSlotOf(ownerId);
+		return own >= 0 && _seated.TryGetValue(peerId, out SeatRef seat) && seat.Slot == own;
+	}
+
+	/// <summary>Whether a blast skips <paramref name="peerId"/> because the hull around their seat takes it (GV-D11).</summary>
+	public bool ShieldedFromBlast(int peerId) =>
+		TrySeat(peerId, out CrewVehicle vehicle, out int seat) && !CrewCombat.BlastReaches(vehicle.Seats[seat]);
+
+	/// <summary>
+	/// Whether any hull on the field is within <paramref name="reach"/> of <paramref name="point"/>:
+	/// what a ground bot minds before it sets off a blast beside one of its side's
+	/// vehicles (§10). Every crew vehicle is the ground force's.
+	/// </summary>
+	public bool HullNear(Vector3 point, float reach)
+	{
+		for (int slot = 0; slot < _vehicles.Length; slot++)
+		{
+			if (VehicleAt(slot) is { Destroyed: false } vehicle && BlastDistance(vehicle, point) <= reach)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/// <summary>Whether the segment passes through any hull on the field, grown by <paramref name="sweepRadius"/> (§10).</summary>
+	public bool HullInLine(Vector3 from, Vector3 to, float sweepRadius)
+	{
+		float nearest = 1f + 1e-6f;
+		return QuerySegment(from, to, sweepRadius, OwnerId.None, ref nearest, out _) != null;
 	}
 
 	/// <summary>
@@ -889,6 +1157,26 @@ public partial class CrewVehicleManager : Node
 		}
 
 		string line = $"{vehicle.KindName} · {SeatName(vehicle, seat)}";
+		if (vehicle.Seats[seat].Role == SeatRole.Gunner && vehicle.Gun != null)
+		{
+			// The gunner's own box on their client, which steps it; the server's elsewhere.
+			line += vehicle.Gun.Box.IsReloading
+				? " · reloading"
+				: $" · {vehicle.Gun.Box.Ammo}/{vehicle.Gun.Stats.MagazineSize}";
+		}
+
+		// A passenger's trigger is dead outside the seat's arc, and the line under the
+		// reticle says so (§8.4), measured on the hull as this process draws it.
+		if (vehicle.Seats[seat].Role == SeatRole.Passenger
+			&& CombatManager.Instance?.Find(peerId)?.Character is { } shooter)
+		{
+			CrewSeats.RelativeAim(vehicle.DrawnPose, shooter.Yaw, shooter.Pitch, out float yaw, out float pitch);
+			if (!CrewSeats.MayFire(vehicle.Seats[seat], yaw, pitch))
+			{
+				line += " · no shot";
+			}
+		}
+
 		if (vehicle.Seats[seat].Role == SeatRole.Driver)
 		{
 			line += $" · {Mathf.CeilToInt(vehicle.Health)}/{Mathf.CeilToInt(vehicle.Definition.MaxHealth)}";
@@ -925,7 +1213,7 @@ public partial class CrewVehicleManager : Node
 	/// </summary>
 	public string DebugLine()
 	{
-		string line = $"{Count} · {Aboard} aboard";
+		string line = $"{Count} · {Aboard} aboard · run over {RunOverTotal}";
 		if (_drivenSlot < 0)
 		{
 			return line;
@@ -1093,8 +1381,10 @@ public partial class CrewVehicleManager : Node
 			return;
 		}
 
+		bool created = false;
 		if (change is PuppetChange.Create or PuppetChange.Replace || VehicleAt(slot) == null)
 		{
+			created = true;
 			FreePuppet(slot);
 			CrewVehicle puppet = CrewVehicle.Create(definition, slot, record.Position, record.Yaw);
 			puppet.IsPuppet = true;
@@ -1115,8 +1405,22 @@ public partial class CrewVehicleManager : Node
 			_latest[slot] = record;
 			_latestTick[slot] = tick;
 			_hasLatest[slot] = true;
-			VehicleAt(slot).ApplyRecord(record, withMotion: slot != _drivenSlot);
+			VehicleAt(slot).ApplyRecord(record, withMotion: slot != _drivenSlot, keepGun: IsLocalGunner(slot),
+				first: created);
 		}
+	}
+
+	/// <summary>
+	/// Client: whether this client is behind <paramref name="slot"/>'s gun, and so steps its
+	/// box itself and does not take the server's, which is a round trip old (§6.4,
+	/// NETCODE.md §10.2).
+	/// </summary>
+	private bool IsLocalGunner(int slot)
+	{
+		int local = NetworkManager.Instance?.LocalPeerId ?? 0;
+		return local != 0 && _seated.TryGetValue(local, out SeatRef seat) && seat.Slot == slot
+			&& VehicleAt(slot) is { } vehicle && seat.Seat < vehicle.Seats.Length
+			&& vehicle.Seats[seat.Seat].Role == SeatRole.Gunner;
 	}
 
 	private void FreePuppet(int slot)
@@ -1206,11 +1510,20 @@ public partial class CrewVehicleManager : Node
 
 		foreach (KeyValuePair<int, SeatRef> entry in _nextSeated)
 		{
-			bool wasSeated = _seated.ContainsKey(entry.Key);
+			bool wasSeated = _seated.TryGetValue(entry.Key, out SeatRef before);
 			_seated[entry.Key] = entry.Value;
 			if (!wasSeated && combat?.Find(entry.Key)?.Character is { } character && IsInstanceValid(character))
 			{
 				character.SetSeated(true);
+			}
+
+			// This client behind the gun now: its box from the last record, its rounds counted
+			// from the first, as the server counts a new gunner's (CrewGun.NewGunner).
+			if (entry.Key == net.LocalPeerId && (!wasSeated || before.Seat != entry.Value.Seat)
+				&& VehicleAt(entry.Value.Slot) is { } gunned && entry.Value.Seat < gunned.Seats.Length
+				&& gunned.Seats[entry.Value.Seat].Role == SeatRole.Gunner)
+			{
+				gunned.Gun?.NewGunner();
 			}
 		}
 
@@ -1352,6 +1665,7 @@ public partial class CrewVehicleManager : Node
 		PredictionStats.Advance(SimConfig.TickDelta);
 		bool fogged = CombatManager.Instance is { Local.Team: Team.Strategist };
 		renderTick = _renderClock.Step(renderTick);
+		DrawnRenderTick = renderTick;
 
 		for (int slot = 0; slot < _vehicles.Length; slot++)
 		{
@@ -1390,6 +1704,7 @@ public partial class CrewVehicleManager : Node
 			CrewPose drawn = vehicle.DrawnPose;
 			CrewSeat seat = vehicle.Seats[entry.Value.Seat];
 			character.PinToSeat(drawn.ToWorld(seat.Eye), vehicle.SimVelocity, drawn.Place(seat.Capsule));
+			AimGun(character, vehicle, entry.Value.Seat, drawn);
 		}
 	}
 

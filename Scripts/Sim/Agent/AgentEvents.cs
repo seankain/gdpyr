@@ -79,6 +79,39 @@ public enum AgentEventKind : byte
 	/// L-D7, §5.4): a pouch's rounds, a grenade, armour points, or several at once.
 	/// </summary>
 	Resupply = 22,
+
+	/// <summary>
+	/// A crew vehicle was asked for at the vehicle kiosk, and the answer
+	/// (docs/GROUND_VEHICLES.md §11). Emitted once the kiosk is on the field (GV6).
+	/// </summary>
+	VehicleRequested = 23,
+
+	/// <summary>A crew vehicle — the ground force's 4x4 or helicopter — was put on the field.</summary>
+	VehicleSpawned = 24,
+
+	/// <summary>A player got into a crew vehicle's seat.</summary>
+	VehicleEntered = 25,
+
+	/// <summary>
+	/// A player left a crew vehicle's seat: got out, was thrown out of its wreck, or was
+	/// put down where they sat — dead, leaving, or the vehicle taken away.
+	/// </summary>
+	VehicleExited = 26,
+
+	/// <summary>
+	/// A round or a blast did a crew vehicle damage, after its armour (GV-D9). Nothing for
+	/// a hit the armour took all of.
+	/// </summary>
+	VehicleDamaged = 27,
+
+	/// <summary>A crew vehicle was destroyed (GV-D12): its crew are thrown out on the same tick.</summary>
+	VehicleDestroyed = 28,
+
+	/// <summary>
+	/// A crew vehicle ran one of the strategist's units on foot over (GV-D17). The unit's
+	/// <c>damage</c>, <c>kill</c> and <c>unit_lost</c> name weapon 15, the ram.
+	/// </summary>
+	VehicleRammed = 29,
 }
 
 /// <summary>
@@ -194,6 +227,22 @@ public static class AgentEventSchema
 		// and the ticks since anything last hurt them, -1 for never this life — never
 		// under 180, the lockout (docs/LOADOUT.md L-D7).
 		new[] { "peer", "rounds", "grenades", "armour", "since_hurt", "" },                    // Resupply
+		// Crew vehicles (docs/GROUND_VEHICLES.md §11). A vehicle is named by its slot, 0 to 3,
+		// as the vehicle record names it; its type by CrewVehicleKind, 0 the 4x4 and 1 the
+		// helicopter ("kind" is every record's own); a seat by its SeatRole, 0 the controls,
+		// 1 the gun, 2 a passenger's.
+		// The refusal is KioskRefusal's number, 0 for taken.
+		new[] { "peer", "type", "refusal", "", "", "" },                                       // VehicleRequested
+		// peer: who asked for it, 0 for nobody.
+		new[] { "vehicle", "type", "peer", "x", "z", "" },                                     // VehicleSpawned
+		new[] { "peer", "vehicle", "seat", "", "", "" },                                       // VehicleEntered
+		// x and z: where they were put down.
+		new[] { "peer", "vehicle", "seat", "x", "z", "" },                                     // VehicleExited
+		// dealt: what the hull took after its armour; health: what it has left.
+		new[] { "attacker", "vehicle", "weapon", "dealt", "health", "" },                      // VehicleDamaged
+		new[] { "attacker", "vehicle", "weapon", "x", "z", "" },                               // VehicleDestroyed
+		// killer: the peer credited, 0 for nobody; speed: the hull's into the unit [m/s].
+		new[] { "vehicle", "unit", "killer", "speed", "x", "z" },                              // VehicleRammed
 	};
 
 	private static readonly string[] Kinds =
@@ -202,6 +251,8 @@ public static class AgentEventSchema
 		"seat_attached", "seat_released", "structure_placed", "structure_built", "structure_lost",
 		"squad_task", "contact_spotted", "node_contested", "unit_embarked", "unit_disembarked", "dropship_landed",
 		"grenade_thrown", "unit_task", "squad_drill", "kit", "resupply",
+		"vehicle_requested", "vehicle_spawned", "vehicle_entered", "vehicle_exited", "vehicle_damaged",
+		"vehicle_destroyed", "vehicle_rammed",
 	};
 
 	/// <summary>The highest kind there is. Everything from 0 to this has a name and a slate of fields.</summary>

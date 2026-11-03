@@ -20,9 +20,21 @@ public sealed class ServerInputQueue
 	private readonly InputFrame[] _slots = new InputFrame[Capacity];
 	private readonly bool[] _filled = new bool[Capacity];
 	private readonly uint[] _slotTicks = new uint[Capacity];
+	private readonly float[] _drawnBehind = new float[Capacity];
 
 	/// <summary>Frames buffered and not yet consumed.</summary>
 	public int Depth { get; private set; }
+
+	/// <summary>
+	/// <see cref="Depth"/> after each pop, smoothed over about a third of a second: how
+	/// long this client's frames wait to be stepped, without the tick-to-tick jitter one
+	/// datagram's early or late arrival puts on the depth. What a seated shooter's view
+	/// tick is measured with (docs/GROUND_VEHICLES.md §5.6).
+	/// </summary>
+	public float SmoothedDepth { get; private set; }
+
+	/// <summary>How much of each pop's depth goes into <see cref="SmoothedDepth"/>.</summary>
+	public const float DepthSmoothing = 0.05f;
 
 	/// <summary>True once a frame has been consumed; before that the queue is still filling.</summary>
 	public bool Started { get; private set; }
@@ -44,6 +56,17 @@ public sealed class ServerInputQueue
 	/// <summary>The last frame consumed, repeated when the buffer runs dry.</summary>
 	public InputFrame Last { get; private set; }
 
+	/// <summary>
+	/// The tick this client was drawing the field at when it sampled the frame the last
+	/// <see cref="TryPop"/> handed out (docs/GROUND_VEHICLES.md §5.6): that frame's tick
+	/// less how far behind it the client said it drew — said for the newest frame of each
+	/// packet, and carried to a frame that came only as an older one from the frame before
+	/// it, the client's lead changing rarely. NaN until the client has said.
+	/// </summary>
+	public float ConsumedDrawnTick { get; private set; } = float.NaN;
+
+	private float _lastDrawnBehind = float.NaN;
+
 	/// <summary>Ticks where the buffer was empty and the last frame had to be repeated.</summary>
 	public int Starvations { get; private set; }
 
@@ -59,7 +82,16 @@ public sealed class ServerInputQueue
 	/// <summary>The next tick <see cref="TryPop"/> will look for.</summary>
 	private uint _nextTick;
 
-	public void Accept(in InputFrame frame)
+	/// <summary>False until the first pop, which <see cref="SmoothedDepth"/> starts from.</summary>
+	private bool _smoothing;
+
+	public void Accept(in InputFrame frame) => Accept(frame, float.NaN);
+
+	/// <summary>
+	/// A frame, and how far behind its tick its client drew the field when it sampled it
+	/// [ticks] — NaN for not known, which every frame but a packet's newest is.
+	/// </summary>
+	public void Accept(in InputFrame frame, float drawnBehindTicks)
 	{
 		if (Started)
 		{
@@ -85,6 +117,12 @@ public sealed class ServerInputQueue
 		{
 			if (_slotTicks[slot] == frame.Tick)
 			{
+				// Reordered: the copy that came as a packet's newest, after an older copy.
+				if (float.IsFinite(drawnBehindTicks))
+				{
+					_drawnBehind[slot] = drawnBehindTicks;
+				}
+
 				Duplicates++;
 				return;
 			}
@@ -96,6 +134,7 @@ public sealed class ServerInputQueue
 		_slots[slot] = frame;
 		_slotTicks[slot] = frame.Tick;
 		_filled[slot] = true;
+		_drawnBehind[slot] = drawnBehindTicks;
 		Depth++;
 	}
 
@@ -127,6 +166,10 @@ public sealed class ServerInputQueue
 			Depth--;
 			Last = frame;
 			AckTick = frame.Tick;
+			if (float.IsFinite(_drawnBehind[slot]))
+			{
+				_lastDrawnBehind = _drawnBehind[slot];
+			}
 		}
 		else
 		{
@@ -135,7 +178,10 @@ public sealed class ServerInputQueue
 		}
 
 		ConsumedTick = _nextTick;
+		ConsumedDrawnTick = float.IsFinite(_lastDrawnBehind) ? frame.Tick - _lastDrawnBehind : float.NaN;
 		_nextTick++;
+		SmoothedDepth = _smoothing ? SmoothedDepth + ((Depth - SmoothedDepth) * DepthSmoothing) : Depth;
+		_smoothing = true;
 		return true;
 	}
 

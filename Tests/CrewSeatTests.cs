@@ -496,4 +496,83 @@ public class CrewSeatTests
 		var local = new Vector3(0.4f, -0.7f, 2.2f);
 		Assert.Equal(local, pose.ToLocal(pose.ToWorld(local)), new Vector3Comparer(1e-5f));
 	}
+
+	// ---- what a seat's weapons see (§6.4) ---------------------------------------------------
+
+	private const ushort Every = 0x1FFF;
+
+	private static bool Has(ushort buttons, InputButtons button) => (buttons & (ushort)button) != 0;
+
+	[Theory]
+	[InlineData(SeatRole.Driver)]
+	[InlineData(SeatRole.Gunner)]
+	[InlineData(SeatRole.Passenger)]
+	public void NoSeat_ThrowsAGrenade_LaunchesADrone_SwingsTheHammer_OrMoves(SeatRole role)
+	{
+		foreach (bool inside in new[] { true, false })
+		{
+			ushort kept = CrewSeats.SeatButtons(role, Every, inside);
+			foreach (InputButtons never in new[] { InputButtons.Grenade, InputButtons.Drone, InputButtons.Melee,
+				InputButtons.Weapon1, InputButtons.Jump, InputButtons.Crouch, InputButtons.Sprint })
+			{
+				Assert.False(Has(kept, never), $"{role} keeps {never}");
+			}
+
+			// The use key is how anybody gets out, and is left alone.
+			Assert.True(Has(kept, InputButtons.Use), $"{role} lost the use key");
+		}
+	}
+
+	[Fact]
+	public void TheDriversKeys_AreTheVehicles_AndNoneReachesAWeapon()
+	{
+		Assert.Equal((ushort)InputButtons.Use, CrewSeats.SeatButtons(SeatRole.Driver, Every, insideArc: true));
+	}
+
+	[Fact]
+	public void TheGunnersTriggerAndReload_AreTheGuns_AndNothingElseIs()
+	{
+		ushort kept = CrewSeats.SeatButtons(SeatRole.Gunner, Every, insideArc: false);
+		Assert.Equal((ushort)(InputButtons.Use | InputButtons.Fire | InputButtons.Reload), kept);
+	}
+
+	[Fact]
+	public void APassenger_KeepsTriggerSightsReloadAndBothGuns_TheTriggerOnlyInsideTheArc()
+	{
+		ushort inside = CrewSeats.SeatButtons(SeatRole.Passenger, Every, insideArc: true);
+		Assert.Equal((ushort)(InputButtons.Use | InputButtons.Fire | InputButtons.Ads | InputButtons.Reload
+			| InputButtons.Weapon2 | InputButtons.Weapon3), inside);
+
+		ushort outside = CrewSeats.SeatButtons(SeatRole.Passenger, Every, insideArc: false);
+		Assert.Equal((ushort)(inside & ~(ushort)InputButtons.Fire), outside);
+		Assert.Equal(0, CrewSeats.SeatButtons(SeatRole.Passenger, 0, insideArc: true));
+	}
+
+	[Fact]
+	public void APassenger_ComesUpWithAGun_NeverTheHammer()
+	{
+		const int all = WeaponSim.AllSlots;
+		int noPrimary = all & ~(1 << SimConfig.LargeSlot);
+
+		Assert.Equal(all & ~1, CrewSeats.PassengerSlots(all));
+		Assert.Equal(SimConfig.LargeSlot, CrewSeats.PassengerSlot(0, all));
+		Assert.Equal(SimConfig.SidearmSlot, CrewSeats.PassengerSlot(0, noPrimary));
+		Assert.Equal(SimConfig.SidearmSlot, CrewSeats.PassengerSlot(SimConfig.SidearmSlot, all));
+		Assert.Equal(SimConfig.LargeSlot, CrewSeats.PassengerSlot(SimConfig.LargeSlot, all));
+		Assert.Equal(SimConfig.SidearmSlot, CrewSeats.PassengerSlot(SimConfig.LargeSlot, noPrimary));
+		Assert.Equal(SimConfig.LargeSlot, CrewSeats.PassengerSlot(7, all));
+	}
+
+	[Fact]
+	public void TheGunsRound_LeavesTheEndOfItsBarrel_WhereverTheHullIs()
+	{
+		var mount = new Vector3(0f, 1.25f, 0.95f);
+		var pose = new CrewPose(new Vector3(10f, 0.7f, -4f), 0.8f, 0.1f, -0.15f);
+		Vector3 direction = CrewSeats.GunDirection(pose, 2.0f, 0.2f, MathF.PI, -0.26f, 0.87f);
+
+		Vector3 muzzle = CrewSeats.GunMuzzle(pose, mount, direction, 1.1f);
+		Assert.Equal(1.1f, muzzle.DistanceTo(pose.ToWorld(mount)), 4);
+		Assert.Equal(direction.Normalized(), (muzzle - pose.ToWorld(mount)).Normalized(), new Vector3Comparer(1e-4f));
+		Assert.Equal(pose.ToWorld(mount), CrewSeats.GunMuzzle(pose, mount, direction, -1f), new Vector3Comparer(1e-5f));
+	}
 }

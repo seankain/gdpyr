@@ -113,8 +113,9 @@ public partial class CombatManager
 		}
 
 		bool flying = IsPiloting(combat.PeerId);
+		bool seated = CrewVehicleManager.Instance?.IsSeated(combat.PeerId) == true;
 		if (!DroneSim.MayLaunch(combat.IsAlive, combat.Team == Team.GroundForce, flying, mounted, tick,
-			combat.DroneEndedTick, Drones.CanLaunch))
+			combat.DroneEndedTick, Drones.CanLaunch, seated))
 		{
 			return;
 		}
@@ -204,22 +205,22 @@ public partial class CombatManager
 		// shoot at drones. Nothing tests a round against a drone yet: it needs a hit shape that
 		// FirstContact checks every unit's, defence's and structure's rounds against, and health.
 		if (FirstContact(chord, ownerId, Team.GroundForce, tick, out Vector3 point, out PlayerCombat victim,
-			out Unit unitVictim, out Structure structureVictim))
+			out Unit unitVictim, out Structure structureVictim, out CrewVehicle crewVictim))
 		{
 			drone.Position = point;
-			EndDrone(slot, DroneEnd.Impact, tick, point, victim, unitVictim, structureVictim);
+			EndDrone(slot, DroneEnd.Impact, tick, point, victim, unitVictim, structureVictim, crewVictim);
 			return;
 		}
 
 		if (DroneSim.BatteryOut(drone, tick))
 		{
-			EndDrone(slot, DroneEnd.Battery, tick, drone.Position, null, null, null);
+			EndDrone(slot, DroneEnd.Battery, tick, drone.Position, null, null, null, null);
 			return;
 		}
 
 		if (DroneSim.OutOfBounds(drone.Position, Cargo.FieldHalfExtentMeters))
 		{
-			EndDrone(slot, DroneEnd.OutOfBounds, tick, drone.Position, null, null, null);
+			EndDrone(slot, DroneEnd.OutOfBounds, tick, drone.Position, null, null, null, null);
 		}
 	}
 
@@ -230,7 +231,7 @@ public partial class CombatManager
 	/// any player, its pilot included, as every blast does.
 	/// </summary>
 	private void EndDrone(int slot, DroneEnd end, uint tick, Vector3 point, PlayerCombat victim, Unit unitVictim,
-		Structure structureVictim)
+		Structure structureVictim, CrewVehicle crewVictim = null)
 	{
 		Drone drone = _drones[slot];
 		_drones[slot] = default;
@@ -268,9 +269,14 @@ public partial class CombatManager
 			flags |= DamageStructure(structureVictim, stats.Damage, explosive: true, stats.StructureDamageScale, pilot,
 				ownerId, weapon, tick);
 		}
+		else if (crewVictim != null)
+		{
+			flags |= DamageCrewVehicle(crewVictim, CrewCombat.DirectDamage(stats), explosive: true,
+				stats.VehicleDamageScale, pilot, ownerId, weapon, tick);
+		}
 
 		flags |= Explode(point, stats, pilot, ownerId, Team.GroundForce, weapon, victim, unitVictim, structureVictim,
-			tick);
+			crewVictim, tick);
 
 		int killed = (UnitManager.Instance?.UnitsLost ?? 0) - lostBefore;
 		DroneKills += Math.Max(killed, 0);

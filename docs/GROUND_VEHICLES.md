@@ -1,10 +1,11 @@
 # gdpyr — Vehicles the ground force drives: a 4x4 and a helicopter
 
-**Status: GV0's baseline measured, GV1's engine-free rules built, GV2's 4x4 on the authority and
-GV3's wire, fog and prediction (§12): a remote client gets in over an 80 ms link, drives the 4x4
-predicted, its passenger rides it smoothly, a strategist is told about it only while the side sees it,
-and a client that joins sees it and who is in it. Nothing is fired from a seat or at a hull yet
-(GV4).** Written against `6699b03`. The
+**Status: GV0's baseline measured, GV1's engine-free rules built, GV2's 4x4 on the authority,
+GV3's wire, fog and prediction, and GV4's combat from and against the vehicles (§12): over an 80 ms
+link a gunner and a passenger fire from a 4x4 at full speed and their rounds leave where their
+tracers do; a rifleman's rounds stop at the hull; a tank's round wrecks it and throws its crew out;
+and it runs riflemen over at speed and pushes them aside at a walk. The helicopter in the game is
+GV5's and the kiosk GV6's.** Written against `6699b03`; GV4 amends GV-D16 (§3). The
 decisions (GV-D1–GV-D17, §3) are the defaults the plan is written against; each is one line to
 change, so flag any you disagree with before GV2 starts. The phases (GV0–GV9, §12) say what each builds, what checks it, and what is
 left for a person at the controls.
@@ -81,7 +82,7 @@ Facts this plan stands on, each read in the source at `6699b03`.
 | GV-D13 | **The kiosk and its timer.** One kiosk, beside the locker. Per kind, at most one alive; both are ready when the round starts; once one is lost — destroyed, or abandoned and removed — the next is ready 45 s (4x4) or 90 s (helicopter) later. A request at the kiosk puts the vehicle on its kind's pad outside the bunker. A vehicle that is empty, with nobody of the ground force within 15 m, for 60 s is removed. | "Spawned on a timer from a kiosk". A cap of one each puts at most five of six players in vehicles. Removal keeps a truck left in a corner from holding its kind's only slot for the rest of the round. |
 | GV-D14 | **Fog: the players' rule.** A strategist is told about a vehicle while the side's sensors see its hull's centre with a clear line, and about its occupants exactly when it is told about the vehicle. | One rule, the one players already have (NETCODE.md §6.2). |
 | GV-D15 | **Bots never drive or fly.** They are made robust to vehicles (§10). HTN ground bots may ride with a person (GV8, optional); legacy bots are unchanged. The computer strategist is unchanged: its units shoot at the occupants, and the hull takes it. | Bots that drive are a navigation system of their own (§15). Legacy bots are the baseline policies are measured against (TRAINING.md §3). |
-| GV-D16 | **Wire and agent API: additive.** One unreliable 30 Hz message and one request with its answer; the input frame and the 32-byte player record unchanged; `DemoFormat.Version` 4 → 5; the agent schema stays `gdpyr-agent-obs-4`; new ops and events only. | Every trained checkpoint keeps loading; an old demo is refused rather than misread. |
+| GV-D16 | **Wire and agent API: additive.** One unreliable 30 Hz message and one request with its answer; the input frame and the 32-byte player record unchanged; `DemoFormat.Version` 4 → 5; the agent schema stays `gdpyr-agent-obs-4`; new ops and events only. **Amended in GV4:** the input *packet*'s header gains one byte, how far behind its newest frame the client was drawing the field (§5.6) — the frame and the demo journal, which records frames, are untouched. | Every trained checkpoint keeps loading; an old demo is refused rather than misread. The byte is the only way the server learns which tick a client drew: its estimate is a tick off, 0.3 m at 18 m/s (§12, GV4). |
 | GV-D17 | **Running units over.** A crew vehicle whose hull strikes one of the strategist's units on foot at 8 m/s or more — measured where it touches, towards the unit — kills it, in the name of whoever is at the controls, or of the last one for 3 s after they leave them. Slower, the unit is pushed aside unhurt (GV-D8). The strategist's vehicles are never run over, the ground force is never hurt by contact, and the crew vehicle loses no speed and takes no damage. | The request. 8 m/s is faster than any unit on foot walks (4.5 m/s) and than the 4x4 reverses (6 m/s), so nothing dies walking into a parked truck or under one backing up, and the 4x4 has it about 2 s from rest. A tank killed by a truck would be absurd. A ram that changed the vehicle's motion would make the driver's prediction depend on units the client sees a round trip late. |
 
 ---
@@ -237,20 +238,38 @@ refusal, in order; each of abandonment's three conditions.
 Each vehicle records its pose (position and orientation) every tick in a 32-tick ring, the size of
 the hitbox ring. A client draws the vehicle at its render clock, `InterpolationDelayTicks` (6)
 behind its estimate of the server's tick (`SimClock.RenderTick`), and its input clock leads that
-estimate by its one-way latency plus however long its frames wait in the server's buffer. So the
-tick a client was drawing when it sampled the frame the server consumes at tick `N` is
+estimate by its one-way latency plus however long its frames wait in the server's buffer.
+
+**The client says which tick it drew** (GV4): each input packet's header carries how far behind
+its newest frame's tick the client was drawing the crew vehicles when it sampled that frame, in
+quarter ticks (`InputCodec.DrawnBehind`; 0 for not known). The server keeps it with the frame and
+carries it to a frame that arrived only as an older one in a later packet
+(`ServerInputQueue.ConsumedDrawnTick`), and the view is that frame's tick less it — clamped into
+the ring and to no later than `N`. **Only for a client that has not said**, the estimate:
 
 ```
-view = N − LagCompensationTicks(peer) − InputBufferDepth(peer) − InterpolationDelayTicks      (clamped to the ring)
+view = N − LagCompensationTicks(peer) − InputBufferDepth(peer) − ½ − InterpolationDelayTicks − 1      (clamped to the ring)
 ```
 
 and a seated shooter with no remote client — a bot, an agent's seat, the listen host — is at `N`.
 The muzzle, the eye and the fire arc are taken from the pose at `view`; NETCODE.md §4.3's cheap
 compensation then advances the round as it does anybody's. At 18 m/s and 100 ms RTT — three ticks
-each way, a three-tick buffer — that is 3 + 3 + 6 = 12 ticks, 3.6 m.
+each way, a three-tick buffer — that is 3 + 3 + ½ + 6 + 1 = 13.5 ticks, 4.05 m.
 
-Tests: the ring wraps; the formula and its clamp; `N` itself for a seat with no client; a sampled
-pose is the one recorded for its tick.
+**Why the client says** (§12, GV4): the plan's estimate was `N − lag − depth − 6`, and over the
+link it put the server's round 1–3 ticks ahead of the tracer. Two terms were missing — the client
+samples a frame on the physics step after the one it drew (`SampleAfterDrawTicks`, 1), and a frame
+waits between the depth reported after it is consumed and a tick more (`BufferHalfTick`, ½) — and
+the depth jumps by a frame from tick to tick with one datagram's jitter, so it is smoothed
+(`ServerInputQueue.SmoothedDepth`). Even so the estimate missed by up to 1.0 m in one run of three:
+how far the client's own estimate of the server's tick is off, and when its clock or its input lead
+moves by a tick, is something only the client knows (NETCODE.md §2). `view` is fractional and the
+ring is interpolated at it, as a client draws a vehicle between two records.
+
+Tests: the ring wraps; the client's drawn tick taken and clamped; the estimate, its fraction and
+its clamp; `N` itself for a seat with no client; a sampled pose is the one recorded for its tick,
+and between two ticks the two interpolated; the header's byte, its quantum and its bounds; the
+buffer carrying it to its frame; the smoothed depth.
 
 ### 5.7 The driver's ledger — `Scripts/Sim/CrewLedger.cs`, `Tests/CrewLedgerTests.cs`
 
@@ -472,8 +491,8 @@ pose and rates the driver's replay restores, the occupants every client draws, a
 status the HUD shows. The kiosk's status is the drone shelf's precedent (CONTROL_POINTS.md §4.4):
 state in a message that is going out anyway. GV3 sends it on every snapshot tick, a 9-byte header
 when no vehicle is out, so a client nothing is fogged for learns of a removal from the records that
-stop naming it (§8.1). Until the kiosk is on the map (GV6) both kinds' status is `disabled`; until
-the gun is (GV4) its box byte is 0 and its reload bit clear.
+stop naming it (§8.1). Until the kiosk is on the map (GV6) both kinds' status is `disabled`. From
+GV4 the gun's box byte and reload bit are the server's box; the gunner's own client keeps its own.
 
 ### 7.2 Requests
 
@@ -631,13 +650,14 @@ runs a unit over, the drive and flight traits), `Weapons/vehicle_gun/vehicle_gun
 - **Ops:** `{"op":"vehicle","kind":"4x4"}` asks a kiosk, through `KioskRules.Check`, and is answered
   with `taken` or the refusal's name; `{"op":"list_vehicles"}` returns every vehicle — slot, kind,
   position, yaw, health, speed, its seats' peers, destroyed — and the kiosk's status.
-- **Events**, appended after `Resupply = 22`: `vehicle_requested` {peer, kind, refusal},
-  `vehicle_spawned` {vehicle, kind, peer, x, z}, `vehicle_entered` {peer, vehicle, seat},
+- **Events**, appended after `Resupply = 22` (GV4, 23–29): `vehicle_requested` {peer, type,
+  refusal}, `vehicle_spawned` {vehicle, type, peer, x, z}, `vehicle_entered` {peer, vehicle, seat},
   `vehicle_exited` {peer, vehicle, seat, x, z}, `vehicle_damaged` {attacker, vehicle, weapon, dealt,
   health}, `vehicle_destroyed` {attacker, vehicle, weapon, x, z}, `vehicle_rammed` {vehicle, unit,
-  speed, x, z}. A unit run over also has the ordinary `damage` and `kill`, naming weapon 15, and
-  `unit_lost`, naming the driver. `EpisodeMetrics` mirrors them; `AgentEventTests`' `Last` assertion
-  moves.
+  killer, speed, x, z}. A vehicle's kind is its `type`, because every record already has a `kind`
+  (`AgentEventTests` refused the plan's name). A unit run over also has the ordinary `damage` and
+  `kill`, naming weapon 15, and `unit_lost`, naming the driver. `EpisodeMetrics` mirrors them;
+  `AgentEventTests`' `Last` assertion moves.
 - **Observation:** `gdpyr-agent-obs-4`, unchanged. A seated seat's `self` is at its seat with its
   vehicle's velocity. Getting in, driving and getting out are the frame's buttons and axes, which a
   policy already sends. A vehicle block in the vector would be `obs-5` (§15).
@@ -1105,6 +1125,152 @@ crew take the shell's blast as well; a rifleman's rounds at the driver stop at t
 box counts down on the tick the gunner fires; a 4x4 at full speed through a line of riflemen kills
 each one it strikes, in its driver's name, and at walking pace pushes them aside unhurt.
 
+**Built on `2f7df04`**, with GV0's .NET SDK and Godot.
+
+- **New, engine-free**, in `Scripts/Sim`: `CrewCombat.cs` — the first hull box a round enters
+  nearer than what was already found (`FirstHit`), a blast's distance to the hull's face, the tank's
+  direct number (`DirectDamage`), the armour, who a blast reaches (not an enclosed seat), when a
+  wreck kills everybody aboard (a helicopter more than 4 m up, or of unknown height), what it deals
+  one it throws out (50, or more than any vest leaves standing) and how long it burns. `CrewSeats`
+  gains what a seat's weapons see of a frame (`SeatButtons`: never a grenade, a drone, the hammer or
+  movement), a passenger's slots and slot (`PassengerSlots`, `PassengerSlot`: a gun, never the
+  hammer) and the gun's muzzle (`GunMuzzle`). `PoseHistory.ViewTick` takes the tick the client says
+  it drew, with the estimate as the fallback, and the ring is interpolated at a fractional tick.
+  `InputCodec`'s header gains the drawn-behind byte; `ServerInputQueue` keeps it with its frame
+  (`ConsumedDrawnTick`) and smooths the depth (`SmoothedDepth`). `KitRefusal.Seated` (7, appended)
+  and `DroneSim.MayLaunch`'s `seated`. §11's seven events, 23–29, mirrored in `EpisodeMetrics`.
+- **New, engine side:** `Scripts/Fps/IGunMount.cs` — what `FireMounted` needs of a gun, which
+  `Emplacement` and `Scripts/Fps/CrewGun.cs`, the 4x4's mounted gun, implement; the gun is handed the
+  hull it fires from before every step.
+- **Changed:** `CombatManager` — a seated player's weapons on both ends (`SimulateSeated`): the
+  driver's and pilot's sights down; the gunner's trigger the gun's, a passenger's their pistol and
+  primary inside the seat's arc, each from the hull at their view tick on the server and as drawn on
+  their client; hulls in `FirstContact` after the structures, the shooter's own vehicle and its crew
+  skipped; `DamageCrewVehicle`; `Explode` over the hulls, skipping enclosed seats; `ResolveCrewWrecks`
+  after `ResolveWrecks`; `RamUnit`; a hull stops a hammer's swing; a drone strikes a hull; no
+  resupply and no locker kit in a seat. `CrewVehicleManager` — the hull query, blast distance and seat
+  questions combat asks; running units over after each vehicle steps; a wreck taken away two seconds
+  on; the crew put out of a wreck; who is at the controls, for the ram's credit; a new gunner's box
+  counted from their first round; the events; on a client, the gunner's own box kept, and a new
+  puppet's first record never set off as a wreck; the gunner's box and a passenger's `no shot` on
+  the seated line; the debug row's `run over`. `CrewVehicle` — the gun, the ram's credit, its hull
+  placed for a query, the wreck drawn burnt and going up, the gun drawn turning with its gunner, the
+  gun's box and reload bit on the record. `PlayerManager` — the drawn-behind byte sent with each
+  input packet and read off it; the depth, and whether a peer plays across a link. `BotPilot` — a
+  friendly hull in the line of fire, or within a blast's reach of the target, holds a bot's fire
+  (§10). `GroundSensor` already never takes a crew vehicle as a target: it scans units and structures.
+- **Four defects found, and fixed:**
+  - **The view tick missed by 1–3 ticks** (§5.6, §14). With the plan's estimate the server's round
+    left 0.3–0.9 m ahead of the tracer along the truck's motion at 18 m/s, median 0.6 m, for the
+    gunner and the passenger alike (two runs). Joined by projectile id across both ends, every
+    frame of both clients was consumed exactly 3 ticks before its input tick, each client drew a
+    steady number of ticks behind its input clock (17 for the gunner, 15–16 for the passenger in that
+    run), and the miss was `(T − drawn) − 12 − depth` to the tick, the depth jumping 1–4 from round
+    to round. With the two missing terms and the depth smoothed, the estimate's worst miss over four
+    runs was 0.290, 0.330, 1.019 and 4.830 m: a client's clock or input lead moving by a tick mid-burst
+    — the join shows `T − drawn` going 12 → 13 with the depth unmoved — is invisible to the server.
+    The client now says which tick it drew (GV-D16, amended); the estimate is kept for a client that
+    does not. Facts: the `PoseHistoryTests`, `ServerInputQueueTests` and `InputCodecTests` above.
+  - **`kind` is every event's own key.** §11 named `vehicle_requested`'s and `vehicle_spawned`'s
+    vehicle kind `kind`, and `AgentEventTests.NoSlotIsNamedKindOrTick_BecauseEveryRecordAlreadyHasThose`
+    and `EveryEventSerializesWithNoDuplicateKeys` failed on it. It is `type`, as a structure's is.
+  - **The ram's threshold was in two places.** `RunOver`'s cheap test of the hull's fastest point
+    compared it with the kill speed itself, so a `Ramming.Kills` that killed at any speed still
+    killed nothing at a walk. It asks `Ramming.Kills`.
+  - **No fact saw a round from a seat hit its own hull.** Fired to the side, nothing from the gun or
+    the bed crosses the 4x4, so not skipping it failed nothing. The check now fires the gun forward
+    at its lowest, its muzzle inside the cab's box.
+- **Tests:** `dotnet test` **2,946 of 2,946 pass**, 31 of them new: `CrewCombatTests` (12),
+  `CrewSeatTests` (+8), `ServerInputQueueTests` (+4), `PoseHistoryTests` (+2), `InputCodecTests` (+2),
+  `AgentEventTests` (+1), `KitRequestTests` (+1), `LoadoutDraftTests` (+1); `DroneTests`' launch fact
+  gains a seat. Three facts move as GV4 means them to: `InputCodecTests`' packet is 38 B, not 37;
+  `KitRequestTests`' first unknown refusal is 8, not 7; `AgentEventTests`' last kind is
+  `vehicle_rammed`. The test project's one warning is still GV0's CS0649.
+- **Builds:** `Gdpyr.csproj`, `tools/Gdpyr.Playtest` and `tools/Gdpyr.AgentClient`, 0 warnings and 0
+  errors each, rebuilt from clean.
+- **Engine checks:** `scripts/crew-vehicle-checks.sh combat` runs
+  `tools/EngineChecks/CrewVehicleCombatChecks.cs` in four headless processes on a copy of the tree
+  — a `--server` and a driver, a gunner and a passenger, the three behind GV3's relay (40 ± 10 ms each
+  way) — in real time, keeping in step by marker files, and reads the server's events from an
+  `AgentEventLog` it installs. **57 of 57 facts in each of the two runs of the final code.** GV3's
+  `net`, after the byte: 57 of 57. Before it, one run of `net` had a driver's clock resync and a
+  1.32 m correction shown at once, and a re-run held all 57. GV2's `physics` and `game`, on the final
+  code: 66 of 66 and 37 of 37.
+- **The scenario suite**, GV0's way (`--fixed-fps 60` through `GODOT`), on a copy of the final tree:
+  **34 of 41**, GV0's eight failing but `htn_squad_retreats`, which passes here as in GV0's second run
+  and GV3's. Against GV0's two runs three claims read anything different, all in scenarios GV0
+  names as spread: `htn_squad_retreats`' `squad_task[goal=4]` 5..10 (7..8 and 8..11), and
+  `tactics_sniper_overwatch`'s `unit_task[goal=21]` 5..9 and `[goal=23]` 3..7, inside GV0's ranges.
+  No scenario puts a crew vehicle down; this is the suite's check that nothing else moved.
+
+Measured by `combat`, the final code (two runs; the relay: one-way 40.0 ms mean, 10.0 ms SD,
+1.8–81.8 ms):
+
+| | |
+|---|---|
+| Parked, a second of the gunner's fire | the box 100 → 92 on the gunner's client, its first round off on the first tick sampled after the press, never back up; the server's 92; the line under the reticle `4x4 · gun · 92/100` |
+| The gun forward and down at −15°, its muzzle inside the cab's box | 4 rounds; the 4x4 600 → 600 |
+| The bed, over the cab | `4x4 · bed · no shot`, and half a second of the trigger fires nothing |
+| On the straight at 18 m/s, both firing to the left, 4.3 s | 33 of the gunner's rounds and 30 of the passenger's adopted; tracer and round 0.002–0.006 m apart on average, 0.009 m at worst — the origins' centimetre — while the passenger's client drew 16–19 ticks behind its input clock in one run |
+| No round from either seat hit the 4x4 | 600 → 600 |
+| A rifleman 35 m off, 8 s, only the driver aboard | 34 hits on the hull, 600 → 498, 3 each; the driver 100 → 100 |
+| A tank's round at the hull's centre from 30 m off its left side | one `vehicle_damaged`, a wreck; the driver 100 → 50, the gunner 100 → 0, the passenger 100 → 9 — the wreck's 50 and the shell's blast; the driver put down 0.65 m from the hull; three `vehicle_exited`; the wreck gone 120 ticks later. On the driver's client: out of the seat, 50 health, the 4x4 drawn a wreck and freed |
+| Full throttle from 60 m into three riflemen abreast, 0.8 m apart | 3 `vehicle_rammed` at 18.0 m/s each; 3 kills with weapon 15 and 3 `unit_lost`, all the driver's; the driver's kills 0 → 3; `run over 3` on the debug row |
+| A quarter throttle into three more | 4.54 m/s at most; none run over, all three alive, each pushed 0.84 m or more |
+
+Each guard, broken on a copy and `combat` run, and what failed:
+
+| Broken | Failed |
+|---|---|
+| the round from the server's own tick, `N` | both shooters' origins, 3.6 m apart at worst |
+| the server's estimate in place of what the client drew | the origins, in three of four runs: 0.330, 1.019, 4.830 m at worst; the plan's estimate, in both of two: 0.90 m |
+| a blast that reaches the enclosed seats | the driver gets out at 50 (0), and their client's record says so (0) |
+| hulls not in `FirstContact` | the rifleman's rounds reach the hull (0 hits) and none reaches the driver (killed); the tank's round wrecks nothing, and every fact after it |
+| the tank's `VehicleImpactDamage` left out, with the two rows below in the same run | one direct hit wrecks the 4x4, and every fact after it; the gunner's box (below) |
+| the shooter's own hull not skipped | the gun forward and down never hits its own 4x4 (600 → 566) |
+| the gunner's client taking the server's box | the box never goes back up while it fires (100 → 93), and the server's agrees (92 and 93) |
+| a ram that kills at any speed | at a walk it kills none of them (3 killed at 4.54 m/s) |
+
+In the run with the shooter's own hull not skipped, the gunner's frames also stopped arriving for
+about 1.2 s, twice — the buffer's depth near 0, its drawn tick held — and the server stepped its last
+frame again with the trigger held, as it does anybody's: ten rounds to the client's seven, rounds
+adopted by the wrong spawns, the origins 4.5 m apart. No other run starved. In the run with the
+tank's number, the own hull and the box broken together, the passenger's tap to get out before the
+tank's turn also failed, for a reason not found, and the server process aborted after its last fact;
+that run's logs were not kept. Its own hull and its box were run again apart, the rows above.
+
+What the phase left open, and what GV4 chose:
+
+- **A blast reaches every hull**, the thrower's own included, as it reaches every player: friendly
+  fire is as for players, and so is self-damage. Only the round is kept off its own vehicle (GV-D6).
+- **A wreck is not shot.** For its two seconds it is still a collider, but `QuerySegment` passes it
+  by, and a round goes through.
+- **A hull stops a hammer's swing**, as it stops a round, and takes it as a bullet; nobody reaches a
+  driver through the door. **A drone that strikes a hull** sets its 800 on it, which wrecks either.
+- **A gunner's rounds are counted from the seat** (`CrewGun.NewGunner`), on the server and on their
+  client, so the cone's seed agrees without the gun's count on the wire. A gunner's client starts
+  from the box the last record gave it.
+- **A passenger who gets in with the hammer up comes up with their primary**, or the pistol without
+  one; `1` does nothing in a seat.
+- **"The reticle says so"** is `· no shot` on the seated line under the reticle, measured on the hull
+  as drawn.
+- **Every unseating is a `vehicle_exited`** — a tap, a wreck, death, leaving, a vehicle taken away or
+  a round's reset. `vehicle_requested` is in the schema for the kiosk's requests (GV6), and nothing
+  emits it yet. `vehicle_rammed` names the peer credited, which §11 did not.
+- **The kiosk's timer** starts on a loss once the kiosk is on the field (GV6).
+- **The drawn-behind byte** is said for a packet's newest frame and carried to a frame that came only
+  as an older one; a quarter tick, 7.5 cm at 18 m/s; 0 — before the client has drawn anything, or
+  more than 63.75 ticks behind — falls back to the estimate.
+- **The tank's fact** puts a strategist tank 30 m off the truck's left side — the lane runs east to
+  the field's edge, and the truck stops near it — and fires one `cannon_76` round from it at the
+  hull's centre through `SpawnProjectile`, in the tank's name, rather than waiting on its AI.
+- **The bots' line of fire and blast checks** count hulls, and no check or scenario has a bot near a
+  crew vehicle: §10's robustness is the code, untested in the engine.
+- **Left for a person at the controls**: everything drawn — tracers leaving the gun and the bed of a
+  moving 4x4, the gun turning, the wreck going up and burning, the `no shot` line — has been driven
+  headless and never looked at (`TODO(GV4…)` in `CrewVehicle.cs`), nor has any of it run on a
+  dedicated server over a real link.
+
 ### GV5 — The helicopter (2 days)
 
 §5.2 in the game: the rotor, ceiling, field clamp, landing and coming down unpiloted; presentation;
@@ -1148,7 +1314,8 @@ DEMOS.md (version 5), EFFECTS.md (§1's table), and this document's status.
 | A direct tank hit destroys either; a near miss does not | §5.8's file facts; `vehicle_tank_direct_hit` | `dotnet test`; Godot headless |
 | Significant small-arms tolerance | §5.8's hits-to-destroy facts; `vehicle_4x4_small_arms` | `dotnet test`; Godot headless |
 | Drivers and pilots are shielded | §5.4's containment fact | `dotnet test` |
-| Passengers fire from a moving seat | `vehicle_passenger_fires`; GV4's origin log over a link | Godot headless; a person, dedicated server |
+| Passengers fire from a moving seat | `vehicle_passenger_fires`; GV4's origin log over a link | Godot headless; `crew-vehicle-checks.sh combat`; a person, dedicated server |
+| The hull stops small arms; a tank's hit wrecks it; the crew get out | GV4's rifleman, tank and wreck facts | `crew-vehicle-checks.sh combat`: a `--server` process and three clients through the relay |
 | The kiosk's timer and cap | §5.5's facts; `vehicle_kiosk_cap` | `dotnet test`; Godot headless |
 | A collision at 8 m/s or more kills a unit on foot; a slower one does not | §5.9's facts; `vehicle_rams_infantry`, `vehicle_pushes_slowly` | `dotnet test`; Godot headless |
 | Driving feels like driving | GV3's error, misprediction and replay numbers | `crew-vehicle-checks.sh net`: a `--server` process and four clients, 80 ms RTT and 20 ms jitter through a relay; a person, dedicated server with `tc netem` |
@@ -1162,7 +1329,7 @@ DEMOS.md (version 5), EFFECTS.md (§1's table), and this document's status.
 | The sprung step does not reconcile: a bounce magnifies small differences | constant corrections driving straight; replays at their longest | damping ratio ≥ 0.25; attitude and its rates in the thresholds; the server rounds its vehicle state to the wire's resolution each tick, so a replay starts from the server's own numbers; last, GV-D4's fallback — the driver interpolates, as a passenger does |
 | A hull catches on corners, or a fast hull swallows a body | trucks stopping dead on wall ends; a player inside a hull | a bevelled collider, checked at 18 m/s in GV2; a body found inside a hull is moved out by the server |
 | Units wedge on a parked vehicle the navmesh knows nothing of | riflemen stuck against a truck | vehicles are few and are removed after 60 s abandoned; if it shows, a `NavigationObstacle3D` on a parked hull |
-| §5.6's view tick is off by a tick or two | tracer and round more than 0.3 m apart at speed | GV4's measured check; the formula is one tested function |
+| §5.6's view tick is off by a tick or two | tracer and round more than 0.3 m apart at speed | GV4's measured check; the formula is one tested function. **Seen in GV4**: the plan's formula ran 1–3 ticks late; with two terms added and the depth smoothed it still missed by up to a metre, the client's own clock moving by a tick, which only the client knows. The client now says which tick it drew, in the input packet's header (GV-D16, amended) |
 | The barracks mortar aims at a point in the air | shells bursting overhead, or no solution found | checked in GV5; if it misbehaves, the mortar skips airborne players |
 | A truck parked in the bunker's door shuts the spawn in | nobody leaves the bunker | anybody can drive it away with `E`; it is removed after 60 s empty |
 | The vehicles decide rounds | the strategist stops winning against people in them | the cap, the timers and the armour are files (§9); one helicopter at 90 s is the first dial |

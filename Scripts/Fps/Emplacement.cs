@@ -22,7 +22,7 @@ namespace Gdpyr.Fps;
 /// would both have to be taught about; here it is something to stand behind and
 /// shoot with, and rounds pass through it.
 /// </summary>
-public partial class Emplacement : Node3D
+public partial class Emplacement : Node3D, IGunMount
 {
 	/// <summary>Nodes in this group are the heavy guns. The map owns them, not the manager.</summary>
 	public const string Group = "emplacement";
@@ -64,6 +64,14 @@ public partial class Emplacement : Node3D
 
 	/// <summary>Where a round leaves from: the barrel, not the gunner's eye.</summary>
 	public Vector3 MuzzlePosition => DeployPosition + (Vector3.Up * SimConfig.EmplacementMuzzleHeightMeters);
+
+	ref WeaponState IGunMount.Belt => ref Weapon;
+
+	/// <summary>The gunner's look inside the traverse arc it was put down facing (<see cref="EmplacementSim.Traverse"/>).</summary>
+	public Vector3 AimFor(float yaw, float pitch) => EmplacementSim.Traverse(yaw, pitch, DeployYaw);
+
+	/// <summary>The barrel's pivot, wherever it points: the tripod does not move.</summary>
+	public Vector3 MuzzleFor(Vector3 aim) => MuzzlePosition;
 
 	private Node3D _yawPivot;
 	private MeshInstance3D _barrel;
