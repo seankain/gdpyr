@@ -107,7 +107,8 @@ public partial class CrewSeatView : Node3D
 			_armVehicle = vehicle;
 		}
 
-		_pivot.GlobalPosition = vehicle.GlobalPosition + (Vector3.Up * PivotHeightMeters);
+		// The hull as it is drawn, a driver's correction still being drawn away included (§8.2).
+		_pivot.GlobalPosition = vehicle.DrawnPose.Position + (Vector3.Up * PivotHeightMeters);
 		float pitch = Mathf.Clamp(character.Pitch - ArmDownRadians, ArmPitchMinRadians, ArmPitchMaxRadians);
 		_pivot.GlobalBasis = Basis.FromEuler(new Vector3(pitch, character.Yaw, 0f));
 

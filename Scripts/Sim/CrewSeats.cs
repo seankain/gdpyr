@@ -192,6 +192,29 @@ public static class CrewLayout
 	public const int MaxHullBoxes = 4;
 
 	/// <summary>
+	/// The middle of the box round every one of <paramref name="hull"/>'s boxes, in the
+	/// vehicle's frame: the point the fog sees a vehicle by (docs/GROUND_VEHICLES.md §7.3).
+	/// The origin for a hull with no boxes.
+	/// </summary>
+	public static Vector3 HullCentre(ReadOnlySpan<HullBox> hull)
+	{
+		if (hull.Length == 0)
+		{
+			return Vector3.Zero;
+		}
+
+		Vector3 min = hull[0].Center - hull[0].HalfExtents;
+		Vector3 max = hull[0].Center + hull[0].HalfExtents;
+		for (int i = 1; i < hull.Length; i++)
+		{
+			min = min.Min(hull[i].Center - hull[i].HalfExtents);
+			max = max.Max(hull[i].Center + hull[i].HalfExtents);
+		}
+
+		return (min + max) * 0.5f;
+	}
+
+	/// <summary>
 	/// The seats, as many as every array holds, up to <see cref="MaxSeats"/>. A seat's arc
 	/// is in degrees: yaw as (min, max), pitch as (min, max). A missing value is zero —
 	/// a seat no file can get wrong into a crash, and one the file tests then fail on.

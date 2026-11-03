@@ -25,6 +25,13 @@ namespace Gdpyr.Fps;
 /// tick, with its driver's frame or a parked one. Its presentation — greybox boxes in
 /// the ground force's colour, wheels placed by their springs, the gun on its mount,
 /// rotor discs — is built only off a dedicated server, as the dropship's is.
+///
+/// <para>On a client (§8) it is one of two things. A <see cref="IsPuppet">puppet</see>,
+/// placed each tick where the records put it at the render clock and never stepped: its
+/// wheels are put on the ground by rays cast here, for the eye alone. Or the vehicle this
+/// client drives, stepped by the same <see cref="Step"/> over the driver's own frames and
+/// replayed from a record when the server disagrees; a correction is drawn away by
+/// <see cref="VisualOffset"/> rather than jumped.</para>
 /// </summary>
 public partial class CrewVehicle : CharacterBody3D
 {
@@ -45,6 +52,7 @@ public partial class CrewVehicle : CharacterBody3D
 	private PhysicsRayQueryParameters3D _ray;
 
 	private Node3D _visual;
+	private Node3D _presentation;
 	private readonly Node3D[] _wheelNodes = new Node3D[FourByFourSim.Wheels];
 	private Node3D _rotor;
 	private Node3D _tailRotor;
@@ -82,6 +90,31 @@ public partial class CrewVehicle : CharacterBody3D
 
 	/// <summary>Its pose over the last half second (§5.6): what a seated shooter's round will leave from.</summary>
 	public PoseHistory Poses { get; } = new();
+
+	/// <summary>
+	/// Server: the newest input frame of its driver's that the server had consumed when it
+	/// last stepped — the driver's acknowledgement the record carries (§7.1). 0 with nobody
+	/// at the controls.
+	/// </summary>
+	public uint DriverInputTick { get; set; }
+
+	/// <summary>
+	/// Client: drawn where the records put it and never stepped (§8.1). False on the
+	/// authority, and for the vehicle this client drives (§8.2).
+	/// </summary>
+	public bool IsPuppet { get; set; }
+
+	/// <summary>
+	/// Client, the vehicle this client drives: what is left of the last correction, drawn on
+	/// the hull and decaying (§8.2). Zero everywhere else.
+	/// </summary>
+	public CrewVisualOffset VisualOffset;
+
+	/// <summary>Where it is drawn: its pose with what is left of a correction on it.</summary>
+	public CrewPose DrawnPose => VisualOffset.Apply(Pose);
+
+	/// <summary>The middle of its hull, where the fog looks for it (§7.3).</summary>
+	public Vector3 HullCentre => CrewFog.HullCentre(Hull, Pose);
 
 	/// <summary>What one of the 4x4's wheel rays found on the last tick, in <see cref="FourByFourSim.Wheels"/> order.</summary>
 	public WheelContact Wheel(int wheel) => wheel >= 0 && wheel < _wheels.Length ? _wheels[wheel] : WheelContact.Miss;
@@ -260,6 +293,148 @@ public partial class CrewVehicle : CharacterBody3D
 		return hit.Count == 0 ? origin : hit["position"].AsVector3();
 	}
 
+	// ---- the wire (§7.1, §8) ----------------------------------------------------------
+
+	/// <summary>What the driver's prediction of it is compared on (§5.7), at <paramref name="tick"/>.</summary>
+	public CrewSample Sample(uint tick) =>
+		Kind == CrewVehicleKind.Helicopter ? CrewSample.Of(tick, Flight) : CrewSample.Of(tick, Drive);
+
+	/// <summary>Server: this vehicle as <c>ServerCrewVehicles</c> carries it.</summary>
+	public CrewVehicleRecord ToRecord()
+	{
+		var record = new CrewVehicleRecord
+		{
+			Slot = (byte)Slot,
+			Kind = Kind,
+			Destroyed = Destroyed,
+			DriverSeated = DriverPeerId != 0,
+			Health = CrewVehicleCodec.HealthToU16(Health),
+			DriverInputTick = DriverPeerId != 0 ? DriverInputTick : 0,
+		};
+
+		if (Kind == CrewVehicleKind.Helicopter)
+		{
+			record.SetFlight(Flight);
+		}
+		else
+		{
+			record.SetDrive(Drive);
+		}
+
+		for (int seat = 0; seat < Seats.Length && seat < CrewLayout.MaxSeats; seat++)
+		{
+			record.SetSeatPeer(seat, Occupants[seat]);
+		}
+
+		return record;
+	}
+
+	/// <summary>
+	/// Client: what a record says that is not where it is — its health, whether it is a
+	/// wreck, who sits where, how fast it is going, its steering or rotor. The pose is the
+	/// interpolator's (<see cref="PlaceAt"/>) or the prediction's (<see cref="Restore"/>).
+	/// </summary>
+	public void ApplyRecord(in CrewVehicleRecord record, bool withMotion)
+	{
+		Health = record.Health;
+		Destroyed = record.Destroyed;
+		for (int seat = 0; seat < Occupants.Length; seat++)
+		{
+			Occupants[seat] = seat < Seats.Length ? record.SeatPeer(seat) : 0;
+		}
+
+		if (!withMotion)
+		{
+			return;
+		}
+
+		if (Kind == CrewVehicleKind.Helicopter)
+		{
+			Flight.Velocity = record.Velocity;
+			Flight.Rotor = record.Rotor;
+			Flight.Grounded = !record.Airborne;
+		}
+		else
+		{
+			Drive.Velocity = record.Velocity;
+			Drive.Steer = record.Steer;
+			Drive.AirTicks = record.Airborne ? 1 : 0;
+		}
+	}
+
+	/// <summary>
+	/// Client, the vehicle it drives: the whole state a record restores, which a replay
+	/// then steps on from (§8.2). The body is put where the state says.
+	/// </summary>
+	public void Restore(in CrewVehicleRecord record)
+	{
+		if (Kind == CrewVehicleKind.Helicopter)
+		{
+			Flight = record.ToFlight();
+		}
+		else
+		{
+			Drive = record.ToDrive();
+		}
+
+		CrewPose pose = Pose;
+		GlobalTransform = new Transform3D(new Basis(Vector3.Up, pose.Yaw), pose.Position);
+		Velocity = SimVelocity;
+	}
+
+	/// <summary>
+	/// Client, a puppet: placed at <paramref name="pose"/>, the records interpolated at the
+	/// render clock (§8.1), its body upright and turned to its heading so the local player
+	/// meets it there. The wheels are put on the ground by rays cast here — or the
+	/// helicopter's height measured — for the eye and the HUD alone.
+	/// </summary>
+	public void PlaceAt(in CrewPose pose)
+	{
+		if (Kind == CrewVehicleKind.Helicopter)
+		{
+			Flight.Position = pose.Position;
+			Flight.Yaw = pose.Yaw;
+			Flight.Pitch = pose.Pitch;
+			Flight.Roll = pose.Roll;
+		}
+		else
+		{
+			Drive.Position = pose.Position;
+			Drive.Yaw = pose.Yaw;
+			Drive.Pitch = pose.Pitch;
+			Drive.Roll = pose.Roll;
+		}
+
+		GlobalTransform = new Transform3D(new Basis(Vector3.Up, pose.Yaw), pose.Position);
+
+		PhysicsDirectSpaceState3D space = GetWorld3D()?.DirectSpaceState;
+		if (space == null || _ray == null)
+		{
+			return;
+		}
+
+		if (Kind == CrewVehicleKind.Helicopter)
+		{
+			HeightAboveGround = CastHeight(space, pose.Position);
+			return;
+		}
+
+		FourByFourTraits traits = DriveTraits;
+		for (int wheel = 0; wheel < FourByFourSim.Wheels; wheel++)
+		{
+			_wheels[wheel] = CastWheel(space, FourByFourSim.Hardpoint(Drive, traits, wheel), traits.RayLengthMeters);
+		}
+	}
+
+	/// <summary>Client: hides it from a strategist the fog no longer tells about it (§7.3). Presentation only; it is still solid.</summary>
+	public void SetFogHidden(bool hidden)
+	{
+		if (_presentation != null)
+		{
+			_presentation.Visible = !hidden;
+		}
+	}
+
 	// ---- seats -----------------------------------------------------------------------
 
 	/// <summary>The seat <paramref name="peerId"/> is in, or −1.</summary>
@@ -319,12 +494,18 @@ public partial class CrewVehicle : CharacterBody3D
 	/// </summary>
 	public override void _Process(double delta)
 	{
+		VisualOffset.Decay((float)delta);
 		if (_visual == null)
 		{
 			return;
 		}
 
-		CrewPose pose = Pose;
+		// The correction still being drawn away, on top of the body (§8.2): the body is
+		// upright and turned to its heading, so the offset's position goes in its frame.
+		_presentation.Position = new Basis(Vector3.Up, -Yaw) * VisualOffset.Position;
+		_presentation.Rotation = new Vector3(0f, VisualOffset.Yaw, 0f);
+
+		CrewPose pose = DrawnPose;
 		_visual.Basis = CrewPose.Rotation(0f, pose.Pitch, pose.Roll);
 
 		if (Kind == CrewVehicleKind.FourByFour)
@@ -375,9 +556,12 @@ public partial class CrewVehicle : CharacterBody3D
 		var body = new StandardMaterial3D { AlbedoColor = Definition.Color, Roughness = 0.7f };
 		var dark = new StandardMaterial3D { AlbedoColor = new Color(0.12f, 0.12f, 0.13f), Roughness = 0.9f };
 
-		// The sprung part: everything that pitches and rolls with the chassis or the tilt.
+		// Everything drawn, which a driver's correction offsets (§8.2); in it, the sprung
+		// part: everything that pitches and rolls with the chassis or the tilt.
+		_presentation = new Node3D { Name = "Presentation" };
+		AddChild(_presentation);
 		_visual = new Node3D { Name = "Visual" };
-		AddChild(_visual);
+		_presentation.AddChild(_visual);
 
 		for (int i = 0; i < Hull.Length; i++)
 		{
@@ -426,7 +610,7 @@ public partial class CrewVehicle : CharacterBody3D
 					},
 					MaterialOverride = dark,
 				});
-				AddChild(node);
+				_presentation.AddChild(node);
 				_wheelNodes[wheel] = node;
 			}
 

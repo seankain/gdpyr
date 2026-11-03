@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Gdpyr.Core;
 using Gdpyr.Match;
@@ -19,15 +20,17 @@ namespace Gdpyr.Fps;
 /// <see cref="EmplacementSim.Resolve"/> beside the guns and the lockers and acted on
 /// here; they are not predicted (GV-D4, NETCODE.md §10.2).
 ///
-/// <para><b>On the authority only, until GV3.</b> Nothing about a vehicle is on the wire
-/// yet (§7): a client neither draws one nor knows who is in it. So a vehicle is driven
-/// offline or by a listen host's own player, and nobody else can be seated
-/// (<see cref="CanBeSeated"/>) — a remote client seated by a server it cannot see the
-/// truck of would be corrected onto an invisible seat on every snapshot. Bots never
-/// drive or ride (GV-D15).</para>
+/// <para><b>On the wire</b> (§7): the authority sends every client
+/// <c>ServerCrewVehicles</c> on the player snapshot's tick, each strategist only the
+/// vehicles its side sees (§7.3). A client draws every vehicle it does not drive as a
+/// puppet at the render clock (§8.1), predicts the one it drives from its own frames and
+/// replays it against each record (§8.2), and puts every seated body on its seat as it
+/// draws the vehicle (§8.3). Who sits where on a client is what the records say, and
+/// nothing else. People ride; bots never drive or ride (GV-D15).</para>
 ///
 /// Like the other managers it never ticks itself: <see cref="PlayerManager"/> drives
-/// it, after the players are simulated and before the units are (§4).
+/// it, after the players are simulated and before the units are (§4), and on a client
+/// around its own prediction.
 /// </summary>
 public partial class CrewVehicleManager : Node
 {
@@ -76,6 +79,9 @@ public partial class CrewVehicleManager : Node
 		}
 	}
 
+	/// <summary>Records queued between the idle frame they arrive on and the physics step that applies them.</summary>
+	private const int MaxPendingPackets = 16;
+
 	public static CrewVehicleManager Instance { get; private set; }
 
 	private readonly CrewVehicle[] _vehicles = new CrewVehicle[SimConfig.MaxCrewVehicles];
@@ -86,6 +92,31 @@ public partial class CrewVehicleManager : Node
 
 	private Node3D _root;
 	private CrewSeatView _view;
+
+	// ---- the wire (§7) ----------------------------------------------------------------
+
+	private readonly CrewVehicleRecord[] _records = new CrewVehicleRecord[SimConfig.MaxCrewVehicles];
+	private readonly CrewVehicleRecord[] _visibleRecords = new CrewVehicleRecord[SimConfig.MaxCrewVehicles];
+	private readonly bool[] _seenScratch = new bool[SimConfig.MaxCrewVehicles];
+
+	/// <summary>The kiosk's line for each kind: none on the field until the kiosk is (GV6).</summary>
+	private readonly KioskLine[] _kiosk = { KioskLine.None, KioskLine.None };
+
+	// ---- a client (§8) ---------------------------------------------------------------
+
+	private readonly List<byte[]> _pending = new();
+	private readonly CrewPuppetRoster _roster = new();
+	private readonly SnapshotInterpolator[] _interpolators = new SnapshotInterpolator[SimConfig.MaxCrewVehicles];
+	private readonly CrewVehicleRecord[] _latest = new CrewVehicleRecord[SimConfig.MaxCrewVehicles];
+	private readonly uint[] _latestTick = new uint[SimConfig.MaxCrewVehicles];
+	private readonly bool[] _hasLatest = new bool[SimConfig.MaxCrewVehicles];
+	private readonly PuppetChange[] _changes = new PuppetChange[SimConfig.MaxCrewVehicles];
+	private readonly CrewVehicleRecord[] _decoded = new CrewVehicleRecord[SimConfig.MaxCrewVehicles];
+	private readonly KioskLine[] _decodedKiosk = new KioskLine[CrewVehicleCodec.Kinds];
+	private readonly Dictionary<int, SeatRef> _nextSeated = new();
+	private readonly SmoothRenderClock _renderClock = new();
+	private CrewLedger _crewLedger;
+	private int _drivenSlot = -1;
 
 	private PhysicsRayQueryParameters3D _ray;
 	private PhysicsShapeQueryParameters3D _shape;
@@ -109,6 +140,60 @@ public partial class CrewVehicleManager : Node
 
 	/// <summary>Players in a seat, every vehicle together.</summary>
 	public int Aboard => _seated.Count;
+
+	/// <summary>
+	/// Client: the driven vehicle's corrections and their size, published once a second
+	/// as the character's are (docs/NETCODE.md §8): mispredictions a second, and the mean
+	/// and worst position error of every comparison, in sync or not.
+	/// </summary>
+	public NetStats PredictionStats { get; } = new();
+
+	/// <summary>Client: ticks re-run by the last replay of the driven vehicle, a snap's included.</summary>
+	public int LastReplayTicks { get; private set; }
+
+	/// <summary>Client: the longest replay of the driven vehicle since this client last got in at the wheel.</summary>
+	public int LongestReplayTicks { get; private set; }
+
+	/// <summary>Client: the driven vehicle's snaps — the first record after getting in, or one past the ring — since it got in.</summary>
+	public int Snaps { get; private set; }
+
+	/// <summary>Client: replays of the driven vehicle since it got in.</summary>
+	public int Replays { get; private set; }
+
+	/// <summary>Client: comparisons of the driven vehicle with its record — in sync or replayed — since it got in.</summary>
+	public int Comparisons { get; private set; }
+
+	/// <summary>Client: the position error of the last comparison [m].</summary>
+	public float LastComparisonErrorMeters { get; private set; }
+
+	/// <summary>Client: the most a replay or a snap has moved the driven hull since it got in [m].</summary>
+	public float LargestCorrectionMeters { get; private set; }
+
+	/// <summary>
+	/// Client: corrections of the driven hull past <see cref="SimConfig.MaxSmoothedErrorMeters"/>
+	/// since it got in — shown at once rather than drawn away: what a driver sees as a snap.
+	/// </summary>
+	public int CorrectionsShownAtOnce { get; private set; }
+
+	/// <summary>
+	/// Client: how far behind the newest <c>ServerCrewVehicles</c> the newest record for
+	/// <paramref name="slot"/> is [ticks]; <see cref="float.MaxValue"/> with no vehicle there.
+	/// A strategist's client hides one once <see cref="Fog.IsLost"/> says so (§7.3).
+	/// </summary>
+	public float RecordAgeTicks(int slot) => _roster.AgeTicks(slot);
+
+	/// <summary>Client: <c>ServerCrewVehicles</c> payloads that failed to decode. Anything but 0 is a bug or an attack.</summary>
+	public int RejectedPackets { get; private set; }
+
+	/// <summary>The kiosk's line for a kind, as the server last said it (§7.1). For the HUD (GV6).</summary>
+	public KioskLine KioskLineOf(byte kind) => kind < _kiosk.Length ? _kiosk[kind] : KioskLine.None;
+
+	/// <summary>Client: the tick of the newest record for <paramref name="slot"/>; 0 with none.</summary>
+	public uint NewestRecordTick(int slot) =>
+		slot >= 0 && slot < _interpolators.Length && _interpolators[slot] is { Count: > 0 } buffer ? buffer.NewestTick : 0;
+
+	/// <summary>The slot of the vehicle this client predicts, or −1 (§8.2).</summary>
+	public int DrivenSlot => _drivenSlot;
 
 	public override void _Ready()
 	{
@@ -257,6 +342,13 @@ public partial class CrewVehicleManager : Node
 
 			vehicle.Step(frame, piloted: driver != 0, SimConfig.TickDelta);
 			vehicle.Poses.Record(tick, vehicle.Pose);
+
+			// The driver's acknowledgement (§7.1): the input tick whose slot this server tick
+			// consumed for them, their own frame or a repeat when it was late — the vehicle
+			// steps once a slot, so this is the tick its state is the state after. Whichever
+			// frame the vehicle was stepped on: on the tick they got in it was a parked one,
+			// and their replay starts after it all the same.
+			vehicle.DriverInputTick = driver != 0 ? PlayerManager.Instance?.ConsumedInputTickOf(driver) ?? tick : 0;
 		}
 
 		_frames.Clear();
@@ -363,12 +455,11 @@ public partial class CrewVehicleManager : Node
 	}
 
 	/// <summary>
-	/// Whether this peer may be put in a seat at all. Until the vehicles are on the wire
-	/// (GV3) only a player whose own process is the authority can see one: offline, or a
-	/// listen host's own player. Bots never ride (GV-D15).
+	/// Whether this peer may be put in a seat at all: a person, on whichever process they
+	/// play — the vehicles are on the wire, so a remote client sees the hull it is put in
+	/// (§7). Bots never drive or ride (GV-D15).
 	/// </summary>
-	public static bool CanBeSeated(int peerId) =>
-		NetworkManager.Instance is { IsClient: false } net && net.HasLocalPlayer && peerId == net.LocalPeerId;
+	public static bool CanBeSeated(int peerId) => peerId != 0 && !BotRoster.IsBot(peerId);
 
 	/// <summary>
 	/// The vehicle a player at <paramref name="feet"/> could get into with a tap of the use
@@ -806,8 +897,16 @@ public partial class CrewVehicleManager : Node
 				: $" · {vehicle.Speed:0} m/s";
 		}
 
+		// Too high is §5.3's rule against a height every process measures for itself, so it
+		// is said for as long as it is true, on a client as on the authority. No room is
+		// the authority's finding alone, said for two seconds after a press it refused.
+		float height = vehicle.Kind == CrewVehicleKind.Helicopter ? vehicle.HeightAboveGround : 0f;
 		string help;
-		if (_exitRefusals.TryGetValue(peerId, out ExitRefusal refusal) && tick - refusal.Tick < ExitRefusalShownTicks)
+		if (!CrewSeats.MayExit(vehicle.Kind, float.IsFinite(height) ? height : float.MaxValue))
+		{
+			help = "too high to get out";
+		}
+		else if (_exitRefusals.TryGetValue(peerId, out ExitRefusal refusal) && tick - refusal.Tick < ExitRefusalShownTicks)
 		{
 			help = refusal.TooHigh ? "too high to get out" : "no room to get out";
 		}
@@ -820,6 +919,505 @@ public partial class CrewVehicleManager : Node
 		return $"{line}\n{help}";
 	}
 
-	/// <summary>The debug HUD's row (§8.5): <c>vehicles 2 · 3 aboard</c>, what GV2 has of it.</summary>
-	public string DebugLine() => $"{Count} · {Aboard} aboard";
+	/// <summary>
+	/// The debug HUD's row (§8.5): <c>vehicles 2 · 3 aboard</c>, and for the driver's client
+	/// <c>· mispredicted 0.4/s · replay 9 (longest 12) · error 0.8/2.1 cm</c>.
+	/// </summary>
+	public string DebugLine()
+	{
+		string line = $"{Count} · {Aboard} aboard";
+		if (_drivenSlot < 0)
+		{
+			return line;
+		}
+
+		NetStats stats = PredictionStats;
+		return $"{line} · mispredicted {stats.MispredictionsPerSecond:0.0}/s · replay {LastReplayTicks}"
+			+ $" (longest {LongestReplayTicks}) · error {stats.MeanErrorMeters * 100f:0.0}/{stats.MaxErrorMeters * 100f:0.0} cm";
+	}
+
+	// ---- the wire: the authority (§7.1, §7.3) ----------------------------------------
+
+	/// <summary>
+	/// Sends every connected peer <c>ServerCrewVehicles</c> (§7.1): on the player snapshot's
+	/// tick and before it, so over a link that keeps order a client knows who sits where
+	/// before it reconciles its own record. Everybody but a strategist gets every vehicle in
+	/// one encoding; a strategist only those its side's sensors see (§7.3), whose occupants
+	/// the player snapshot then carries exactly with them.
+	/// </summary>
+	public void Replicate(NetworkManager net, int[] peers)
+	{
+		if (peers.Length == 0)
+		{
+			return;
+		}
+
+		int count = 0;
+		for (int slot = 0; slot < _vehicles.Length; slot++)
+		{
+			if (VehicleAt(slot) is { } vehicle)
+			{
+				_records[count++] = vehicle.ToRecord();
+			}
+		}
+
+		CombatManager combat = CombatManager.Instance;
+		VisibilityService fog = combat?.Visibility;
+		byte[] everything = null;
+
+		for (int i = 0; i < peers.Length; i++)
+		{
+			int peerId = peers[i];
+			byte[] payload;
+			if (fog == null || combat.TeamOf(peerId) != Team.Strategist)
+			{
+				payload = everything ??= CrewVehicleCodec.Encode(net.Tick, _kiosk, _records.AsSpan(0, count));
+			}
+			else
+			{
+				for (int slot = 0; slot < _seenScratch.Length; slot++)
+				{
+					_seenScratch[slot] = fog.IsVehicleVisible(slot);
+				}
+
+				int visible = CrewFog.Filter(Team.Strategist, _records.AsSpan(0, count), _seenScratch, _visibleRecords);
+				fog.CountWithheld(count - visible);
+				payload = CrewVehicleCodec.Encode(net.Tick, _kiosk, _visibleRecords.AsSpan(0, visible));
+			}
+
+			RpcId(peerId, MethodName.ServerCrewVehicles, payload);
+			net.Stats.RecordSent(payload.Length);
+		}
+	}
+
+	/// <summary>Server → clients, unreliable, at <see cref="SimConfig.SnapshotRate"/> (§7.1).</summary>
+	[Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
+		TransferMode = MultiplayerPeer.TransferModeEnum.Unreliable)]
+	private void ServerCrewVehicles(byte[] payload)
+	{
+		NetworkManager net = NetworkManager.Instance;
+		if (net == null || !net.IsClient)
+		{
+			return;
+		}
+
+		net.Stats.RecordReceived(payload.Length);
+
+		// Queued, as the player snapshot is: the driver's replay moves a body, which is only
+		// valid inside the physics step, and this arrives on the idle frame.
+		_pending.Add(payload);
+		if (_pending.Count > MaxPendingPackets)
+		{
+			_pending.RemoveAt(0);
+		}
+	}
+
+	/// <summary>
+	/// The listen host's curtain for a local strategist (§6.7): a vehicle its side does not
+	/// see is not drawn. The authority is the state, so this hides rather than filters, as
+	/// <c>PlayerManager.ApplyLocalFog</c> does the players.
+	/// </summary>
+	public void ApplyLocalFog(bool fogged, VisibilityService visibility)
+	{
+		for (int slot = 0; slot < _vehicles.Length; slot++)
+		{
+			if (VehicleAt(slot) is { } vehicle)
+			{
+				vehicle.SetFogHidden(fogged && visibility != null && !visibility.IsVehicleVisible(slot));
+			}
+		}
+	}
+
+	// ---- a client (§8) ---------------------------------------------------------------
+
+	/// <summary>
+	/// Every record that arrived since the last tick, applied before the player snapshot
+	/// is, so the local player's own record is reconciled — or not — knowing whether they
+	/// are seated (§8.3). Puppets are made, remade and freed (§8.1); each record goes to its
+	/// slot's interpolator; who sits where is taken from the newest record of every vehicle
+	/// still in sight; and the vehicle this client drives is compared with its record and,
+	/// when they disagree, replayed (§8.2).
+	/// </summary>
+	public void ClientApplyPending(NetworkManager net)
+	{
+		for (int p = 0; p < _pending.Count; p++)
+		{
+			if (!CrewVehicleCodec.TryDecode(_pending[p], _decodedKiosk, _decoded, out uint tick, out int count))
+			{
+				RejectedPackets++;
+				continue;
+			}
+
+			if (tick >= _roster.NewestPacketTick)
+			{
+				_decodedKiosk.CopyTo(_kiosk, 0);
+			}
+
+			for (int slot = 0; slot < _changes.Length; slot++)
+			{
+				_changes[slot] = PuppetChange.Ignore;
+			}
+
+			_roster.Receive(tick, _decoded.AsSpan(0, count), _changes);
+			for (int i = 0; i < count; i++)
+			{
+				ApplyRecord(tick, _decoded[i], _changes[_decoded[i].Slot]);
+			}
+		}
+
+		_pending.Clear();
+
+		bool fogged = CombatManager.Instance is { Local.Team: Team.Strategist };
+		for (int slot = 0; slot < _vehicles.Length; slot++)
+		{
+			if (_roster.DueToFree(slot, net.Tick, fogged))
+			{
+				FreePuppet(slot);
+				_roster.Free(slot);
+			}
+		}
+
+		ClientSeats(net);
+
+		if (_drivenSlot >= 0 && VehicleAt(_drivenSlot) is { } driven && _hasLatest[_drivenSlot])
+		{
+			ReconcileDriven(driven, _latest[_drivenSlot]);
+		}
+	}
+
+	private void ApplyRecord(uint tick, in CrewVehicleRecord record, PuppetChange change)
+	{
+		int slot = record.Slot;
+		if (change == PuppetChange.Ignore || CrewVehicleCatalog.Definition(record.KindId) is not { } definition)
+		{
+			return;
+		}
+
+		if (change is PuppetChange.Create or PuppetChange.Replace || VehicleAt(slot) == null)
+		{
+			FreePuppet(slot);
+			CrewVehicle puppet = CrewVehicle.Create(definition, slot, record.Position, record.Yaw);
+			puppet.IsPuppet = true;
+			_vehicles[slot] = puppet;
+			_root.AddChild(puppet);
+			_interpolators[slot] = new SnapshotInterpolator();
+			_hasLatest[slot] = false;
+		}
+		else if (change == PuppetChange.Restart)
+		{
+			_interpolators[slot].DropBefore(tick);
+		}
+
+		_interpolators[slot].Push(tick, record.Position, record.Yaw, record.Pitch, record.Roll);
+
+		if (!_hasLatest[slot] || tick >= _latestTick[slot])
+		{
+			_latest[slot] = record;
+			_latestTick[slot] = tick;
+			_hasLatest[slot] = true;
+			VehicleAt(slot).ApplyRecord(record, withMotion: slot != _drivenSlot);
+		}
+	}
+
+	private void FreePuppet(int slot)
+	{
+		CrewVehicle vehicle = _vehicles[slot];
+		_vehicles[slot] = null;
+		_interpolators[slot] = null;
+		_hasLatest[slot] = false;
+		if (slot == _drivenSlot)
+		{
+			_drivenSlot = -1;
+		}
+
+		if (IsInstanceValid(vehicle))
+		{
+			vehicle.QueueFree();
+		}
+	}
+
+	/// <summary>
+	/// Who sits where, on a client: the newest record of every vehicle it has and has not
+	/// lost to the fog (§7.3) — a lost vehicle's last record is old news about its seats,
+	/// and a player who got out of it may be in sight on their own. Bodies are put in and
+	/// out of their seats as the records say, the local player's among them, and the
+	/// vehicle this client drives is the one whose driver's seat names it.
+	/// </summary>
+	private void ClientSeats(NetworkManager net)
+	{
+		_nextSeated.Clear();
+		int driven = -1;
+		for (int slot = 0; slot < _vehicles.Length; slot++)
+		{
+			CrewVehicle vehicle = VehicleAt(slot);
+			if (vehicle == null || !_hasLatest[slot] || Fog.IsLost(_roster.AgeTicks(slot)))
+			{
+				continue;
+			}
+
+			for (int seat = 0; seat < vehicle.Seats.Length; seat++)
+			{
+				int peer = _latest[slot].SeatPeer(seat);
+				if (peer == 0)
+				{
+					continue;
+				}
+
+				_nextSeated[peer] = new SeatRef(slot, seat);
+				if (peer == net.LocalPeerId && vehicle.Seats[seat].Role == SeatRole.Driver && !vehicle.Destroyed)
+				{
+					driven = slot;
+				}
+			}
+		}
+
+		CombatManager combat = CombatManager.Instance;
+		_scratch.Clear();
+		foreach (KeyValuePair<int, SeatRef> entry in _seated)
+		{
+			if (!_nextSeated.TryGetValue(entry.Key, out SeatRef next) || next.Slot != entry.Value.Slot)
+			{
+				_scratch.Add(entry.Key);
+			}
+		}
+
+		// Out first: a body that moved from one vehicle to another is put down and picked up.
+		for (int i = 0; i < _scratch.Count; i++)
+		{
+			int peer = _scratch[i];
+			SeatRef was = _seated[peer];
+			_seated.Remove(peer);
+			if (combat?.Find(peer)?.Character is not { } character || !IsInstanceValid(character))
+			{
+				continue;
+			}
+
+			// The local player is put at their seat's own exit point as this client draws the
+			// vehicle — where the server most often puts them — and the next record of theirs
+			// corrects that like any other (§8.2). Anybody else is placed by their record.
+			Vector3 feet = character.SimPosition;
+			if (peer == net.LocalPeerId && VehicleAt(was.Slot) is { } from && was.Seat < from.Seats.Length)
+			{
+				feet = from.DrawnPose.ToWorld(from.Seats[was.Seat].Exit);
+			}
+
+			character.LeaveSeat(feet, Vector3.Zero);
+		}
+
+		foreach (KeyValuePair<int, SeatRef> entry in _nextSeated)
+		{
+			bool wasSeated = _seated.ContainsKey(entry.Key);
+			_seated[entry.Key] = entry.Value;
+			if (!wasSeated && combat?.Find(entry.Key)?.Character is { } character && IsInstanceValid(character))
+			{
+				character.SetSeated(true);
+			}
+		}
+
+		if (driven == _drivenSlot)
+		{
+			return;
+		}
+
+		if (VehicleAt(_drivenSlot) is { } left)
+		{
+			// Back to the records: drawn at the render clock from here on.
+			left.IsPuppet = true;
+			left.VisualOffset = default;
+		}
+
+		_drivenSlot = driven;
+		if (VehicleAt(driven) is { } now)
+		{
+			now.IsPuppet = false;
+			_crewLedger ??= new CrewLedger(PlayerManager.Instance.Prediction);
+			_crewLedger.Reset();
+			LastReplayTicks = 0;
+			LongestReplayTicks = 0;
+			Snaps = 0;
+			Replays = 0;
+			Comparisons = 0;
+			LargestCorrectionMeters = 0f;
+			CorrectionsShownAtOnce = 0;
+			GD.Print($"[vehicles] driving slot {driven}: predicting it from here (tick {net.Tick})");
+		}
+	}
+
+	/// <summary>
+	/// The driven vehicle against its newest record (§8.2): the ledger decides; a replay —
+	/// or the snap of the first record after getting in — restores the record's state and
+	/// re-runs the frames the server has not consumed yet, through the same step, rays and
+	/// <c>MoveAndSlide</c> as the prediction; and what moved is drawn away from where the
+	/// hull was being drawn rather than jumped.
+	/// </summary>
+	private void ReconcileDriven(CrewVehicle vehicle, in CrewVehicleRecord record)
+	{
+		CrewSample server = record.ToSample(record.DriverInputTick);
+		ReplayDecision decision = _crewLedger.Decide(record.DriverInputTick, server);
+
+		switch (decision.Action)
+		{
+			case ReplayAction.Ignore:
+				return;
+
+			case ReplayAction.InSync:
+				PredictionStats.RecordPredictionError(decision.PositionError);
+				Comparisons++;
+				LastComparisonErrorMeters = decision.PositionError;
+				return;
+		}
+
+		if (decision.Action == ReplayAction.Replay)
+		{
+			Comparisons++;
+			LastComparisonErrorMeters = decision.PositionError;
+			PredictionStats.RecordPredictionError(decision.PositionError);
+			PredictionStats.RecordMisprediction();
+			Replays++;
+		}
+		else
+		{
+			// The first record after getting in, or one the prediction has no state for: rare
+			// after the first, and a reason to look at the clock (§5.7).
+			Snaps++;
+			GD.Print($"[vehicles] the driven {vehicle.KindName} snapped to the record for tick {record.DriverInputTick}:"
+				+ $" newest input {_crewLedger.Inputs.LastRecordedTick}, a prediction for it"
+				+ $" {(_crewLedger.TryGetState(record.DriverInputTick, out _) ? "on record" : "not on record")}, replaying"
+				+ $" {Math.Max(0, (long)decision.ToTick - decision.FromTick + 1)} ticks");
+		}
+
+		CrewPose drawnBefore = vehicle.DrawnPose;
+		vehicle.Restore(record);
+
+		PredictionLedger inputs = _crewLedger.Inputs;
+		for (uint tick = decision.FromTick; tick <= decision.ToTick && decision.FromTick <= decision.ToTick; tick++)
+		{
+			if (!inputs.TryGetInput(tick, out InputFrame frame))
+			{
+				// Never sampled — the clock stalled that tick to let the server catch up.
+				continue;
+			}
+
+			vehicle.Step(frame, piloted: true, SimConfig.TickDelta);
+			_crewLedger.UpdateState(vehicle.Sample(tick));
+		}
+
+		LastReplayTicks = _crewLedger.LastReplayLength;
+		LongestReplayTicks = Mathf.Max(LongestReplayTicks, LastReplayTicks);
+
+		float moved = drawnBefore.Position.DistanceTo(vehicle.Pose.Position);
+		LargestCorrectionMeters = Mathf.Max(LargestCorrectionMeters, moved);
+		if (moved > SimConfig.MaxSmoothedErrorMeters)
+		{
+			// Rare, and what a driver sees as a snap: worth a line in the log.
+			CorrectionsShownAtOnce++;
+			GD.Print($"[vehicles] the driven {vehicle.KindName} corrected by {moved:0.00} m at once: {decision.Action}"
+				+ $" from tick {record.DriverInputTick}, error {decision.PositionError:0.00} m, {decision.VelocityError:0.00} m/s");
+		}
+
+		vehicle.VisualOffset = CrewVisualOffset.Absorb(drawnBefore, vehicle.Pose);
+	}
+
+	/// <summary>
+	/// One predicted tick of the vehicle this client drives (§8.2), on the frame the
+	/// character was just simulated on — the frame the server will step it on — and its
+	/// state recorded beside that frame. Nothing for a client that is not driving.
+	/// </summary>
+	public void ClientPredict(uint tick, in InputFrame frame)
+	{
+		if (_drivenSlot < 0 || VehicleAt(_drivenSlot) is not { } vehicle || _crewLedger == null)
+		{
+			return;
+		}
+
+		vehicle.Step(frame, piloted: true, SimConfig.TickDelta);
+		_crewLedger.Record(vehicle.Sample(tick));
+	}
+
+	// TODO(GV3, docs/GROUND_VEHICLES.md §12): check on a display, on a dedicated server over a real
+	// link: the driven hull's corrections drawn away, the chase camera behind a predicted truck, the
+	// passenger's view at the smoothed clock, a strategist's hull appearing and going. Driven headless
+	// by scripts/crew-vehicle-checks.sh net through a delaying relay, never looked at.
+	/// <summary>
+	/// The client's render-clock half (§8.1, §8.3), after the remote characters are placed:
+	/// every puppet at <paramref name="renderTick"/> — followed by
+	/// <see cref="SmoothRenderClock"/>, so the clock's whole-tick corrections do not jump a
+	/// fast vehicle, and its passengers' view, by a tick's travel — hidden from a strategist
+	/// once its records stop arriving; then every seated body, the local player's included,
+	/// at its seat on the vehicle as this client draws it: predicted for the driver,
+	/// interpolated for everybody else.
+	/// </summary>
+	public void ClientTick(float renderTick)
+	{
+		PredictionStats.Advance(SimConfig.TickDelta);
+		bool fogged = CombatManager.Instance is { Local.Team: Team.Strategist };
+		renderTick = _renderClock.Step(renderTick);
+
+		for (int slot = 0; slot < _vehicles.Length; slot++)
+		{
+			CrewVehicle vehicle = VehicleAt(slot);
+			if (vehicle == null)
+			{
+				continue;
+			}
+
+			if (vehicle.IsPuppet && _interpolators[slot] is { } interpolator
+				&& interpolator.TrySample(renderTick, out Vector3 position, out float yaw, out float pitch, out float roll))
+			{
+				vehicle.PlaceAt(new CrewPose(position, yaw, pitch, roll));
+				interpolator.Prune(renderTick);
+			}
+
+			vehicle.SetFogHidden(fogged && Fog.IsLost(_roster.AgeTicks(slot)));
+		}
+
+		PinDrawn();
+	}
+
+	/// <summary>Every seated body at its seat on the vehicle as it is drawn here, moving at the vehicle's speed.</summary>
+	private void PinDrawn()
+	{
+		CombatManager combat = CombatManager.Instance;
+		foreach (KeyValuePair<int, SeatRef> entry in _seated)
+		{
+			CrewVehicle vehicle = VehicleAt(entry.Value.Slot);
+			fps_controller character = combat?.Find(entry.Key)?.Character;
+			if (vehicle == null || character == null || !IsInstanceValid(character) || entry.Value.Seat >= vehicle.Seats.Length)
+			{
+				continue;
+			}
+
+			CrewPose drawn = vehicle.DrawnPose;
+			CrewSeat seat = vehicle.Seats[entry.Value.Seat];
+			character.PinToSeat(drawn.ToWorld(seat.Eye), vehicle.SimVelocity, drawn.Place(seat.Capsule));
+		}
+	}
+
+	/// <summary>
+	/// Client: everything forgotten, for a new connection — whose server's ticks do not
+	/// continue the last one's and whose vehicles are its own.
+	/// </summary>
+	public void ResetClient()
+	{
+		CombatManager combat = CombatManager.Instance;
+		foreach (KeyValuePair<int, SeatRef> entry in _seated)
+		{
+			if (combat?.Find(entry.Key)?.Character is { } character && IsInstanceValid(character))
+			{
+				character.LeaveSeat(character.SimPosition, Vector3.Zero);
+			}
+		}
+
+		for (int slot = 0; slot < _vehicles.Length; slot++)
+		{
+			FreePuppet(slot);
+		}
+
+		_roster.Clear();
+		_pending.Clear();
+		_seated.Clear();
+		_renderClock.Reset();
+		_drivenSlot = -1;
+		_crewLedger?.Reset();
+	}
 }

@@ -167,4 +167,34 @@ public class SnapshotInterpolatorTests
 			previous = position.X;
 		}
 	}
+
+	[Fact]
+	public void TheRollChannel_IsInterpolated_AndHeldPastTheNewest()
+	{
+		// A crew vehicle's chassis rolls (docs/GROUND_VEHICLES.md §8.1): interpolated as the
+		// pitch is, and like every angle never extrapolated.
+		var interpolator = new SnapshotInterpolator();
+		interpolator.Push(100, Vector3.Zero, 0f, 0.1f, -0.2f);
+		interpolator.Push(102, Vector3.Right, 0f, 0.3f, 0.2f);
+
+		Assert.True(interpolator.TrySample(101f, out _, out _, out float pitch, out float roll));
+		Assert.Equal(0.2f, pitch, 5);
+		Assert.Equal(0f, roll, 5);
+
+		Assert.True(interpolator.TrySample(103f, out Vector3 ahead, out _, out _, out float held));
+		Assert.Equal(0.2f, held, 5);
+		Assert.True(ahead.X > 1f);
+	}
+
+	[Fact]
+	public void ACharactersRoll_IsZero_AndItsOldSampleIsUnchanged()
+	{
+		var interpolator = WithLine(100, 4);
+		Assert.True(interpolator.TrySample(103f, out Vector3 a, out float yawA, out float pitchA));
+		Assert.True(interpolator.TrySample(103f, out Vector3 b, out float yawB, out float pitchB, out float roll));
+		Assert.Equal(a, b);
+		Assert.Equal(yawA, yawB);
+		Assert.Equal(pitchA, pitchB);
+		Assert.Equal(0f, roll);
+	}
 }

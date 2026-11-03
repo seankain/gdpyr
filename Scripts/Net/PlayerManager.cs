@@ -120,6 +120,27 @@ public partial class PlayerManager : Node
 	/// <summary>Ticks replayed by the last reconciliation. For the net HUD.</summary>
 	public int LastReplayTicks => _ledger.LastReplayLength;
 
+	/// <summary>
+	/// The client's own input ring and predicted states: the ring a crew vehicle's driver
+	/// replays too, so their frames are recorded once (docs/GROUND_VEHICLES.md §5.7).
+	/// </summary>
+	public PredictionLedger Prediction => _ledger;
+
+	/// <summary>
+	/// The input tick whose slot the authority stepped <paramref name="peerId"/> on this
+	/// tick — with that tick's frame, or the last one repeated when it had not arrived
+	/// (<see cref="ServerInputQueue.ConsumedTick"/>) — or this tick for the authority's own
+	/// player, whose frames are never late. 0 for nobody here, and before any frame has
+	/// arrived. What a crew vehicle's record acknowledges for its driver
+	/// (docs/GROUND_VEHICLES.md §7.1): the vehicle is stepped once a slot, so a replay
+	/// that started after the last <em>real</em> frame would re-run the slots the server
+	/// filled with repeats and land a tick's travel ahead for each.
+	/// </summary>
+	public uint ConsumedInputTickOf(int peerId) =>
+		_players.TryGetValue(peerId, out Player player)
+			? player.Queue?.ConsumedTick ?? NetworkManager.Instance?.Tick ?? 0
+			: 0;
+
 	/// <summary>Input packets that failed to decode. Anything but 0 is a bug or an attack.</summary>
 	public int RejectedInputPackets { get; private set; }
 
@@ -970,6 +991,11 @@ public partial class PlayerManager : Node
 			return;
 		}
 
+		// The crew vehicles first, on the same tick: over a link that keeps order a client
+		// knows who sits where before it reconciles its own record against a seat
+		// (docs/GROUND_VEHICLES.md §7.1, §8.3).
+		CrewVehicleManager.Instance?.Replicate(net, peers);
+
 		if (fog == null || !AnyStrategist(combat, peers))
 		{
 			unfiltered ??= SnapshotCodec.Encode(net.Tick, _snapshotScratch.AsSpan(0, count));
@@ -1094,6 +1120,10 @@ public partial class PlayerManager : Node
 
 	private void ClientTick(NetworkManager net)
 	{
+		// The crew vehicles' records before the players': who sits where decides whether
+		// the local record is reconciled at all (docs/GROUND_VEHICLES.md §8.3), and the
+		// driven vehicle's replay runs here, before this tick's frames are predicted (§8.2).
+		CrewVehicleManager.Instance?.ClientApplyPending(net);
 		ApplyPendingSnapshots(net);
 		SpectateIfAsked(net);
 
@@ -1137,6 +1167,10 @@ public partial class PlayerManager : Node
 
 				Simulate(_local, frame, tick, authoritative: false);
 				_ledger.Record(tick, frame, _local.Character.CaptureState(tick));
+
+				// A crew vehicle's driver predicts it on the same frame, after their body, as
+				// the server steps it after the players (docs/GROUND_VEHICLES.md §8.2).
+				CrewVehicleManager.Instance?.ClientPredict(tick, frame);
 			}
 			else
 			{
@@ -1152,6 +1186,10 @@ public partial class PlayerManager : Node
 		}
 
 		UpdateRemotes(net.Clock.RenderTick);
+
+		// After the remote bodies are placed: the puppets at the render clock, then every
+		// seated body on its seat as this client draws the vehicle (docs/GROUND_VEHICLES.md §8).
+		CrewVehicleManager.Instance?.ClientTick(net.Clock.RenderTick);
 		UnitManager.Instance?.ClientTick(net.Clock.RenderTick);
 		EmplacementManager.Instance?.ClientTick();
 		CombatManager.Instance?.ClientPostTick(net.Tick);
@@ -1268,6 +1306,15 @@ public partial class PlayerManager : Node
 		// about the prediction, and a starved buffer reports itself by repeating an
 		// acknowledgement.
 		net.Clock.OnInputBufferDepth(snapshot.InputBufferDepth);
+
+		// Seated, the body is pinned to the seat as this client draws the vehicle, and its
+		// record — the server's pin — is not reconciled; its health, ammunition and kit have
+		// been taken from it already (docs/GROUND_VEHICLES.md §8.3). Getting out is then a
+		// correction like any other: the first record after it disagrees, and is replayed.
+		if (CrewVehicleManager.Instance is { } crew && crew.IsSeated(_local.PeerId))
+		{
+			return;
+		}
 
 		fps_controller character = _local.Character;
 		ReplayDecision decision = _ledger.Decide(snapshot);
@@ -1423,6 +1470,10 @@ public partial class PlayerManager : Node
 		}
 
 		bool fogged = combat is { Local.Team: Team.Strategist };
+
+		// The crew vehicles behind the same curtain (docs/GROUND_VEHICLES.md §6.7); their
+		// occupants are hidden below exactly with them, by the same answer (§7.3).
+		CrewVehicleManager.Instance?.ApplyLocalFog(fogged, combat.Visibility);
 
 		for (int i = 0; i < _ordered.Count; i++)
 		{
@@ -1585,6 +1636,10 @@ public partial class PlayerManager : Node
 		{
 			_local = player;
 			_ledger.Reset();
+
+			// A new connection's vehicles are its own, and its ticks do not continue the
+			// last one's (docs/GROUND_VEHICLES.md §8.1).
+			CrewVehicleManager.Instance?.ResetClient();
 
 			// The fog's reference is a server tick, so it means nothing across a join:
 			// a second server's clock does not continue the first one's, and a stale
