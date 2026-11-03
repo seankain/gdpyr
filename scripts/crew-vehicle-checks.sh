@@ -1,17 +1,24 @@
 #!/usr/bin/env bash
 #
-# The crew vehicles' engine checks (docs/GROUND_VEHICLES.md §12, GV2).
+# The crew vehicles' engine checks (docs/GROUND_VEHICLES.md §12, GV2 and GV3).
 #
 # What the 4x4 relies on the engine for — a body pushed out of a hull by its own
 # MoveAndSlide, a bevelled hull in MotionMode.Floating sliding off a wall's end at
 # 18 m/s, the springs over the test strip — and the 4x4 and the helicopter driven end
 # to end on a listen host, through the input map. Headless, on a copy of the tree with
-# tools/EngineChecks/CrewVehicleChecks.cs added as an autoload: the game itself never
-# compiles or loads it.
+# tools/EngineChecks/CrewVehicleChecks.cs and CrewVehicleNetChecks.cs added as
+# autoloads: the game itself never compiles or loads them.
 #
-#   ./scripts/crew-vehicle-checks.sh            # both: physics, then the listen host
+#   ./scripts/crew-vehicle-checks.sh            # physics, then the listen host
 #   ./scripts/crew-vehicle-checks.sh physics
 #   ./scripts/crew-vehicle-checks.sh game
+#   ./scripts/crew-vehicle-checks.sh net        # GV3: a dedicated server and four clients
+#
+# `net` runs in real time, not at --fixed-fps: a dedicated server, a UDP relay that
+# delays every datagram NET_DELAY_MS ± NET_JITTER_MS each way (40 ± 10 by default: 80 ms
+# RTT, 20 ms jitter — DEPLOYMENT.md §4's tc netem line, in user space, for kernels
+# without sch_netem), and a driver, a passenger and a strategist through it; a fourth
+# client joins once the server asks. Requires python3 as well.
 #
 # Requires a Godot 4.6 .NET binary on PATH (or $GODOT) and the .NET SDK. One line per
 # fact, PASS or FAIL; exits non-zero when any fails. KEEP=1 keeps the copy and its logs.
@@ -19,6 +26,10 @@ set -uo pipefail
 
 GODOT="${GODOT:-godot}"
 GAME_PORT="${GAME_PORT:-7791}"
+NET_SERVER_PORT="${NET_SERVER_PORT:-7792}"
+NET_RELAY_PORT="${NET_RELAY_PORT:-7793}"
+NET_DELAY_MS="${NET_DELAY_MS:-40}"
+NET_JITTER_MS="${NET_JITTER_MS:-10}"
 if [ $# -eq 0 ]; then
 	MODES=(physics game)
 else
@@ -43,8 +54,9 @@ fi
 	--exclude='./tools/*/bin' --exclude='./tools/*/obj' -cf - .) | (cd "$COPY" && tar -xf -)
 
 mkdir -p "$COPY/EngineChecks"
-cp "$PROJECT_DIR/tools/EngineChecks/CrewVehicleChecks.cs" "$COPY/EngineChecks/"
-sed -i 's#^GameConsole="\*res://Scripts/Ui/GameConsole.cs"#&\nCrewVehicleChecks="*res://EngineChecks/CrewVehicleChecks.cs"#' \
+cp "$PROJECT_DIR/tools/EngineChecks/CrewVehicleChecks.cs" "$PROJECT_DIR/tools/EngineChecks/CrewVehicleNetChecks.cs" \
+	"$COPY/EngineChecks/"
+sed -i 's#^GameConsole="\*res://Scripts/Ui/GameConsole.cs"#&\nCrewVehicleChecks="*res://EngineChecks/CrewVehicleChecks.cs"\nCrewVehicleNetChecks="*res://EngineChecks/CrewVehicleNetChecks.cs"#' \
 	"$COPY/project.godot"
 
 if ! (cd "$COPY" && dotnet build Gdpyr.csproj -nologo -v quiet > "$COPY/build.log" 2>&1); then
@@ -57,8 +69,78 @@ if [ ! -d "$COPY/.godot/imported" ]; then
 	"$GODOT" --headless --path "$COPY" --import > "$COPY/import.log" 2>&1
 fi
 
+# GV3: the dedicated server, the relay, three clients through it and a fourth when the
+# server asks for one. Every part's log is kept in the copy; their [checks] lines are
+# printed in the order the parts are listed.
+run_net() {
+	local dir="$COPY/net"
+	mkdir -p "$dir"
+	rm -f "$dir"/*
+
+	CREW_NET_CHECK=server CREW_NET_DIR="$dir" timeout 600 "$GODOT" --headless --path "$COPY" --max-fps 60 \
+		-- --server "$NET_SERVER_PORT" --no-bots > "$COPY/net-server.log" 2>&1 &
+	local server=$!
+	python3 "$PROJECT_DIR/tools/EngineChecks/delay_relay.py" --listen "$NET_RELAY_PORT" \
+		--server "127.0.0.1:$NET_SERVER_PORT" --delay-ms "$NET_DELAY_MS" --jitter-ms "$NET_JITTER_MS" \
+		> "$COPY/net-relay.log" 2>&1 &
+	local relay=$!
+	sleep 5
+
+	local pids=()
+	for part in driver passenger strategist; do
+		CREW_NET_CHECK=$part CREW_NET_DIR="$dir" timeout 600 "$GODOT" --headless --path "$COPY" --max-fps 60 \
+			-- --client "127.0.0.1:$NET_RELAY_PORT" > "$COPY/net-$part.log" 2>&1 &
+		pids+=($!)
+		sleep 2
+	done
+
+	local waited=0
+	while [ ! -f "$dir/join" ] && kill -0 "$server" 2>/dev/null && [ "$waited" -lt 420 ]; do
+		sleep 1
+		waited=$((waited + 1))
+	done
+
+	if [ -f "$dir/join" ]; then
+		CREW_NET_CHECK=joiner CREW_NET_DIR="$dir" timeout 300 "$GODOT" --headless --path "$COPY" --max-fps 60 \
+			-- --client "127.0.0.1:$NET_RELAY_PORT" > "$COPY/net-joiner.log" 2>&1 &
+		pids+=($!)
+	fi
+
+	local status=0
+	local code
+	wait "$server"
+	code=$?
+	echo "net-server: exit $code" >> "$COPY/net-exits.log"
+	[ "$code" -ne 0 ] && status=1
+	local parts=(driver passenger strategist joiner)
+	for i in "${!pids[@]}"; do
+		wait "${pids[$i]}"
+		code=$?
+		echo "net-${parts[$i]}: exit $code" >> "$COPY/net-exits.log"
+		[ "$code" -ne 0 ] && status=1
+	done
+
+	kill "$relay" 2>/dev/null
+	wait "$relay" 2>/dev/null
+
+	for part in server driver passenger strategist joiner; do
+		[ -f "$COPY/net-$part.log" ] && grep '^\[checks\]' "$COPY/net-$part.log"
+	done
+	tail -n 1 "$COPY/net-relay.log"
+	cat "$COPY/net-exits.log"
+	return "$status"
+}
+
 failed=0
 for mode in "${MODES[@]}"; do
+	if [ "$mode" = "net" ]; then
+		run_net
+		status=$?
+		echo "net: exit $status"
+		[ "$status" -ne 0 ] && failed=1
+		continue
+	fi
+
 	args=()
 	[ "$mode" = "game" ] && args=(-- --listen "$GAME_PORT" --no-bots)
 	CREW_VEHICLE_CHECK="$mode" timeout 900 "$GODOT" --headless --path "$COPY" --fixed-fps 60 "${args[@]}" \

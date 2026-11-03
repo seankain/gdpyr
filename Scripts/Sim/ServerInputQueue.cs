@@ -30,6 +30,17 @@ public sealed class ServerInputQueue
 	/// <summary>The tick of the last *real* frame consumed. This is what the snapshot acknowledges.</summary>
 	public uint AckTick { get; private set; }
 
+	/// <summary>
+	/// The tick of the slot the last <see cref="TryPop"/> filled — with its own frame, or
+	/// with <see cref="Last"/> repeated when it had none — and so the frame the server
+	/// stepped as that tick. One more every pop, starved or not; 0 before the first. A
+	/// frame for it that arrives later is discarded, so it is what a replay of anything
+	/// stepped once per tick has to start after (docs/GROUND_VEHICLES.md §7.1): a crew
+	/// vehicle's record acknowledges it, where the player snapshot acknowledges
+	/// <see cref="AckTick"/> and reads a repeat as starvation.
+	/// </summary>
+	public uint ConsumedTick { get; private set; }
+
 	/// <summary>The last frame consumed, repeated when the buffer runs dry.</summary>
 	public InputFrame Last { get; private set; }
 
@@ -123,6 +134,7 @@ public sealed class ServerInputQueue
 			frame = Last;
 		}
 
+		ConsumedTick = _nextTick;
 		_nextTick++;
 		return true;
 	}

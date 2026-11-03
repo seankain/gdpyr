@@ -155,4 +155,37 @@ public class ServerInputQueueTests
 		Assert.Equal(0, queue.Starvations);
 		Assert.InRange(queue.Depth, SimConfig.MinInputBufferDepth, SimConfig.MaxInputBufferDepth);
 	}
+
+	[Fact]
+	public void ConsumedTick_IsTheSlotsTick_WhetherItsFrameCameOrTheLastWasRepeated()
+	{
+		// What a crew vehicle's record acknowledges (docs/GROUND_VEHICLES.md §7.1): the slot
+		// the server stepped, one more every pop; AckTick stays on the last real frame.
+		var queue = new ServerInputQueue();
+		Assert.Equal(0u, queue.ConsumedTick);
+
+		queue.Accept(Frame(10));
+		queue.Accept(Frame(11));
+		Assert.True(queue.TryPop(out _));
+		Assert.Equal(10u, queue.ConsumedTick);
+		Assert.True(queue.TryPop(out _));
+		Assert.Equal(11u, queue.ConsumedTick);
+
+		// Starved for two ticks: the last frame is repeated, as tick 12's and 13's.
+		Assert.True(queue.TryPop(out InputFrame repeated));
+		Assert.Equal(11u, repeated.Tick);
+		Assert.Equal(12u, queue.ConsumedTick);
+		Assert.True(queue.TryPop(out _));
+		Assert.Equal(13u, queue.ConsumedTick);
+		Assert.Equal(11u, queue.AckTick);
+
+		// Their own frames, late, are discarded; the next slot is 14's.
+		queue.Accept(Frame(12));
+		queue.Accept(Frame(13));
+		queue.Accept(Frame(14));
+		Assert.True(queue.TryPop(out InputFrame next));
+		Assert.Equal(14u, next.Tick);
+		Assert.Equal(14u, queue.ConsumedTick);
+		Assert.Equal(14u, queue.AckTick);
+	}
 }

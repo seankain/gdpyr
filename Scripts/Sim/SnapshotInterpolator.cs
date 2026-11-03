@@ -14,6 +14,10 @@ namespace Gdpyr.Sim;
 ///
 /// Fixed storage, kept sorted by tick, so a snapshot that arrives out of order is
 /// still usable as long as the render clock has not passed it yet.
+///
+/// A crew vehicle is drawn through one too (docs/GROUND_VEHICLES.md §8.1), with its
+/// sprung chassis's or its tilt's pitch in the pitch channel and its roll in a channel
+/// of its own, which a character leaves at zero.
 /// </summary>
 public sealed class SnapshotInterpolator
 {
@@ -21,6 +25,7 @@ public sealed class SnapshotInterpolator
 	private readonly Vector3[] _positions = new Vector3[SimConfig.SnapshotBufferTicks];
 	private readonly float[] _yaws = new float[SimConfig.SnapshotBufferTicks];
 	private readonly float[] _pitches = new float[SimConfig.SnapshotBufferTicks];
+	private readonly float[] _rolls = new float[SimConfig.SnapshotBufferTicks];
 
 	public int Count { get; private set; }
 
@@ -30,7 +35,7 @@ public sealed class SnapshotInterpolator
 	/// <summary>Snapshots dropped because the render clock had already passed their tick.</summary>
 	public int Stale { get; private set; }
 
-	public void Push(uint tick, Vector3 position, float yaw, float pitch)
+	public void Push(uint tick, Vector3 position, float yaw, float pitch, float roll = 0f)
 	{
 		// Duplicate tick: a retransmit of something already held.
 		for (int i = Count - 1; i >= 0; i--)
@@ -62,6 +67,7 @@ public sealed class SnapshotInterpolator
 			_positions[insert] = _positions[insert - 1];
 			_yaws[insert] = _yaws[insert - 1];
 			_pitches[insert] = _pitches[insert - 1];
+			_rolls[insert] = _rolls[insert - 1];
 			insert--;
 		}
 
@@ -69,6 +75,7 @@ public sealed class SnapshotInterpolator
 		_positions[insert] = position;
 		_yaws[insert] = yaw;
 		_pitches[insert] = pitch;
+		_rolls[insert] = roll;
 		Count++;
 	}
 
@@ -76,11 +83,16 @@ public sealed class SnapshotInterpolator
 	/// Samples the buffer at a fractional tick. False only when nothing has ever
 	/// been received for this entity.
 	/// </summary>
-	public bool TrySample(float renderTick, out Vector3 position, out float yaw, out float pitch)
+	public bool TrySample(float renderTick, out Vector3 position, out float yaw, out float pitch) =>
+		TrySample(renderTick, out position, out yaw, out pitch, out _);
+
+	/// <summary>As <see cref="TrySample(float, out Vector3, out float, out float)"/>, with the roll channel.</summary>
+	public bool TrySample(float renderTick, out Vector3 position, out float yaw, out float pitch, out float roll)
 	{
 		position = Vector3.Zero;
 		yaw = 0f;
 		pitch = 0f;
+		roll = 0f;
 
 		if (Count == 0)
 		{
@@ -92,6 +104,7 @@ public sealed class SnapshotInterpolator
 			position = _positions[0];
 			yaw = _yaws[0];
 			pitch = _pitches[0];
+			roll = _rolls[0];
 			return true;
 		}
 
@@ -99,6 +112,7 @@ public sealed class SnapshotInterpolator
 		if (renderTick >= _ticks[newest])
 		{
 			ExtrapolatePastNewest(renderTick, newest, out position, out yaw, out pitch);
+			roll = _rolls[newest];
 			return true;
 		}
 
@@ -111,6 +125,7 @@ public sealed class SnapshotInterpolator
 				position = _positions[i - 1].Lerp(_positions[i], t);
 				yaw = Mathf.LerpAngle(_yaws[i - 1], _yaws[i], t);
 				pitch = Mathf.Lerp(_pitches[i - 1], _pitches[i], t);
+				roll = Mathf.Lerp(_rolls[i - 1], _rolls[i], t);
 				return true;
 			}
 		}
@@ -118,6 +133,7 @@ public sealed class SnapshotInterpolator
 		position = _positions[0];
 		yaw = _yaws[0];
 		pitch = _pitches[0];
+		roll = _rolls[0];
 		return true;
 	}
 
@@ -178,6 +194,7 @@ public sealed class SnapshotInterpolator
 			_positions[i - 1] = _positions[i];
 			_yaws[i - 1] = _yaws[i];
 			_pitches[i - 1] = _pitches[i];
+			_rolls[i - 1] = _rolls[i];
 		}
 		Count--;
 	}

@@ -57,6 +57,12 @@ public sealed class VisibilityService
 	/// <summary>Per sensor in <see cref="_sensors"/>, the unit tier it belongs to; -1 for a structure's.</summary>
 	private readonly int[] _sensorTier = new int[SimConfig.MaxUnits + (SimConfig.MaxStructures * 4)];
 	private readonly Dictionary<int, Contact> _contacts = new();
+
+	/// <summary>Per crew vehicle slot, whether a sensor saw its hull at the last refresh (docs/GROUND_VEHICLES.md §7.3).</summary>
+	private readonly bool[] _vehicleSeen = new bool[SimConfig.MaxCrewVehicles];
+
+	/// <summary>Beside <see cref="_vehicleSeen"/>: the sensor that saw it, for the contact event's tier.</summary>
+	private readonly int[] _vehicleObserver = new int[SimConfig.MaxCrewVehicles];
 	private readonly int[] _candidates = new int[SimConfig.FogLineOfSightCandidates];
 	private readonly Func<Vector3, Vector3, bool> _lineOfSight;
 
@@ -113,8 +119,29 @@ public sealed class VisibilityService
 		Recompute(tick, combat, units);
 	}
 
-	/// <summary>Whether a strategist may be told where this peer is right now.</summary>
-	public bool IsVisible(int peerId) => _contacts.TryGetValue(peerId, out Contact contact) && contact.Visible;
+	/// <summary>
+	/// Whether a strategist may be told where this peer is right now. A player in a crew
+	/// vehicle's seat exactly when the vehicle is (docs/GROUND_VEHICLES.md §7.3): asked of
+	/// the seat they are in now, so the player snapshot and the vehicles' message never
+	/// disagree about who is in it, even between two refreshes.
+	/// </summary>
+	public bool IsVisible(int peerId)
+	{
+		bool playerSeen = _contacts.TryGetValue(peerId, out Contact contact) && contact.Visible;
+		if (CrewVehicleManager.Instance is { } crew && crew.TrySeat(peerId, out CrewVehicle vehicle, out _))
+		{
+			return CrewFog.PlayerSeen(seated: true, IsVehicleVisible(vehicle.Slot), playerSeen);
+		}
+
+		return playerSeen;
+	}
+
+	/// <summary>
+	/// Whether a strategist may be told about the crew vehicle in <paramref name="slot"/>
+	/// (docs/GROUND_VEHICLES.md §7.3, GV-D14): a sensor of the side saw the middle of its
+	/// hull, with a clear line, at the last refresh.
+	/// </summary>
+	public bool IsVehicleVisible(int slot) => slot >= 0 && slot < _vehicleSeen.Length && _vehicleSeen[slot];
 
 	/// <summary>
 	/// Whether any strategist sensor has this point in range, ignoring walls.
@@ -183,6 +210,7 @@ public sealed class VisibilityService
 		_contacts.Clear();
 		_sensors.Clear();
 		Contacts.Clear();
+		Array.Clear(_vehicleSeen);
 		VisibleContacts = 0;
 		TrackedContacts = 0;
 		WithheldRecords = 0;
@@ -197,6 +225,16 @@ public sealed class VisibilityService
 		int visible = 0;
 		int tracked = 0;
 
+		// The crew vehicles first, by the middle of the hull: their occupants are seen
+		// exactly with them below (docs/GROUND_VEHICLES.md §7.3).
+		CrewVehicleManager crew = CrewVehicleManager.Instance;
+		for (int slot = 0; slot < _vehicleSeen.Length; slot++)
+		{
+			CrewVehicle vehicle = crew?.VehicleAt(slot);
+			_vehicleObserver[slot] = vehicle != null ? Sees(vehicle.HullCentre) : -1;
+			_vehicleSeen[slot] = _vehicleObserver[slot] >= 0;
+		}
+
 		for (int i = 0; combat != null && i < combat.PlayerCount; i++)
 		{
 			PlayerCombat player = combat.PlayerAt(i);
@@ -210,7 +248,10 @@ public sealed class VisibilityService
 			// The chest, not the eyes: it is the middle of the capsule a unit would be
 			// shooting at, and a player crouching behind a crate should not be visible
 			// because the top of their head clears it.
-			int observer = Sees(player.Character.Hitbox.Center);
+			// In a seat, the vehicle's answer and no ray of its own (§7.3).
+			int observer = crew != null && crew.TrySeat(player.PeerId, out CrewVehicle seatedIn, out _)
+				? _vehicleObserver[seatedIn.Slot]
+				: Sees(player.Character.Hitbox.Center);
 			bool seen = observer >= 0;
 			if (seen)
 			{

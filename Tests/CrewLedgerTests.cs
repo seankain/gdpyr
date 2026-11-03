@@ -176,4 +176,112 @@ public class CrewLedgerTests
 		// After a reset the first record snaps, as the first after getting in does.
 		Assert.Equal(ReplayAction.Snap, ledger.Decide(16, Sample(16)).Action);
 	}
+
+	[Fact]
+	public void TheStatesASnapReplayed_AreOnRecord_BeforeTheNextPredictedTick()
+	{
+		// Getting in: the first record snaps and replays the ticks after it. If the client's
+		// clock then stalls a tick — no input sampled, nothing predicted — the next record
+		// still has the replayed state to be compared with, rather than snapping again
+		// (docs/GROUND_VEHICLES.md §12, GV3).
+		var inputs = new PredictionLedger();
+		for (uint tick = 1; tick <= 20; tick++)
+		{
+			inputs.RecordInput(tick, InputFrame.Create(tick, 0f, -1f, 0f, 0f, InputButtons.None));
+		}
+
+		var ledger = new CrewLedger(inputs);
+		ReplayDecision snap = ledger.Decide(10, Sample(10));
+		Assert.Equal(ReplayAction.Snap, snap.Action);
+		for (uint tick = snap.FromTick; tick <= snap.ToTick; tick++)
+		{
+			ledger.UpdateState(Sample(tick));
+		}
+
+		Assert.True(ledger.TryGetState(12, out _));
+		Assert.Equal(ReplayAction.InSync, ledger.Decide(12, Sample(12)).Action);
+	}
+
+	// ---- a driver whose frames are late ------------------------------------------------
+
+	private static WheelContact[] Flat(in FourByFourState state)
+	{
+		var wheels = new WheelContact[FourByFourSim.Wheels];
+		FourByFourTraits traits = FourByFourTraits.Default;
+		for (int i = 0; i < wheels.Length; i++)
+		{
+			float distance = FourByFourSim.Hardpoint(state, traits, i).Y;
+			wheels[i] = distance >= 0f && distance <= traits.RayLengthMeters ? WheelContact.At(distance) : WheelContact.Miss;
+		}
+
+		return wheels;
+	}
+
+	private static void Step(ref FourByFourState state, in InputFrame frame)
+	{
+		Vector3 velocity = FourByFourSim.Step(ref state, FourByFourTraits.Default, frame, Flat(state), SimConfig.TickDelta);
+		FourByFourSim.AfterMove(ref state, state.Position + (velocity * SimConfig.TickDelta), velocity);
+	}
+
+	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	public void LateFrames_KeepTheDriverInSync_OnlyWhenTheRecordAcknowledgesTheSlotTheServerStepped(bool bySlot)
+	{
+		// The client predicts every tick from its own frames; the server's buffer starves
+		// for seven ticks — their frames arrive late and are discarded — and it steps the
+		// truck on the last frame repeated, once a slot, as it always steps it. At full
+		// throttle the repeat is the frame that never came, so the two trucks are where
+		// they should be. Acknowledged by the slot (ServerInputQueue.ConsumedTick) the record
+		// is in sync; by the last real frame (AckTick), it reads as seven ticks of travel —
+		// 2.1 m at 18 m/s, a correction shown at once (docs/GROUND_VEHICLES.md §12, GV3).
+		var inputs = new PredictionLedger();
+		var ledger = new CrewLedger(inputs);
+		var queue = new ServerInputQueue();
+		FourByFourState client = FourByFourState.At(new Vector3(0f, FourByFourTraits.Default.RideHeightMeters, 0f), 0f);
+		FourByFourState server = client;
+
+		uint lateFrom = 400;
+		uint lateTo = 406;
+		ReplayDecision decision = default;
+		for (uint tick = 1; tick <= 420; tick++)
+		{
+			InputFrame frame = InputFrame.Create(tick, 0f, -1f, 0f, 0f, InputButtons.None);
+			Step(ref client, frame);
+			inputs.RecordInput(tick, frame);
+			ledger.Record(CrewSample.Of(tick, client));
+
+			// The server is three ticks behind the client's input clock; a late frame arrives
+			// after its slot has gone.
+			if (tick < lateFrom || tick > lateTo)
+			{
+				queue.Accept(frame);
+			}
+
+			if (tick > 3)
+			{
+				Assert.True(queue.TryPop(out InputFrame consumed));
+				Step(ref server, consumed);
+				if (queue.ConsumedTick == lateTo)
+				{
+					var record = new CrewVehicleRecord { Kind = CrewVehicleKind.FourByFour };
+					record.SetDrive(server);
+					record = record.Quantized();
+					uint ack = bySlot ? queue.ConsumedTick : queue.AckTick;
+					decision = ledger.Decide(ack, record.ToSample(ack));
+				}
+			}
+		}
+
+		Assert.True(queue.Starvations >= 7);
+		if (bySlot)
+		{
+			Assert.Equal(ReplayAction.InSync, decision.Action);
+		}
+		else
+		{
+			Assert.Equal(ReplayAction.Replay, decision.Action);
+			Assert.InRange(decision.PositionError, 2f, 2.2f);
+		}
+	}
 }

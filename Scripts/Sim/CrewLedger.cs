@@ -107,12 +107,22 @@ public sealed class CrewLedger
 		_recording = true;
 	}
 
-	/// <summary>Overwrites a predicted state after it has been replayed.</summary>
+	/// <summary>
+	/// Overwrites a predicted state after it has been replayed — or writes it, for a tick
+	/// a snap replayed that was never predicted: the first record after getting in replays
+	/// the ticks after it, and the next record is compared with those whether or not the
+	/// client has predicted a tick of its own since (a clock stall can leave it none).
+	/// </summary>
 	public void UpdateState(in CrewSample state)
 	{
 		if (_states[state.Tick & Mask].Tick == state.Tick || _inputs.TryGetInput(state.Tick, out _))
 		{
 			_states[state.Tick & Mask] = state;
+			_recording = true;
+			if (state.Tick > LastRecordedTick)
+			{
+				LastRecordedTick = state.Tick;
+			}
 		}
 	}
 

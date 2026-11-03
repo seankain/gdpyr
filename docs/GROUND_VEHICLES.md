@@ -1,9 +1,10 @@
 # gdpyr — Vehicles the ground force drives: a 4x4 and a helicopter
 
-**Status: GV0's baseline measured, GV1's engine-free rules built, and GV2's 4x4 on the authority
-(§12): offline and on a listen host, the console puts a 4x4 or a helicopter down and its own player
-gets in, drives, changes seat and gets out. Nothing is on the wire yet (GV3).** Written against
-`6699b03`. The
+**Status: GV0's baseline measured, GV1's engine-free rules built, GV2's 4x4 on the authority and
+GV3's wire, fog and prediction (§12): a remote client gets in over an 80 ms link, drives the 4x4
+predicted, its passenger rides it smoothly, a strategist is told about it only while the side sees it,
+and a client that joins sees it and who is in it. Nothing is fired from a seat or at a hull yet
+(GV4).** Written against `6699b03`. The
 decisions (GV-D1–GV-D17, §3) are the defaults the plan is written against; each is one line to
 change, so flag any you disagree with before GV2 starts. The phases (GV0–GV9, §12) say what each builds, what checks it, and what is
 left for a person at the controls.
@@ -469,7 +470,10 @@ seconds left. Then 46 bytes a vehicle:
 Two vehicles are 101 bytes, 3.0 KB/s per client; four are 193 bytes, one datagram. It carries the
 pose and rates the driver's replay restores, the occupants every client draws, and the kiosk's
 status the HUD shows. The kiosk's status is the drone shelf's precedent (CONTROL_POINTS.md §4.4):
-state in a message that is going out anyway.
+state in a message that is going out anyway. GV3 sends it on every snapshot tick, a 9-byte header
+when no vehicle is out, so a client nothing is fogged for learns of a removal from the records that
+stop naming it (§8.1). Until the kiosk is on the map (GV6) both kinds' status is `disabled`; until
+the gun is (GV4) its box byte is 0 and its reload bit clear.
 
 ### 7.2 Requests
 
@@ -509,7 +513,9 @@ A vehicle's node is made on the first record that names its slot, of the kind it
 seconds after a record marks it destroyed — or, on a client nothing is fogged for, after fifteen
 packets without it. Position, yaw and attitude are interpolated at the render clock
 (`SnapshotInterpolator`, with an attitude channel), and wheels are placed by rays cast on the client:
-presentation only.
+presentation only. GV3 draws vehicles at the render clock followed by `SmoothRenderClock`, which
+slews a whole-tick correction of the clock away over ten ticks rather than jumping a 4x4, and the
+passenger looking out of it, 30 cm (§12, GV3).
 
 ### 8.2 The driver
 
@@ -546,7 +552,8 @@ reconciled while seated (§6.7); its health, ammunition and kit apply as before.
   `[E] helicopter door`, `[E] vehicle kiosk`.
 - **Seated:** `4x4 · driver · 412/600 · 14 m/s`, `4x4 · gun · 87/100`, `helicopter · pilot · 380/450
   · 12 m up`; under it `[E] get out · hold [E] gun` (the next free seat's name), or `too high to get
-  out`, or `no room to get out`.
+  out` — for as long as it is true, on every client — or, on the authority for two seconds after a
+  refused press, `no room to get out`.
 - **Under the round's line**, for the ground force: `4x4 ready · helicopter 0:42`.
 - **`KioskPanel`**, `LoadoutPanel`'s pattern: a row per kind with its status, `1` and `2` to ask,
   the refusal at its foot (`refused (not_ready): ready in 0:42`); it closes on a vehicle taken, death,
@@ -947,6 +954,147 @@ What the phase left open, and what GV2 chose:
 the strip; a passenger's view is smooth; a strategist sees a vehicle only when the side's sensors do;
 a client that joins sees the vehicles and who is in them.
 
+**Built on `1e18017`**, with GV0's .NET SDK and Godot.
+
+- **New, engine-free**, in `Scripts/Sim`: `CrewVehicleCodec.cs` — `ServerCrewVehicles` (§7.1): the
+  9-byte header with the kiosk's line per kind (`KioskLine`), the 46-byte `CrewVehicleRecord`, a
+  total decoder, and the record to and from each kind's state for the driver's replay. `CrewFog.cs` —
+  §7.3's rule: which records go in a strategist's packet, a seated player exactly with their vehicle,
+  and the hull's centre the fog looks at (`CrewLayout.HullCentre`). `CrewPuppets.cs` —
+  `CrewPuppetRoster` (§8.1: a node made, remade for another kind, freed two seconds after a wreck or
+  fifteen packets after the server stopped naming it, kept for the fog), `CrewVisualOffset` (§8.2: a
+  correction drawn away at the character's half-life, or shown at once past 1 m) and
+  `SmoothRenderClock` (below). `SnapshotInterpolator` gains a roll channel; `ServerInputQueue` gains
+  `ConsumedTick` (below).
+- **Changed:** `CrewVehicle` (a puppet placed at the render clock, its wheel rays or height ray cast
+  for the eye and the HUD; a record out and in; `Restore` for a replay; the drawn offset; hidden from
+  a strategist); `CrewVehicleManager` (the broadcast on the player snapshot's tick, before it,
+  filtered per strategist; on a client the records, the puppets, who sits where, the driver's
+  prediction and replay, every seated body pinned to its seat as drawn; `CanBeSeated` is now any
+  person, bots still never; the debug row's prediction numbers; the listen host's curtain);
+  `PlayerManager` (the vehicles' message applied before the player snapshot, the driven vehicle
+  predicted after the character on the same frame, the puppets placed after the remote bodies; the
+  local record not reconciled while seated; a new connection resets the vehicles);
+  `VisibilityService` (each vehicle seen by its hull's centre at every refresh; a seated player
+  visible exactly with the vehicle of the seat they are in now); `CrewSeatView` (the chase camera
+  follows the hull as drawn).
+- **Three defects found by the network check below, and fixed:**
+  - **The driver's acknowledgement.** First written as the player snapshot's: the last real frame
+    the server consumed (`AckTick`). On a tick the server's buffer has no frame it steps the vehicle on
+    the last one repeated, and the late frame is discarded when it comes: the vehicle steps once a
+    slot either way, but the acknowledgement stays on the last real frame, so the driver compared the
+    server's state k slots on with its own k slots earlier — 0.30 m a slot at 18 m/s. In two runs of
+    the first seven the 4x4 was corrected by 2.1 m at once; in the one that logged it, at full speed
+    on the straight, the driver's buffer had starved 64 times and the correction had no velocity error
+    at all. The record now acknowledges `ServerInputQueue.ConsumedTick`, the slot stepped, its own
+    frame or a repeat. Facts:
+    `ConsumedTick_IsTheSlotsTick_WhetherItsFrameCameOrTheLastWasRepeated`, and
+    `LateFrames_KeepTheDriverInSync_OnlyWhenTheRecordAcknowledgesTheSlotTheServerStepped`, whose
+    by-the-last-real-frame case reads seven starved slots as a replay of 2.0–2.2 m.
+  - **The passenger's view jumped.** `SimClock` walks an error in its estimate of the server's tick
+    off a whole tick at a time (NETCODE.md §2), which moves everything drawn at the render clock by a
+    tick's travel at once. In two runs of the first seven the passenger's step changed by 30 and 60 cm
+    from one tick to the next; the one that logged it had the eye moving 0.60 m in a tick after 0.30 m,
+    the render clock advancing by 2.0 that tick, and the newest record still 2 ticks ahead of it — not
+    the interpolation running out. Vehicles are now drawn at `SmoothRenderClock`: a tick a tick,
+    slewing towards the render clock by at most a tenth of a tick, a resync taken at once. Facts:
+    `AWholeTickCorrection_IsSlewedAWayOverTenTicks_NotJumped` (both ways),
+    `ASteadyRenderClock_IsFollowedExactly`, `AResync_IsTakenAtOnce_AndSoIsTheFirstTick`.
+  - **A second snap after getting in.** A snap's replay wrote the ticks after it with `UpdateState`,
+    which did not count them as predicted until the client's next own step had; a clock stall in that
+    frame left the next record with nothing on record to compare, and it snapped again (one run of
+    twelve). `UpdateState` now counts. Fact:
+    `TheStatesASnapReplayed_AreOnRecord_BeforeTheNextPredictedTick`, which failed before.
+- **Tests:** `dotnet test` **2,915 of 2,915 pass**, 47 of them new: `CrewVehicleCodecTests` (18),
+  `CrewFogTests` (6), `CrewPuppetTests` (17), `CrewLedgerTests` (+3), `SnapshotInterpolatorTests` (+2)
+  and `ServerInputQueueTests` (+1). The test project's one warning is still GV0's CS0649.
+- **Builds:** `Gdpyr.csproj`, `tools/Gdpyr.Playtest` and `tools/Gdpyr.AgentClient`, 0 warnings and 0
+  errors each, rebuilt from clean.
+- **Engine checks:** `scripts/crew-vehicle-checks.sh net` runs
+  `tools/EngineChecks/CrewVehicleNetChecks.cs` in five headless processes on a copy of the tree, in real time (no `--fixed-fps`): a `--server`
+  process; a relay, `tools/EngineChecks/delay_relay.py`, that holds every datagram each way for a
+  normal 40 ± 10 ms — DEPLOYMENT.md §4's `tc netem` line, which this kernel cannot run (no `sch_netem`);
+  and a driver, a passenger and a strategist through it, then a client that joins. They keep in step by
+  marker files. **57 of 57 facts in each of five runs of the final code**, every part exiting 0 in the
+  last; the table below is the first four's, the fifth's after the check's own fix (below). GV2's
+  `physics` and `game` checks still hold, 66 of 66 and 37 of 37.
+- **The scenario suite**, GV0's way (`--fixed-fps 60` through `GODOT`), in 779 s of scenario wall
+  time: **34 of 41**, GV0's eight failing but `htn_squad_retreats`, which passes here as in GV0's
+  second run. Against GV0's two runs only three scenarios report anything different, all of them the
+  spread GV0 names and inside its ranges: `htn_squad_retreats`'s verdict, `tactics_react_to_fire`'s
+  `chair.units.58.last` 0.012..0.019, and `tactics_sniper_overwatch`'s `unit_task[goal=21]` 6..9 and
+  `[goal=23]` 4..6. No scenario puts a vehicle down, so this is the suite's check that nothing else
+  moved.
+
+Measured over the four runs (the relay: one-way 40.0 ms mean, 10.0 ms SD, 1.8–81.8 ms; the clients'
+smoothed RTT, logged every 5 s, 85–159 ms, most of it 88–110; the driver's clock 0 resyncs and 16–26
+nudges):
+
+| | |
+|---|---|
+| Getting in over the link | one snap, the first record after it, replaying 9–11 ticks |
+| The strip at full throttle from rest, about 7 m/s at the first bump and 13 m/s off the ramp | 1–2 replays, the largest moving the hull 2.2–3.4 cm; in the runs that logged why, an attitude error just past 0.5° at the foot of the ramp, and a position error just past 3 cm twice as it settled from the drop |
+| The straight after it, x −20 to 80 at 16.5–18 m/s, 5.5–5.6 s | 154–162 comparisons, mean error 0.33–0.47 cm, worst 0.38–0.51 cm — the record's 1 cm resolution; no replay |
+| The whole drive, 215 m | 1–3 replays, the longest 10–11 ticks; the largest correction 2.2–4.4 cm; none shown at once |
+| The passenger's eye on the straight, 332–333 ticks at 0.300 m a tick | in three runs the step never changes; in the fourth it changes by 3.0 cm at most, a clock correction being slewed away |
+| The helicopter: rotor up, 3 s of Space, 3 s of W, Ctrl to the ground | 12.3–13.5 m up; no replay in three runs; in the fourth, the pilot's buffer starved 35 times: 9 replays, the largest 8.6 cm, none shown at once |
+| A strategist, no unit of its side on the field, through the whole drive | told nothing about the 4x4 or the two in it on any of 1,147–1,148 ticks |
+| A builder of its side 30 m from the parked 4x4 | told about the 4x4 and both in it on 120 of 120 ticks, its client seating them; the server's fog the same |
+| The builder gone | told nothing more on 120 of 120 ticks; the hull hidden; nobody seated in it |
+| A client joining with the 4x4 parked and two aboard | the 4x4, the driver at its wheel and the passenger in its bed; the driver's body at the seat's eye of the hull as drawn, to 0.1 mm |
+| The driver's input buffer on the server, the 4x4's drive | 0 starved; 42–50 late redundant copies discarded |
+
+Each guard, broken on the check's copy and `net` run, and what failed:
+
+| Broken | Failed |
+|---|---|
+| no fog for vehicles: a strategist sent every one | 4: `unseen, a strategist is told nothing…`, `out of sight again…`, `and its client hides the hull it last saw`, `and seats nobody in a vehicle it has lost` |
+| puppets drawn at their newest record, not interpolated | `the passenger's view is smooth…`: the step changed by 120 cm in a tick |
+| a strategist's client seating players from a vehicle it has lost | `and seats nobody in a vehicle it has lost` |
+| the record acknowledging one slot early | nothing. The first record's snap takes the offset in and the driver predicts a slot ahead from then on, in sync (mean error 1.46 cm): a constant offset is invisible to every fact here. The harm is an offset that changes, which only a starved buffer makes, and `LateFrames_…`'s by-the-last-real-frame case fails on it in `dotnet test` |
+| the record acknowledging the server's own tick | nothing: in these runs the server's tick and the driver's consumed slot were the same number |
+
+The `nofog` run also failed the passenger's `this client has the driver at the wheel`: the check read
+the server's marker the tick it was written, before the record saying so could have crossed the link.
+It now waits up to two seconds for the record. The first run of the one-slot-early guard ended with a
+process exiting non-zero and no failed fact, and its logs were not kept; a second run, kept, had every
+part exit 0. The script now prints every part's exit code.
+
+What the phase left open, and what GV3 chose:
+
+- **The server is a `--server` process of the editor binary, headless**, not an exported dedicated
+  server: without the export's `dedicated_server` feature it builds a presentation it never draws.
+  The wire, the clocks and the authority are the deployed server's; an exported build has not been
+  run, for want of export templates here.
+- **The relay stands in for `tc netem`** and does the same to one game's traffic: each datagram
+  delayed on its own, so reordered as netem reorders. Five Godot processes share four cores here;
+  which of that and the relay's tail starved the buffers in some runs was not measured.
+- **The header goes out on every snapshot tick**, with no vehicle out too: 270 B/s a client, so a
+  client nothing is fogged for learns of a removal from the packets that stop naming it. The kiosk's
+  lines say `disabled` until GV6, and the gun's box is 0 until GV4.
+- **Both acknowledgements are kept.** The player snapshot still acknowledges the last real frame and
+  reads a repeat as starvation (NETCODE.md §3.2), as the character's prediction was built on; only the
+  vehicle record, which is stepped once a slot whatever, acknowledges the slot.
+- **Only vehicles are drawn at the smoothed clock.** Remote players and units are still drawn at the
+  render clock with its whole-tick corrections — 8 cm for a walking player — and a vehicle's
+  occupants ride the vehicle. The same clock would serve them; it is NETCODE.md §2's to change.
+- **The local player's own record is not reconciled while seated**, and neither ledger compares it:
+  the body is where its seat is drawn. Getting out puts it at its seat's exit point as drawn until its
+  own record says where; the vehicles' message is sent first, but a reordered pair can seat a body
+  or put it down a tick late.
+- **A strategist's lost vehicle is hidden and kept**, freed only by a record marking it a wreck; its
+  last record's seats are not used, so a player who got out of it and walked into sight is drawn
+  where their own record puts them.
+- **`too high to get out` is said whenever it is true**, on every process: the rule and the height are
+  each client's own. `no room to get out` is still the authority's finding alone, so a remote client
+  sees `[E] get out` again after a press the server refused.
+- **The helicopter is predicted over the link** through the same path, and climbs, flies and lands
+  without a snap; GV5 still owns it.
+- **Left for a person at the controls**: everything drawn over the link — the correction drawn away
+  on the hull, the chase camera behind a predicted truck, the passenger's view, a strategist's hull
+  appearing and going — has been driven headless and never looked at (`TODO(GV3…)` in
+  `CrewVehicleManager.cs`), nor has any of it run on a dedicated server over a real link.
+
 ### GV4 — Combat from and against vehicles (3 days)
 
 §6.4, §6.5 — running units over included — §5.6 in the game, `VehicleImpactDamage`, wrecks, the
@@ -1003,7 +1151,7 @@ DEMOS.md (version 5), EFFECTS.md (§1's table), and this document's status.
 | Passengers fire from a moving seat | `vehicle_passenger_fires`; GV4's origin log over a link | Godot headless; a person, dedicated server |
 | The kiosk's timer and cap | §5.5's facts; `vehicle_kiosk_cap` | `dotnet test`; Godot headless |
 | A collision at 8 m/s or more kills a unit on foot; a slower one does not | §5.9's facts; `vehicle_rams_infantry`, `vehicle_pushes_slowly` | `dotnet test`; Godot headless |
-| Driving feels like driving | GV3's error, misprediction and replay numbers | a person, dedicated server with `tc netem` |
+| Driving feels like driving | GV3's error, misprediction and replay numbers | `crew-vehicle-checks.sh net`: a `--server` process and four clients, 80 ms RTT and 20 ms jitter through a relay; a person, dedicated server with `tc netem` |
 
 ---
 
