@@ -234,8 +234,11 @@ public static class CrewLayout
 	/// The corners of a box with its twelve edges bevelled by <paramref name="bevel"/>:
 	/// the points of the convex hull a crew vehicle collides as (docs/GROUND_VEHICLES.md
 	/// §6.1), so it slides off a wall's end rather than catching on it. Three points per
-	/// corner, twenty-four in all, each inside the box. A bevel is at most half the
-	/// shortest side.
+	/// corner, twenty-four in all, each inside the box: each on one of the corner's three
+	/// faces, pulled in by the bevel along the other two axes. Their hull keeps every face
+	/// flat, inset by the bevel all round, and cuts each edge at 45° — not only the
+	/// corners, which a point pulled in along one axis would cut and leave every edge
+	/// sharp between them. A bevel is at most half the shortest side.
 	/// </summary>
 	public static Vector3[] BevelledBox(Vector3 centre, Vector3 halfExtents, float bevel)
 	{
@@ -248,9 +251,9 @@ public static class CrewLayout
 			float sx = (corner & 1) == 0 ? -1f : 1f;
 			float sy = (corner & 2) == 0 ? -1f : 1f;
 			float sz = (corner & 4) == 0 ? -1f : 1f;
-			points[at++] = centre + new Vector3(sx * (h.X - b), sy * h.Y, sz * h.Z);
-			points[at++] = centre + new Vector3(sx * h.X, sy * (h.Y - b), sz * h.Z);
-			points[at++] = centre + new Vector3(sx * h.X, sy * h.Y, sz * (h.Z - b));
+			points[at++] = centre + new Vector3(sx * h.X, sy * (h.Y - b), sz * (h.Z - b));
+			points[at++] = centre + new Vector3(sx * (h.X - b), sy * h.Y, sz * (h.Z - b));
+			points[at++] = centre + new Vector3(sx * (h.X - b), sy * (h.Y - b), sz * h.Z);
 		}
 
 		return points;

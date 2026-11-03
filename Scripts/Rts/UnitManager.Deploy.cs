@@ -140,13 +140,13 @@ public partial class UnitManager
 		return false;
 	}
 
-	/// <summary>Whether anything solid — the world, a unit or a player — is where a body of this size standing at <paramref name="feet"/> would be.</summary>
+	/// <summary>Whether anything solid — the world, a unit, a player or a crew vehicle — is where a body of this size standing at <paramref name="feet"/> would be.</summary>
 	private bool IsDeployCrowded(PhysicsDirectSpaceState3D space, Vector3 feet, byte definitionId, float radius,
 		float height)
 	{
 		_deployShape ??= new PhysicsShapeQueryParameters3D
 		{
-			CollisionMask = CollisionLayers.World | CollisionLayers.Units | CollisionLayers.Players,
+			CollisionMask = CollisionLayers.World | CollisionLayers.Units | CollisionLayers.Players | CollisionLayers.Vehicles,
 		};
 
 		// One capsule per kind, made on first use, as a passenger's is. Never shorter than

@@ -404,6 +404,51 @@ public class CrewSeatTests
 		Assert.Equal(-MathF.PI / 2f, yaw, 4);
 	}
 
+	// ---- the collider ----------------------------------------------------------------------
+
+	[Theory]
+	[InlineData(0.95f, 0.95f, 2.4f, 0.25f)]
+	[InlineData(0.9f, 1.2f, 1.5f, 0.3f)]
+	[InlineData(1f, 0.5f, 2f, 0.5f)]
+	public void TheCollidersTwelveEdges_AreBevelled_NotOnlyItsCorners(float hx, float hy, float hz, float bevel)
+	{
+		// Every point of the hull keeps |a| + |b| at most the edge's own sum less the bevel,
+		// for each pair of axes; a hull of points that does so is cut along every edge, so
+		// the middle of a vertical edge — where a wall's end meets a truck's front corner —
+		// is outside it (docs/GROUND_VEHICLES.md §6.1). A hull that only truncates the
+		// corners has points on the edges, and fails here.
+		var centre = new Vector3(0.3f, 0.5f, -0.2f);
+		Vector3[] points = CrewLayout.BevelledBox(centre, new Vector3(hx, hy, hz), bevel);
+		Assert.Equal(24, points.Length);
+
+		float xMax = 0f, yMax = 0f, zMax = 0f;
+		foreach (Vector3 p in points)
+		{
+			Vector3 d = (p - centre).Abs();
+			Assert.True(d.X + d.Z <= hx + hz - bevel + 1e-5f, $"{p}: on a vertical edge");
+			Assert.True(d.X + d.Y <= hx + hy - bevel + 1e-5f, $"{p}: on a fore-and-aft edge");
+			Assert.True(d.Y + d.Z <= hy + hz - bevel + 1e-5f, $"{p}: on a sideways edge");
+			xMax = MathF.Max(xMax, d.X);
+			yMax = MathF.Max(yMax, d.Y);
+			zMax = MathF.Max(zMax, d.Z);
+		}
+
+		// And each face is still there, flat, at the box's own extent.
+		Assert.Equal(hx, xMax, 5);
+		Assert.Equal(hy, yMax, 5);
+		Assert.Equal(hz, zMax, 5);
+	}
+
+	[Fact]
+	public void ABevelOfNothing_IsTheBox()
+	{
+		Vector3[] points = CrewLayout.BevelledBox(Vector3.Zero, new Vector3(1f, 2f, 3f), 0f);
+		foreach (Vector3 p in points)
+		{
+			Assert.Equal(new Vector3(1f, 2f, 3f), p.Abs());
+		}
+	}
+
 	[Fact]
 	public void TheGun_TurnsAllTheWayRound_AndElevatesFromMinus15ToPlus50_RelativeToTheHull()
 	{

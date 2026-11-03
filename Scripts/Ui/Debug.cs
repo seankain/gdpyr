@@ -45,6 +45,7 @@ public partial class Debug : PanelContainer
 		FillPlayers();
 		FillCombat();
 		FillUnits();
+		FillVehicles();
 		FillFog();
 		FillBoards();
 		FillEconomy();
@@ -167,6 +168,20 @@ public partial class Debug : PanelContainer
 		{
 			SetProperty("hits", $"{combat.HitsResolved}");
 		}
+	}
+
+	/// <summary>
+	/// The crew vehicles (docs/GROUND_VEHICLES.md §8.5): how many are out and how many
+	/// players are in them.
+	/// </summary>
+	private void FillVehicles()
+	{
+		if (Fps.CrewVehicleManager.Instance is not { } crew)
+		{
+			return;
+		}
+
+		SetProperty("vehicles", crew.DebugLine());
 	}
 
 	/// <summary>

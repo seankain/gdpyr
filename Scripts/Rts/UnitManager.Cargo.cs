@@ -850,8 +850,9 @@ public partial class UnitManager
 	/// <item>navigation mesh — within a passenger's own tolerance of it, not a
 	/// structure's; skipped, as a site's is, while there is none;</item>
 	/// <item>clearance — the passenger's capsule, lifted off the floor, against the
-	/// world, units and players, leaving out the vehicle: the map's invisible colliders
-	/// are not carved from the navigation mesh.</item>
+	/// world, units, players and crew vehicles, leaving out the vehicle: the map's
+	/// invisible colliders are not carved from the navigation mesh, and a parked truck
+	/// is on none (docs/GROUND_VEHICLES.md §6.7).</item>
 	/// </list>
 	/// </summary>
 	private bool IsExitClear(Unit vehicle, Unit rider, Vector3 candidate, out Vector3 ground)
@@ -889,7 +890,7 @@ public partial class UnitManager
 		return !IsCrowded(space, vehicle, rider, ground);
 	}
 
-	/// <summary>Whether anything solid — the world, a unit or a player, the vehicle aside — is where a passenger standing at <paramref name="feet"/> would be.</summary>
+	/// <summary>Whether anything solid — the world, a unit, a player or a crew vehicle, the vehicle aside — is where a passenger standing at <paramref name="feet"/> would be.</summary>
 	private bool IsCrowded(PhysicsDirectSpaceState3D space, Unit vehicle, Unit rider, Vector3 feet)
 	{
 		float height = rider.Definition?.HeightMeters ?? 1.8f;
@@ -902,7 +903,7 @@ public partial class UnitManager
 
 		_exitShape ??= new PhysicsShapeQueryParameters3D
 		{
-			CollisionMask = CollisionLayers.World | CollisionLayers.Units | CollisionLayers.Players,
+			CollisionMask = CollisionLayers.World | CollisionLayers.Units | CollisionLayers.Players | CollisionLayers.Vehicles,
 		};
 		_exitShape.Shape = capsule;
 		_exitShape.Transform = new Transform3D(Basis.Identity,

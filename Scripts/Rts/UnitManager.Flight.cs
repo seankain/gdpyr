@@ -251,11 +251,11 @@ public partial class UnitManager
 		}
 
 		return !IsHullObstructed(space, unit, ground, traits.ClearAltitudeMeters,
-			CollisionLayers.World | CollisionLayers.Units | CollisionLayers.Players);
+			CollisionLayers.World | CollisionLayers.Units | CollisionLayers.Players | CollisionLayers.Vehicles);
 	}
 
 	/// <summary>
-	/// Whether a unit or a player is under an aircraft coming down: the hull's width from
+	/// Whether a unit, a player or a crew vehicle is under an aircraft coming down: the hull's width from
 	/// the ground up to its feet, leaving out the units walking to get into it, who stand
 	/// off round it rather than under it.
 	/// </summary>
@@ -268,7 +268,8 @@ public partial class UnitManager
 		}
 
 		Vector3 ground = unit.GlobalPosition - (Vector3.Up * unit.HeightAboveGround);
-		return IsHullObstructed(space, unit, ground, unit.HeightAboveGround, CollisionLayers.Units | CollisionLayers.Players);
+		return IsHullObstructed(space, unit, ground, unit.HeightAboveGround,
+			CollisionLayers.Units | CollisionLayers.Players | CollisionLayers.Vehicles);
 	}
 
 	/// <summary>
