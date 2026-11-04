@@ -1,0 +1,41 @@
+{
+  "name": "a pilot and a passenger on the helicopter's pad climb five seconds, fly forward four, come down and both get out more than 40 m from the pad",
+  "seeds": [1, 2],
+  "duration_ticks": 1140,
+  "warmup_ticks": 60,
+  "roster": { "ground": 2, "strategists": 0 },
+
+  "seats": [
+    { "id": "pilot", "team": "ground", "policy": "ground", "step_mul": 4,
+      "script": { "repeat": false, "steps": [
+        { "ticks": 300, "buttons": ["jump"] },
+        { "ticks": 240, "move": [0, -1] },
+        { "ticks": 480, "buttons": ["crouch"] },
+        { "ticks": 8, "buttons": ["use"] },
+        { "ticks": 112 }
+      ] } },
+    { "id": "passenger", "team": "ground", "policy": "ground", "step_mul": 4,
+      "script": { "repeat": false, "steps": [
+        { "ticks": 1020 },
+        { "ticks": 8, "buttons": ["use"] },
+        { "ticks": 112 }
+      ] } }
+  ],
+
+  "spawns": [
+    { "vehicle": "helicopter", "id": "heli", "at": [-109.73, 0.5, 88.31], "yaw": -0.8929 },
+    { "peer": "pilot", "seat": { "vehicle": "heli", "role": "pilot" } },
+    { "peer": "passenger", "seat": { "vehicle": "heli", "role": "passenger" } }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.vehicle_entered.count", "op": "==", "value": 2 },
+    { "metric": "events.vehicle_exited.count", "op": "==", "value": 2 },
+    { "metric": "events.vehicle_exited[peer=@pilot].count", "op": "==", "value": 1 },
+    { "metric": "events.vehicle_exited[peer=@passenger].count", "op": "==", "value": 1 },
+    { "metric": "events.vehicle_exited.x.min", "op": ">=", "value": -78.5 },
+    { "metric": "events.vehicle_exited.z.max", "op": "<=", "value": 63.2 },
+    { "metric": "events.vehicle_damaged.count", "op": "==", "value": 0 }
+  ]
+}

@@ -180,6 +180,57 @@ public sealed class GdpyrUnit
 	public bool IsRiding => RidingIn != 0;
 }
 
+/// <summary>
+/// One crew vehicle as <c>list_vehicles</c> reports it (docs/GROUND_VEHICLES.md §11): the
+/// ground force's 4x4 or helicopter, by its slot on the wire, 0–3.
+/// </summary>
+public sealed class GdpyrVehicle
+{
+	/// <summary>Its slot: what a seat placement and every <c>vehicle_*</c> event name it by.</summary>
+	public int Slot;
+
+	/// <summary><c>4x4</c> or <c>helicopter</c>.</summary>
+	public string Type = string.Empty;
+
+	public float X;
+
+	public float Y;
+
+	public float Z;
+
+	/// <summary>Heading [rad], in the look convention.</summary>
+	public float Yaw;
+
+	public float Health;
+
+	/// <summary>[m/s]</summary>
+	public float Speed;
+
+	public bool Destroyed;
+
+	/// <summary>A helicopter off the ground.</summary>
+	public bool Airborne;
+
+	/// <summary>Whether it came from the kiosk, and so counts against its kind's cap.</summary>
+	public bool FromKiosk;
+
+	/// <summary>Each seat's role — <c>driver</c>, <c>gunner</c>, <c>passenger</c> — in seat order.</summary>
+	public string[] Roles = Array.Empty<string>();
+
+	/// <summary>Who sits in each seat, by peer id; 0 for empty.</summary>
+	public int[] Peers = Array.Empty<int>();
+}
+
+/// <summary>One kind's line at the vehicle kiosk: <c>ready</c>, <c>out</c>, <c>counting</c> (with the seconds left) or <c>disabled</c>.</summary>
+public sealed class GdpyrKioskLine
+{
+	public string Type = string.Empty;
+
+	public string Status = string.Empty;
+
+	public int SecondsLeft;
+}
+
 /// <summary>What a <c>step</c> said about one attached seat (docs/AGENT_API.md §5.2).</summary>
 public sealed class GdpyrSeatStatus
 {
@@ -362,6 +413,14 @@ public sealed class GdpyrConnection : IDisposable
 	private readonly NetworkStream _stream;
 	private readonly Queue<GdpyrObservation> _observations = new();
 	private readonly Queue<GdpyrEvent> _events = new();
+
+	/// <summary>
+	/// The first tick an event may be from to be queued: one past the last <c>reset</c>. What
+	/// the reset itself emitted — the last round's <c>round_end</c>, everybody it unseated from
+	/// a crew vehicle (docs/GROUND_VEHICLES.md §12, GV7) — is stamped with the reset's tick and
+	/// pushed after its answer, and belongs to the episode that ended.
+	/// </summary>
+	private uint _eventsFrom;
 
 	/// <summary>Pushed observations held before the oldest is dropped.</summary>
 	private const int MaxQueuedObservations = 64;
@@ -773,8 +832,10 @@ public sealed class GdpyrConnection : IDisposable
 	/// </summary>
 	/// <param name="at">Where to put the seat, or null to leave it where it is and only equip <paramref name="kit"/>.</param>
 	/// <param name="kit">The kit to equip and respawn with (docs/LOADOUT.md §9), or null to keep the seat's.</param>
+	/// <param name="vehicle">A crew vehicle's slot to seat it in (docs/GROUND_VEHICLES.md §11), or −1 for none.</param>
+	/// <param name="role">The seat in <paramref name="vehicle"/>: <c>driver</c>, <c>gunner</c> or <c>passenger</c>.</param>
 	public Task SpawnSeatAsync(int seat, float[] at, float yaw = 0f, float pitch = 0f,
-		CancellationToken cancel = default, GdpyrKit kit = null) =>
+		CancellationToken cancel = default, GdpyrKit kit = null, int vehicle = -1, string role = null) =>
 		RequestAsync(writer =>
 		{
 			writer.WriteString("op", "spawn");
@@ -789,7 +850,153 @@ public sealed class GdpyrConnection : IDisposable
 			}
 
 			WriteKit(writer, kit);
+			if (vehicle >= 0)
+			{
+				writer.WriteStartObject("vehicle_seat");
+				writer.WriteNumber("vehicle", vehicle);
+				writer.WriteString("role", role ?? "driver");
+				writer.WriteEndObject();
+			}
 		}, cancel);
+
+	/// <summary>
+	/// Puts a crew vehicle on the field for a scenario (docs/GROUND_VEHICLES.md §11), free and
+	/// outside the kiosk's cap: <paramref name="kind"/> <c>4x4</c> or <c>helicopter</c>,
+	/// <paramref name="at"/> the ground it stands on (a helicopter's skids, hovering when off
+	/// the ground), <paramref name="health"/> 0 for full. Returns its slot; the server refuses
+	/// one with nowhere to stand.
+	/// </summary>
+	public async Task<int> SpawnVehicleAsync(string kind, float[] at, float yaw = 0f, float health = 0f,
+		CancellationToken cancel = default)
+	{
+		JsonElement response = await RequestAsync(writer =>
+		{
+			writer.WriteString("op", "spawn");
+			writer.WriteString("vehicle", kind ?? "4x4");
+			WriteVector(writer, "at", at);
+			writer.WriteNumber("yaw", yaw);
+			if (health > 0f)
+			{
+				writer.WriteNumber("health", health);
+			}
+		}, cancel).ConfigureAwait(false);
+
+		return response.GetProperty("vehicle").GetInt32();
+	}
+
+	/// <summary>
+	/// Asks the vehicle kiosk for a crew vehicle for one of this session's ground seats
+	/// (docs/GROUND_VEHICLES.md §11), through the validator a person's panel goes through.
+	/// Returns <c>taken</c>, or the refusal's code — <c>dead</c>, <c>not_ground</c>,
+	/// <c>not_at_kiosk</c>, <c>seated</c>, <c>mounted</c>, <c>carrying</c>, <c>piloting</c>,
+	/// <c>invalid</c>, <c>out</c>, <c>not_ready</c>, <c>pad_blocked</c>, <c>too_soon</c> —
+	/// which is an answer, not an error.
+	/// </summary>
+	public async Task<string> RequestVehicleAsync(int seat, string kind, CancellationToken cancel = default)
+	{
+		JsonElement response = await RequestAsync(writer =>
+		{
+			writer.WriteString("op", "vehicle");
+			writer.WriteNumber("seat", seat);
+			writer.WriteString("kind", kind ?? "4x4");
+		}, cancel).ConfigureAwait(false);
+
+		return response.TryGetProperty("answer", out JsonElement answer) && answer.ValueKind == JsonValueKind.String
+			? answer.GetString()
+			: "unknown";
+	}
+
+	/// <summary>
+	/// Every crew vehicle on the field and each kind's line at the kiosk
+	/// (docs/GROUND_VEHICLES.md §11). Named for a strategist seat this session holds, only
+	/// what its side sees; with <paramref name="seat"/> 0, every one.
+	/// </summary>
+	public async Task<(List<GdpyrVehicle> Vehicles, List<GdpyrKioskLine> Kiosk)> ListVehiclesAsync(int seat = 0,
+		CancellationToken cancel = default)
+	{
+		JsonElement response = await RequestAsync(writer =>
+		{
+			writer.WriteString("op", "list_vehicles");
+			if (seat != 0)
+			{
+				writer.WriteNumber("seat", seat);
+			}
+		}, cancel).ConfigureAwait(false);
+
+		return ReadVehicles(response);
+	}
+
+	/// <summary>A <c>vehicles</c> answer, read: what <see cref="ListVehiclesAsync"/> returns. Total: anything missing reads empty.</summary>
+	public static (List<GdpyrVehicle> Vehicles, List<GdpyrKioskLine> Kiosk) ReadVehicles(JsonElement response)
+	{
+		var vehicles = new List<GdpyrVehicle>();
+		var kiosk = new List<GdpyrKioskLine>();
+		if (response.ValueKind != JsonValueKind.Object)
+		{
+			return (vehicles, kiosk);
+		}
+
+		if (response.TryGetProperty("vehicles", out JsonElement array) && array.ValueKind == JsonValueKind.Array)
+		{
+			foreach (JsonElement element in array.EnumerateArray())
+			{
+				var roles = new List<string>();
+				var peers = new List<int>();
+				if (element.TryGetProperty("seats", out JsonElement seats) && seats.ValueKind == JsonValueKind.Array)
+				{
+					foreach (JsonElement seat in seats.EnumerateArray())
+					{
+						roles.Add(seat.TryGetProperty("role", out JsonElement role) && role.ValueKind == JsonValueKind.String
+							? role.GetString()
+							: string.Empty);
+						peers.Add(Whole(seat, "peer"));
+					}
+				}
+
+				vehicles.Add(new GdpyrVehicle
+				{
+					Slot = Whole(element, "slot"),
+					Type = element.TryGetProperty("type", out JsonElement type) && type.ValueKind == JsonValueKind.String
+						? type.GetString()
+						: string.Empty,
+					X = Real(element, "x"),
+					Y = Real(element, "y"),
+					Z = Real(element, "z"),
+					Yaw = Real(element, "yaw"),
+					Health = Real(element, "health"),
+					Speed = Real(element, "speed"),
+					Destroyed = element.TryGetProperty("destroyed", out JsonElement destroyed)
+						&& destroyed.ValueKind == JsonValueKind.True,
+					Airborne = element.TryGetProperty("airborne", out JsonElement airborne)
+						&& airborne.ValueKind == JsonValueKind.True,
+					FromKiosk = element.TryGetProperty("from_kiosk", out JsonElement fromKiosk)
+						&& fromKiosk.ValueKind == JsonValueKind.True,
+					Roles = roles.ToArray(),
+					Peers = peers.ToArray(),
+				});
+			}
+		}
+
+		if (response.TryGetProperty("kiosk", out JsonElement lines) && lines.ValueKind == JsonValueKind.Array)
+		{
+			foreach (JsonElement element in lines.EnumerateArray())
+			{
+				kiosk.Add(new GdpyrKioskLine
+				{
+					Type = element.TryGetProperty("type", out JsonElement type) && type.ValueKind == JsonValueKind.String
+						? type.GetString()
+						: string.Empty,
+					Status = element.TryGetProperty("status", out JsonElement status)
+						&& status.ValueKind == JsonValueKind.String
+							? status.GetString()
+							: string.Empty,
+					SecondsLeft = Whole(element, "seconds_left"),
+				});
+			}
+		}
+
+		return (vehicles, kiosk);
+	}
 
 	/// <summary>
 	/// Asks for a kit for one of this session's ground seats (docs/LOADOUT.md §9): taken
@@ -971,7 +1178,7 @@ public sealed class GdpyrConnection : IDisposable
 	/// <summary>Ends the round now and starts a fresh one (docs/AGENT_API.md §7.1).</summary>
 	public async Task ResetAsync(int seed = 0, CancellationToken cancel = default)
 	{
-		await RequestAsync(writer =>
+		JsonElement response = await RequestAsync(writer =>
 		{
 			writer.WriteString("op", "reset");
 			writer.WriteNumber("seed", seed);
@@ -979,6 +1186,11 @@ public sealed class GdpyrConnection : IDisposable
 
 		_observations.Clear();
 		_events.Clear();
+		if (response.ValueKind == JsonValueKind.Object && response.TryGetProperty("tick", out JsonElement tick)
+			&& tick.TryGetUInt32(out uint resetTick))
+		{
+			_eventsFrom = resetTick + 1;
+		}
 	}
 
 	/// <summary>A hash of the tick's simulation state, for measuring divergence (docs/AGENT_API.md §3).</summary>
@@ -1181,6 +1393,11 @@ public sealed class GdpyrConnection : IDisposable
 				{
 					record.Fields[property.Name] = property.Value.GetDouble();
 				}
+			}
+
+			if (record.Tick < _eventsFrom)
+			{
+				continue;
 			}
 
 			while (_events.Count >= MaxQueuedEvents)

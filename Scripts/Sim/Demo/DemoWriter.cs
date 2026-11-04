@@ -113,6 +113,10 @@ public sealed class DemoWriter : IDisposable
 	public void WriteUnitSnapshot(uint tick, ReadOnlySpan<byte> payload) =>
 		WritePayload(tick, DemoRecordKind.UnitSnapshot, payload);
 
+	/// <summary>A <see cref="CrewVehicleCodec"/> payload, as the authority broadcast it or a client received it.</summary>
+	public void WriteCrewVehicles(uint tick, ReadOnlySpan<byte> payload) =>
+		WritePayload(tick, DemoRecordKind.CrewVehicles, payload);
+
 	/// <summary>
 	/// Puts a line of text in the stream at this tick. Nothing in the simulation
 	/// reads one back; it is there so that "this is where it went wrong" survives

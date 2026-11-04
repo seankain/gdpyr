@@ -1,0 +1,28 @@
+{
+  "name": "a rifleman 35 m off wrecks a 4x4 at 40 health with a driver alone in it: the driver is thrown out, and the wreck's 50 is the first damage they take",
+  "seeds": [1, 2],
+  "duration_ticks": 900,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 0 },
+
+  "seats": [
+    { "id": "driver", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json",
+      "kit": { "primary": "rifle", "magazines": 5, "grenades": 3, "armour": "none" } }
+  ],
+
+  "spawns": [
+    { "vehicle": "4x4", "id": "truck", "at": [-60, 0.5, 50], "yaw": -1.5708, "health": 40 },
+    { "peer": "driver", "seat": { "vehicle": "truck", "role": "driver" } },
+    { "unit": "infantry", "team": "strategist", "at": [-60, 0.5, 15], "order": "none", "autonomy": "off" }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.vehicle_damaged.count", "op": ">=", "value": 14 },
+    { "metric": "events.vehicle_destroyed.count", "op": "==", "value": 1 },
+    { "metric": "events.vehicle_exited.count", "op": "==", "value": 1 },
+    { "metric": "events.vehicle_exited[peer=@driver].count", "op": "==", "value": 1 },
+    { "metric": "events.damage[victim=@driver].count", "op": ">=", "value": 1 },
+    { "metric": "events.damage[victim=@driver].amount.first", "op": "==", "value": 50 }
+  ]
+}

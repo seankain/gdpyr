@@ -1,0 +1,29 @@
+{
+  "name": "a 4x4 at a quarter throttle into three riflemen standing abreast 15 m ahead pushes them aside and kills none",
+  "seeds": [1, 2, 3],
+  "duration_ticks": 480,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 0 },
+
+  "seats": [
+    { "id": "driver", "team": "ground", "policy": "ground", "step_mul": 4,
+      "script": { "repeat": false, "steps": [ { "ticks": 480, "move": [0, -0.25] } ] } }
+  ],
+
+  "spawns": [
+    { "vehicle": "4x4", "id": "truck", "at": [-60, 0.5, 50], "yaw": -1.5708 },
+    { "peer": "driver", "seat": { "vehicle": "truck", "role": "driver" } },
+    { "unit": "infantry", "team": "strategist", "at": [-45, 0.5, 49.2], "order": "none", "autonomy": "off" },
+    { "unit": "infantry", "team": "strategist", "at": [-45, 0.5, 50], "order": "none", "autonomy": "off" },
+    { "unit": "infantry", "team": "strategist", "at": [-45, 0.5, 50.8], "order": "none", "autonomy": "off" }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.vehicle_entered[seat=0].count", "op": "==", "value": 1 },
+    { "metric": "observation.driver.self.position.last", "op": ">=", "value": -0.1172 },
+    { "metric": "events.vehicle_rammed.count", "op": "==", "value": 0 },
+    { "metric": "events.kill.count", "op": "==", "value": 0 },
+    { "metric": "events.unit_lost.count", "op": "==", "value": 0 }
+  ]
+}

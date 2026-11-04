@@ -77,6 +77,7 @@ public readonly struct DemoRecord
 		DemoRecordKind.Despawn => $"tick {Tick} despawn peer {PeerId}",
 		DemoRecordKind.PlayerSnapshot => $"tick {Tick} player snapshot, {Payload?.Length ?? 0} B",
 		DemoRecordKind.UnitSnapshot => $"tick {Tick} unit snapshot, {Payload?.Length ?? 0} B",
+		DemoRecordKind.CrewVehicles => $"tick {Tick} crew vehicles, {Payload?.Length ?? 0} B",
 		DemoRecordKind.Mark => $"tick {Tick} mark '{Text}'",
 		_ => $"tick {Tick} {Kind}",
 	};

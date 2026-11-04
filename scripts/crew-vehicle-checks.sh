@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# The crew vehicles' engine checks (docs/GROUND_VEHICLES.md §12, GV2 to GV6).
+# The crew vehicles' engine checks (docs/GROUND_VEHICLES.md §12, GV2 to GV7).
 #
 # What the 4x4 relies on the engine for — a body pushed out of a hull by its own
 # MoveAndSlide, a bevelled hull in MotionMode.Floating sliding off a wall's end at
@@ -8,7 +8,8 @@
 # to end on a listen host, through the input map. Headless, on a copy of the tree with
 # tools/EngineChecks/CrewVehicleChecks.cs, CrewVehicleNetChecks.cs and CrewVehicleCombatChecks.cs
 # added as autoloads, CrewHelicopterChecks.cs as well for `heli` and `heli-net`, and
-# CrewKioskChecks.cs for `kiosk` and `kiosk-pad`: the game itself never compiles or loads them.
+# CrewKioskChecks.cs for `kiosk` and `kiosk-pad`, CrewDemoChecks.cs for `demo`: the game itself
+# never compiles or loads them.
 #
 #   ./scripts/crew-vehicle-checks.sh            # physics, then the listen host
 #   ./scripts/crew-vehicle-checks.sh physics
@@ -20,6 +21,7 @@
 #   ./scripts/crew-vehicle-checks.sh kiosk      # GV6: the vehicle kiosk on a listen host
 #   ./scripts/crew-vehicle-checks.sh kiosk-pad  # GV6: the same map with the helicopter's pad in a wall
 #   ./scripts/crew-vehicle-checks.sh kiosk-net  # GV6: a dedicated server and a client asking the kiosk
+#   ./scripts/crew-vehicle-checks.sh demo       # GV7: a 4x4 driven into a demo on a listen host, and played back
 #
 # `net` runs in real time, not at --fixed-fps: a dedicated server, a UDP relay that
 # delays every datagram NET_DELAY_MS ± NET_JITTER_MS each way (40 ± 10 by default: 80 ms
@@ -65,15 +67,16 @@ fi
 mkdir -p "$COPY/EngineChecks"
 cp "$PROJECT_DIR/tools/EngineChecks/CrewVehicleChecks.cs" "$PROJECT_DIR/tools/EngineChecks/CrewVehicleNetChecks.cs" \
 	"$PROJECT_DIR/tools/EngineChecks/CrewVehicleCombatChecks.cs" "$PROJECT_DIR/tools/EngineChecks/CrewHelicopterChecks.cs" \
-	"$PROJECT_DIR/tools/EngineChecks/CrewKioskChecks.cs" "$COPY/EngineChecks/"
+	"$PROJECT_DIR/tools/EngineChecks/CrewKioskChecks.cs" "$PROJECT_DIR/tools/EngineChecks/CrewDemoChecks.cs" \
+	"$COPY/EngineChecks/"
 sed -i 's#^GameConsole="\*res://Scripts/Ui/GameConsole.cs"#&\nCrewVehicleChecks="*res://EngineChecks/CrewVehicleChecks.cs"\nCrewVehicleNetChecks="*res://EngineChecks/CrewVehicleNetChecks.cs"\nCrewVehicleCombatChecks="*res://EngineChecks/CrewVehicleCombatChecks.cs"#' \
 	"$COPY/project.godot"
 
-# GV5's and GV6's checks are each an autoload only while their own modes run, so that every
-# other mode runs with the three autoloads it was written against (docs/GROUND_VEHICLES.md §12,
-# GV5): `extra_autoload CrewHelicopterChecks`, `extra_autoload CrewKioskChecks`, or none.
+# GV5's, GV6's and GV7's checks are each an autoload only while their own modes run, so that
+# every other mode runs with the three autoloads it was written against (docs/GROUND_VEHICLES.md
+# §12, GV5): `extra_autoload CrewHelicopterChecks`, `CrewKioskChecks`, `CrewDemoChecks`, or none.
 extra_autoload() {
-	sed -i '/^CrewHelicopterChecks=/d; /^CrewKioskChecks=/d' "$COPY/project.godot"
+	sed -i '/^CrewHelicopterChecks=/d; /^CrewKioskChecks=/d; /^CrewDemoChecks=/d' "$COPY/project.godot"
 	if [ -n "$1" ]; then
 		sed -i "s#^CrewVehicleCombatChecks=.*#&\\n$1=\"*res://EngineChecks/$1.cs\"#" "$COPY/project.godot"
 	fi
@@ -313,6 +316,8 @@ for mode in "${MODES[@]}"; do
 		extra_autoload CrewHelicopterChecks
 	elif [ "$mode" = "kiosk" ] || [ "$mode" = "kiosk-pad" ] || [ "$mode" = "kiosk-net" ]; then
 		extra_autoload CrewKioskChecks
+	elif [ "$mode" = "demo" ]; then
+		extra_autoload CrewDemoChecks
 	else
 		extra_autoload ""
 	fi
@@ -338,6 +343,25 @@ for mode in "${MODES[@]}"; do
 		grep '^\[checks\]' "$COPY/$mode.log"
 		echo "$mode: exit $status"
 		[ "$status" -ne 0 ] && failed=1
+		continue
+	fi
+
+	if [ "$mode" = "demo" ]; then
+		# Recorded on a listen host, then played back by a second process: a live round
+		# refuses the console's playdemo, so --playdemo is how a demo is watched from a start.
+		mkdir -p "$COPY/demo"
+		rm -f "$COPY/demo"/*
+		CREW_DEMO_CHECK=listen CREW_NET_DIR="$COPY/demo" timeout 900 "$GODOT" --headless --path "$COPY" \
+			--fixed-fps 60 -- --listen "$GAME_PORT" --no-bots > "$COPY/demo-listen.log" 2>&1
+		status=$?
+		grep '^\[checks\]' "$COPY/demo-listen.log"
+		echo "demo, recorded: exit $status"
+		CREW_DEMO_CHECK=playback CREW_NET_DIR="$COPY/demo" timeout 900 "$GODOT" --headless --path "$COPY" \
+			--fixed-fps 60 -- --playdemo gv7-crew > "$COPY/demo-playback.log" 2>&1
+		played=$?
+		grep '^\[checks\]' "$COPY/demo-playback.log"
+		echo "demo, played back: exit $played"
+		{ [ "$status" -ne 0 ] || [ "$played" -ne 0 ]; } && failed=1
 		continue
 	fi
 

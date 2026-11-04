@@ -70,4 +70,38 @@ public struct AgentStateHash
 		Add(value.Y, VelocityQuantum);
 		Add(value.Z, VelocityQuantum);
 	}
+
+	/// <summary>Radians to a ten-thousandth, as a character's look is folded.</summary>
+	public const float AngleQuantum = 0.0001f;
+
+	/// <summary>
+	/// Folds one crew vehicle in (docs/GROUND_VEHICLES.md §11): its slot and kind, whether it
+	/// is a wreck or in the air, where it is and how it moves, its heading and attitude —
+	/// the 4x4's sprung chassis, the helicopter's tilt — its steering or rotor, its health,
+	/// its gun's box, and who sits in each seat. Everything its record carries (§7.1) but the
+	/// driver's acknowledgement, which is the wire's and not the simulation's, taken before
+	/// the record's own rounding.
+	/// </summary>
+	public void Add(in CrewVehicleRecord vehicle)
+	{
+		Add((uint)vehicle.Slot);
+		Add((uint)vehicle.KindId);
+		Add(vehicle.Destroyed);
+		Add(vehicle.Airborne);
+		AddPosition(vehicle.Position);
+		AddVelocity(vehicle.Velocity);
+		Add(vehicle.Yaw, AngleQuantum);
+		Add(vehicle.YawRate, AngleQuantum);
+		Add(vehicle.Pitch, AngleQuantum);
+		Add(vehicle.PitchRate, AngleQuantum);
+		Add(vehicle.Roll, AngleQuantum);
+		Add(vehicle.RollRate, AngleQuantum);
+		Add(vehicle.Steer, AngleQuantum);
+		Add(vehicle.Rotor, AngleQuantum);
+		Add((uint)vehicle.Health);
+		Add((uint)vehicle.GunRounds);
+		Add(vehicle.Seat0);
+		Add(vehicle.Seat1);
+		Add(vehicle.Seat2);
+	}
 }

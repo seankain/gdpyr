@@ -640,6 +640,10 @@ public partial class PlayerManager : Node
 
 		ClearRoster();
 
+		// And the crew vehicles, the authority's or a client's puppets: the file's own come
+		// with its records (docs/GROUND_VEHICLES.md §7.4).
+		CrewVehicleManager.Instance?.ClearForPlayback();
+
 		if (Bootstrap.IsDedicatedServer)
 		{
 			// Nothing to look through. A headless process can still read a demo — the
@@ -698,6 +702,10 @@ public partial class PlayerManager : Node
 		float renderTick = playback.RenderTick;
 		UpdateRemotes(renderTick);
 		UnitManager.Instance?.ClientTick(renderTick);
+
+		// After the bodies are placed, as on a client: the vehicles at the read head's render
+		// clock, and every seated body put on its seat on them.
+		CrewVehicleManager.Instance?.PlaybackTick(playback.Tick, renderTick);
 		_demoCamera?.Follow();
 	}
 
@@ -739,6 +747,13 @@ public partial class PlayerManager : Node
 
 				case DemoRecordKind.UnitSnapshot:
 					UnitManager.Instance?.ApplyRecordedSnapshot(record.Payload);
+					break;
+
+				case DemoRecordKind.CrewVehicles:
+					// Applied as a client applies one: puppets, who sits where (docs/GROUND_VEHICLES.md
+					// §7.4). The journal's step for a seated body is look-only, so this is where
+					// playback learns who sits where, on every tick it has a record for.
+					CrewVehicleManager.Instance?.ApplyRecorded(record.Payload);
 					break;
 
 				case DemoRecordKind.Mark:
@@ -1000,6 +1015,13 @@ public partial class PlayerManager : Node
 		CombatManager combat = CombatManager.Instance;
 		VisibilityService fog = combat?.Visibility;
 
+		// The crew vehicles first, on the same tick: over a link that keeps order a client
+		// knows who sits where before it reconciles its own record against a seat
+		// (docs/GROUND_VEHICLES.md §7.1, §8.3) — and a demo, recorded here with no peer as
+		// readily as with some, has them before the player snapshot it is played back beside
+		// (§7.4).
+		CrewVehicleManager.Instance?.Replicate(net, peers, _demo);
+
 		// Encoded once and reused: every peer that is not a strategist gets the same
 		// bytes, the demo gets the same bytes, and the allocation is the one this
 		// method always made.
@@ -1020,11 +1042,6 @@ public partial class PlayerManager : Node
 		{
 			return;
 		}
-
-		// The crew vehicles first, on the same tick: over a link that keeps order a client
-		// knows who sits where before it reconciles its own record against a seat
-		// (docs/GROUND_VEHICLES.md §7.1, §8.3).
-		CrewVehicleManager.Instance?.Replicate(net, peers);
 
 		if (fog == null || !AnyStrategist(combat, peers))
 		{
@@ -1154,7 +1171,7 @@ public partial class PlayerManager : Node
 		// The crew vehicles' records before the players': who sits where decides whether
 		// the local record is reconciled at all (docs/GROUND_VEHICLES.md §8.3), and the
 		// driven vehicle's replay runs here, before this tick's frames are predicted (§8.2).
-		CrewVehicleManager.Instance?.ClientApplyPending(net);
+		CrewVehicleManager.Instance?.ClientApplyPending(net, _demo);
 		ApplyPendingSnapshots(net);
 		SpectateIfAsked(net);
 

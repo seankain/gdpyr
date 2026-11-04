@@ -1,0 +1,28 @@
+{
+  "name": "a helicopter hovering 15 m up at 10 health with two aboard is wrecked by a rifleman 30 m off, and both aboard are killed",
+  "seeds": [1, 2],
+  "duration_ticks": 1200,
+  "warmup_ticks": 60,
+  "roster": { "ground": 2, "strategists": 0 },
+
+  "seats": [
+    { "id": "pilot", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json" },
+    { "id": "passenger", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json" }
+  ],
+
+  "spawns": [
+    { "vehicle": "helicopter", "id": "heli", "at": [-20, 15.5, 50], "yaw": -1.5708, "health": 10 },
+    { "peer": "pilot", "seat": { "vehicle": "heli", "role": "pilot" } },
+    { "peer": "passenger", "seat": { "vehicle": "heli", "role": "passenger" } },
+    { "unit": "infantry", "team": "strategist", "at": [-20, 0.5, 80], "order": "none", "autonomy": "off" }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.vehicle_destroyed.count", "op": "==", "value": 1 },
+    { "metric": "events.kill.count", "op": "==", "value": 2 },
+    { "metric": "events.kill[victim=@pilot].count", "op": "==", "value": 1 },
+    { "metric": "events.kill[victim=@passenger].count", "op": "==", "value": 1 },
+    { "metric": "events.vehicle_exited.count", "op": "==", "value": 2 }
+  ]
+}

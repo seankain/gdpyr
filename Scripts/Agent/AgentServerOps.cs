@@ -87,6 +87,8 @@ public sealed partial class AgentServer
 				case "reset": Reset(session, correlation, root, tick); break;
 				case "spawn": Spawn(session, correlation, root, tick); break;
 				case "loadout": TakeLoadout(session, correlation, root, tick); break;
+				case "vehicle": RequestVehicle(session, correlation, root, tick); break;
+				case "list_vehicles": ListVehicles(session, correlation, root, tick); break;
 				case "events": Events(session, correlation, root); break;
 				case "state_hash": StateHash(session, correlation, tick); break;
 				case "quit": session.Close(); break;
@@ -1086,6 +1088,12 @@ public sealed partial class AgentServer
 			return;
 		}
 
+		if (root.TryGetProperty("vehicle", out JsonElement _))
+		{
+			SpawnVehicle(session, correlation, root, where);
+			return;
+		}
+
 		if (root.TryGetProperty("unit", out JsonElement _))
 		{
 			UnitManager units = UnitManager.Instance;
@@ -1207,6 +1215,25 @@ public sealed partial class AgentServer
 			character.ApplyRemoteTransform(where, yaw, pitch);
 		}
 
+		// In a crew vehicle's seat, when the spawn names one (docs/GROUND_VEHICLES.md §11):
+		// seated by the server directly, as a unit is put aboard. Harness-only, like the
+		// rest of this op; a policy gets in with the use key, as a person does.
+		int seatedIn = -1;
+		SeatRole role = SeatRole.Driver;
+		if (root.TryGetProperty("vehicle_seat", out JsonElement placed))
+		{
+			if (!ReadVehicleSeat(session, correlation, placed, out seatedIn, out role))
+			{
+				return;
+			}
+
+			if (CrewVehicleManager.Instance?.ServerSeatPlaced(seat.PeerId, seatedIn, role) is { } notSeated)
+			{
+				session.SendError(correlation, "not_seated", notSeated);
+				return;
+			}
+		}
+
 		session.SendJson(AgentFrameKind.Response, correlation, writer =>
 		{
 			writer.WriteString("op", "spawned");
@@ -1216,6 +1243,210 @@ public sealed partial class AgentServer
 			{
 				WriteKit(writer, kit);
 			}
+
+			if (seatedIn >= 0)
+			{
+				writer.WriteNumber("vehicle", seatedIn);
+				writer.WriteString("role", AgentJson.SeatRoleNames[(int)role]);
+			}
+		});
+	}
+
+	/// <summary>
+	/// A seat placement's <c>vehicle_seat</c>: <c>{"vehicle": 0, "role": "gunner"}</c>, the
+	/// vehicle by its slot and the seat by its role. False when an error was sent.
+	/// </summary>
+	private static bool ReadVehicleSeat(AgentSession session, uint correlation, JsonElement placed, out int slot,
+		out SeatRole role)
+	{
+		slot = -1;
+		role = SeatRole.Driver;
+		if (placed.ValueKind != JsonValueKind.Object || !placed.TryGetProperty("vehicle", out JsonElement value)
+			|| !value.TryGetInt32(out slot) || slot < 0 || slot >= SimConfig.MaxCrewVehicles)
+		{
+			session.SendError(correlation, "bad_request",
+				$"'vehicle_seat' is {{\"vehicle\": <slot 0-{SimConfig.MaxCrewVehicles - 1}>, \"role\": <role>}}");
+			return false;
+		}
+
+		string named = Text(placed, "role", null);
+		if (!AgentJson.TryParseSeatRole(named, out role))
+		{
+			session.SendError(correlation, "bad_request",
+				$"a seat's 'role' is one of {string.Join(", ", AgentJson.SeatRoleNames)}, not '{named ?? "nothing"}'");
+			return false;
+		}
+
+		return true;
+	}
+
+	/// <summary>
+	/// A crew vehicle's kind in a request: a name the API publishes (<see cref="AgentJson.VehicleNames"/>)
+	/// or a number, which goes to the validator as it is — so a kind this build has none of
+	/// is the kiosk's own <c>invalid</c>, as a person's console gets it. False when an error was sent.
+	/// </summary>
+	private static bool ReadVehicleKind(AgentSession session, uint correlation, JsonElement root, string name,
+		out byte kind)
+	{
+		kind = byte.MaxValue;
+		if (root.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.Number
+			&& value.TryGetByte(out kind))
+		{
+			return true;
+		}
+
+		string named = Text(root, name, null);
+		if (AgentJson.TryParseVehicle(named, out kind))
+		{
+			return true;
+		}
+
+		session.SendError(correlation, "bad_request",
+			$"'{name}' is one of {string.Join(", ", AgentJson.VehicleNames)}, or a kind's number; not '{named ?? "nothing"}'");
+		return false;
+	}
+
+	/// <summary>
+	/// Puts a crew vehicle on the field for a scenario (docs/GROUND_VEHICLES.md §11),
+	/// free and outside the kiosk's cap: <c>{"op":"spawn","vehicle":"4x4","at":[x,y,z],"yaw":0,"health":600}</c>,
+	/// <c>y</c> the ground it stands on — or, for a helicopter, its skids' height, hovering
+	/// when that is off the ground. The structure spawn's twin, and as narrow.
+	/// </summary>
+	private void SpawnVehicle(AgentSession session, uint correlation, JsonElement root, Vector3 where)
+	{
+		CrewVehicleManager vehicles = CrewVehicleManager.Instance;
+		if (vehicles == null)
+		{
+			session.SendError(correlation, "no_round", "this process has no crew vehicles");
+			return;
+		}
+
+		if (!ReadVehicleKind(session, correlation, root, "vehicle", out byte kind))
+		{
+			return;
+		}
+
+		CrewVehicleDefinition definition = CrewVehicleCatalog.Definition(kind);
+		float yaw = root.TryGetProperty("yaw", out JsonElement turned) && turned.TryGetDouble(out double read)
+			? (float)read
+			: 0f;
+		float health = root.TryGetProperty("health", out JsonElement healthValue)
+			&& healthValue.TryGetDouble(out double asked)
+				? (float)asked
+				: definition?.MaxHealth ?? 0f;
+
+		int slot = vehicles.ServerPlaceVehicle(kind, where, yaw, health, out string refused);
+		if (slot < 0)
+		{
+			session.SendError(correlation, "vehicle_refused", refused);
+			return;
+		}
+
+		session.SendJson(AgentFrameKind.Response, correlation, writer =>
+		{
+			writer.WriteString("op", "spawned");
+			writer.WriteNumber("vehicle", slot);
+			writer.WriteString("type", AgentJson.VehicleName(kind));
+			writer.WriteNumber("health", health);
+		});
+	}
+
+	/// <summary>
+	/// A crew vehicle asked for at the kiosk by one of this session's ground seats
+	/// (docs/GROUND_VEHICLES.md §11): <c>{"op":"vehicle","seat":3,"kind":"4x4"}</c>, through
+	/// <c>KioskRules.Check</c> and onto its pad by the one door a person's panel goes through
+	/// (<c>CrewVehicleManager.TryRequest</c>), paced and refused alike, and a
+	/// <c>vehicle_requested</c> event either way. The answer is <c>taken</c>, with the slot it
+	/// took, or the refusal's code — an answer, not an error, as the <c>loadout</c> op's is.
+	/// </summary>
+	private void RequestVehicle(AgentSession session, uint correlation, JsonElement root, uint tick)
+	{
+		int peerId = Int(root, "seat", 0);
+		if (!_book.TryGet(peerId, out AgentSeat seat) || seat.SessionId != session.Id)
+		{
+			session.SendError(correlation, "not_attached", $"this session does not hold seat {peerId}");
+			return;
+		}
+
+		if (!ReadVehicleKind(session, correlation, root, "kind", out byte kind))
+		{
+			return;
+		}
+
+		CrewVehicleManager vehicles = CrewVehicleManager.Instance;
+		PlayerCombat player = CombatManager.Instance?.Find(peerId);
+		if (vehicles == null || player == null)
+		{
+			session.SendError(correlation, "no_character", $"seat {peerId} has no combat state to ask with");
+			return;
+		}
+
+		bool taken = vehicles.TryRequest(player, kind, tick, out KioskRefusal refusal, out int slot);
+		session.SendJson(AgentFrameKind.Response, correlation, writer =>
+		{
+			writer.WriteString("op", "vehicle");
+			writer.WriteNumber("seat", peerId);
+			writer.WriteNumber("tick", tick);
+			writer.WriteString("type", AgentJson.VehicleName(kind));
+			writer.WriteBoolean("taken", taken);
+			writer.WriteString("answer", KioskRules.CodeOf(refusal));
+			if (taken)
+			{
+				writer.WriteNumber("vehicle", slot);
+			}
+		});
+	}
+
+	/// <summary>
+	/// Every crew vehicle on the field, and each kind's line at the kiosk
+	/// (docs/GROUND_VEHICLES.md §11): slot, kind, position, yaw, health, speed, its seats'
+	/// peers, destroyed — as the vehicle record carries them (§7.1). Named for a strategist
+	/// seat this session holds, only what that side sees (GV-D14), unless the server is
+	/// omniscient; otherwise every one, which is the control plane's view, as
+	/// <c>state_hash</c>'s and <c>spawn</c>'s are.
+	/// </summary>
+	private void ListVehicles(AgentSession session, uint correlation, JsonElement root, uint tick)
+	{
+		CombatManager combat = CombatManager.Instance;
+		int peerId = Int(root, "seat", 0);
+		bool fogged = false;
+		if (peerId != 0)
+		{
+			if (!_book.TryGet(peerId, out AgentSeat seat) || seat.SessionId != session.Id)
+			{
+				session.SendError(correlation, "not_attached", $"this session does not hold seat {peerId}");
+				return;
+			}
+
+			fogged = combat?.TeamOf(peerId) == Team.Strategist && !Limits.Omniscient;
+		}
+
+		CrewVehicleManager vehicles = CrewVehicleManager.Instance;
+		VisibilityService fog = combat?.Visibility;
+		session.SendJson(AgentFrameKind.Response, correlation, writer =>
+		{
+			writer.WriteString("op", "vehicles");
+			writer.WriteNumber("tick", tick);
+			writer.WriteStartArray("vehicles");
+			for (int slot = 0; vehicles != null && slot < SimConfig.MaxCrewVehicles; slot++)
+			{
+				CrewVehicle vehicle = vehicles.VehicleAt(slot);
+				if (vehicle == null || (fogged && fog != null && !fog.IsVehicleVisible(slot)))
+				{
+					continue;
+				}
+
+				AgentJson.WriteVehicle(writer, vehicle.ToRecord(), vehicle.Seats, vehicle.FromKiosk);
+			}
+
+			writer.WriteEndArray();
+			writer.WriteStartArray("kiosk");
+			for (byte kind = 0; vehicles != null && kind < CrewVehicleCodec.Kinds; kind++)
+			{
+				AgentJson.WriteKioskLine(writer, kind, vehicles.KioskLineAt(kind, tick));
+			}
+
+			writer.WriteEndArray();
 		});
 	}
 
@@ -1511,6 +1742,16 @@ public sealed partial class AgentServer
 			hash.Add((int)unit.Order.Kind);
 			hash.Add((int)unit.RidingIn);
 			hash.AddPosition(unit.GlobalPosition);
+		}
+
+		// The crew vehicles and who sits in them (docs/GROUND_VEHICLES.md §11).
+		CrewVehicleManager vehicles = CrewVehicleManager.Instance;
+		for (int slot = 0; vehicles != null && slot < SimConfig.MaxCrewVehicles; slot++)
+		{
+			if (vehicles.VehicleAt(slot) is { } vehicle)
+			{
+				hash.Add(vehicle.ToRecord());
+			}
 		}
 
 		ulong value = hash.Value;

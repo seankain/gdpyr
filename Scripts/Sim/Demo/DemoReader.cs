@@ -196,6 +196,7 @@ public sealed class DemoReader : IDisposable
 
 				case DemoRecordKind.PlayerSnapshot:
 				case DemoRecordKind.UnitSnapshot:
+				case DemoRecordKind.CrewVehicles:
 				{
 					if (!TryRead(2))
 					{

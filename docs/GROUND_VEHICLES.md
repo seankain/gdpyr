@@ -6,8 +6,12 @@ GV6's kiosk (§12): beside the locker in the bunker, a person takes each kind fr
 onto its pad outside, loses it, is refused `not_ready` while its timer runs, and takes it again 45 s
 or 90 s after the loss, to the tick; a vehicle left alone for a minute is taken away and its kind
 counts down as for a loss; a new round makes both ready; and every refusal of §5.5 but `piloting`
-has been met in the game, on a listen host, and the request and its answer over an 80 ms link. The
-agent API, the scenarios and demos are GV7's.** Written against `6699b03`; GV4 amends GV-D16 (§3). The
+has been met in the game, on a listen host, and the request and its answer over an 80 ms link. And
+GV7's agent API, scenarios and demos (§12): a policy asks the kiosk (`vehicle`), lists the vehicles
+(`list_vehicles`), gets in, drives and gets out with the use key and the axes; a scenario puts a
+vehicle down and seats its seats in it; §11's ten scenarios and an eleventh pass in every seed, and
+the old ones read as at GV0 within its spread; and a demo records the vehicles and plays them
+back, version 5. GV8's riding bots and GV9's docs are left.** Written against `6699b03`; GV4 amends GV-D16 (§3). The
 decisions (GV-D1–GV-D17, §3) are the defaults the plan is written against; each is one line to
 change, so flag any you disagree with before GV2 starts. The phases (GV0–GV9, §12) say what each builds, what checks it, and what is
 left for a person at the controls.
@@ -694,6 +698,14 @@ A harness seat has no client, so `vehicle_passenger_fires` checks firing from a 
 §5.6's rewind: that needs a client on a link, GV4's check. The stream names a strategist's round by
 weapon 0 (`CombatManager.WeaponOnStream`), so the tank's scenario counts hits rather than filtering
 on the tank's weapon id.
+
+**As built in GV7** (§12): the `vehicle` op names its seat, `{"op":"vehicle","seat":3,"kind":"4x4"}`;
+`list_vehicles` takes an optional seat, fogged for a strategist's, and also reports `y`, `airborne`,
+`from_kiosk` and the kiosk's lines; on the wire a seat placement is `"vehicle_seat": {"vehicle":
+<slot>, "role": ...}`, and in the file §11's `seat`. A ground step gains `vehicle` (the kiosk) and
+`look_at` (a point the eye is kept on, which the passenger's scenario aims with), and the vocabulary
+a `first` aggregate (the wreck's 50). `vehicle_policy_gets_in` is an eleventh scenario: a policy in
+by the use key, driving and out, which none of the ten shows.
 
 ---
 
@@ -1589,6 +1601,174 @@ What the phase left open, and what GV6 chose:
 pass over their seeds and the old ones report what they did at GV0, within the engine's run-to-run
 spread (AGENT_API.md §3).
 
+**Built on `6c1f9da`**, with GV0's .NET SDK and Godot.
+
+- **New, engine-free**, in `Scripts/Sim`: `AgentJson` gains the vehicles' and seats' names
+  (`VehicleNames`, `SeatRoleNames`, `TryParseVehicle`, `TryParseSeatRole`, `pilot` for the
+  controls), and writes a vehicle as `list_vehicles` reports it from its wire record
+  (`WriteVehicle`) and a kind's line at the kiosk (`WriteKioskLine`). `AgentStateHash.Add` folds a
+  vehicle's record — everything but the driver's acknowledgement, at the hash's millimetre and its
+  ten-thousandth of a radian. The demo format: `DemoRecordKind.CrewVehicles` (8), the writer, the
+  reader, the summary's count, and `DemoFormat.Version` 5.
+- **New, in the harness** (`tools/Gdpyr.Playtest`): a vehicle spawn and a seat placement in one, a
+  ground step's `vehicle` (the kiosk) and `look_at` (`ScriptAim.cs`, below), `ScenarioVehicles` —
+  the kinds, their seats and full health, and the kiosk's refusals, pinned to the files and the
+  rules — the `vehicles_taken` and `vehicles_refused.<code>` counters, and a `first` aggregate.
+  **The C# client** (`tools/Gdpyr.AgentClient`): `SpawnVehicleAsync`, `SpawnSeatAsync`'s vehicle
+  seat, `RequestVehicleAsync`, `ListVehiclesAsync` and `ReadVehicles`, and
+  `AgentGroundAction.LookIsAbsolute`. **The Python client**: `vehicle()` and `list_vehicles()`.
+- **New, engine side:** `AgentServerOps` — the `vehicle` op through the kiosk's one door
+  (`TryRequest`, which now also hands back the slot), `list_vehicles`, the `spawn` op's `vehicle`
+  and a seat placement's `vehicle_seat`, and `state_hash` over every vehicle. `CrewVehicleManager`
+  — `ServerPlaceVehicle` and `ServerSeatPlaced`, the harness-only placement and seating; the
+  kiosk's line worked out afresh for the op (`KioskLineAt`); the demo's two ends (below).
+  `tools/EngineChecks/CrewDemoChecks.cs`, run by `scripts/crew-vehicle-checks.sh demo`. The eleven
+  scenarios in `Tests/Scenarios`: §11's ten and `vehicle_policy_gets_in`.
+- **Changed:** `CrewVehicleManager.CanBeSeated` — a seat an external policy holds may sit (below);
+  `ReleaseTheGone` puts down a seat whose policy has detached, which is a bot again. `BotDirector`
+  — a policy's seat in a vehicle that goes quiet holds still on a neutral frame instead of
+  falling back to its bot. `PlayerManager` — the vehicles' message is replicated before the
+  player snapshot is recorded and whether anybody is connected or not, so a demo has it; a
+  client's demo records what it received; playback applies the records and places the puppets
+  and their crews (§7.4). The two clients drop events from before one past a reset's tick (below).
+- **The demo, as built** (§7.4): the authority records the payload it sends the ground force, which
+  no fog has thinned, on every snapshot tick, before that tick's player snapshot; a client records
+  each payload it applies, at its own tick. Playback queues each record as a received one is and
+  runs it through the client's own path at the read head's tick — puppets made and freed, who sits
+  where — then draws every puppet at the read head's render clock and every seated body on its
+  seat. Nobody drives in playback, so nothing is predicted. A body in a demo has no combat state,
+  so the manager finds a seated body through the demo's roster when the round has none for it.
+- **Three defects found, and fixed:**
+  - **No policy could sit in a vehicle.** `CanBeSeated` refused every peer id in the bots' band, and
+    an agent's seat is a bot's seat (AGENT_API.md §2): a policy's tap of E did nothing, and the
+    harness's seating would have been refused. Found reading the seat rules before the first run.
+    It now admits a seat a policy is attached to — the rule the strategist's cargo already keeps
+    for who may load it (`UnitManager.IsSeatedStrategist`). Bots still never ride (GV-D15): a seat
+    whose policy detaches is put down on the next tick, and one whose policy goes quiet holds still
+    rather than handing its bot the wheel.
+  - **An episode counted the last one's reset.** In the first run of all ten, seed 2 of
+    `vehicle_4x4_drives` read one `vehicle_exited` and seed 2 of `vehicle_passenger_fires` two: the
+    previous episode's crew, unseated by the `reset` at tick 664 and 542. What a reset emits is
+    stamped with its tick and pushed after its answer, past the client's `_events.Clear()` — so the
+    last round's `round_end` had always been counted in the next seed's metrics too; no scenario
+    claimed it. The C# and Python clients now drop events from before one past the reset's tick.
+  - **`look_at` aimed at the rifleman's feet.** The first `vehicle_passenger_fires` hit nothing in
+    either seed. From the trace: at tick 401 the look's pitch, −0.0807 rad at 32.65 m, put the eye
+    at 4.04 m against the bed seat's 3.05 m (the hull at 1.203 m and the seat's eye 1.85 m above it):
+    the eye was taken as the drawn standing camera, 1.6 m over the body's origin, and on the
+    headless authority, which plays no animation, the camera is at its controller's rest, 0.596 m.
+    Every round went into the floor short of the rifleman. `ScriptAim.EyeHeightMeters` is 0.596.
+- **The check's own mistake:** a live round refuses `playdemo` ("quit to the main menu to watch a
+  demo"), so the first `demo` check stopped at its playback. It now records on a listen host and
+  plays the file back in a second process started with `--playdemo`, which is how a demo is watched
+  from a start.
+- **Tests:** `dotnet test` **3,026 of 3,026 pass**, 53 of them new: `CrewVehicleAgentTests` (52 — the
+  vehicle spawn and seat placement and every sentence a malformed one gets, a unit aboard a crew
+  vehicle and a command naming one refused, a step's `vehicle` and `look_at`, the harness's kinds,
+  seats, health and refusals against the files and `KioskRules`, `first`, `look_at`'s angles and
+  lead, the names, `list_vehicles` written by the server's writer and read by the client, the state
+  hash over a vehicle, and an absolute look through the server's decoder) and `DemoCodecTests` (+1,
+  a version-4 demo refused). Three of its facts move as GV7 means them to: the version is 5, the
+  round trip carries a crew vehicle record, the summary counts them. Every file in
+  `Tests/Scenarios` parses and names only metrics that exist (`ScenarioTests`, H6's fact), the
+  eleven new ones among them. The test project's one warning is still GV0's CS0649.
+- **Builds:** `Gdpyr.csproj`, `tools/Gdpyr.Playtest` and `tools/Gdpyr.AgentClient`, 0 warnings and 0
+  errors each.
+- **Engine checks:** **`demo`, 14 of 14 facts** — the recording's 7 and the playback's 7 — in each
+  of three runs of the final code, both processes exiting 0 each time; every run measured the
+  puppet within 0.006 m of the recorded path on 235 frames, the body seated as recorded on 241 of
+  241, and its eye at the seat's to 0.0000 m on the 180 it sat. GV2–GV6's checks, rerun in one
+  sitting on the final code: `physics` 66 of 66, `game` 37 of 37, `net` 57 of 57, `combat` 57 of
+  57, `heli` 39 of 39, `heli-net` 39 of 39, `kiosk` 40 of 40, `kiosk-pad` 5 of 5 and `kiosk-net` 13
+  of 13, every part exiting 0 but `heli-net`'s pilot, which crashed (signal 11) after its last
+  fact, as one of GV5's five runs did.
+- **The scenario suite**, GV0's way (`--fixed-fps 60` through `GODOT`), on a copy of the final tree
+  without `vehicle_policy_gets_in`, which was added after it and run alone on the same code: **44 of
+  51**, in 826 s of scenario wall time. §11's ten pass in every seed; the seven that fail are GV0's
+  eight but `htn_squad_retreats`, which passes here as in GV0's second run. Beside it, on a copy of
+  the untouched `6c1f9da` on the same host: **33 of 41** in 793 s, GV0's eight failing as in GV0's
+  first run. Against GV0's two runs and that one, the old scenarios read the same in every claim but
+  six, five in what GV0 names as spread or GV5 found to be: `htn_squad_retreats`' verdict (2 of 4
+  seeds fell back) and `squad_task[goal=4]` 7..11; `tactics_sniper_overwatch`'s `unit_task[goal=21]`
+  7..9 and `[goal=23]` 5..6, inside GV0's ranges; `tactics_react_to_fire`'s 0.013..0.019, GV0's
+  second run's; `htn_locker_runner_kit` failing in seed 1 as in GV0's first run; and
+  `tactics_move_to_node`'s units' kills, five or more in 3 of 3 seeds, which GV5 saw read 2 and 3 run
+  alone. The sixth is `htn_strategist_deploys_forward`'s `unit_built[barracks=0,x<60]`, 20..28
+  where GV0's runs and the base read 20..27. Run alone, twice on each tree, it read 20..28 and
+  20..27 here and 20..28 both times on the untouched `6c1f9da`: spread, in a scenario GV0 did not
+  see move. No old scenario puts a crew vehicle down; the ten new ones are where they are.
+
+Measured by the scenarios, the final code (every value the same in each seed but where two are given):
+
+| Scenario | Set-up as built | Measured |
+|---|---|---|
+| `vehicle_kiosk_cap` | a seat 0.5 m in front of the kiosk's cabinet; `vehicle 4x4` on the first tick and 60 ticks later | two `vehicle_requested`: taken (refusal 0), then `out` (9); one `vehicle_spawned`, the 4x4 in the asker's name; `vehicles_taken` 1, `vehicles_refused.out` 1 |
+| `vehicle_4x4_drives` | the 4x4 at (−60, 0.5, 50) facing east, a seated driver: 4 s of W, 2 s of W and D, 2 s of S, 2 s of nothing | ends at x 0.044 of the observation's 256 m scale, about 71 m east of its start; no `vehicle_damaged`, no `vehicle_exited` |
+| `vehicle_4x4_small_arms` | the same 4x4, four riflemen 1 m apart 35 m to its left, 5 s | 68 and 82 hits on the hull, 3 each; not destroyed; no kill; the driver never hurt |
+| `vehicle_tank_direct_hit` | a tank 30 m to the 4x4's left, nothing else of the strategist's, 10 s | one `vehicle_damaged`, `dealt` 600 — the hull's whole health — `health` 0; destroyed; the driver out of the driver's seat, their first damage the wreck's 50 |
+| `vehicle_wreck_ejects` | the 4x4 at 40 health, a rifleman 35 m off, 15 s | 14 hits on the hull, 3 each; destroyed; one `vehicle_exited`, the driver's; the driver's first damage the wreck's 50, then the rifleman's on foot (4 `damage` in all) |
+| `vehicle_passenger_fires` | full throttle from (−60, 0.5, 50) east; a rifleman at (20, 0.5, 25), 25 m off the line; the bed passenger's `look_at` on its chest, fire held, 8 s | 5 hits on the rifleman in each seed; none on its own 4x4; nobody out |
+| `heli_flies_and_lands` | the helicopter on the kiosk's helicopter pad facing the field's middle, a pilot and a door passenger: 5 s of Space, 4 s of W, 8 s of Ctrl, then E for both | both out, at x −49.43 or more and z 39.55 or less: each at least 77.5 m from the pad; no damage |
+| `heli_wreck_at_height` | the helicopter put down 15 m up at 10 health, a pilot and a door passenger, a rifleman 30 m off on the floor | destroyed; 2 kills, the pilot's and the passenger's; 2 `vehicle_exited` |
+| `vehicle_rams_infantry` | full throttle from (−60, 0.5, 50) east into three riflemen 0.8 m apart across the lane at x 0 | 3 `vehicle_rammed` at 18 m/s, each the driver's; 3 kills with weapon 15 and 3 `unit_lost`, the driver's |
+| `vehicle_pushes_slowly` | a quarter throttle into the same three at x −45 | ends at x −0.102 of the scale, about 34 m on, through them; none run over, none killed |
+| `vehicle_policy_gets_in` | a seat 1.7 m off the 4x4's left side, at the driver's door: a tap of E, 2 s of W, 1 s of S, a tap of E | in at the wheel by the use key, out of the wheel at x −48.16, 11.8 m on |
+
+Each guard, broken on a copy and the scenarios or checks named run, and what failed:
+
+| Broken | Failed |
+|---|---|
+| `CanBeSeated` refusing every bot peer id, as before GV7 | every scenario that seats somebody stops at its spawn, exit 2 (`not_seated: seat 1073741824 is a bot with no policy on it`), `vehicle_rams_infantry` and `heli_flies_and_lands` run; `vehicle_policy_gets_in`, which seats nobody, fails 4 of 6: nobody gets in |
+| the reset's own events kept | seed 2 of `vehicle_4x4_drives` (one `vehicle_exited`) and of `vehicle_passenger_fires` (two) |
+| `look_at`'s eye at 1.6 m | `vehicle_passenger_fires`: 0 hits |
+| `first` reading the last value | `vehicle_tank_direct_hit` and `vehicle_wreck_ejects` (the driver's first damage 90 and 20) and `vehicle_kiosk_cap` (`out` first); in `dotnet test`, `FirstIsWhatHappenedFirst_…` |
+| playback not applying the crew records | `demo`: 5 of the playback's 7 — no puppet, nobody seated, nothing at the end |
+| the authority recording none | `demo`: the file has 0 vehicle records to 120 player ones, and the same 5 in the playback |
+| a seated body found only through the round, which a demo has none of | `demo`: the body's eye 1.280 m from the seat's — never pinned |
+| the state hash folding nothing for a vehicle | `TheStateHash_FoldsWhereAVehicleIsWhoSitsInItAndItsHealth` |
+| a crew vehicle's label a strategist command may name | `AUnitCannotRideInACrewVehicle_NorAStrategistCommandNameOne` |
+
+What the phase left open, and what GV7 chose:
+
+- **The `vehicle` op names its seat**: `{"op":"vehicle","seat":3,"kind":"4x4"}`, as `loadout` does;
+  §11's shape had none. It answers `taken` or the refusal's code with `taken` true or false, and the
+  slot. A kind may be named or numbered; a number this build has no vehicle for goes to the validator
+  and comes back `invalid`, as the console's does.
+- **`list_vehicles` takes an optional seat.** Named for a strategist seat the session holds, it lists
+  only what that side sees (GV-D14) unless the server is omniscient; with none it lists everything,
+  the control plane's view as `state_hash` and `spawn` are. Its fields are the wire record's —
+  quantized as a client gets them — and `y`, `airborne`, `from_kiosk` and the kiosk's lines besides
+  §11's list. `welcome`'s schema does not publish the vehicles' names; the schema stays
+  `gdpyr-agent-obs-4`.
+- **The wire's seat placement is `vehicle_seat`**, a slot and a role, because a `spawn`'s `vehicle`
+  is the vehicle spawn's kind; the scenario file's is §11's `seat`, a label and a role. A seat in a
+  vehicle is put where the vehicle is and looks the way it faces unless the spawn says otherwise —
+  a pilot's look is the heading the helicopter turns to.
+- **A scenario's vehicle stands on the ground under its `at`**, the first found looking down from a
+  metre above it; a helicopter put more than 5 cm off the ground hovers with its rotor at full speed,
+  which is how `heli_wreck_at_height` starts 15 m up. One with nowhere to stand is refused
+  (`vehicle_refused`). Its `health` is checked against the kind's when the file is read.
+- **Distances are claimed as coordinates**, the vocabulary having no distance: "the driver's
+  observed position moves ≥ 60 m" is `observation.driver.self.position.last >= 0` from x −60 east,
+  and "both ≥ 40 m from the pad" the exits' x and z bounds that put every point of them 40 m off. A
+  field of an event kind that never fired reads 0, so those bounds hold vacuously without exits;
+  the exit counts are what fail then.
+- **The passenger aims by `look_at`**, the one harness feature that is a little like a policy: a
+  scripted look is a delta a decision and cannot follow a target from a seat moving at 18 m/s. It
+  reads only the seat's own observed position, and the server still slews the look at the seat's
+  turn-rate ceiling. Its eye height is the headless authority's camera; on a listen host, where the
+  crouch animation runs, it would be wrong.
+- **The tank's `dealt` is 600**, what the hull had, not the round's 1,000: `vehicle_damaged`
+  carries what was taken.
+- **Every unit the scenarios put down has its micro-autonomy off**, so riflemen stand where they
+  were put rather than going to cover; they still shoot.
+- **The quiet seat's neutral frame and a detached seat put down** are code no check reaches: the
+  harness runs in stepped mode, where a seat never falls back to its bot.
+- **The Python client's reset filter** is the C# client's rule written again, and untested: the
+  repository has no Python tests.
+- **Left for a person at the controls**: a demo of the vehicles watched with a camera — the puppets
+  and their crews have been played back headless and never looked at.
+
 ### GV8 — Bots ride with a person (1½ days, optional)
 
 §10's last item, with an `htn_*` scenario and `UnitHtnTests`-style facts for the ground domain's new
@@ -1617,6 +1797,8 @@ DEMOS.md (version 5), EFFECTS.md (§1's table), and this document's status.
 | The kiosk's timer and cap | §5.5's facts; `vehicle_kiosk_cap` | `dotnet test`; Godot headless |
 | Each kind taken at the kiosk, lost, ready again on its timer and taken again; every refusal a person can meet; the pads checked | §8.5's panel facts (`KioskMenuTests`); GV6's kiosk, pad and link facts | `dotnet test`; `crew-vehicle-checks.sh kiosk` and `kiosk-pad` (a listen host) and `kiosk-net` (a `--server` process and a client through the relay); a person, both |
 | A collision at 8 m/s or more kills a unit on foot; a slower one does not | §5.9's facts; `vehicle_rams_infantry`, `vehicle_pushes_slowly` | `dotnet test`; Godot headless |
+| A policy asks the kiosk, lists the vehicles, gets in by the use key, drives and gets out; a scenario puts a vehicle down and seats its seats in it; the old scenarios are unchanged | GV7's facts (`CrewVehicleAgentTests`); the eleven vehicle scenarios; the whole suite against GV0's runs | `dotnet test`; Godot headless |
+| A demo records the vehicles and plays them back | `DemoCodecTests`; GV7's `demo` facts | `dotnet test`; `crew-vehicle-checks.sh demo` (a listen host, then `--playdemo`) |
 | Driving feels like driving | GV3's error, misprediction and replay numbers | `crew-vehicle-checks.sh net`: a `--server` process and four clients, 80 ms RTT and 20 ms jitter through a relay; a person, dedicated server with `tc netem` |
 | The helicopter flies the arena, lands on the floor and the bunker's roof, and settles when its pilot gets out at 4 m; its passenger fires from the door | §5.2's facts; GV5's flight, roof, settling and door facts | `dotnet test`; `crew-vehicle-checks.sh heli` (a listen host) and `heli-net` (a `--server` process and two clients through the relay); a person, both |
 

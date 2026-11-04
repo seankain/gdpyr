@@ -201,6 +201,10 @@ class GdpyrEnv:
         self._correlation = 1
         self._observations: List[Observation] = []
         self._events: List[Dict[str, Any]] = []
+        # One past the last reset's tick: what the reset itself emitted -- the last round's
+        # round_end, everybody it unseated from a crew vehicle -- belongs to the episode
+        # that ended, and arrives after the reset's answer (GROUND_VEHICLES.md §12, GV7).
+        self._events_from = 0
 
         self.schema = Schema()
         self.omniscient = False
@@ -233,9 +237,10 @@ class GdpyrEnv:
         a starting state (docs/AGENT_API.md §3.1). Write claims about
         distributions, not about trajectories.
         """
-        self._request({"op": "reset", "seed": int(seed or 0)})
+        answer = self._request({"op": "reset", "seed": int(seed or 0)})
         self._observations.clear()
         self._events.clear()
+        self._events_from = int(answer.get("tick", -1)) + 1
         self._elapsed = 0
 
         observation = self._advance(GroundAction())
@@ -337,6 +342,37 @@ class GdpyrEnv:
             raise AgentError("a strategist carries no kit")
 
         return self._request({"op": "loadout", "seat": self.seat, "kit": dict(kit), "when": when})
+
+    def vehicle(self, kind: Any = "4x4") -> Dict[str, Any]:
+        """Asks the vehicle kiosk for a crew vehicle for this ground seat (``GROUND_VEHICLES.md`` §11).
+
+        ``kind`` is ``"4x4"`` or ``"helicopter"``. The seat has to be standing at the
+        kiosk; the request goes through the validator a person's panel goes through and
+        is paced the same way. The answer's ``taken`` says whether the vehicle was put on
+        its pad — then ``vehicle`` is its slot — and ``answer`` is ``taken`` or the
+        refusal's code: ``dead``, ``not_ground``, ``not_at_kiosk``, ``seated``, ``mounted``,
+        ``carrying``, ``piloting``, ``invalid``, ``out``, ``not_ready``, ``pad_blocked`` or
+        ``too_soon`` — an answer, not an error::
+
+            answer = env.vehicle("4x4")
+            if not answer["taken"]:
+                print(answer["answer"])
+
+        Getting in, driving and getting out are the action's ``use`` button and axes.
+        """
+        if self.policy != "ground":
+            raise AgentError("a strategist drives nothing")
+
+        return self._request({"op": "vehicle", "seat": self.seat, "kind": kind})
+
+    def list_vehicles(self) -> Dict[str, Any]:
+        """Every crew vehicle on the field and each kind's line at the kiosk (``GROUND_VEHICLES.md`` §11).
+
+        ``vehicles`` is a list of ``{slot, type, x, y, z, yaw, health, speed, destroyed,
+        airborne, from_kiosk, seats: [{role, peer}]}``; ``kiosk`` a list of ``{type, status,
+        seconds_left}``. For a strategist seat, only the vehicles its side sees.
+        """
+        return self._request({"op": "list_vehicles", "seat": self.seat})
 
     def sample_action(self) -> GroundAction:
         """A uniformly silly ground action. For smoke tests, not for training."""
@@ -517,7 +553,9 @@ class GdpyrEnv:
             self._observations.append(self._decode(payload))
         elif kind == _KIND_EVENT:
             body = json.loads(payload)
-            self._events.extend(body.get("events", []))
+            self._events.extend(
+                event for event in body.get("events", []) if int(event.get("tick", 0)) >= self._events_from
+            )
         elif kind == _KIND_ERROR:
             # An unsolicited error is the server saying something went wrong outside
             # a request — a step timeout, or a human connecting into a stepped round.

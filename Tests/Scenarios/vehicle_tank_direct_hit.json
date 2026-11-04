@@ -1,0 +1,29 @@
+{
+  "name": "a tank 30 m off a driver in a 4x4 destroys it with one direct hit, and the driver is thrown out",
+  "seeds": [1, 2],
+  "duration_ticks": 600,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 0 },
+
+  "seats": [
+    { "id": "driver", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json",
+      "kit": { "primary": "rifle", "magazines": 5, "grenades": 3, "armour": "none" } }
+  ],
+
+  "spawns": [
+    { "vehicle": "4x4", "id": "truck", "at": [-60, 0.5, 50], "yaw": -1.5708 },
+    { "peer": "driver", "seat": { "vehicle": "truck", "role": "driver" } },
+    { "unit": "tank", "team": "strategist", "at": [-60, 0.5, 20], "order": "none", "autonomy": "off" }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.vehicle_damaged.count", "op": "==", "value": 1 },
+    { "metric": "events.vehicle_damaged.dealt.first", "op": "==", "value": 600 },
+    { "metric": "events.vehicle_damaged.health.first", "op": "==", "value": 0 },
+    { "metric": "events.vehicle_destroyed.count", "op": "==", "value": 1 },
+    { "metric": "events.vehicle_exited.count", "op": "==", "value": 1 },
+    { "metric": "events.vehicle_exited[peer=@driver,seat=0].count", "op": "==", "value": 1 },
+    { "metric": "events.damage[victim=@driver].amount.first", "op": "==", "value": 50 }
+  ]
+}

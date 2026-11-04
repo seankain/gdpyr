@@ -60,6 +60,12 @@ what it sees and command by what it names. The C# client makes the same join
 space beside it — six discrete heads, at most two commands a decision — which is worth reading
 before inventing one: [`docs/TRAINING.md`](../../docs/TRAINING.md) §7.
 
+A ground seat can take a crew vehicle at the vehicle kiosk with `env.vehicle("4x4")` or
+`env.vehicle("helicopter")` — through the validator a person's panel goes through, answered `taken`
+or with the refusal's code — and `env.list_vehicles()` returns every one on the field and each
+kind's line at the kiosk ([`docs/GROUND_VEHICLES.md`](../../docs/GROUND_VEHICLES.md) §11). Getting
+in, driving and getting out are the action's `use` button and axes, as a person's are.
+
 Pass `feature_planes=True` for the optional `32 × 32 × 4` grid, which arrives in
 `info["planes"]` as an `(N, N, C)` array (§6.3). It is a strategist affordance: a ground policy's
 spatial signal is the ray fan in its own vector.

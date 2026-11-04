@@ -31,6 +31,9 @@ public readonly struct DemoSummary
 	public readonly int PlayerSnapshots;
 	public readonly int UnitSnapshots;
 
+	/// <summary>Crew vehicle messages (docs/GROUND_VEHICLES.md §7.4).</summary>
+	public readonly int CrewVehicles;
+
 	/// <summary>The marks, in order, with the tick each was written at.</summary>
 	public readonly IReadOnlyList<(uint Tick, string Text)> Marks;
 
@@ -42,7 +45,7 @@ public readonly struct DemoSummary
 	public readonly string Error;
 
 	private DemoSummary(in DemoHeader header, uint firstTick, uint lastTick, int ticks, int inputs, int spawns,
-		int despawns, int playerSnapshots, int unitSnapshots,
+		int despawns, int playerSnapshots, int unitSnapshots, int crewVehicles,
 		IReadOnlyList<(uint Tick, string Text)> marks, string error)
 	{
 		Header = header;
@@ -54,6 +57,7 @@ public readonly struct DemoSummary
 		Despawns = despawns;
 		PlayerSnapshots = playerSnapshots;
 		UnitSnapshots = unitSnapshots;
+		CrewVehicles = crewVehicles;
 		Marks = marks;
 		Error = error;
 	}
@@ -80,7 +84,7 @@ public readonly struct DemoSummary
 		{
 			uint first = 0, last = 0;
 			bool any = false;
-			int ticks = 0, inputs = 0, spawns = 0, despawns = 0, players = 0, units = 0;
+			int ticks = 0, inputs = 0, spawns = 0, despawns = 0, players = 0, units = 0, vehicles = 0;
 			var marks = new List<(uint, string)>();
 
 			while (reader.TryReadRecord(out DemoRecord record))
@@ -105,6 +109,7 @@ public readonly struct DemoSummary
 					case DemoRecordKind.Despawn: despawns++; break;
 					case DemoRecordKind.PlayerSnapshot: players++; break;
 					case DemoRecordKind.UnitSnapshot: units++; break;
+					case DemoRecordKind.CrewVehicles: vehicles++; break;
 					case DemoRecordKind.Mark: marks.Add((record.Tick, record.Text)); break;
 				}
 			}
@@ -116,7 +121,7 @@ public readonly struct DemoSummary
 			}
 
 			summary = new DemoSummary(reader.Header, first, last, ticks, inputs, spawns, despawns, players,
-				units, marks, reader.Error);
+				units, vehicles, marks, reader.Error);
 		}
 
 		return true;
@@ -136,7 +141,7 @@ public readonly struct DemoSummary
 			$"  map         {(string.IsNullOrEmpty(Header.Map) ? "unknown" : Header.Map)}",
 			$"  ticks       {Ticks} recorded, {FirstTick}-{LastTick} ({Seconds:0.0}s at {Header.TickRate} Hz)",
 			$"  records     {Inputs} input, {PlayerSnapshots} player, {UnitSnapshots} unit,"
-				+ $" {Spawns} spawn, {Despawns} despawn",
+				+ $" {CrewVehicles} vehicle, {Spawns} spawn, {Despawns} despawn",
 			$"  seed        {Header.RoundSeed}",
 		};
 

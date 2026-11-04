@@ -27,14 +27,25 @@ public sealed class EpisodeMetrics
 		public double Max = double.NegativeInfinity;
 		public double Last;
 
+		/// <summary>The value the stream started with: what happened first (docs/GROUND_VEHICLES.md §11).</summary>
+		public double First;
+
 		/// <summary>The tick each of those last moved on, so a failure can name one.</summary>
 		public uint LastTick;
+
+		public uint FirstTick;
 
 		public uint MinTick;
 		public uint MaxTick;
 
 		public void Add(double value, uint tick)
 		{
+			if (Count == 0)
+			{
+				First = value;
+				FirstTick = tick;
+			}
+
 			Count++;
 			Sum += value;
 			Last = value;
@@ -252,7 +263,7 @@ public sealed class EpisodeMetrics
 		}
 
 		// A bare name is the stream's last value; a trailing aggregate names one of
-		// the five the vocabulary has.
+		// the ones the vocabulary has: count, sum, mean, min, max, last and first.
 		if (TryRead(metric, "last", out value, out tick))
 		{
 			return true;
@@ -307,7 +318,7 @@ public sealed class EpisodeMetrics
 	}
 
 	private static bool IsAggregate(string name) =>
-		name is "count" or "sum" or "mean" or "min" or "max" or "last";
+		name is "count" or "sum" or "mean" or "min" or "max" or "last" or "first";
 
 	/// <summary>
 	/// Every event kind the game emits (docs/AGENT_API.md §8), so that
@@ -470,12 +481,14 @@ public sealed class EpisodeMetrics
 			"mean" => series.Sum / series.Count,
 			"min" => series.Min,
 			"max" => series.Max,
+			"first" => series.First,
 			_ => series.Last,
 		};
 		tick = aggregate switch
 		{
 			"min" => series.MinTick,
 			"max" => series.MaxTick,
+			"first" => series.FirstTick,
 			_ => series.LastTick,
 		};
 		return true;
@@ -584,6 +597,11 @@ public sealed class EpisodeMetrics
 			case "max":
 				value = series.Max;
 				tick = series.MaxTick;
+				return true;
+
+			case "first":
+				value = series.First;
+				tick = series.FirstTick;
 				return true;
 
 			default:
