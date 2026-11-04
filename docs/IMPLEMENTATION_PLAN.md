@@ -624,7 +624,7 @@ listen-host or dedicated-server check by a person has been taken for any of them
 scenarios first ran in L5's suite, and L8's engine-side checks — the suite against obs-4, the
 legacy baseline's re-measure and a PPO smoke run — have not been taken.
 
-### M12 — Vehicles the ground force drives (~20 days) *in progress: GV0–GV5 done — the rules, the 4x4 driven on the authority, the vehicles on the wire, fogged and predicted, combat from and against them, and the helicopter*
+### M12 — Vehicles the ground force drives (~20 days) *built: GV0–GV9; its sixteen scenarios and the engine checks pass in Godot, the checks by a person at the controls are outstanding*
 
 A 4x4 technical — a sprung chassis, a mounted 12.7 mm gun, a passenger in the bed — and a
 helicopter with a passenger in its door, driven and flown by ground-force players from their own
@@ -635,6 +635,22 @@ spawn bunker, and another 45 s or 90 s after it is lost. At 600 and 450 health, 
 Either kills a strategist's unit on foot that it strikes at 8 m/s or more, in its driver's name.
 The design, decisions (GV-D1–GV-D17) and phases (GV0–GV9) are
 [`GROUND_VEHICLES.md`](GROUND_VEHICLES.md); GV0–GV4 with GV6 are the 4x4 alone, about 14 days.
+
+Built: the engine-free rules (GV1); the 4x4 on the authority, its springs over a test strip, the
+seats and the use key, and the bunker made solid (GV2, GV5); the vehicles on the wire, fogged, and
+predicted on the driver's client — 0.51 cm of error at worst, the record's resolution, on the
+straight at 18 m/s over an 80 ms link (GV3, [`NETCODE.md`](NETCODE.md) §10.11); firing from the
+seats from the pose each shooter's client drew, the hull's armour, the tank's direct hit, wrecks and
+running units over (GV4); the helicopter flown over the arena and onto the bunker's roof, and the
+barracks mortar no longer holding a target it cannot reach (GV5); the kiosk, its panel and its
+timers (GV6); the agent API's `vehicle` and `list_vehicles`, the harness's vehicle spawns and seats,
+eleven scenarios and demo version 5 (GV7); and HTN ground bots that ride with a person, with five
+more scenarios (GV8).
+Each phase in GROUND_VEHICLES.md §12 says what it ran and what it did not: `dotnet test` at 3,052,
+the engine checks (`scripts/crew-vehicle-checks.sh`) as a listen host and as a `--server` process
+with clients behind a relay standing in for `tc netem`, and the suite at 50 of 57, the seven that
+fail being GV0's own. Nothing drawn — the vehicles, the chase camera, the kiosk's panel, a wreck —
+has been looked at by a person, and none of it has run on a dedicated server over a real link.
 
 **Total: ~29–37 engineering days to end of M8.**
 

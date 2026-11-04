@@ -14,7 +14,10 @@ the old ones read as at GV0 within its spread; and a demo records the vehicles a
 back, version 5. And GV8's riding bots (§12): an HTN ground bot with nothing in sight beside a
 person's stopped 4x4 or helicopter gets in by the use key, at the gun first, fights from the seat
 and gets out when the person does; with nobody or nobody but a bot at the controls none gets in, and
-a legacy bot never does. GV9's docs are left.** Written against `6699b03`; GV4 amends GV-D16 (§3). The
+a legacy bot never does. And GV9's docs (§12): the README's controls, NETCODE.md §10.11, M12,
+AGENT_API.md, DEMOS.md and EFFECTS.md say what was built. What is left is a person's: everything
+drawn has been driven headless and never looked at, and none of it has run on a dedicated server
+over a real link.** Written against `6699b03`; GV4 amends GV-D16 (§3). The
 decisions (GV-D1–GV-D17, §3) are the defaults the plan is written against; each is one line to
 change, so flag any you disagree with before GV2 starts. The phases (GV0–GV9, §12) say what each builds, what checks it, and what is
 left for a person at the controls.
@@ -64,7 +67,7 @@ Facts this plan stands on, each read in the source at `6699b03`.
 | The strategist's units on foot — rifleman, builder, sniper, heavy gunner — move at 4.5 m/s at most, are 0.4–0.45 m in radius and set no `BulletDamageScale` (so 1). Its technical, tank, supply truck and dropship are units marked `IsVehicle`. A unit's hitbox is an analytic capsule, and one killed through `UnitManager.Damage` credits its killer and emits `unit_lost` | `Units/*.tres`; `Scripts/Rts/UnitDefinition.cs:72`; `Scripts/Rts/Unit.cs:337`; `UnitManager.cs:1808` |
 | A weapon definition needs no round: the hammer has none and loads as `default` projectile stats | `Weapons/geopick/geopick.tres`; `Scripts/Core/WeaponCatalog.cs` (`Projectile?.ToStats() ?? default`) |
 | Three physics layers: World, Players, Units. Every player, and every unit on foot that is not riding, calls `MoveAndSlide` every tick, idle or not | `Scripts/Core/CollisionLayers.cs`; `project.godot` `[layer_names]`; `Scripts/Fps/State.cs:46`; `UnitManager.cs:643` → `Scripts/Rts/Unit.cs:443` |
-| The Test map's weapon locker is at (−79.45, 1.95, 91.38), inside the ground force's 30 × 30 × 7.1 m concrete bunker (`Scenes/Environment/Pillbox.tscn`, origin (−75.83, 0.5, 87.46)), whose one door — in its local +X wall — is 3.2 m wide and 4 m high. NETCODE.md §10.6 still gives the locker's earlier position, (8, 0.5, 11). **Not solid until GV5:** the collision mesh hung under a plain `Node3D`, which gives it to no body (§12, GV5) | `Scenes/Test.tscn:422`, `:426`; the bunker's collision mesh |
+| The Test map's weapon locker is at (−79.45, 1.95, 91.38), inside the ground force's 30 × 30 × 7.1 m concrete bunker (`Scenes/Environment/Pillbox.tscn`, origin (−75.83, 0.5, 87.46)), whose one door — in its local +X wall — is 3.2 m wide and 4 m high. NETCODE.md §10.6 still gave the locker's earlier position, (8, 0.5, 11), until GV9. **Not solid until GV5:** the collision mesh hung under a plain `Node3D`, which gives it to no body (§12, GV5) | `Scenes/Test.tscn:422`, `:426`; the bunker's collision mesh |
 | The floor is a flat 240 × 240 m slab; its obstacles are 1.2 m low walls, 2.8–3 m blocks and the range posts | `Scenes/Test.tscn` |
 | The ground force's keys: W A S D, Space, Ctrl, Shift, 1 2 3, R, V, E, G, Q, F1–F3, both mouse buttons. U, T and G are each asserted to carry one action | `project.godot`; `Tests/VehicleControlsTests.cs`; `GrenadeTests.TheGrenadeKeyIsBound` |
 | There is no fall damage: a player's health changes only in `CombatManager.Damage`, which only rounds, blasts and swings reach | `CombatManager.cs:1226`, `:1238` |
@@ -1948,6 +1951,42 @@ What the phase left open, and what GV8 chose:
 README (controls, a paragraph), NETCODE.md (§1's table, §7's table, a §10.11 in §10.10's shape, and
 §10.6's stale locker position), IMPLEMENTATION_PLAN.md M12, AGENT_API.md (ops, events, spawns),
 DEMOS.md (version 5), EFFECTS.md (§1's table), and this document's status.
+
+**Done on `c08dd39`.** Docs only: no source, scene or scenario changed. Every number written was
+read off the code, the `.tres` files, `Scenes/Test.tscn` or §12's measurements, not measured again.
+
+- **README:** the document index's line says GV0–GV9 are built. Under "Playing either side", a
+  **Vehicles** paragraph — the kiosk and its panel, the timers, the prompts, the seats, who fires
+  what, the armour, a wreck, running units over — and a table of the seated controls; the console's
+  `vehicle` and `kiosk`. Under "Playing on your own", the HTN bots that ride along.
+- **NETCODE.md:** the model line and §1's table give the crew vehicles their row — predicted by the
+  driver, interpolated by everybody else, a seated body pinned. §7's table gains
+  `ServerCrewVehicles`, `ClientRequestVehicle` and `ServerKioskResult`, and a paragraph says what
+  rides where; GV4 had already written the input packet's byte. **§10.11**, in §10.10's shape: what
+  they are and why they are not §10.10's, the rule, combat, the kiosk, a table of the two kinds,
+  what is on the wire (one message and one request, the acknowledgement by slot, the driver's
+  ledger, the smoothed clock, the fog, demo version 5, weapons 14 and 15, the agent API, one build
+  for everybody), who uses it and what is not in it. **§10.6**: the locker at (−79.45, 1.95, 91.38)
+  in the bunker, beside the kiosk, drawn 1.14 m above the floor; its measurement was taken at the
+  old position, and the three `locker_*` scenarios that still spawn there fail (GV0).
+- **IMPLEMENTATION_PLAN.md M12:** built, GV0–GV9, with what each phase built and what is
+  outstanding.
+- **AGENT_API.md:** the ops (GV7), the events (GV4) and the spawns and step fields (GV7) were
+  checked against `AgentServerOps`, `AgentJson`, `AgentEvents` and the harness, and left as they
+  were, but for `vehicle_requested`'s "emitted once the kiosk is on the field", which now says who
+  emits it. New: §6.1, what a seat in a crew vehicle observes — the seat's position and the
+  vehicle's velocity, its own weapons, `weapon.mounted` 0 at the 4x4's gun; §7.2, what each button
+  does in each seat; §8, weapons 14 and 15 on the stream; §9.1, the sixteen scenarios that use the
+  vehicle spawns; §10, the GV4 and GV7 test rows.
+- **DEMOS.md:** GV7's record tag, payload, playback and version notes checked against
+  `DemoFormat`, `DemoWriter` and `DemoRecorder`, and left; §2.3 gains what the record costs, about
+  0.4 KB/s with no vehicle out and 3.1 KB/s with both.
+- **EFFECTS.md:** §1's table gains a crew vehicle's wreck; §2.3 says how
+  `CrewVehicle.PresentDestroyed` draws it; §5's display check names the 4x4 and the helicopter.
+- **Left alone:** HTN_BOTS.md and AI_DEBUG.md (GV8), LOADOUT.md (GV4, GV5) and
+  `tools/gdpyr_env/README.md` (GV7), which their phases wrote.
+- **Not run:** `dotnet test` and the builds — there is no .NET SDK in this container, and no code
+  changed — nor any engine check or scenario.
 
 **About 20 days in all.** GV0–GV4 with GV6, about 14, are the 4x4 alone and can ship first.
 

@@ -403,6 +403,14 @@ distance, zero-padded. A ray fan is 16 physics queries per seat per decision; at
 six seats that is 1,440 queries a second, which is small next to the fog's own ray budget
 (`SimConfig.FogLineOfSightCandidates`) but is staggered across seats anyway.
 
+**A seat in a crew vehicle** ([`GROUND_VEHICLES.md`](GROUND_VEHICLES.md) §11) reads the same 150
+floats. The server pins a seated body to its seat every tick, so `self`'s position is the seat's and
+its velocity the vehicle's; the contacts and the rays are taken from there. The weapon block is the
+seat's own weapons: at the 4x4's gun `weapon.mounted` stays 0 — it is an emplacement's — and the
+gun's box is in no field. Who sits where, and the vehicle's health and speed, are `list_vehicles`'
+(§7.1), and getting in and out is on the stream (`vehicle_entered`, `vehicle_exited`, §8). A vehicle
+block in the vector would be `obs-5`; GROUND_VEHICLES.md §15 leaves it out.
+
 ### 6.2 Strategist policy (global, fogged)
 
 Exactly what a human strategist's client is sent, and nothing else. The ground-force contacts come
@@ -569,6 +577,17 @@ holds a drone node and has one built ([`CONTROL_POINTS.md`](CONTROL_POINTS.md) �
 then stands still, its look angles steer the drone and `fire` sets it off. The observation does not
 carry the drone yet: a policy learns of one from the `kill` and `damage` events, whose `weapon` is
 13.
+
+**A crew vehicle is driven with the same frame** ([`GROUND_VEHICLES.md`](GROUND_VEHICLES.md) §11).
+`use` beside a hull, carrying no gun or can, gets in at the free seat whose door is nearest; seated,
+a tap of `use` — pressed then released inside 30 ticks — gets out, and a hold moves to the next free
+seat.
+At a 4x4's wheel `move` is throttle and steering, `jump` the handbrake; at a helicopter's controls
+`move` flies it along and across its heading, `jump` and `crouch` climb and descend, and the look's
+yaw is the heading it turns to. At the gun `fire` and `reload` work the 4x4's gun; in the bed or the
+door `fire`, `ads`, `reload`, `weapon2` and `weapon3` are the seat's own pistol and primary, and
+`fire` does nothing outside the seat's arc. `grenade`, `drone`, `melee` and `weapon1`, the hammer,
+do nothing in any seat. The kiosk's request is not a button but the `vehicle` op (§7.1).
 
 ### 7.3 The fairness ceilings are on by default
 
@@ -757,7 +776,7 @@ from position deltas and gets it slightly wrong.
 | `unit_task` | unit, tier, goal, x, z — a unit started one of the tactics of [`TACTICS.md`](TACTICS.md) §5, by its `UnitGoal` number, a protocol constant from here on: 18 take cover from fire, 19 return fire, 20 throw a grenade at an enemy hidden behind cover, a marksman's 21 to its hide spot, 22 pop out, 23 fire from a peek, 24 duck, 25 relocate (§5.3), a heavy gunner's 26 suppress a place and 27 fill its belt (§5.2), and its part in its squad's drill (§5.5): 28 to ground, 29 to a fire position, 30 bound, 31 hold and 32 rush; and 33 escort an exposed builder (§5.10); where it was when it started. Only a unit whose micro-autonomy is on, under `--bot-ai htn` |
 | `squad_drill` | squad (its board slot), phase, elements, x, z — a board squad's drill changed phase ([`TACTICS.md`](TACTICS.md) §5.5), by its `DrillPhase` number, a protocol constant: 1 approach, 2 hold the point, 3 go to ground, 4 set the base, 5 bound, 6 grenades, 7 rush, and 0 when the squad stops drilling; how many of its units take part; its threat point, else where its order goes. Only a squad of two units or more whose micro-autonomy is on, under an attack or a move onto a node, under `--bot-ai htn` |
 | `grenade_thrown` | thrower (owner id), tier (its catalog id; −1 for a player), hidden (1 when a unit threw at something hidden from it — behind a wall with only its head showing, out of sight where a gunner is still firing, or, under micro-autonomy, an enemy the side knows is crouched behind cover — 0 when it could see it, −1 for a player, whose aim is its own), x, z (where the thrower stood) — a hand grenade left somebody's hand ([`NETCODE.md`](NETCODE.md) §10.9, [`TACTICS.md`](TACTICS.md) §5.4). Either bot AI |
-| `vehicle_requested` | peer, type, refusal — a crew vehicle asked for at the vehicle kiosk and the answer, `KioskRefusal`'s number, 0 for taken ([`GROUND_VEHICLES.md`](GROUND_VEHICLES.md) §11). In the schema from GV4; emitted once the kiosk is on the field (GV6) |
+| `vehicle_requested` | peer, type, refusal — a crew vehicle asked for at the vehicle kiosk and the answer, `KioskRefusal`'s number, 0 for taken ([`GROUND_VEHICLES.md`](GROUND_VEHICLES.md) §11): a person's panel or console, or a policy's `vehicle` op, every one through `KioskRules.Check` |
 | `vehicle_spawned` | vehicle, type, peer, x, z — a crew vehicle put on the field: `vehicle` its slot, 0–3, as the vehicle record names it; `type` its `CrewVehicleKind`, 0 the 4x4 and 1 the helicopter (`kind` is every record's own); `peer` who asked for it, 0 for nobody |
 | `vehicle_entered` / `vehicle_exited` | peer, vehicle, seat — `seat` its `SeatRole`: 0 the controls, 1 the gun, 2 a passenger's; and for an exit, x and z where they were put down. An exit is any way out: a tap of E, thrown out of a wreck, or put down where they sat — dead, leaving, or the vehicle taken away |
 | `vehicle_damaged` | attacker, vehicle, weapon, dealt, health — what a crew vehicle's hull took after its armour ([`GROUND_VEHICLES.md`](GROUND_VEHICLES.md) GV-D9), and what it has left. A hit its armour took all of is no record |
@@ -802,7 +821,9 @@ explosives hurt ([`NETCODE.md`](NETCODE.md) §10.6) — is no record at all. Eit
 
 A player's `weapon` is the weapon whose round did it, not whatever the player is holding when it
 lands: 12 for a hand grenade ([`NETCODE.md`](NETCODE.md) §10.9), 7 for a mounted heavy gun's
-round, and for a swing the hammer. Before hand grenades it was the weapon in hand at the moment of
+round, 14 for the 4x4's mounted gun, 15 — the ram — for a unit a crew vehicle ran over
+([`NETCODE.md`](NETCODE.md) §10.11), and for a swing the hammer. Before hand grenades it was the
+weapon in hand at the moment of
 the hit, which named the large weapon for a mounted gunner's kills.
 
 **This event stream is most of M8's per-round CSV.** The columns that milestone names — round
@@ -918,7 +939,9 @@ stepped on — what a policy aiming at a point does, from nothing a policy is no
 way a scripted passenger in a 4x4 at 18 m/s keeps a rifleman 25 m off in its sights. The eye is the
 observed position plus 0.596 m, the body's camera on the headless authority (`tools/Gdpyr.Playtest/
 ScriptAim.cs`). A step with both `look` and `look_at`, a `look_at` that is not three numbers, an
-unknown kind, and either on a strategist's step are refused when the file is read.
+unknown kind, and either on a strategist's step are refused when the file is read. The sixteen
+crew vehicle scenarios — the twelve `vehicle_*` and `heli_*` files and the four `htn_bot*` ones of
+[`GROUND_VEHICLES.md`](GROUND_VEHICLES.md) GV7 and GV8 — are the ones that use them.
 
 **A unit spawn can name its micro-autonomy** ([`TACTICS.md`](TACTICS.md) §5.9): `"autonomy": "on"`
 or `"off"`, through the `spawn` op's field of the same name; left out, the unit starts with the
@@ -1133,6 +1156,8 @@ The same rule the rest of the codebase follows: the interesting part is engine-f
 | `unit_task`'s goal 33, escorting a builder; a script's `construct`, and each malformed one as a sentence | `Tests/AgentEventTests.cs`, `Tests/EscortTests.cs`, `Tests/ScenarioTests.cs` | TACTICS T9 |
 | The strategist vector's `autonomy`, the last of a unit's 15 floats, and 1,156 floats in all (`gdpyr-agent-obs-3`); the client and the server name one schema version | `Tests/AgentObservationTests.cs`, `Tests/AgentInteropTests.cs` | TACTICS T8 |
 | The ground vector's kit block, the last five of 150 floats (`gdpyr-agent-obs-4`): appended, the kit normalized, the primary's reserve whatever is in the hands and no pouches empty, no vest apart from a spent one, the load's cap and floor, named in JSON beside the extras; the .NET client, the Python client and the server name one schema version | `Tests/AgentObservationTests.cs`, `Tests/AgentInteropTests.cs` | LOADOUT L8 |
+| The seven `vehicle_*` kinds appended as 23–29, `vehicle_rammed` the last; a vehicle's kind named `type`, since every record has a `kind` | `Tests/AgentEventTests.cs` | GROUND_VEHICLES GV4 |
+| The `vehicle` and `list_vehicles` ops: a vehicle spawn and a seat placement, and each malformed one as a sentence; a ground step's `vehicle` and `look_at`; the `first` aggregate; the harness's kinds, seats, health and refusals against the files and `KioskRules`; `list_vehicles` as the server writes it and the client reads it; the state hash over a vehicle; a unit aboard a crew vehicle and a strategist command naming one refused | `Tests/CrewVehicleAgentTests.cs`, `Tests/ScenarioTests.cs` | GROUND_VEHICLES GV7 |
 
 One test is not engine-free and is worth the exception: the **divergence probe** of §3 — two seeded
 600-tick episodes against one headless server, comparing `state_hash` per tick and reporting the

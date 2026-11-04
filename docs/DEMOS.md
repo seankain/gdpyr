@@ -96,8 +96,10 @@ killed mid-round, and none of those may take a client down.
 A journalled tick is 5 bytes for the marker and 17 per character — a tag, a peer id and the frame.
 Eight players at 60 Hz is about 8.4 KB/s. The keyframes are the rest: a full player snapshot is
 `5 + 32n` bytes at 30 Hz and a unit snapshot `5 + 13n` at 20 Hz, so a busy round with fifty units
-adds roughly 24 KB/s. Call it a megabyte a half-minute, or a few hundred megabytes for a long
-evening.
+adds roughly 24 KB/s. Since version 5 the crew vehicles' message is a third keyframe, `9 + 46n`
+bytes at 30 Hz whether a vehicle is out or not: about 0.4 KB/s with none and 3.1 KB/s with both
+kinds out, the record's tag and length included. Call it a megabyte a half-minute, or a few hundred
+megabytes for a long evening.
 
 The journal is the cheap half, and that is the argument for journalling rather than recording state:
 the round costs what the players pressed.
