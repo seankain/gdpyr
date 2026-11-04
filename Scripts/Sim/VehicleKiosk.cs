@@ -1,4 +1,5 @@
 using System;
+using Godot;
 
 namespace Gdpyr.Sim;
 
@@ -329,6 +330,21 @@ public static class KioskRules
 	/// </summary>
 	public static bool Abandoned(uint tick, uint unattendedSinceTick) =>
 		tick >= unattendedSinceTick && tick - unattendedSinceTick >= (uint)AbandonTicks;
+
+	/// <summary>
+	/// The heading a vehicle is put on its pad with (§6.6): facing the pad marker's −Z,
+	/// as <see cref="CrewPose.Forward"/> faces its own. <paramref name="markerZ"/> is the
+	/// marker's +Z in the world; only its flat part counts.
+	/// </summary>
+	public static float PadYaw(Vector3 markerZ) => MathF.Atan2(markerZ.X, markerZ.Z);
+
+	/// <summary>
+	/// Where a vehicle's origin goes on a pad whose ground is at <paramref name="ground"/>:
+	/// the 4x4's is its hardpoints' plane, standing on its springs at
+	/// <paramref name="rideHeightMeters"/>; the helicopter's is its skids.
+	/// </summary>
+	public static Vector3 PadOrigin(CrewVehicleKind kind, Vector3 ground, float rideHeightMeters) =>
+		kind == CrewVehicleKind.FourByFour ? ground + new Vector3(0f, rideHeightMeters, 0f) : ground;
 
 	/// <summary>A refusal's code, or <c>taken</c> for none.</summary>
 	public static string CodeOf(KioskRefusal refusal) =>

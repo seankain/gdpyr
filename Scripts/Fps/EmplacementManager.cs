@@ -265,7 +265,10 @@ public partial class EmplacementManager : Node
 		float vehicleDistance = float.MaxValue;
 		vehicleSlot = seated || crew == null ? -1 : crew.NearestEnterable(at, combat.PeerId, out vehicleDistance);
 		float nearestItem = Mathf.Min(gunDistance, canDistance);
+		float kioskDistance = crew?.KioskDistance(at) ?? float.PositiveInfinity;
 
+		// The nearest of locker, kiosk, gun, can and hull wins (docs/GROUND_VEHICLES.md §5.3):
+		// each of the locker and the kiosk is in reach only when nearer than everything else.
 		var situation = new UseSituation(
 			intent,
 			CarryOf(combat.PeerId),
@@ -273,9 +276,10 @@ public partial class EmplacementManager : Node
 			gunIndex >= 0,
 			canIndex >= 0 && canDistance <= gunDistance,
 			combat.Character.IsOnFloor(),
-			LockerInReach(at, Mathf.Min(nearestItem, vehicleDistance)),
+			LockerInReach(at, Mathf.Min(Mathf.Min(nearestItem, vehicleDistance), kioskDistance)),
 			seated,
-			vehicleSlot >= 0 && vehicleDistance < nearestItem);
+			vehicleSlot >= 0 && vehicleDistance < nearestItem,
+			KioskInReach(at, kioskDistance, Mathf.Min(nearestItem, vehicleDistance)));
 
 		return EmplacementSim.Resolve(situation);
 	}
@@ -604,10 +608,16 @@ public partial class EmplacementManager : Node
 		float vehicleDistance = float.MaxValue;
 		int vehicle = crew?.NearestEnterable(at, combat.PeerId, out vehicleDistance) ?? -1;
 		float nearestItem = Mathf.Min(gunDistance, canDistance);
+		float kioskDistance = crew?.KioskDistance(at) ?? float.PositiveInfinity;
 
-		if (LockerInReach(at, Mathf.Min(nearestItem, vehicleDistance)))
+		if (LockerInReach(at, Mathf.Min(Mathf.Min(nearestItem, vehicleDistance), kioskDistance)))
 		{
 			return "[E] weapon locker";
+		}
+
+		if (KioskInReach(at, kioskDistance, Mathf.Min(nearestItem, vehicleDistance)))
+		{
+			return "[E] vehicle kiosk";
 		}
 
 		if (vehicle >= 0 && vehicleDistance < nearestItem)
@@ -793,6 +803,14 @@ public partial class EmplacementManager : Node
 
 		return false;
 	}
+
+	/// <summary>
+	/// Whether the vehicle kiosk's footprint, <paramref name="kioskDistance"/> away, is in
+	/// reach (docs/GROUND_VEHICLES.md §5.3: the locker's metre) and nearer than any locker
+	/// and than <paramref name="nearestOther"/>, the nearest gun, can or hull in reach.
+	/// </summary>
+	private bool KioskInReach(Vector3 at, float kioskDistance, float nearestOther) =>
+		KioskRules.InReach(kioskDistance) && kioskDistance < nearestOther && kioskDistance < LockerDistance(at);
 
 	/// <summary>Whether this peer is still someone who could be holding something.</summary>
 	private static bool IsUsable(CombatManager combat, int peerId)

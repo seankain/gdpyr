@@ -23,7 +23,7 @@ public readonly struct KioskLine
 		SecondsLeft = (byte)Math.Clamp(secondsLeft, 0, byte.MaxValue);
 	}
 
-	/// <summary>A kind the field offers no kiosk for — every kind until the kiosk is on the map (GV6).</summary>
+	/// <summary>A kind the field offers no kiosk for: a map without one, or a pad that failed its check (§6.6).</summary>
 	public static KioskLine None => new(KioskStatus.Disabled, 0);
 }
 

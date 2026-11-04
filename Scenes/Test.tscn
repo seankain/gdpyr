@@ -11,6 +11,7 @@
 [ext_resource type="Script" uid="uid://d1v3u2uki6be7" path="res://Scripts/Fps/WeaponLocker.cs" id="9_locker"]
 [ext_resource type="PackedScene" uid="uid://cl1bqr2cnooqw" path="res://Scenes/Environment/Pillbox.tscn" id="10_kq4yt"]
 [ext_resource type="PackedScene" path="res://Scenes/Environment/VehicleTestStrip.tscn" id="11_strip"]
+[ext_resource type="Script" uid="uid://dfryvl8vlrxbw" path="res://Scripts/Fps/VehicleKiosk.cs" id="12_kiosk"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_xaant"]
 sky_top_color = Color(0.335715, 0.270978, 1, 1)
@@ -429,3 +430,13 @@ transform = Transform3D(-0.7202122, 0, -0.69375384, 0, 1, 0, 0.69375384, 0, -0.7
 
 [node name="VehicleTestStrip" parent="." instance=ExtResource("11_strip")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -104, 0.5, 52.5)
+
+[node name="VehicleKiosk1" type="Node3D" parent="." groups=["vehicle_kiosk"]]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -82.95, 0.8084, 91.375694)
+script = ExtResource("12_kiosk")
+
+[node name="Pad4x4" type="Marker3D" parent="VehicleKiosk1"]
+transform = Transform3D(0.6937538, 0, -0.7202122, 0, 1, 0, 0.7202122, 0, 0.6937538, 9.44853, -0.3084, -12.0449)
+
+[node name="PadHelicopter" type="Marker3D" parent="VehicleKiosk1"]
+transform = Transform3D(-0.6269355, 0, 0.7790712, 0, 1, 0, -0.7790712, 0, -0.6269355, 26.7849, -0.3084, 3.06968)

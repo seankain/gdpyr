@@ -1,12 +1,13 @@
 # gdpyr — Vehicles the ground force drives: a 4x4 and a helicopter
 
 **Status: GV0's baseline measured, GV1's engine-free rules built, GV2's 4x4 on the authority,
-GV3's wire, fog and prediction, GV4's combat from and against the vehicles, and GV5's helicopter
-(§12): on a listen host and over an 80 ms link a pilot takes off, flies the arena to the field's
-edge, lands on the floor and on the bunker's roof — which GV5 made solid — and gets out at 4 m while
-it flies, and it settles; a passenger fires from the door at full speed and their rounds leave
-where their tracers do; and the barracks mortar shells a helicopter in its reach and no longer
-holds one out of it. The kiosk is GV6's.** Written against `6699b03`; GV4 amends GV-D16 (§3). The
+GV3's wire, fog and prediction, GV4's combat from and against the vehicles, GV5's helicopter, and
+GV6's kiosk (§12): beside the locker in the bunker, a person takes each kind from the kiosk's panel
+onto its pad outside, loses it, is refused `not_ready` while its timer runs, and takes it again 45 s
+or 90 s after the loss, to the tick; a vehicle left alone for a minute is taken away and its kind
+counts down as for a loss; a new round makes both ready; and every refusal of §5.5 but `piloting`
+has been met in the game, on a listen host, and the request and its answer over an 80 ms link. The
+agent API, the scenarios and demos are GV7's.** Written against `6699b03`; GV4 amends GV-D16 (§3). The
 decisions (GV-D1–GV-D17, §3) are the defaults the plan is written against; each is one line to
 change, so flag any you disagree with before GV2 starts. The phases (GV0–GV9, §12) say what each builds, what checks it, and what is
 left for a person at the controls.
@@ -423,7 +424,9 @@ stop on its handbrake; the helicopter's rotor spins down and, in the air, it com
   bunker's door on the door's axis, facing away from it; `PadHelicopter` 25 m out, with 8 m clear
   round it. The editor sets their positions. At start each pad is checked — the hull's boxes ×1.2
   clear of World and Vehicles, ground within 0.6 m below — and a pad that fails disables its kind,
-  with an error in the log and a line on the debug HUD.
+  with an error in the log and a line on the debug HUD. **As built in GV6** (§12): the door's axis
+  meets the field's edge before 25 m, so `PadHelicopter` is 25 m from the door's middle round the
+  bunker's corner, facing the field's middle.
 - **A request**, `ClientRequestVehicle(byte kind)` → `KioskRules.Check` → the vehicle on its pad,
   facing its marker's −Z, and `ServerKioskResult(byte refusal)` to the asker alone. An agent's
   `vehicle` op (§11) goes through the same validator.
@@ -492,7 +495,8 @@ pose and rates the driver's replay restores, the occupants every client draws, a
 status the HUD shows. The kiosk's status is the drone shelf's precedent (CONTROL_POINTS.md §4.4):
 state in a message that is going out anyway. GV3 sends it on every snapshot tick, a 9-byte header
 when no vehicle is out, so a client nothing is fogged for learns of a removal from the records that
-stop naming it (§8.1). Until the kiosk is on the map (GV6) both kinds' status is `disabled`. From
+stop naming it (§8.1). On a map without a kiosk, and for a kind whose pad failed its check (§6.6),
+the status is `disabled`. From
 GV4 the gun's box byte and reload bit are the server's box; the gunner's own client keeps its own.
 
 ### 7.2 Requests
@@ -579,7 +583,8 @@ reconciled while seated (§6.7); its health, ammunition and kit apply as before.
   the refusal at its foot (`refused (not_ready): ready in 0:42`); it closes on a vehicle taken, death,
   leaving the reach, the round's end, `E` and `Esc`, and holds `InputFocus.Menu` while open, so the
   sampler sends neutral frames, as for the locker.
-- **Debug HUD:** `vehicles 2 · 3 aboard · 4x4 out · helicopter 0:42 · mispredicted 0.4/s · replay 9 · run over 3`.
+- **Debug HUD:** `vehicles 2 · 3 aboard · 4x4 out · helicopter 0:42 · run over 3 · mispredicted 0.4/s · replay 9`;
+  `off` for a kind the kiosk does not offer, and on the authority `· helicopter pad failed`.
 - **Presentation:** greybox boxes, cylinders for wheels and discs for rotors, in the ground force's
   colour; a seated body in its pose; a wreck burning as a unit vehicle's does. A unit run over falls
   as a shot one does, a round trip after the driver struck it, and the driver gets a hit marker.
@@ -1428,6 +1433,156 @@ What the phase left open, and what GV5 chose:
 **Done when** a person on a listen host takes each kind from the kiosk, loses it, waits out the timer
 and takes it again, and is refused with a reason at every gate in §5.5 they can reach.
 
+**Built on `12dc589`**, with GV0's .NET SDK and Godot.
+
+- **New, engine-free**, in `Scripts/Sim`: `KioskMenu.cs` — the panel as a model (`KioskMenu`):
+  `1` a 4x4, `2` a helicopter, `E` or Escape to close; one request at a time; taken closes it, a
+  refusal stays in its footer explained against the kind's line as it stands, so a `not_ready`
+  counts down (`refused (not_ready): ready in 0:42`); it closes on death, a side change, the role
+  menu, a seat, leaving the kiosk's reach and the round's end. `KioskHud` — the line under the
+  round's (`4x4 ready · helicopter 0:42`, every kind offered) and the debug row's (`off` for a kind
+  not offered). `KioskRules` gains where a vehicle stands on its pad (`PadOrigin`) and which way it
+  faces (`PadYaw`, the marker's −Z).
+- **New, engine side:** `Scripts/Fps/VehicleKiosk.cs` — the map node, the locker's twin: a cabinet,
+  its reach ring, and the `Pad4x4` and `PadHelicopter` markers under it, each pad's outline painted
+  half a metre outside the vehicle's collider. `Scripts/Fps/CrewVehicleManager.Kiosk.cs` — the
+  kiosk's half of the manager: finding it, each kind's timer, the pads' check, a request through
+  `KioskRules.Check` and the vehicle on its pad (`TryRequest`, the one door GV7's `vehicle` op will
+  use), a loss (`NoteLost`), the vehicles left alone, the round's reset, and
+  `ClientRequestVehicle`/`ServerKioskResult` (§7.2). `Scripts/Ui/KioskPanel.cs` — the widget.
+- **Changed:** `Scenes/Test.tscn` (`VehicleKiosk1` and its two pads); `CrewVehicle` (`FromKiosk`,
+  `LossCounted`, `Abandon`); `CrewVehicleManager` (the kiosk last in the server's tick, its lines
+  refreshed before each broadcast and reset on a new connection, a wreck's loss asked again, the
+  debug row); `CombatManager` (a kiosk vehicle's loss from the hit that wrecks it, not from its
+  removal; `RestartRound`'s `ResetRound`; the kiosk's panel opened by the use key on both ends,
+  beside the locker's; `AnswerKiosk`); `EmplacementManager` (the kiosk in the use key's reach and
+  the prompt, the nearest of locker, kiosk, gun, can and hull winning); `CombatHud` (the panel, the
+  kiosk's line under the round's — the label 72 px tall now, for three lines); `GameConsole`
+  (`kiosk <4x4|helicopter>`: the panel's request from anywhere, its answer to the scrollback).
+- **One defect found by the check, and fixed:** **a strategist was refused `dead`.** The validator
+  was handed `PlayerCombat.IsAlive`, which is false for anybody not on the ground force, and `dead`
+  is asked before `not_ground`; the console's `kiosk 4x4` in the strategist's chair read `refused
+  (dead): you are not on the field`. Dead is now the ground force's own — down on the field
+  (`IsDowned`) — and a strategist, or somebody still choosing a side, whose health the role menu
+  zeroes, is refused `not_ground`.
+- **Tests:** `dotnet test` **2,973 of 2,973 pass**, 17 of them new: `KioskMenuTests` (17). The test
+  project's one warning is still GV0's CS0649.
+- **Builds:** `Gdpyr.csproj`, `tools/Gdpyr.Playtest` and `tools/Gdpyr.AgentClient`, 0 warnings and 0
+  errors each.
+- **Engine checks:** `tools/EngineChecks/CrewKioskChecks.cs`, run by `scripts/crew-vehicle-checks.sh
+  kiosk` (a listen host on `Test.tscn` at `--fixed-fps 60`, its own player through the input map and
+  the panel's keys as keyboard events), `kiosk-pad` (the same, on a copy of the map with the
+  helicopter's pad moved into the bunker's door wall) and `kiosk-net` (a `--server` process and a
+  client through GV3's relay, 40 ± 10 ms each way, in real time, keeping in step by marker files).
+  **`kiosk`, 40 of 40 facts** and **`kiosk-pad`, 5 of 5**, in each of two runs of the final
+  code; **`kiosk-net`, 13 of 13** — the server's 4 and the client's 9 — in each of three, every
+  part exiting 0. On the final code, GV2's `physics` 66 of 66 and `game` 37 of 37, GV3's `net` 57
+  of 57 and GV5's `heli` 39 of 39, every part exiting 0. **GV4's `combat`, 57 of 57** in each of
+  two runs, its server aborting as it quit in both (signal 4, a Godot .NET assertion as the
+  runtime finalized — `!rc_owner` here), and the driver's crashing (signal 11) in the first; run
+  beside it, the untouched `12dc589` held the same 57 and its server aborted the same way, on
+  GV5's `script_bindings.is_empty()`. **GV5's `heli-net`, 39 of 39** in one run, every part exiting
+  0; in the other the passenger's tracer and round left 6.051 m apart, and its process crashed as
+  it quit — and `12dc589`, run beside it, failed the same fact (0.361 m), its pilot crashing as it
+  quit. Neither check asks the kiosk, and the base commit fails the same ways beside them: this
+  host's, as GV5's were.
+- **The scenario suite**, GV0's way (`--fixed-fps 60` through `GODOT`), on a copy of the final tree:
+  **34 of 41**, in 827 s of scenario wall time: GV0's eight failing but `htn_squad_retreats`, which
+  passes here as in GV0's second run. Against GV0's two runs four claims read differently, all in
+  scenarios GV0 names as spread: `htn_squad_retreats`' `squad_task[goal=4]` 6..10 (GV4 read 5..10);
+  `tactics_react_to_fire`'s `chair.units.28.last` 0.012..0.019 (as at GV3); and
+  `tactics_sniper_overwatch`'s `unit_task[goal=21]` 4..11, inside GV0's ranges, and `[goal=23]`
+  4..8, one above them. Run alone three times beside the untouched `12dc589`, that scenario's
+  `[goal=23]` read 2..7, 4..6 and 5..7 here and 2..8, 1..6 and 1..7 there: spread. No scenario puts a
+  crew vehicle down or asks the kiosk; this is the suite's check that nothing else moved.
+
+Where the map puts it, measured by `kiosk`:
+
+| | |
+|---|---|
+| `VehicleKiosk1` | (−82.95, 0.808, 91.38), on the bunker's floor; 3.50 m from the locker along its width, facing as it does: the cabinets 2.3 m apart, and no point of a 5 cm grid round them in both reaches |
+| `Pad4x4` | (−92.40, 0.5, 103.42): 8.000 m out of the door, 0.000 m off its axis, facing away from it. From the map's transforms, 15.3 m from the kiosk |
+| `PadHelicopter` | (−109.73, 0.5, 88.31): 25.000 m from the door's middle; nothing on the world layer or the vehicles' within 8 m of it, up to 8 m high; the nearest player spawn 16.19 m off; facing the field's middle. From the map's transforms, 10 m out from the door's face and 22.9 m along it, round the bunker's corner, 12.75 m from that corner and 9.8 m from the west wall's inner face |
+| Both pads' check at the start | clear, on the listen host and the dedicated server |
+
+Measured by `kiosk`, the listen host:
+
+| | |
+|---|---|
+| The prompt | `[E] weapon locker` at the locker, `[E] vehicle kiosk` at the kiosk |
+| A tap of E at the kiosk | the panel up, `InputFocus.Menu` held |
+| `1` | taken: `vehicle_requested` taken and `vehicle_spawned` in the asker's name; the 4x4 put down at (−92.399, 103.421), heading 133.93°, the pad's; the panel closed; `4x4 out · helicopter ready` |
+| `1` again, then `2` 4 ticks later | `refused (out): one is out already: …`, the panel open; then `refused (too_soon): one request a quarter-second; ask again` |
+| `2` with a 4x4 the console put on the helicopter's pad | `refused (pad_blocked): something is on its pad`; with it gone, `2` takes the helicopter, on its pad facing the field's middle |
+| A 4x4 the console put down elsewhere | the kiosk's 4x4 still ready: it counts against no cap |
+| E, Escape, a step out of reach | each closes the panel and lets the keyboard go |
+| A tank's round at each, the helicopter first | wrecks; `4x4 0:45 · helicopter 1:30`; `1` refused `not_ready: ready in 0:45`; both wrecks gone two seconds on |
+| Ready again | the 4x4 2,700 ticks after its loss, the helicopter 5,400 — 45 s and 90 s to the tick; each taken again from the panel |
+| Left alone | a 4x4 with nobody within 15 m, from the first check that found it so, taken away 3,600 ticks later, its kind counting down from 45 s; the helicopter with a person 5 m off kept, then gone a minute after they left |
+| The console's `kiosk 4x4` | from the open floor 74.4 m off, `not_at_kiosk`; at the wheel of a 4x4 in the bunker, its seat 0.58 m from the kiosk's footprint (in at the bed's door, round to the wheel with a hold of E), `seated`; carrying the heavy gun at the kiosk, `carrying`; behind it deployed 1.3 m off, `mounted`; dead there, `dead`; in the strategist's chair, `not_ground`; a kind this build has none of, `invalid` |
+| A new round, a 4x4 just wrecked | `4x4 0:45 · helicopter …` → `4x4 ready · helicopter ready`, nothing on the field |
+
+Measured by `kiosk-pad`: the helicopter's pad in the wall fails (`hull box 0 ×1.2 is not clear of the
+world and the vehicles`), the 4x4's passes; the HUD's line is `4x4 ready`; the debug row says
+`helicopter off · helicopter pad failed`; `2` on the panel is `refused (invalid): this kiosk does not
+offer it` beside `[2] helicopter — not offered here`; `1` still takes a 4x4.
+
+Measured by `kiosk-net` (three runs; the relay one-way 40.1–40.2 ms mean, 9.7–9.8 ms SD, 10.4–67.3 ms): the dedicated server checks both pads, and both
+pass; the client, put at the kiosk by the server, reads both kinds ready off the header, opens the
+panel from its own reading of its tap, and `1` is answered `taken` 10–12 ticks after the key,
+the 4x4 drawn on its pad and the header saying `4x4 out · helicopter ready`; `1` again is refused
+`out` in the footer; on the open floor, the console's `kiosk helicopter` says `asked the kiosk for a
+helicopter` and a round trip later `kiosk, helicopter: refused (not_at_kiosk): too far from the
+kiosk`; the server's event log has each request, in the client's name.
+
+Each guard, broken on a copy and the check run, and what failed:
+
+| Broken | Failed |
+|---|---|
+| the timer started by the spawn, not the loss | in `dotnet test`, `TheTimer_RunsFromTheLoss_NotTheSpawn` and `ANewRound_MakesItReadyAgain`; in `kiosk`, 6: both countdowns at the loss (`4x4 0:43 · helicopter 1:29`), both kinds ready 2,544 and 5,338 ticks after their losses, and neither kind counting after it was left alone |
+| the kiosk left out of the use key's reach | `kiosk`: the prompt at the kiosk is empty, the panel never opens, nothing is taken, and the check stops 21 facts in |
+| no vehicle ever left alone | `kiosk`: the 4x4 and the helicopter left alone are both still there, no countdown, and 2 on the field at the new round |
+| no loss counted | `kiosk`: both wrecks leave their kinds `out`, `1` meets the burning wreck on its pad (`pad_blocked`) instead of `not_ready`, both kinds ready again as soon as their wrecks are taken away (120 and 142 ticks after the hit), and nothing counts down after a vehicle is left alone |
+| the pads' hull boxes not checked | `kiosk-pad`: 4 of 5 — the helicopter's pad in the wall passes, the kiosk offers it, the debug row says nothing, and `2` is refused `pad_blocked` — the request's own check of the pad — rather than `invalid` |
+| a new round that clears the vehicles and keeps the timers | `kiosk`: the new round keeps `4x4 0:45 · helicopter 1:23` |
+| `PlayerCombat.IsAlive` handed to the validator | `kiosk`: the strategist is refused `dead` |
+| the client's tap at the kiosk not opening its panel | `kiosk-net`: 5 of the client's 9 — no panel, no answer, nothing drawn on the pad, the header still `4x4 ready · helicopter ready`, no refusal in a footer — and 1 of the server's 4: no request reached it |
+
+What the phase left open, and what GV6 chose:
+
+- **The helicopter's pad is off the door's axis** (§6.6). 25 m out on it is outside the field (GV2),
+  so it is 25 m from the door's middle the other way round the bunker's corner, with 8 m clear, and
+  faces the field's middle rather than the far corner. The 4x4's faces away from the door, toward
+  the north-west corner, as §6.6 says.
+- **Only the kiosk's vehicles count**: one the console (`vehicle`) or, from GV7, a scenario puts
+  down counts against no cap and its loss starts no timer. Every wire slot taken — only the console
+  can do that, the cap being two of four — reads as the kind being `out`.
+- **Every vehicle left alone goes**, the console's too: it holds one of the wire's four slots. The
+  check runs once a second and the minute from the first check that found it alone, so a vehicle
+  goes 60 to 61 s after it was left. **The 4x4's pad is 15.3 m from the kiosk**: a person standing at
+  the kiosk does not keep a 4x4 on its pad from going; the check's first run found it so.
+- **A loss starts its timer on the tick of the hit**, from `DamageCrewVehicle`, and the server's tick
+  asks again for a wreck it finds, once. A wreck burning on its pad blocks the pad for its two
+  seconds.
+- **Every request is paced**, honoured or not: a quarter-second from the last one, so `too_soon` is
+  two keys pressed quickly — `1` refused, then `2`.
+- **The pads are checked two physics frames after the kiosk is found**, once the map's CSG has its
+  collision, on the authority; until then, and on a map without a kiosk, both kinds are `disabled`.
+- **The panel asks whatever the status says**, greying out nothing but a second request while one is
+  awaited: `out`, `not_ready`, `pad_blocked`, `too_soon` and a pad's `invalid` are each a key a person
+  presses at the kiosk. The other gates close the panel (a death, a side change, a seat, leaving the
+  reach) or keep it from opening (carrying, a gun, a drone), so the console's `kiosk
+  <4x4|helicopter>` asks the same validator from anywhere, and its answer goes to the scrollback — on
+  a client a round trip later. **`piloting` is not met in the game**: launching a drone needs a drone
+  node held, and no check holds one; `VehicleKioskTests` holds the validator to it.
+- **The locker floats.** `WeaponLocker1`'s origin is at y 1.945, 1.137 m above the bunker's floor at
+  0.808 — where it was put before GV5 made the bunker solid — so its cabinet is drawn in the air; the
+  kiosk stands on the floor. The locker's reach is flat, so nothing measured changes; putting it on
+  the floor is the map's to do.
+- **Left for a person at the controls**: everything drawn — the cabinet and its ring, the pads'
+  outlines, the panel, the HUD's line — has been driven headless and never looked at (`TODO(GV6…)` in
+  `VehicleKiosk.cs` and `KioskPanel.cs`), nor run on a dedicated server over a real link.
+
 ### GV7 — Agent API, harness, scenarios and demos (2 days)
 
 §11 and §7.4; the ten scenarios; the whole suite against GV0's run. **Done when** the new scenarios
@@ -1460,6 +1615,7 @@ DEMOS.md (version 5), EFFECTS.md (§1's table), and this document's status.
 | Passengers fire from a moving seat | `vehicle_passenger_fires`; GV4's origin log over a link | Godot headless; `crew-vehicle-checks.sh combat`; a person, dedicated server |
 | The hull stops small arms; a tank's hit wrecks it; the crew get out | GV4's rifleman, tank and wreck facts | `crew-vehicle-checks.sh combat`: a `--server` process and three clients through the relay |
 | The kiosk's timer and cap | §5.5's facts; `vehicle_kiosk_cap` | `dotnet test`; Godot headless |
+| Each kind taken at the kiosk, lost, ready again on its timer and taken again; every refusal a person can meet; the pads checked | §8.5's panel facts (`KioskMenuTests`); GV6's kiosk, pad and link facts | `dotnet test`; `crew-vehicle-checks.sh kiosk` and `kiosk-pad` (a listen host) and `kiosk-net` (a `--server` process and a client through the relay); a person, both |
 | A collision at 8 m/s or more kills a unit on foot; a slower one does not | §5.9's facts; `vehicle_rams_infantry`, `vehicle_pushes_slowly` | `dotnet test`; Godot headless |
 | Driving feels like driving | GV3's error, misprediction and replay numbers | `crew-vehicle-checks.sh net`: a `--server` process and four clients, 80 ms RTT and 20 ms jitter through a relay; a person, dedicated server with `tc netem` |
 | The helicopter flies the arena, lands on the floor and the bunker's roof, and settles when its pilot gets out at 4 m; its passenger fires from the door | §5.2's facts; GV5's flight, roof, settling and door facts | `dotnet test`; `crew-vehicle-checks.sh heli` (a listen host) and `heli-net` (a `--server` process and two clients through the relay); a person, both |

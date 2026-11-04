@@ -30,6 +30,11 @@ namespace Gdpyr.Fps;
 /// draws the vehicle (§8.3). Who sits where on a client is what the records say, and
 /// nothing else. People ride; bots never drive or ride (GV-D15).</para>
 ///
+/// <para><b>The kiosk</b> (§6.6, <c>CrewVehicleManager.Kiosk.cs</c>): the map's
+/// <see cref="VehicleKiosk"/>, each kind's timer and cap, the pads' check at the start, a
+/// request through <see cref="KioskRules.Check"/> and the vehicle on its pad, and a
+/// vehicle left alone for a minute taken away.</para>
+///
 /// Like the other managers it never ticks itself: <see cref="PlayerManager"/> drives
 /// it, after the players are simulated and before the units are (§4), and on a client
 /// around its own prediction.
@@ -101,7 +106,11 @@ public partial class CrewVehicleManager : Node
 	private readonly CrewVehicleRecord[] _visibleRecords = new CrewVehicleRecord[SimConfig.MaxCrewVehicles];
 	private readonly bool[] _seenScratch = new bool[SimConfig.MaxCrewVehicles];
 
-	/// <summary>The kiosk's line for each kind: none on the field until the kiosk is (GV6).</summary>
+	/// <summary>
+	/// The kiosk's line for each kind (§7.1): on the authority from its timers
+	/// (<c>RefreshKioskLines</c>), on a client as the server last said it; nothing offered
+	/// on a map without a kiosk.
+	/// </summary>
 	private readonly KioskLine[] _kiosk = { KioskLine.None, KioskLine.None };
 
 	// ---- a client (§8) ---------------------------------------------------------------
@@ -190,7 +199,7 @@ public partial class CrewVehicleManager : Node
 	/// <summary>Client: <c>ServerCrewVehicles</c> payloads that failed to decode. Anything but 0 is a bug or an attack.</summary>
 	public int RejectedPackets { get; private set; }
 
-	/// <summary>The kiosk's line for a kind, as the server last said it (§7.1). For the HUD (GV6).</summary>
+	/// <summary>The kiosk's line for a kind (§7.1): the authority's own, or as the server last said it. For the HUD.</summary>
 	public KioskLine KioskLineOf(byte kind) => kind < _kiosk.Length ? _kiosk[kind] : KioskLine.None;
 
 	/// <summary>Client: the tick of the newest record for <paramref name="slot"/>; 0 with none.</summary>
@@ -347,8 +356,11 @@ public partial class CrewVehicleManager : Node
 			}
 
 			// A wreck burns where it stopped, and is taken away two seconds after (GV-D12).
+			// Its loss was counted by the hit that wrecked it; asked again, once, in case
+			// anything else ever wrecks one.
 			if (vehicle.Destroyed)
 			{
+				NoteLost(vehicle, vehicle.DestroyedTick);
 				if (tick - vehicle.DestroyedTick >= (uint)CrewCombat.WreckBurnTicks)
 				{
 					Remove(slot);
@@ -378,6 +390,10 @@ public partial class CrewVehicleManager : Node
 
 		_frames.Clear();
 		PinSeated();
+
+		// The kiosk last: its pads' check, the vehicles left alone, and each kind's line
+		// (§6.6). A loss later this tick, in CombatManager's post-tick, starts its own timer.
+		ServerKiosk(tick);
 	}
 
 	/// <summary>
@@ -1024,7 +1040,8 @@ public partial class CrewVehicleManager : Node
 	/// The console's <c>vehicle &lt;4x4|helicopter&gt;</c> (docs/GROUND_VEHICLES.md §12, GV2):
 	/// one of <paramref name="kind"/> on the ground in front of <paramref name="combat"/>,
 	/// facing the way they look. Offline or on a listen host, for its own player; a test
-	/// stand-in for the kiosk (GV6), with none of its timers or caps.
+	/// stand-in for the kiosk (§6.6), with none of its timers or caps: what it puts down
+	/// counts against no kind's cap, and its loss starts no timer.
 	/// </summary>
 	public bool SpawnInFrontOf(PlayerCombat combat, byte kind, out string message)
 	{
@@ -1208,12 +1225,12 @@ public partial class CrewVehicleManager : Node
 	}
 
 	/// <summary>
-	/// The debug HUD's row (§8.5): <c>vehicles 2 · 3 aboard</c>, and for the driver's client
+	/// The debug HUD's row (§8.5): <c>vehicles 2 · 3 aboard · 4x4 out · helicopter 0:42</c>, and for the driver's client
 	/// <c>· mispredicted 0.4/s · replay 9 (longest 12) · error 0.8/2.1 cm</c>.
 	/// </summary>
 	public string DebugLine()
 	{
-		string line = $"{Count} · {Aboard} aboard · run over {RunOverTotal}";
+		string line = $"{Count} · {Aboard} aboard · {KioskDebugLine()} · run over {RunOverTotal}";
 		if (_drivenSlot < 0)
 		{
 			return line;
@@ -1239,6 +1256,9 @@ public partial class CrewVehicleManager : Node
 		{
 			return;
 		}
+
+		// The kiosk's lines as they stand after this tick's losses (§7.1).
+		RefreshKioskLines(net.Tick);
 
 		int count = 0;
 		for (int slot = 0; slot < _vehicles.Length; slot++)
@@ -1731,6 +1751,7 @@ public partial class CrewVehicleManager : Node
 		_roster.Clear();
 		_pending.Clear();
 		_seated.Clear();
+		Array.Fill(_kiosk, KioskLine.None);
 		_renderClock.Reset();
 		_drivenSlot = -1;
 		_crewLedger?.Reset();

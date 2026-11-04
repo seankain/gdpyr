@@ -107,6 +107,18 @@ public partial class CrewVehicle : CharacterBody3D
 	/// <summary>Server: units it has run over since it was put on the field (§6.5). For the debug HUD.</summary>
 	public int RunOver { get; set; }
 
+	/// <summary>
+	/// Server: handed out by the kiosk (§6.6), so it counts against its kind's cap and its
+	/// loss starts its kind's timer. False for one the console or a scenario put down.
+	/// </summary>
+	public bool FromKiosk { get; set; }
+
+	/// <summary>Server: its loss has been counted against the kiosk's timer, once (GV-D13).</summary>
+	public bool LossCounted { get; set; }
+
+	/// <summary>Server: how long it has been left alone, checked once a second (GV-D13).</summary>
+	public AbandonClock Abandon;
+
 	/// <summary>Its pose over the last half second (§5.6): what a seated shooter's round will leave from.</summary>
 	public PoseHistory Poses { get; } = new();
 

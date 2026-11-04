@@ -82,7 +82,7 @@ public enum AgentEventKind : byte
 
 	/// <summary>
 	/// A crew vehicle was asked for at the vehicle kiosk, and the answer
-	/// (docs/GROUND_VEHICLES.md §11). Emitted once the kiosk is on the field (GV6).
+	/// (docs/GROUND_VEHICLES.md §11): every request, a person's panel or console and an agent's alike.
 	/// </summary>
 	VehicleRequested = 23,
 

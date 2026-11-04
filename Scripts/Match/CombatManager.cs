@@ -351,13 +351,14 @@ public partial class CombatManager : Node
 
 		EmplacementManager emplacements = EmplacementManager.Instance;
 
-		// A tap at a weapon locker opens its panel in the player's own process
-		// (docs/LOADOUT.md §7.2). On a listen host the host's player is simulated here,
-		// so this is that process; every other player's client opens its own from its
-		// prediction of the same frames (ClientSimulateLocal).
-		if (emplacements?.ServerUse(combat, input, tick) == UseAction.OpenLocker && combat == Local)
+		// A tap at a weapon locker or the vehicle kiosk opens its panel in the player's own
+		// process (docs/LOADOUT.md §7.2, docs/GROUND_VEHICLES.md §6.6). On a listen host the
+		// host's player is simulated here, so this is that process; every other player's
+		// client opens its own from its prediction of the same frames (ClientSimulateLocal).
+		UseAction use = emplacements?.ServerUse(combat, input, tick) ?? UseAction.None;
+		if (combat == Local)
 		{
-			_hud?.OpenLocker(combat);
+			OpenPanelFor(use, combat);
 		}
 
 		// In a crew vehicle's seat (docs/GROUND_VEHICLES.md §6.4): from the hull as the
@@ -1288,6 +1289,10 @@ public partial class CombatManager : Node
 		vehicle.Health = 0f;
 		vehicle.Destroyed = true;
 		vehicle.DestroyedTick = tick;
+
+		// A kiosk vehicle's loss starts its kind's timer now, not when the wreck is taken
+		// away (GV-D13).
+		CrewVehicleManager.Instance?.NoteLost(vehicle, tick);
 		if (_crewWreckCount < _crewWrecks.Length)
 		{
 			_crewWrecks[_crewWreckCount++] = new CrewWreck
@@ -1842,8 +1847,9 @@ public partial class CombatManager : Node
 		UnitManager.Instance?.ClearUnits();
 
 		// Every crew vehicle off the field, its riders put down where they sat before the
-		// respawns below put them back on their spawns (docs/GROUND_VEHICLES.md §6.6).
-		CrewVehicleManager.Instance?.ClearAll();
+		// respawns below put them back on their spawns, and both kinds ready at the kiosk
+		// (docs/GROUND_VEHICLES.md §6.6).
+		CrewVehicleManager.Instance?.ResetRound(tick);
 
 		// A fresh round asks the people here which side they want to play it on,
 		// before anybody is put back on the field (docs/IMPLEMENTATION_PLAN.md §M3).
@@ -2212,12 +2218,10 @@ public partial class CombatManager : Node
 
 		// The use press, read where the server reads it — after the death check, before
 		// the gun — from the same frames: the one action of it that is this client's to
-		// take is opening a weapon locker's panel (docs/LOADOUT.md §7.2). Everything else
-		// a press does is the server's, a round trip later.
-		if (EmplacementManager.Instance?.PredictUse(combat, input) == UseAction.OpenLocker)
-		{
-			_hud?.OpenLocker(combat);
-		}
+		// take is opening a weapon locker's or the vehicle kiosk's panel (docs/LOADOUT.md
+		// §7.2, docs/GROUND_VEHICLES.md §6.6). Everything else a press does is the
+		// server's, a round trip later.
+		OpenPanelFor(EmplacementManager.Instance?.PredictUse(combat, input) ?? UseAction.None, combat);
 
 		// The server's rule for a seated player, over the same frames, from the hull as this
 		// client draws it — where the player sees their seat (docs/GROUND_VEHICLES.md §6.4).
@@ -2780,6 +2784,40 @@ public partial class CombatManager : Node
 		}, net.Tick, out KitRefusal refusal);
 
 		RpcId(sender, MethodName.ServerKitResult, (byte)refusal);
+	}
+
+	/// <summary>The local player's own panel for a press of the use key: the locker's or the kiosk's.</summary>
+	private void OpenPanelFor(UseAction use, PlayerCombat combat)
+	{
+		switch (use)
+		{
+			case UseAction.OpenLocker:
+				_hud?.OpenLocker(combat);
+				break;
+
+			case UseAction.OpenKiosk:
+				_hud?.OpenKiosk(combat);
+				break;
+		}
+	}
+
+	/// <summary>
+	/// The vehicle kiosk's answer to the local player (docs/GROUND_VEHICLES.md §6.6), from
+	/// <c>CrewVehicleManager</c>: to the kiosk's panel when it asked, and to the console's
+	/// scrollback when the console's <c>kiosk</c> did.
+	/// </summary>
+	public void AnswerKiosk(byte kind, KioskRefusal refusal)
+	{
+		if (_hud != null && _hud.AnswerKiosk(refusal))
+		{
+			return;
+		}
+
+		string answer = refusal == KioskRefusal.None
+			? "taken: it is on its pad"
+			: $"refused ({KioskRules.CodeOf(refusal)}): "
+				+ KioskMenu.Explain(refusal, CrewVehicleManager.Instance?.KioskLineOf(kind) ?? KioskLine.None);
+		GameConsole.Print($"kiosk, {KioskMenu.NameOf(kind)}: {answer}");
 	}
 
 	/// <summary>Server -> the requester alone: whether its kit was taken, and if not, why (§6.2).</summary>
