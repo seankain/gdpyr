@@ -378,6 +378,12 @@ public partial class GameConsole : CanvasLayer
 		_commands.Register("vehicle", "vehicle <4x4|helicopter|clear>",
 			"put a 4x4 or a helicopter in front of you, or take every one away", Vehicle);
 
+		// The vehicle kiosk's request from anywhere (docs/GROUND_VEHICLES.md §6.6): the
+		// panel's own path to the one validator, so every refusal it gives can be met — the
+		// ones the panel's reach and its neutral frames keep a person from.
+		_commands.Register("kiosk", "kiosk <4x4|helicopter>",
+			"ask the vehicle kiosk for one, wherever you are: it answers or says why not", Kiosk);
+
 		_commands.Register("clear", "clear", "empty the scrollback", _ =>
 		{
 			_lines.Clear();
@@ -466,6 +472,40 @@ public partial class GameConsole : CanvasLayer
 		return crew.SpawnInFrontOf(Match.CombatManager.Instance?.Local, kind, out string message)
 			? ConsoleResult.Say(message)
 			: ConsoleResult.Failed(message);
+	}
+
+	private static ConsoleResult Kiosk(IReadOnlyList<string> args)
+	{
+		if (args.Count != 1 || !TryParseVehicleKind(args[0], out byte kind))
+		{
+			return ConsoleResult.Failed("kiosk <4x4|helicopter>");
+		}
+
+		if (Fps.CrewVehicleManager.Instance is not { } crew || Match.CombatManager.Instance?.Local == null)
+		{
+			return ConsoleResult.Failed("no player to ask for one");
+		}
+
+		// The authority answers on the spot and a client a round trip later; either way
+		// CombatManager.AnswerKiosk prints the answer to this scrollback.
+		return crew.RequestVehicle(kind, out _)
+			? ConsoleResult.Done()
+			: ConsoleResult.Say($"asked the kiosk for a {CrewVehicleCatalog.NameOf(kind)}");
+	}
+
+	private static bool TryParseVehicleKind(string text, out byte kind)
+	{
+		for (byte id = 0; id < CrewVehicleCatalog.Count; id++)
+		{
+			if (string.Equals(text, CrewVehicleCatalog.NameOf(id), StringComparison.OrdinalIgnoreCase))
+			{
+				kind = id;
+				return true;
+			}
+		}
+
+		kind = byte.MaxValue;
+		return false;
 	}
 
 	private static readonly string ExplodeUsage =

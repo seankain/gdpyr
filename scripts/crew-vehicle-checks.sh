@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 #
-# The crew vehicles' engine checks (docs/GROUND_VEHICLES.md §12, GV2 to GV5).
+# The crew vehicles' engine checks (docs/GROUND_VEHICLES.md §12, GV2 to GV6).
 #
 # What the 4x4 relies on the engine for — a body pushed out of a hull by its own
 # MoveAndSlide, a bevelled hull in MotionMode.Floating sliding off a wall's end at
 # 18 m/s, the springs over the test strip — and the 4x4 and the helicopter driven end
 # to end on a listen host, through the input map. Headless, on a copy of the tree with
 # tools/EngineChecks/CrewVehicleChecks.cs, CrewVehicleNetChecks.cs and CrewVehicleCombatChecks.cs
-# added as autoloads, and CrewHelicopterChecks.cs as well for `heli` and `heli-net`: the game
-# itself never compiles or loads them.
+# added as autoloads, CrewHelicopterChecks.cs as well for `heli` and `heli-net`, and
+# CrewKioskChecks.cs for `kiosk` and `kiosk-pad`: the game itself never compiles or loads them.
 #
 #   ./scripts/crew-vehicle-checks.sh            # physics, then the listen host
 #   ./scripts/crew-vehicle-checks.sh physics
@@ -17,6 +17,9 @@
 #   ./scripts/crew-vehicle-checks.sh combat     # GV4: a dedicated server, a driver, a gunner, a passenger
 #   ./scripts/crew-vehicle-checks.sh heli       # GV5: the helicopter on a listen host
 #   ./scripts/crew-vehicle-checks.sh heli-net   # GV5: a dedicated server, a pilot and a door passenger
+#   ./scripts/crew-vehicle-checks.sh kiosk      # GV6: the vehicle kiosk on a listen host
+#   ./scripts/crew-vehicle-checks.sh kiosk-pad  # GV6: the same map with the helicopter's pad in a wall
+#   ./scripts/crew-vehicle-checks.sh kiosk-net  # GV6: a dedicated server and a client asking the kiosk
 #
 # `net` runs in real time, not at --fixed-fps: a dedicated server, a UDP relay that
 # delays every datagram NET_DELAY_MS ± NET_JITTER_MS each way (40 ± 10 by default: 80 ms
@@ -62,17 +65,36 @@ fi
 mkdir -p "$COPY/EngineChecks"
 cp "$PROJECT_DIR/tools/EngineChecks/CrewVehicleChecks.cs" "$PROJECT_DIR/tools/EngineChecks/CrewVehicleNetChecks.cs" \
 	"$PROJECT_DIR/tools/EngineChecks/CrewVehicleCombatChecks.cs" "$PROJECT_DIR/tools/EngineChecks/CrewHelicopterChecks.cs" \
-	"$COPY/EngineChecks/"
+	"$PROJECT_DIR/tools/EngineChecks/CrewKioskChecks.cs" "$COPY/EngineChecks/"
 sed -i 's#^GameConsole="\*res://Scripts/Ui/GameConsole.cs"#&\nCrewVehicleChecks="*res://EngineChecks/CrewVehicleChecks.cs"\nCrewVehicleNetChecks="*res://EngineChecks/CrewVehicleNetChecks.cs"\nCrewVehicleCombatChecks="*res://EngineChecks/CrewVehicleCombatChecks.cs"#' \
 	"$COPY/project.godot"
 
-# GV5's checks are an autoload only while `heli` or `heli-net` runs, so that every other mode
-# runs with the three autoloads it was written against (docs/GROUND_VEHICLES.md §12, GV5).
-heli_autoload() {
-	sed -i '/^CrewHelicopterChecks=/d' "$COPY/project.godot"
+# GV5's and GV6's checks are each an autoload only while their own modes run, so that every
+# other mode runs with the three autoloads it was written against (docs/GROUND_VEHICLES.md §12,
+# GV5): `extra_autoload CrewHelicopterChecks`, `extra_autoload CrewKioskChecks`, or none.
+extra_autoload() {
+	sed -i '/^CrewHelicopterChecks=/d; /^CrewKioskChecks=/d' "$COPY/project.godot"
+	if [ -n "$1" ]; then
+		sed -i "s#^CrewVehicleCombatChecks=.*#&\\n$1=\"*res://EngineChecks/$1.cs\"#" "$COPY/project.godot"
+	fi
+}
+
+# GV6's failing pad: the helicopter's pad moved into the bunker's door wall, 8 m along it from
+# the door, for `kiosk-pad`; the map put back after.
+bad_pad() {
 	if [ "$1" = "on" ]; then
-		sed -i 's#^CrewVehicleCombatChecks=.*#&\nCrewHelicopterChecks="*res://EngineChecks/CrewHelicopterChecks.cs"#' \
-			"$COPY/project.godot"
+		cp "$COPY/Scenes/Test.tscn" "$COPY/Scenes/Test.tscn.orig"
+		python3 - "$COPY/Scenes/Test.tscn" <<'PY'
+import sys
+path = sys.argv[1]
+text = open(path).read()
+old = 'transform = Transform3D(-0.6269355, 0, 0.7790712, 0, 1, 0, -0.7790712, 0, -0.6269355, 26.7849, -0.3084, 3.06968)'
+new = 'transform = Transform3D(-0.6269355, 0, 0.7790712, 0, 1, 0, -0.7790712, 0, -0.6269355, 9.2302, -0.3084, -0.7337)'
+assert text.count(old) == 1, 'the helicopter pad is not where GV6 put it'
+open(path, 'w').write(text.replace(old, new))
+PY
+	elif [ -f "$COPY/Scenes/Test.tscn.orig" ]; then
+		mv "$COPY/Scenes/Test.tscn.orig" "$COPY/Scenes/Test.tscn"
 	fi
 }
 
@@ -244,12 +266,79 @@ run_heli_net() {
 	return "$status"
 }
 
+# GV6: the dedicated server, the relay, and one client asking the kiosk through it.
+run_kiosk_net() {
+	local dir="$COPY/kiosk"
+	mkdir -p "$dir"
+	rm -f "$dir"/*
+
+	CREW_KIOSK_CHECK=server CREW_NET_DIR="$dir" timeout 600 "$GODOT" --headless --path "$COPY" --max-fps 60 \
+		-- --server "$NET_SERVER_PORT" --no-bots > "$COPY/kiosk-server.log" 2>&1 &
+	local server=$!
+	python3 "$PROJECT_DIR/tools/EngineChecks/delay_relay.py" --listen "$NET_RELAY_PORT" \
+		--server "127.0.0.1:$NET_SERVER_PORT" --delay-ms "$NET_DELAY_MS" --jitter-ms "$NET_JITTER_MS" \
+		> "$COPY/kiosk-relay.log" 2>&1 &
+	local relay=$!
+	sleep 5
+
+	CREW_KIOSK_CHECK=client CREW_NET_DIR="$dir" timeout 600 "$GODOT" --headless --path "$COPY" --max-fps 60 \
+		-- --client "127.0.0.1:$NET_RELAY_PORT" > "$COPY/kiosk-client.log" 2>&1 &
+	local client=$!
+
+	local status=0
+	local code
+	wait "$server"
+	code=$?
+	echo "kiosk-server: exit $code" >> "$COPY/kiosk-exits.log"
+	[ "$code" -ne 0 ] && status=1
+	wait "$client"
+	code=$?
+	echo "kiosk-client: exit $code" >> "$COPY/kiosk-exits.log"
+	[ "$code" -ne 0 ] && status=1
+
+	kill "$relay" 2>/dev/null
+	wait "$relay" 2>/dev/null
+
+	for part in server client; do
+		[ -f "$COPY/kiosk-$part.log" ] && grep '^\[checks\]' "$COPY/kiosk-$part.log"
+	done
+	tail -n 1 "$COPY/kiosk-relay.log"
+	cat "$COPY/kiosk-exits.log"
+	return "$status"
+}
+
 failed=0
 for mode in "${MODES[@]}"; do
 	if [ "$mode" = "heli" ] || [ "$mode" = "heli-net" ]; then
-		heli_autoload on
+		extra_autoload CrewHelicopterChecks
+	elif [ "$mode" = "kiosk" ] || [ "$mode" = "kiosk-pad" ] || [ "$mode" = "kiosk-net" ]; then
+		extra_autoload CrewKioskChecks
 	else
-		heli_autoload off
+		extra_autoload ""
+	fi
+
+	if [ "$mode" = "kiosk-net" ]; then
+		run_kiosk_net
+		status=$?
+		echo "kiosk-net: exit $status"
+		[ "$status" -ne 0 ] && failed=1
+		continue
+	fi
+
+	if [ "$mode" = "kiosk" ] || [ "$mode" = "kiosk-pad" ]; then
+		part=listen
+		if [ "$mode" = "kiosk-pad" ]; then
+			part=badpad
+			bad_pad on
+		fi
+		CREW_KIOSK_CHECK=$part timeout 900 "$GODOT" --headless --path "$COPY" --fixed-fps 60 \
+			-- --listen "$GAME_PORT" --no-bots > "$COPY/$mode.log" 2>&1
+		status=$?
+		bad_pad off
+		grep '^\[checks\]' "$COPY/$mode.log"
+		echo "$mode: exit $status"
+		[ "$status" -ne 0 ] && failed=1
+		continue
 	fi
 
 	if [ "$mode" = "heli-net" ]; then

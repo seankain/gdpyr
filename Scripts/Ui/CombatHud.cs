@@ -27,6 +27,7 @@ public partial class CombatHud : CanvasLayer
 	private Label _prompt;
 	private Panel _hitMarker;
 	private LoadoutPanel _panel;
+	private KioskPanel _kiosk;
 
 	private float _hitMarkerAge = float.MaxValue;
 	private bool _hitMarkerWasKill;
@@ -63,7 +64,8 @@ public partial class CombatHud : CanvasLayer
 
 		_status.Size = new Vector2(240f, 80f);
 		_ammo.Size = new Vector2(236f, 56f);
-		_round.Size = new Vector2(320f, 48f);
+		// Three lines: the round, the drones and the vehicle kiosk (docs/GROUND_VEHICLES.md §8.5).
+		_round.Size = new Vector2(320f, 72f);
 		_notice.Size = new Vector2(800f, 72f);
 
 		_hitMarker = new Panel
@@ -79,6 +81,9 @@ public partial class CombatHud : CanvasLayer
 
 		_panel = new LoadoutPanel { Name = "LoadoutPanel" };
 		root.AddChild(_panel);
+
+		_kiosk = new KioskPanel { Name = "KioskPanel" };
+		root.AddChild(_kiosk);
 	}
 
 	/// <summary>
@@ -92,6 +97,25 @@ public partial class CombatHud : CanvasLayer
 	public void AnswerKit(KitRefusal refusal) => _panel?.Answer(refusal);
 
 	/// <summary>
+	/// The local player's own tap at the vehicle kiosk (docs/GROUND_VEHICLES.md §6.6), as
+	/// for the locker: from its predicted frames on a client, from the authority's own use
+	/// step on a listen host. Not while the locker's panel is up.
+	/// </summary>
+	public void OpenKiosk(PlayerCombat combat)
+	{
+		if (_panel is { IsOpen: false })
+		{
+			_kiosk?.Open(combat);
+		}
+	}
+
+	/// <summary>The kiosk's answer; false when the kiosk's panel was not waiting for one.</summary>
+	public bool AnswerKiosk(KioskRefusal refusal) => _kiosk != null && _kiosk.Answer(refusal);
+
+	/// <summary>The kiosk's panel. For the checks.</summary>
+	public KioskPanel Kiosk => _kiosk;
+
+	/// <summary>
 	/// The death screen's <c>E</c> (docs/LOADOUT.md §7.3): the same panel, editing the
 	/// next spawn's kit. A dead player's frames carry no buttons (InputFrame.LookOnly),
 	/// so the key means nothing else while they are down; once the panel is up it is the
@@ -99,7 +123,7 @@ public partial class CombatHud : CanvasLayer
 	/// </summary>
 	public override void _UnhandledInput(InputEvent @event)
 	{
-		if (_panel == null || _panel.IsOpen || InputFocus.TextEntry || GetTree().Paused
+		if (_panel == null || _panel.IsOpen || _kiosk is { IsOpen: true } || InputFocus.TextEntry || GetTree().Paused
 			|| !@event.IsActionPressed("use") || @event.IsEcho())
 		{
 			return;
@@ -150,6 +174,7 @@ public partial class CombatHud : CanvasLayer
 			_notice.Text = string.Empty;
 			_prompt.Text = string.Empty;
 			_panel.Refresh(default);
+			_kiosk.Refresh(default);
 			if (spectating)
 			{
 				_round.Text = match.Phase == RoundPhase.Live
@@ -175,6 +200,7 @@ public partial class CombatHud : CanvasLayer
 			_notice.Text = string.Empty;
 			_prompt.Text = string.Empty;
 			_panel.Refresh(default);
+			_kiosk.Refresh(default);
 			return;
 		}
 
@@ -212,11 +238,28 @@ public partial class CombatHud : CanvasLayer
 			}
 		}
 
+		// The kiosk's line (docs/GROUND_VEHICLES.md §8.5): 4x4 ready · helicopter 0:42.
+		if (CrewVehicleManager.Instance is { } crew)
+		{
+			string kiosk = KioskHud.Line(crew.KioskLines);
+			if (kiosk.Length > 0)
+			{
+				_round.Text += $"\n{kiosk}";
+			}
+		}
+
 		bool dead = combat.IsDowned;
 		bool roundOver = match.Phase == RoundPhase.Ended;
 		_panel.Refresh(new DraftSituation(combat.IsAlive, combat.Team == Team.GroundForce, awaitingRole, roundOver,
 			combat.Character != null && emplacements != null
 				? emplacements.LockerDistance(combat.Character.SimPosition)
+				: float.PositiveInfinity));
+
+		CrewVehicleManager vehicles = CrewVehicleManager.Instance;
+		_kiosk.Refresh(new KioskMenuSituation(combat.IsAlive, combat.Team == Team.GroundForce, awaitingRole, roundOver,
+			vehicles != null && vehicles.IsSeated(combat.PeerId),
+			combat.Character != null && vehicles != null
+				? vehicles.KioskDistance(combat.Character.SimPosition)
 				: float.PositiveInfinity));
 
 		_notice.Text = !dead ? string.Empty
@@ -225,7 +268,7 @@ public partial class CombatHud : CanvasLayer
 
 		// The panel takes the middle of the screen, where the prompt is; what the prompt
 		// would say there is what the panel is for.
-		_prompt.Text = dead || awaitingRole || _panel.IsOpen ? string.Empty : JoinLines(emplacements?.PromptFor(combat, tick),
+		_prompt.Text = dead || awaitingRole || _panel.IsOpen || _kiosk.IsOpen ? string.Empty : JoinLines(emplacements?.PromptFor(combat, tick),
 			ResupplyLine(combat, emplacements, tick));
 	}
 
