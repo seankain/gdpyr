@@ -132,6 +132,12 @@ public sealed class EpisodeMetrics
 		"squad_drill" => "phase",
 		"kit" => "primary",
 		"resupply" => "rounds",
+		"vehicle_requested" => "refusal",
+		"vehicle_spawned" => "type",
+		"vehicle_entered" or "vehicle_exited" => "seat",
+		"vehicle_damaged" => "dealt",
+		"vehicle_destroyed" => "weapon",
+		"vehicle_rammed" => "speed",
 		_ => null,
 	};
 
@@ -314,6 +320,8 @@ public sealed class EpisodeMetrics
 		"seat_attached", "seat_released", "structure_placed", "structure_built", "structure_lost",
 		"squad_task", "contact_spotted", "node_contested", "unit_embarked", "unit_disembarked", "dropship_landed",
 		"grenade_thrown", "unit_task", "squad_drill", "kit", "resupply",
+		"vehicle_requested", "vehicle_spawned", "vehicle_entered", "vehicle_exited", "vehicle_damaged",
+		"vehicle_destroyed", "vehicle_rammed",
 	};
 
 	/// <summary>
@@ -346,6 +354,13 @@ public sealed class EpisodeMetrics
 		["squad_drill"] = new[] { "squad", "phase", "elements", "x", "z" },
 		["kit"] = new[] { "peer", "primary", "armour", "magazines", "grenades" },
 		["resupply"] = new[] { "peer", "rounds", "grenades", "armour", "since_hurt" },
+		["vehicle_requested"] = new[] { "peer", "type", "refusal" },
+		["vehicle_spawned"] = new[] { "vehicle", "type", "peer", "x", "z" },
+		["vehicle_entered"] = new[] { "peer", "vehicle", "seat" },
+		["vehicle_exited"] = new[] { "peer", "vehicle", "seat", "x", "z" },
+		["vehicle_damaged"] = new[] { "attacker", "vehicle", "weapon", "dealt", "health" },
+		["vehicle_destroyed"] = new[] { "attacker", "vehicle", "weapon", "x", "z" },
+		["vehicle_rammed"] = new[] { "vehicle", "unit", "killer", "speed", "x", "z" },
 	};
 
 	/// <summary>

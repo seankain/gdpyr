@@ -319,6 +319,7 @@ public class LoadoutDraftTests
 	[InlineData(KitRefusal.Carrying, "carrying")]
 	[InlineData(KitRefusal.Invalid, "invalid")]
 	[InlineData(KitRefusal.TooSoon, "too_soon")]
+	[InlineData(KitRefusal.Seated, "seated")]
 	public void ARefusalGoesInTheFooterAndLeavesThePanelOpenToTryAgain(KitRefusal refusal, string code)
 	{
 		LoadoutDraft draft = Opened(Default);

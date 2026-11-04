@@ -71,6 +71,9 @@ public partial class PlayerManager : Node
 
 	private readonly PredictionLedger _ledger = new();
 	private readonly InputFrame[] _inputScratch = new InputFrame[InputCodec.MaxFrames];
+
+	/// <summary>Client: how far behind the last sampled frame's tick the field was drawn, as the input header carries it.</summary>
+	private byte _lastDrawnBehind;
 	private readonly PlayerSnapshot[] _snapshotScratch = new PlayerSnapshot[SnapshotCodec.MaxPlayers];
 
 	/// <summary>One strategist's view of the roster, compacted out of <see cref="_snapshotScratch"/>.</summary>
@@ -140,6 +143,33 @@ public partial class PlayerManager : Node
 		_players.TryGetValue(peerId, out Player player)
 			? player.Queue?.ConsumedTick ?? NetworkManager.Instance?.Tick ?? 0
 			: 0;
+
+	/// <summary>
+	/// Server: frames of <paramref name="peerId"/>'s the jitter buffer holds after each
+	/// tick's, smoothed (<see cref="ServerInputQueue.SmoothedDepth"/>) — how long their
+	/// frames wait to be stepped, one of the terms of a seated shooter's view tick
+	/// (docs/GROUND_VEHICLES.md §5.6). 0 for a peer with no buffer: the listen host's own
+	/// player and the bots.
+	/// </summary>
+	public float InputBufferDepthOf(int peerId) =>
+		_players.TryGetValue(peerId, out Player player) ? player.Queue?.SmoothedDepth ?? 0f : 0f;
+
+	/// <summary>
+	/// Server: whether <paramref name="peerId"/> plays from a client of its own across a link,
+	/// and so draws the field behind the server (docs/GROUND_VEHICLES.md §5.6). False for
+	/// the listen host's own player, a bot and an agent's seat.
+	/// </summary>
+	public bool HasRemoteClient(int peerId) =>
+		_players.TryGetValue(peerId, out Player player) && player.Queue != null;
+
+	/// <summary>
+	/// Server: the tick <paramref name="peerId"/>'s client says it was drawing the field at
+	/// when it sampled the frame stepped this tick (<see cref="ServerInputQueue.ConsumedDrawnTick"/>):
+	/// where a seated shooter's round leaves from (docs/GROUND_VEHICLES.md §5.6). NaN when
+	/// it has not said, and for a peer with no client across a link.
+	/// </summary>
+	public float DrawnTickOf(int peerId) =>
+		_players.TryGetValue(peerId, out Player player) ? player.Queue?.ConsumedDrawnTick ?? float.NaN : float.NaN;
 
 	/// <summary>Input packets that failed to decode. Anything but 0 is a bug or an attack.</summary>
 	public int RejectedInputPackets { get; private set; }
@@ -1104,15 +1134,16 @@ public partial class PlayerManager : Node
 			return;
 		}
 
-		if (!InputCodec.TryDecode(payload, _inputScratch, out int count))
+		if (!InputCodec.TryDecode(payload, _inputScratch, out int count, out byte drawnBehind))
 		{
 			RejectedInputPackets++;
 			return;
 		}
 
+		// How far behind it the client drew is said for the newest frame, the packet's last.
 		for (int i = 0; i < count; i++)
 		{
-			player.Queue.Accept(_inputScratch[i]);
+			player.Queue.Accept(_inputScratch[i], i == count - 1 ? InputCodec.DrawnBehindTicks(drawnBehind) : float.NaN);
 		}
 	}
 
@@ -1142,6 +1173,12 @@ public partial class PlayerManager : Node
 			InputFrame frame = _sampler != null ? _sampler.Sample(tick) : InputFrame.Neutral(tick);
 
 			_lastSampledTick = tick;
+
+			// What this client had drawn when it sampled the frame: the field as the step
+			// before put it up, the crew vehicles at their smoothed render clock. The newest
+			// frame's goes in the packet's header (docs/GROUND_VEHICLES.md §5.6).
+			float drawn = CrewVehicleManager.Instance?.DrawnRenderTick ?? 0f;
+			_lastDrawnBehind = drawn > 0f ? InputCodec.DrawnBehind(tick - drawn) : (byte)0;
 
 			// A client's half of the journal: its own intent, which is the only intent
 			// it has. Recorded before the death rule is applied, exactly as the
@@ -1219,7 +1256,7 @@ public partial class PlayerManager : Node
 			return;
 		}
 
-		byte[] payload = InputCodec.Encode(_inputScratch.AsSpan(0, count));
+		byte[] payload = InputCodec.Encode(_inputScratch.AsSpan(0, count), _lastDrawnBehind);
 		RpcId(1, MethodName.ClientInput, payload);
 		net.Stats.RecordSent(payload.Length);
 	}

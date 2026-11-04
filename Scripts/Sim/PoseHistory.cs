@@ -172,19 +172,63 @@ public sealed class PoseHistory
 	}
 
 	/// <summary>
+	/// The client samples a frame on the physics step after the one it drew the field
+	/// on: what a player reacts to is the picture the step before put up [ticks].
+	/// </summary>
+	public const float SampleAfterDrawTicks = 1f;
+
+	/// <summary>
+	/// A frame waits in the server's buffer between the depth reported after it is
+	/// consumed and a tick more — the frame after it is already there, the one after
+	/// that not yet — so half a tick more than the depth on average [ticks].
+	/// </summary>
+	public const float BufferHalfTick = 0.5f;
+
+	/// <summary>
 	/// The tick a client was drawing when it sampled the frame the server consumes at
-	/// <paramref name="serverTick"/> (docs/GROUND_VEHICLES.md §5.6):
+	/// <paramref name="serverTick"/> (docs/GROUND_VEHICLES.md §5.6), fractional:
 	///
 	/// <code>
-	/// view = N − LagCompensationTicks − InputBufferDepth − InterpolationDelayTicks
+	/// view = N − LagCompensationTicks − InputBufferDepth − InterpolationDelayTicks − 1 − ½
 	/// </code>
 	///
-	/// clamped so that it is never more than the ring holds behind <c>N</c>, nor before
-	/// tick 0. A seat with no remote client — a bot, an agent, the listen host — sees
-	/// the vehicle where the server has it, at <c>N</c>. A negative latency or depth,
-	/// which only a lying client could report, counts as none.
+	/// the one-way latency the frame took to arrive, the ticks it waited in the buffer —
+	/// the depth, smoothed, and the half tick it leaves out (<see cref="BufferHalfTick"/>)
+	/// — the interpolation delay the client draws behind its estimate of the server's
+	/// tick, and the step between drawing and sampling (<see cref="SampleAfterDrawTicks"/>).
+	/// Clamped so that it is never more than the ring holds behind <c>N</c>, nor before
+	/// tick 0. A seat with no remote client — a bot, an agent, the listen host — sees the
+	/// vehicle where the server has it, at <c>N</c>. A negative latency or depth, which
+	/// only a lying client could report, counts as none.
+	///
+	/// What it cannot know is how far the client's own estimate of the server's tick is
+	/// off — up to a tick either way, which its clock walks off only at two (NETCODE.md
+	/// §2) — so a client's view and this one differ by up to about a tick: which is why a
+	/// client says what it drew, and this is only the fallback for one that has not.
 	/// </summary>
-	public static uint ViewTick(uint serverTick, int lagCompensationTicks, int inputBufferDepth, bool remoteClient)
+	public static float ViewTick(uint serverTick, int lagCompensationTicks, float inputBufferDepth, bool remoteClient) =>
+		ViewTick(serverTick, float.NaN, lagCompensationTicks, inputBufferDepth, remoteClient);
+
+	/// <summary>
+	/// The same, given <paramref name="drawnTick"/> — the tick the client says it was drawing
+	/// when it sampled the frame (the input packet's header, <c>InputCodec.DrawnBehind</c>):
+	/// that, clamped into the ring and to no later than <paramref name="serverTick"/>. The
+	/// estimate above only when the client has not said (NaN), as a client from before the
+	/// header carried it does not.
+	/// </summary>
+	public static float ViewTick(uint serverTick, float drawnTick, int lagCompensationTicks, float inputBufferDepth,
+		bool remoteClient)
+	{
+		if (remoteClient && float.IsFinite(drawnTick))
+		{
+			float oldest = serverTick > Capacity - 1 ? serverTick - (Capacity - 1) : 0f;
+			return Math.Clamp(drawnTick, oldest, serverTick);
+		}
+
+		return Estimate(serverTick, lagCompensationTicks, inputBufferDepth, remoteClient);
+	}
+
+	private static float Estimate(uint serverTick, int lagCompensationTicks, float inputBufferDepth, bool remoteClient)
 	{
 		if (!remoteClient)
 		{
@@ -192,9 +236,33 @@ public sealed class PoseHistory
 		}
 
 		// Each term clamped before the sum, so no reported latency can wrap it.
-		int lag = Math.Clamp(lagCompensationTicks, 0, Capacity);
-		int depth = Math.Clamp(inputBufferDepth, 0, Capacity);
-		int back = Math.Min(lag + depth + SimConfig.InterpolationDelayTicks, Capacity - 1);
-		return serverTick > (uint)back ? serverTick - (uint)back : 0;
+		float lag = Math.Clamp(lagCompensationTicks, 0, Capacity);
+		float depth = float.IsFinite(inputBufferDepth) ? Math.Clamp(inputBufferDepth, 0f, Capacity) : 0f;
+		float back = MathF.Min(lag + depth + SimConfig.InterpolationDelayTicks + SampleAfterDrawTicks + BufferHalfTick,
+			Capacity - 1);
+		return serverTick > back ? serverTick - back : 0f;
+	}
+
+	/// <summary>
+	/// The pose at a fractional <paramref name="tick"/>: between the two recorded ticks
+	/// either side of it, as a client draws a vehicle between two records; the nearest the
+	/// ring holds when either is missing (<see cref="Sample(uint)"/>).
+	/// </summary>
+	public CrewPose Sample(float tick)
+	{
+		if (!HasSamples || !float.IsFinite(tick) || tick <= 0f)
+		{
+			return Sample(0u);
+		}
+
+		uint below = (uint)MathF.Floor(tick);
+		float t = tick - below;
+		if (t <= 1e-4f || !TryGet(below, out CrewPose a) || !TryGet(below + 1, out CrewPose b))
+		{
+			return Sample(t > 0.5f ? below + 1 : below);
+		}
+
+		return new CrewPose(a.Position.Lerp(b.Position, t), Mathf.LerpAngle(a.Yaw, b.Yaw, t),
+			Mathf.Lerp(a.Pitch, b.Pitch, t), Mathf.Lerp(a.Roll, b.Roll, t));
 	}
 }

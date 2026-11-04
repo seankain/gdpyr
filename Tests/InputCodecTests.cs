@@ -12,9 +12,47 @@ public class InputCodecTests
 	[Fact]
 	public void Frame_IsTwelveBytesOnTheWire()
 	{
-		// The budget in docs/NETCODE.md §7 assumes ~48 B for three frames plus header.
+		// The budget in docs/NETCODE.md §7 assumes ~48 B for three frames plus header: the
+		// count and, from docs/GROUND_VEHICLES.md's GV4, how far behind the client drew.
 		Assert.Equal(12, InputFrame.SizeBytes);
-		Assert.Equal(37, InputCodec.PayloadBytes(SimConfig.InputRedundancy));
+		Assert.Equal(2, InputCodec.HeaderBytes);
+		Assert.Equal(38, InputCodec.PayloadBytes(SimConfig.InputRedundancy));
+	}
+
+	[Fact]
+	public void HowFarBehindTheNewestFrameTheClientDrew_RidesTheHeader_InQuarterTicks()
+	{
+		var frames = new[] { Sample(100), Sample(101), Sample(102) };
+		byte behind = InputCodec.DrawnBehind(15.3f);
+		Assert.Equal(61, behind);
+		byte[] payload = InputCodec.Encode(frames, behind);
+
+		var into = new InputFrame[InputCodec.MaxFrames];
+		Assert.True(InputCodec.TryDecode(payload, into, out int count, out byte read));
+		Assert.Equal(3, count);
+		Assert.Equal(behind, read);
+		Assert.Equal(15.25f, InputCodec.DrawnBehindTicks(read));
+
+		// The frames are where they were: one header byte later, unchanged.
+		Assert.Equal(102u, into[2].Tick);
+		Assert.Equal(frames[2].Buttons, into[2].Buttons);
+	}
+
+	[Fact]
+	public void ADrawnOffsetNoByteHolds_OrNoneAtAll_IsNotKnown()
+	{
+		Assert.Equal(0, InputCodec.DrawnBehind(0f));
+		Assert.Equal(0, InputCodec.DrawnBehind(-3f));
+		Assert.Equal(0, InputCodec.DrawnBehind(float.NaN));
+		Assert.Equal(0, InputCodec.DrawnBehind(64f));
+		Assert.Equal(255, InputCodec.DrawnBehind(63.75f));
+		Assert.Equal(1, InputCodec.DrawnBehind(0.2f));
+		Assert.True(float.IsNaN(InputCodec.DrawnBehindTicks(0)));
+
+		// A packet that says nothing reads as not known.
+		byte[] payload = InputCodec.Encode(new[] { Sample(5) });
+		Assert.True(InputCodec.TryDecode(payload, new InputFrame[8], out _, out byte read));
+		Assert.Equal(0, read);
 	}
 
 	[Fact]
@@ -74,8 +112,8 @@ public class InputCodecTests
 	public void Decode_ClampsTheOutOfRangeMoveAxis()
 	{
 		byte[] payload = InputCodec.Encode(new[] { Sample(7) });
-		payload[1 + 4] = 0x80; // MoveX = -128
-		payload[1 + 5] = 0x80; // MoveZ = -128
+		payload[InputCodec.HeaderBytes + 4] = 0x80; // MoveX = -128
+		payload[InputCodec.HeaderBytes + 5] = 0x80; // MoveZ = -128
 
 		var into = new InputFrame[1];
 		Assert.True(InputCodec.TryDecode(payload, into, out int count));

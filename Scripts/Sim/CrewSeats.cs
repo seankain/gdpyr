@@ -527,6 +527,67 @@ public static class CrewSeats
 		return pose.DirectionToWorld(Aim.Direction(yaw, pitch));
 	}
 
+	/// <summary>
+	/// Where the mounted gun's round leaves from (§6.4): the end of its barrel, which
+	/// pivots at <paramref name="mount"/> on the hull at <paramref name="pose"/> and
+	/// points along <paramref name="direction"/> (<see cref="GunDirection"/>).
+	/// </summary>
+	public static Vector3 GunMuzzle(in CrewPose pose, Vector3 mount, Vector3 direction, float barrelMeters) =>
+		pose.ToWorld(mount) + (direction * MathF.Max(barrelMeters, 0f));
+
+	/// <summary>Every button a seat's weapons are never shown (GV-D6): no grenade, drone, hammer or movement.</summary>
+	private const ushort NeverFromASeat = (ushort)(InputButtons.Grenade | InputButtons.Drone | InputButtons.Melee
+		| InputButtons.Weapon1 | InputButtons.Jump | InputButtons.Crouch | InputButtons.Sprint);
+
+	/// <summary>
+	/// The buttons a seated player's weapons step sees this tick (§6.4), from the frame's:
+	/// a driver's none — their keys are the vehicle's; the gunner's trigger and reload,
+	/// which are the gun's; a passenger's trigger, sights, reload and the keys for their
+	/// pistol and primary, the trigger only while <paramref name="insideArc"/>. Never a
+	/// grenade, a drone or the hammer. The use key is left alone: it is how anybody gets
+	/// out, and the use table reads it before any weapon does.
+	/// </summary>
+	public static ushort SeatButtons(SeatRole role, ushort buttons, bool insideArc)
+	{
+		const ushort use = (ushort)InputButtons.Use;
+		switch (role)
+		{
+			case SeatRole.Gunner:
+				return (ushort)(buttons & (use | (ushort)(InputButtons.Fire | InputButtons.Reload)));
+
+			case SeatRole.Passenger:
+				ushort kept = (ushort)(buttons & ~NeverFromASeat);
+				kept &= (ushort)(use | (ushort)(InputButtons.Fire | InputButtons.Ads | InputButtons.Reload
+					| InputButtons.Weapon2 | InputButtons.Weapon3));
+				return insideArc ? kept : (ushort)(kept & ~(ushort)InputButtons.Fire);
+
+			default:
+				return (ushort)(buttons & use);
+		}
+	}
+
+	/// <summary>
+	/// The slots a passenger may hold (GV-D6): <paramref name="occupied"/>, the kit's, less
+	/// the hammer's, slot 0.
+	/// </summary>
+	public static int PassengerSlots(int occupied) => occupied & ~1;
+
+	/// <summary>
+	/// The slot a passenger holds (GV-D6): the one they have up if it is their pistol or
+	/// their primary and they have it; otherwise their primary, or their pistol when the
+	/// kit has none. A player who gets in with the hammer up comes up with a gun.
+	/// </summary>
+	public static int PassengerSlot(int current, int occupied)
+	{
+		int allowed = PassengerSlots(occupied);
+		if (current is SimConfig.SidearmSlot or SimConfig.LargeSlot && (allowed & (1 << current)) != 0)
+		{
+			return current;
+		}
+
+		return (allowed & (1 << SimConfig.LargeSlot)) != 0 ? SimConfig.LargeSlot : SimConfig.SidearmSlot;
+	}
+
 	/// <summary>How many of the seats have somebody in them.</summary>
 	public static int Occupied(ReadOnlySpan<int> occupants, int seatCount)
 	{

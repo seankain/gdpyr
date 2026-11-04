@@ -452,7 +452,7 @@ route, so there is no second behaviour to write.
 
 | Message | Direction | Transfer | Rate | ~Size |
 |---|---|---|---|---|
-| `Input` (3 frames) | C→S | Unreliable | 60 Hz | ~48 B |
+| `Input` (3 frames) | C→S | Unreliable | 60 Hz | ~48 B: 2 B of header — the count, and how far behind the newest frame the client drew the crew vehicles, in quarter ticks ([`GROUND_VEHICLES.md`](GROUND_VEHICLES.md) §5.6) — and 12 B a frame |
 | `PlayerSnapshot` (visible players) | S→C | Unreliable | 30 Hz | 32 B × players |
 | `UnitSnapshot` (visible units) | S→C | Unreliable | 20 Hz | 5 B + 14 B × units |
 | `ServerSpawnUnit` / `ServerDespawnUnit` | S→C | Reliable | per unit per life | ~24 B / 8 B |
@@ -522,7 +522,7 @@ message of its own.
 primary, magazine pouches, grenade pouches, vest: four bytes — is asked for with
 `ClientLockerLoadout` at a locker, which the server answers to the asker alone with
 `ServerKitResult` (taken, or one of `dead`, `not_at_locker`, `mounted`, `carrying`, `invalid`,
-`too_soon`), or with `ClientSelectLoadout` for the next spawn, which is not answered. Everything a
+`too_soon`, `seated` — [`GROUND_VEHICLES.md`](GROUND_VEHICLES.md) §6.4), or with `ClientSelectLoadout` for the next spawn, which is not answered. Everything a
 kit changes rides the player record, which went from 29 to 32 B for it (LOADOUT.md L-D13):
 
 | Offset | Contents |

@@ -187,13 +187,14 @@ public static class DroneSim
 
 	/// <summary>
 	/// Whether a player may put a drone up on <paramref name="tick"/>: alive, on the
-	/// ground force, not already flying one or behind a mounted gun, past the relaunch
-	/// lockout since their last, and with one ready while their side holds a drone node.
+	/// ground force, not already flying one, behind a mounted gun or in a crew vehicle's
+	/// seat (docs/GROUND_VEHICLES.md §6.4), past the relaunch lockout since their last,
+	/// and with one ready while their side holds a drone node.
 	/// </summary>
 	public static bool MayLaunch(bool alive, bool groundForce, bool flying, bool mounted, uint tick,
-		uint lastEndedTick, bool stockReady)
+		uint lastEndedTick, bool stockReady, bool seated = false)
 	{
-		if (!alive || !groundForce || flying || mounted || !stockReady)
+		if (!alive || !groundForce || flying || mounted || seated || !stockReady)
 		{
 			return false;
 		}

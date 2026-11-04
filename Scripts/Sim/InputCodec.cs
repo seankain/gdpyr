@@ -6,7 +6,9 @@ namespace Gdpyr.Sim;
 /// <summary>
 /// Packs the redundant input packet: the last few <see cref="InputFrame"/>s, sent
 /// unreliably every tick, so one lost datagram costs nothing
-/// (docs/NETCODE.md §3.2, §7).
+/// (docs/NETCODE.md §3.2, §7) — and how far behind the newest of them this client was
+/// drawing the field when it sampled it, which is where a seated shooter's round leaves
+/// from (docs/GROUND_VEHICLES.md §5.6). The frames themselves are unchanged.
 ///
 /// Decoding is the server's trust boundary. It is total — a malformed or hostile
 /// payload returns false rather than throwing — and it clamps every field into
@@ -20,21 +22,48 @@ public static class InputCodec
 	/// </summary>
 	public const int MaxFrames = 8;
 
-	public const int HeaderBytes = 1;
+	/// <summary>The frame count, then how far behind the newest frame the client drew (<see cref="DrawnBehind"/>).</summary>
+	public const int HeaderBytes = 2;
+
+	/// <summary>What one step of the drawn-behind byte is worth [ticks]: 7.5 cm at 18 m/s.</summary>
+	public const float DrawnBehindQuantumTicks = 0.25f;
+
+	/// <summary>
+	/// How far behind a frame's tick its client was drawing the field when it sampled it,
+	/// as the header carries it: quarter ticks, 1 to 255; 0 for not known — before the
+	/// client has drawn anything, or further behind than a byte holds.
+	/// </summary>
+	public static byte DrawnBehind(float ticks)
+	{
+		if (!float.IsFinite(ticks) || ticks <= 0f)
+		{
+			return 0;
+		}
+
+		float steps = MathF.Round(ticks / DrawnBehindQuantumTicks);
+		return steps is >= 1f and <= 255f ? (byte)steps : (byte)0;
+	}
+
+	/// <summary>The header's byte back in ticks; NaN for 0, not known.</summary>
+	public static float DrawnBehindTicks(byte quarterTicks) =>
+		quarterTicks == 0 ? float.NaN : quarterTicks * DrawnBehindQuantumTicks;
 
 	public const int MaxPayloadBytes = HeaderBytes + MaxFrames * InputFrame.SizeBytes;
 
 	public static int PayloadBytes(int frameCount) => HeaderBytes + frameCount * InputFrame.SizeBytes;
 
-	public static byte[] Encode(ReadOnlySpan<InputFrame> frames)
+	public static byte[] Encode(ReadOnlySpan<InputFrame> frames, byte drawnBehind = 0)
 	{
 		var payload = new byte[PayloadBytes(Math.Min(frames.Length, MaxFrames))];
-		Encode(frames, payload);
+		Encode(frames, payload, drawnBehind);
 		return payload;
 	}
 
-	/// <summary>Returns the number of bytes written, or 0 if <paramref name="into"/> is too small.</summary>
-	public static int Encode(ReadOnlySpan<InputFrame> frames, Span<byte> into)
+	/// <summary>
+	/// Returns the number of bytes written, or 0 if <paramref name="into"/> is too small.
+	/// <paramref name="drawnBehind"/> is the newest frame's, as <see cref="DrawnBehind"/> makes it.
+	/// </summary>
+	public static int Encode(ReadOnlySpan<InputFrame> frames, Span<byte> into, byte drawnBehind = 0)
 	{
 		int count = Math.Min(frames.Length, MaxFrames);
 		int size = PayloadBytes(count);
@@ -44,6 +73,7 @@ public static class InputCodec
 		}
 
 		into[0] = (byte)count;
+		into[1] = drawnBehind;
 		int offset = HeaderBytes;
 		for (int i = 0; i < count; i++)
 		{
@@ -87,9 +117,17 @@ public static class InputCodec
 		Buttons = BinaryPrimitives.ReadUInt16LittleEndian(from[10..]),
 	};
 
-	public static bool TryDecode(ReadOnlySpan<byte> payload, Span<InputFrame> into, out int count)
+	public static bool TryDecode(ReadOnlySpan<byte> payload, Span<InputFrame> into, out int count) =>
+		TryDecode(payload, into, out count, out _);
+
+	/// <summary>
+	/// The frames, oldest first, and the newest one's drawn-behind byte (0 for not known).
+	/// Total: a malformed payload is false, never an exception.
+	/// </summary>
+	public static bool TryDecode(ReadOnlySpan<byte> payload, Span<InputFrame> into, out int count, out byte drawnBehind)
 	{
 		count = 0;
+		drawnBehind = 0;
 		if (payload.Length < HeaderBytes)
 		{
 			return false;
@@ -109,6 +147,7 @@ public static class InputCodec
 		}
 
 		count = frames;
+		drawnBehind = payload[1];
 		return true;
 	}
 }

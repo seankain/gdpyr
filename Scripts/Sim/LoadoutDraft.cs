@@ -487,6 +487,7 @@ public sealed class LoadoutDraft
 		KitRefusal.Carrying => "put down what you are carrying first",
 		KitRefusal.Invalid => "that kit breaks a loadout rule",
 		KitRefusal.TooSoon => "one kit a quarter-second; take it again",
+		KitRefusal.Seated => "get out of the vehicle first",
 		_ => string.Empty,
 	};
 

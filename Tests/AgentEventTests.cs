@@ -353,11 +353,37 @@ public class AgentEventTests
 		// docs/LOADOUT.md L-D7: what a locker gave a player on one tick. Appended, so
 		// every kind before it keeps its number.
 		Assert.Equal(22, (int)AgentEventKind.Resupply);
-		Assert.Equal(AgentEventKind.Resupply, AgentEventSchema.Last);
 		Assert.Equal("resupply", AgentEventSchema.NameOf(AgentEventKind.Resupply));
 		Assert.Equal(new[] { "peer", "rounds", "grenades", "armour", "since_hurt", "" },
 			AgentEventSchema.FieldsOf(AgentEventKind.Resupply).ToArray());
 		Assert.Equal("rounds", Gdpyr.Playtest.EpisodeMetrics.DefaultFieldOf("resupply"));
+	}
+
+	[Fact]
+	public void TheCrewVehicles_AreAppendedAfterResupply_InThePlansOrder()
+	{
+		// docs/GROUND_VEHICLES.md §11: appended, so every kind before them keeps its
+		// number; a vehicle's kind is its "type", because every record already has a "kind".
+		(AgentEventKind Kind, string Name, string[] Fields, string Default)[] expected =
+		{
+			(AgentEventKind.VehicleRequested, "vehicle_requested", new[] { "peer", "type", "refusal", "", "", "" }, "refusal"),
+			(AgentEventKind.VehicleSpawned, "vehicle_spawned", new[] { "vehicle", "type", "peer", "x", "z", "" }, "type"),
+			(AgentEventKind.VehicleEntered, "vehicle_entered", new[] { "peer", "vehicle", "seat", "", "", "" }, "seat"),
+			(AgentEventKind.VehicleExited, "vehicle_exited", new[] { "peer", "vehicle", "seat", "x", "z", "" }, "seat"),
+			(AgentEventKind.VehicleDamaged, "vehicle_damaged", new[] { "attacker", "vehicle", "weapon", "dealt", "health", "" }, "dealt"),
+			(AgentEventKind.VehicleDestroyed, "vehicle_destroyed", new[] { "attacker", "vehicle", "weapon", "x", "z", "" }, "weapon"),
+			(AgentEventKind.VehicleRammed, "vehicle_rammed", new[] { "vehicle", "unit", "killer", "speed", "x", "z" }, "speed"),
+		};
+
+		for (int i = 0; i < expected.Length; i++)
+		{
+			Assert.Equal(23 + i, (int)expected[i].Kind);
+			Assert.Equal(expected[i].Name, AgentEventSchema.NameOf(expected[i].Kind));
+			Assert.Equal(expected[i].Fields, AgentEventSchema.FieldsOf(expected[i].Kind).ToArray());
+			Assert.Equal(expected[i].Default, Gdpyr.Playtest.EpisodeMetrics.DefaultFieldOf(expected[i].Name));
+		}
+
+		Assert.Equal(AgentEventKind.VehicleRammed, AgentEventSchema.Last);
 	}
 
 	[Fact]

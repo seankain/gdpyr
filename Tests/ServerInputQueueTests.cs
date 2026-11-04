@@ -188,4 +188,78 @@ public class ServerInputQueueTests
 		Assert.Equal(14u, queue.ConsumedTick);
 		Assert.Equal(14u, queue.AckTick);
 	}
+
+	[Fact]
+	public void TheSmoothedDepth_StartsAtTheFirstPopsDepth_AndBarelyMovesForOneLateDatagram()
+	{
+		// A client three frames ahead, every tick: the depth after each pop is 3.
+		var queue = new ServerInputQueue();
+		uint sent = 100;
+		for (int i = 0; i < 4; i++)
+		{
+			queue.Accept(Frame(sent++));
+		}
+
+		Assert.True(queue.TryPop(out _));
+		Assert.Equal(3f, queue.SmoothedDepth);
+		for (int i = 0; i < 200; i++)
+		{
+			queue.Accept(Frame(sent++));
+			Assert.True(queue.TryPop(out _));
+		}
+
+		Assert.Equal(3, queue.Depth);
+		Assert.Equal(3f, queue.SmoothedDepth, 4);
+
+		// One datagram late: a tick at depth 2, and the smoothed depth moves by a twentieth.
+		Assert.True(queue.TryPop(out _));
+		Assert.Equal(2, queue.Depth);
+		Assert.Equal(3f - ServerInputQueue.DepthSmoothing, queue.SmoothedDepth, 4);
+	}
+
+	[Fact]
+	public void TheDrawnTick_IsTheFramesTickLessWhatItsPacketSaid_AndCarriesToAFrameThatCameOnlyAsAnOlderOne()
+	{
+		var queue = new ServerInputQueue();
+		Assert.True(float.IsNaN(queue.ConsumedDrawnTick));
+
+		// Frames 100 and 101 came as their packets' newest, saying 15.25 and 15.5; 102 only
+		// inside a later packet, its own lost.
+		queue.Accept(Frame(100), 15.25f);
+		queue.Accept(Frame(101), 15.5f);
+		queue.Accept(Frame(102));
+
+		Assert.True(queue.TryPop(out _));
+		Assert.Equal(84.75f, queue.ConsumedDrawnTick);
+		Assert.True(queue.TryPop(out _));
+		Assert.Equal(85.5f, queue.ConsumedDrawnTick);
+		Assert.True(queue.TryPop(out _));
+		Assert.Equal(86.5f, queue.ConsumedDrawnTick);
+
+		// Starved: the last frame repeated, drawn where it was.
+		Assert.True(queue.TryPop(out InputFrame repeated));
+		Assert.Equal(102u, repeated.Tick);
+		Assert.Equal(86.5f, queue.ConsumedDrawnTick);
+	}
+
+	[Fact]
+	public void ANewestCopyThatArrivesAfterAnOlderOne_StillSaysWhereItsFrameWasDrawn()
+	{
+		var queue = new ServerInputQueue();
+		queue.Accept(Frame(200));
+		queue.Accept(Frame(200), 14f);
+		Assert.True(queue.TryPop(out _));
+		Assert.Equal(186f, queue.ConsumedDrawnTick);
+	}
+
+	[Fact]
+	public void AClientThatNeverSays_HasNoDrawnTick()
+	{
+		var queue = new ServerInputQueue();
+		queue.Accept(Frame(10));
+		queue.Accept(Frame(11));
+		Assert.True(queue.TryPop(out _));
+		Assert.True(queue.TryPop(out _));
+		Assert.True(float.IsNaN(queue.ConsumedDrawnTick));
+	}
 }

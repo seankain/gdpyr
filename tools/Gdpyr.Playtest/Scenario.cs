@@ -237,7 +237,10 @@ public static class ScenarioKit
 	/// What the server may answer a <c>loadout</c> with instead of taking it
 	/// (docs/LOADOUT.md §6.2): each is a counter, <c>counters.loadouts_refused.&lt;code&gt;</c>.
 	/// </summary>
-	public static readonly string[] Refusals = { "dead", "not_at_locker", "mounted", "carrying", "invalid", "too_soon" };
+	public static readonly string[] Refusals =
+	{
+		"dead", "not_at_locker", "mounted", "carrying", "invalid", "too_soon", "seated",
+	};
 
 	public const int PouchSlots = 9;
 

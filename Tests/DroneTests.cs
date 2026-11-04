@@ -150,6 +150,10 @@ public class DroneTests
 		Assert.False(DroneSim.MayLaunch(true, true, true, false, 500, 0, true));
 		Assert.False(DroneSim.MayLaunch(true, true, false, true, 500, 0, true));
 		Assert.False(DroneSim.MayLaunch(true, true, false, false, 500, 0, false));
+
+		// Nobody in a crew vehicle's seat launches one (docs/GROUND_VEHICLES.md §6.4).
+		Assert.False(DroneSim.MayLaunch(true, true, false, false, 500, 0, true, seated: true));
+		Assert.True(DroneSim.MayLaunch(true, true, false, false, 500, 0, true, seated: false));
 	}
 
 	[Fact]
