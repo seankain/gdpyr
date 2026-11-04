@@ -254,6 +254,96 @@ public class CrewSeatTests
 		Assert.Equal(2, CrewSeats.Occupied(new[] { 2, 0, 4 }, 3));
 	}
 
+	// ---- a bot riding with a person (docs/GROUND_VEHICLES.md §10, GV8) ---------------------
+
+	[Fact]
+	public void ABotMayRide_AtTheGunOrAsAPassenger_WithAPersonAtTheControls_NeverAtThem()
+	{
+		Assert.True(CrewSeats.MayRide(SeatRole.Gunner, personDriving: true));
+		Assert.True(CrewSeats.MayRide(SeatRole.Passenger, personDriving: true));
+		Assert.False(CrewSeats.MayRide(SeatRole.Driver, personDriving: true));
+
+		foreach (SeatRole role in Enum.GetValues<SeatRole>())
+		{
+			Assert.False(CrewSeats.MayRide(role, personDriving: false));
+		}
+	}
+
+	[Fact]
+	public void ARider_GetsTheGunFirst_ThenThePassengersSeat_WhereverItStands()
+	{
+		// Where it stands does not come into it, unlike a person's pick by the nearest door.
+		Assert.Equal(1, CrewSeats.PickRiderSeat(ThreeSeats, new[] { 7, 0, 0 }, personDriving: true));
+		Assert.Equal(2, CrewSeats.PickRiderSeat(ThreeSeats, new[] { 7, 8, 0 }, personDriving: true));
+		Assert.Equal(-1, CrewSeats.PickRiderSeat(ThreeSeats, new[] { 7, 8, 9 }, personDriving: true));
+
+		// The bed's door is the nearest from beside the bed; a person standing there gets the bed.
+		var pose = new CrewPose(Vector3.Zero, 0f);
+		Assert.Equal(2, CrewSeats.PickSeat(ThreeSeats, new[] { 7, 0, 0 }, pose, new Vector3(2f, 0f, 1.5f)));
+	}
+
+	[Fact]
+	public void ARider_NeverGetsTheControls_EvenWhenTheyAreTheOnlySeatFree()
+	{
+		Assert.Equal(-1, CrewSeats.PickRiderSeat(ThreeSeats, new[] { 0, 8, 9 }, personDriving: true));
+
+		// Two seats, a pilot's and a door: the door or nothing.
+		CrewSeat[] heli = { Seat(SeatRole.Driver, new Vector3(-1f, 0f, 0f)), Seat(SeatRole.Passenger, new Vector3(1f, 0f, 0f)) };
+		Assert.Equal(1, CrewSeats.PickRiderSeat(heli, new[] { 7, 0 }, personDriving: true));
+		Assert.Equal(-1, CrewSeats.PickRiderSeat(heli, new[] { 7, 8 }, personDriving: true));
+	}
+
+	[Fact]
+	public void WithNobodyOrABotAtTheControls_ARiderGetsNoSeat()
+	{
+		Assert.Equal(-1, CrewSeats.PickRiderSeat(ThreeSeats, new int[3], personDriving: false));
+		Assert.Equal(-1, CrewSeats.PickRiderSeat(ThreeSeats, new[] { 0, 0, 9 }, personDriving: false));
+	}
+
+	[Fact]
+	public void TheFilesSeats_GiveARiderThe4x4sGunThenItsBed_AndTheHelicoptersDoor()
+	{
+		CrewSeat[] truck = CrewVehicleFiles.Seats(CrewVehicleFiles.FourByFourPath);
+		CrewSeat[] heli = CrewVehicleFiles.Seats(CrewVehicleFiles.HelicopterPath);
+
+		int gun = CrewSeats.PickRiderSeat(truck, new[] { 7, 0, 0 }, personDriving: true);
+		Assert.Equal(SeatRole.Gunner, truck[gun].Role);
+		var occupants = new[] { 7, 0, 0 };
+		occupants[gun] = 8;
+		int bed = CrewSeats.PickRiderSeat(truck, occupants, personDriving: true);
+		Assert.Equal(SeatRole.Passenger, truck[bed].Role);
+
+		int door = CrewSeats.PickRiderSeat(heli, new[] { 7, 0 }, personDriving: true);
+		Assert.Equal(SeatRole.Passenger, heli[door].Role);
+	}
+
+	private static bool Offers(bool destroyed = false, float speed = 0f,
+		CrewVehicleKind kind = CrewVehicleKind.FourByFour, bool grounded = true, int riderSeat = 1,
+		float hullDistance = 10f) =>
+		CrewSeats.OffersRide(destroyed, speed, kind, grounded, riderSeat, hullDistance, offerMeters: 15f);
+
+	[Fact]
+	public void ARide_IsOnOffer_FromAStoppedVehicleWithASeatForABot_Within15Metres()
+	{
+		Assert.True(Offers());
+		Assert.True(Offers(hullDistance: 15f));
+		Assert.True(Offers(speed: CrewSeats.MaxEnterSpeedMetersPerSecond));
+		Assert.True(Offers(kind: CrewVehicleKind.Helicopter, grounded: true));
+	}
+
+	[Fact]
+	public void EachGateOfARide_RefusesOnItsOwn()
+	{
+		Assert.False(Offers(destroyed: true));
+		Assert.False(Offers(speed: CrewSeats.MaxEnterSpeedMetersPerSecond + 0.01f));
+		Assert.False(Offers(kind: CrewVehicleKind.Helicopter, grounded: false));
+		Assert.False(Offers(riderSeat: -1));
+		Assert.False(Offers(hullDistance: 15.01f));
+
+		// The grounded flag is the helicopter's; a 4x4 off a bump is still a ride.
+		Assert.True(Offers(kind: CrewVehicleKind.FourByFour, grounded: false));
+	}
+
 	[Fact]
 	public void AHold_MovesToTheNextFreeSeat_RoundPastTheLast()
 	{

@@ -944,6 +944,12 @@ public class GroundHtnTests
 			(GroundFact.Contact, (byte)ContactLevel.None) };
 		yield return new object[] { GroundGoal.Rearm, new[] { (GroundFact.Ammo, (byte)AmmoBand.Dry) },
 			(GroundFact.Suppressed, (byte)1) };
+		yield return new object[] { GroundGoal.BoardVehicle, new[] { (GroundFact.Ride, (byte)RideState.Offered) },
+			(GroundFact.Ride, (byte)RideState.None) };
+		yield return new object[] { GroundGoal.Ride, new[] { (GroundFact.Ride, (byte)RideState.Riding) },
+			(GroundFact.Ride, (byte)RideState.None) };
+		yield return new object[] { GroundGoal.LeaveVehicle, new[] { (GroundFact.Ride, (byte)RideState.DriverOut) },
+			(GroundFact.Ride, (byte)RideState.None) };
 	}
 
 	[Theory]
@@ -1331,15 +1337,250 @@ public class GroundHtnTests
 		Assert.True(down.Held(InputButtons.Crouch));
 	}
 
+	// ---- riding with a person (docs/GROUND_VEHICLES.md §10, GV8) -------------
+
+	private static readonly Vector3 Door = new(-91f, 0.5f, 101f);
+
+	private static Bot Offered(bool inReach = false)
+	{
+		var bot = new Bot();
+		bot.C.RidePoint = Door;
+		bot.C.RideInReach = inReach;
+		bot.C.SenseRide(RideState.Offered);
+		return bot;
+	}
+
+	[Fact]
+	public void ARideOnOffer_WithNothingInSight_IsBoarded_AtTheDoorOfTheSeatItWouldGet()
+	{
+		Bot bot = Offered();
+		bot.Tick();
+
+		Assert.Equal("[BoardVehicle]", bot.LastPlan);
+		Assert.Equal(GroundMove.Point, bot.C.Intent.Move);
+		Assert.True(bot.C.Intent.HasPoint);
+		Assert.Equal(Door, bot.C.Intent.Point);
+	}
+
+	[Fact]
+	public void BoardingItTapsTheKey_OnlyWhereATapWouldGetItIn()
+	{
+		Bot bot = Offered(inReach: false);
+		bot.Tick();
+		Assert.False(bot.C.Intent.TapUse);
+
+		bot.C.RideInReach = true;
+		bot.Tick();
+		Assert.Equal(GroundGoal.BoardVehicle, bot.Goal);
+		Assert.True(bot.C.Intent.TapUse);
+
+		// Shoved out of reach, it walks back and stops tapping.
+		bot.C.RideInReach = false;
+		bot.Tick();
+		Assert.False(bot.C.Intent.TapUse);
+	}
+
+	[Fact]
+	public void ARideOnOffer_IsNotBoarded_WithSomethingInSight_OrFireComingAtIt()
+	{
+		Bot seeing = Offered();
+		seeing.Sense(GroundFact.Contact, ContactLevel.Visible);
+		seeing.Tick();
+		Assert.Equal(GroundGoal.Engage, seeing.Goal);
+
+		Bot fired = Offered();
+		fired.C.SenseSuppressed(fired.C.Tick);
+		fired.Tick();
+		Assert.NotEqual(GroundGoal.BoardVehicle, fired.Goal);
+	}
+
+	[Fact]
+	public void AFightComingIntoSight_EndsTheBoarding()
+	{
+		Bot bot = Offered();
+		bot.Tick();
+		Assert.Equal(GroundGoal.BoardVehicle, bot.Goal);
+
+		bot.Sense(GroundFact.Contact, ContactLevel.Visible);
+		bot.Tick();
+
+		Assert.Equal(GroundGoal.Engage, bot.Goal);
+		Assert.False(bot.C.Intent.TapUse);
+	}
+
+	[Fact]
+	public void AGhost_TheRolesNode_AndASweep_DoNotKeepABotFromARide()
+	{
+		Bot ghost = Offered();
+		ghost.Sense(GroundFact.Contact, ContactLevel.Ghost);
+		ghost.Tick();
+		Assert.Equal(GroundGoal.BoardVehicle, ghost.Goal);
+
+		Bot denier = Offered();
+		denier.C.HasZone = true;
+		denier.C.ZonePoint = Node;
+		denier.Sense(GroundFact.Role, GroundRole.Denier);
+		denier.Tick();
+		Assert.Equal(GroundGoal.BoardVehicle, denier.Goal);
+
+		Bot sweeper = Offered();
+		sweeper.C.SweepPoint = Node;
+		sweeper.Sense(GroundFact.Sweep, true);
+		sweeper.Tick();
+		Assert.Equal(GroundGoal.BoardVehicle, sweeper.Goal);
+	}
+
+	[Fact]
+	public void LeavingDefences_AReload_AndADryBotsWalkToTheLocker_ComeBeforeARide()
+	{
+		Bot inside = Offered();
+		inside.C.ExitPoint = new Vector3(70f, 0.5f, -70f);
+		inside.Sense(GroundFact.InsideDefences, true);
+		inside.Tick();
+		Assert.Equal(GroundGoal.LeaveDefences, inside.Goal);
+
+		Bot low = Offered();
+		low.Sense(GroundFact.MagazineLow, true);
+		low.Tick();
+		Assert.Equal(GroundGoal.Reload, low.Goal);
+
+		Bot dry = Offered();
+		dry.Sense(GroundFact.Ammo, AmmoBand.Dry);
+		dry.Tick();
+		Assert.Equal(GroundGoal.Rearm, dry.Goal);
+	}
+
+	[Fact]
+	public void GettingIn_EndsTheBoarding_AndTheRideBeginsOnTheSameTick()
+	{
+		Bot bot = Offered(inReach: true);
+		bot.Tick();
+		Assert.Equal(GroundGoal.BoardVehicle, bot.Goal);
+
+		bot.C.SenseRide(RideState.Riding);
+		bot.Tick();
+
+		Assert.Equal(GroundGoal.Ride, bot.Goal);
+		Assert.False(bot.C.Intent.TapUse);
+	}
+
+	[Fact]
+	public void Seated_WithAPersonDriving_ItRides_AndFightsFromTheSeat_WhateverElseIsTrue()
+	{
+		Bot bot = Seeing(Threat.Infantry);
+		bot.C.FocusOwnerId = -42;
+		bot.C.ExitPoint = new Vector3(70f, 0.5f, -70f);
+		bot.C.FallbackPoint = new Vector3(2f, 0.5f, 7f);
+		bot.Sense(GroundFact.InsideDefences, true);
+		bot.Sense(GroundFact.Health, HealthBand.Critical);
+		bot.Sense(GroundFact.Odds, OddsBand.Outnumbered);
+		bot.Sense(GroundFact.Ammo, AmmoBand.Dry);
+		bot.Sense(GroundFact.Role, GroundRole.LockerRunner);
+		bot.C.SenseRide(RideState.Riding);
+		bot.Tick();
+
+		Assert.Equal("[Ride]", bot.LastPlan);
+		Assert.Equal(GroundMove.Stay, bot.C.Intent.Move);
+		Assert.False(bot.C.Intent.HasPoint);
+		Assert.False(bot.C.Intent.TapUse);
+		Assert.False(bot.C.Intent.TakeLauncher);
+		Assert.Equal(-42, bot.C.Intent.TargetOwnerId);
+	}
+
+	[Fact]
+	public void TheDriverOut_ItTapsTheKeyUntilItIsOut_ThenGoesBackToItsOwnPlan()
+	{
+		var bot = new Bot();
+		bot.C.SenseRide(RideState.Riding);
+		bot.Tick();
+		Assert.Equal(GroundGoal.Ride, bot.Goal);
+
+		bot.C.SenseRide(RideState.DriverOut);
+		bot.Tick();
+		Assert.Equal("[LeaveVehicle]", bot.LastPlan);
+		Assert.True(bot.C.Intent.TapUse);
+		Assert.Equal(GroundMove.Stay, bot.C.Intent.Move);
+
+		// An exit refused — nowhere clear, or a helicopter too high — keeps it tapping.
+		bot.Tick(30);
+		Assert.Equal(GroundGoal.LeaveVehicle, bot.Goal);
+		Assert.True(bot.C.Intent.TapUse);
+
+		bot.C.SenseRide(RideState.None);
+		bot.Tick();
+		Assert.Equal(GroundGoal.Standoff, bot.Goal);
+		Assert.False(bot.C.Intent.TapUse);
+	}
+
+	[Fact]
+	public void APersonBackAtTheControls_BeforeItIsOut_KeepsItRiding()
+	{
+		var bot = new Bot();
+		bot.C.SenseRide(RideState.DriverOut);
+		bot.Tick();
+		Assert.Equal(GroundGoal.LeaveVehicle, bot.Goal);
+
+		bot.C.SenseRide(RideState.Riding);
+		bot.Tick();
+
+		Assert.Equal(GroundGoal.Ride, bot.Goal);
+		Assert.False(bot.C.Intent.TapUse);
+	}
+
+	[Fact]
+	public void ABoardingThatTakesTooLong_IsGivenUp_AndTriedAgainFifteenSecondsLater()
+	{
+		Bot bot = Offered();
+		bot.Tick();
+		Assert.Equal(GroundGoal.BoardVehicle, bot.Goal);
+
+		bot.Tick(GroundPlanTraits.Default.BoardTimeoutTicks + 1);
+		Assert.Equal(GroundGoal.Standoff, bot.Goal);
+		Assert.Equal(1, bot.C.FailedBoards);
+
+		// Nothing changes for the wait; then the planner is told it is over, and boards again.
+		bot.Tick(GroundPlanTraits.Default.BoardRetryTicks - 2);
+		Assert.Equal(GroundGoal.Standoff, bot.Goal);
+		bot.Tick(3);
+		bot.C.SenseRide(RideState.Offered);
+		bot.Tick();
+		Assert.Equal(GroundGoal.BoardVehicle, bot.Goal);
+	}
+
+	[Fact]
+	public void TheRideNumbers_Are15Metres_EightSecondsToGetIn_AndFifteenToWait()
+	{
+		GroundPlanTraits traits = GroundPlanTraits.Default;
+
+		Assert.Equal(15f, traits.RideOfferMeters);
+		Assert.Equal(SimConfig.TickRate * 8, traits.BoardTimeoutTicks);
+		Assert.Equal(SimConfig.TickRate * 15, traits.BoardRetryTicks);
+	}
+
+	[Fact]
+	public void TheDebuggerNamesTheRide_AndColoursItsTasksAsOne()
+	{
+		Gdpyr.Sim.AiDebug.HtnSchema schema = Gdpyr.Sim.AiDebug.HtnSchema.Ground;
+		Assert.Equal("Ride", schema.FactName((int)GroundFact.Ride));
+		Assert.Equal("DriverOut", schema.FactValue((int)GroundFact.Ride, (byte)RideState.DriverOut));
+
+		foreach (GroundGoal goal in new[] { GroundGoal.BoardVehicle, GroundGoal.Ride, GroundGoal.LeaveVehicle })
+		{
+			Assert.Equal(Gdpyr.Sim.AiDebug.AiTaskFamily.Ride,
+				Gdpyr.Sim.AiDebug.AiGoals.Family(Gdpyr.Sim.AiDebug.HtnDomainKind.Ground, (byte)goal));
+		}
+	}
+
 	// ---- sharing and allocation --------------------------------------------
 
 	/// <summary>How many situations <see cref="Situation"/> has.</summary>
-	private const int Situations = 12;
+	private const int Situations = 15;
 
 	/// <summary>
-	/// Twelve situations: one per branch of §5.1, as facts, a bot in its spot behind
-	/// cover pinned down by a gunner (docs/TACTICS.md §5.7), and a dry one with nothing
-	/// in sight (docs/LOADOUT.md §8).
+	/// Fifteen situations: one per branch of §5.1, as facts, a bot in its spot behind
+	/// cover pinned down by a gunner (docs/TACTICS.md §5.7), a dry one with nothing
+	/// in sight (docs/LOADOUT.md §8), and one offered a ride, one riding and one whose
+	/// driver has got out (docs/GROUND_VEHICLES.md §10, GV8).
 	/// </summary>
 	private static void Situation(GroundContext c, int phase)
 	{
@@ -1367,6 +1608,13 @@ public class GroundHtnTests
 		c.Sense(GroundFact.Sweep, phase == 8);
 		c.Sense(GroundFact.InsideDefences, phase == 9);
 		c.Sense(GroundFact.Ammo, (byte)(phase == 11 ? AmmoBand.Dry : AmmoBand.Ok));
+		c.SenseRide(phase switch
+		{
+			12 => RideState.Offered,
+			13 => RideState.Riding,
+			14 => RideState.DriverOut,
+			_ => RideState.None,
+		});
 	}
 
 	private static ulong[] Traces(int agents, int ticks)

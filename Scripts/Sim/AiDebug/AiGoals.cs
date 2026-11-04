@@ -26,6 +26,9 @@ public enum AiTaskFamily : byte
 
 	/// <summary>A unit taking cover from where it was fired upon, and firing back (docs/TACTICS.md §5.1).</summary>
 	React = 8,
+
+	/// <summary>A ground bot getting into, riding in or getting out of a person's vehicle (docs/GROUND_VEHICLES.md §10, GV8).</summary>
+	Ride = 9,
 }
 
 /// <summary>Goal bytes as names and families, per domain.</summary>
@@ -46,6 +49,7 @@ public static class AiGoals
 				or GroundGoal.HoldCover => AiTaskFamily.Attack,
 			GroundGoal.TakeNode or GroundGoal.HoldNode => AiTaskFamily.DefendZone,
 			GroundGoal.SweepZone or GroundGoal.Standoff => AiTaskFamily.Recon,
+			GroundGoal.BoardVehicle or GroundGoal.Ride or GroundGoal.LeaveVehicle => AiTaskFamily.Ride,
 			_ => AiTaskFamily.None,
 		},
 		HtnDomainKind.Unit => (UnitGoal)goal switch
@@ -98,6 +102,7 @@ public static class AiGoals
 		AiTaskFamily.Build => "ffe066",
 		AiTaskFamily.Obey => "f0f0f0",
 		AiTaskFamily.React => "ff6ec7",
+		AiTaskFamily.Ride => "3fd9c9",
 		_ => "9aa0a6",
 	};
 

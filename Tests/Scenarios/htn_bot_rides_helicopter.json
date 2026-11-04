@@ -1,0 +1,36 @@
+{
+  "name": "an HTN ground bot gets into the passenger's door of a person's helicopter on its pad, a second finds no seat, and the one aboard gets out after the pilot lands and does",
+  "bot_ai": "htn",
+  "seeds": [1, 2, 3],
+  "duration_ticks": 1380,
+  "warmup_ticks": 60,
+  "roster": { "ground": 3, "strategists": 0 },
+
+  "seats": [
+    { "id": "pilot", "team": "ground", "policy": "ground", "step_mul": 4,
+      "script": { "repeat": false, "steps": [
+        { "ticks": 420 },
+        { "ticks": 180, "buttons": ["jump"] },
+        { "ticks": 180, "move": [0, -1] },
+        { "ticks": 420, "buttons": ["crouch"] },
+        { "ticks": 8, "buttons": ["use"] },
+        { "ticks": 172 }
+      ] } }
+  ],
+
+  "spawns": [
+    { "vehicle": "helicopter", "id": "heli", "at": [-109.73, 0.5, 88.31], "yaw": -0.8929 },
+    { "peer": "pilot", "seat": { "vehicle": "heli", "role": "pilot" } }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.vehicle_entered.count", "op": "==", "value": 2 },
+    { "metric": "events.vehicle_entered[seat=2,peer!=@pilot].count", "op": "==", "value": 1 },
+    { "metric": "events.vehicle_exited.count", "op": "==", "value": 2 },
+    { "metric": "events.vehicle_exited.seat.first", "op": "==", "value": 0 },
+    { "metric": "events.vehicle_exited[seat=0,peer=@pilot].count", "op": "==", "value": 1 },
+    { "metric": "events.vehicle_exited[peer!=@pilot].x.min", "op": ">=", "value": -90 },
+    { "metric": "events.vehicle_damaged.count", "op": "==", "value": 0 }
+  ]
+}

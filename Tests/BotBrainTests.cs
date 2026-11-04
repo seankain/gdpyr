@@ -566,4 +566,51 @@ public class BotBrainTests
 		// What every existing caller builds: the primary up and not dry.
 		Assert.False(BotBrain.Frame(10, 1073741826, Situation(), Steady).Held(InputButtons.Weapon2));
 	}
+
+	// ---- the use key (docs/GROUND_VEHICLES.md §10, GV8) ----------------------------
+
+	private static BotSituation Tapping(bool useDown) =>
+		new(true, 0f, 0f, 0f, false, Vector3.Zero, 999f, false, 0, false, Vector3.Zero, 0f, false, false,
+			useDown: useDown);
+
+	[Fact]
+	public void ABotsTapOfTheUseKey_IsATapEveryEightTicks_FirstFourTicksIn_AndNeverAHold()
+	{
+		const uint since = 1000;
+		var tracker = new UseTracker();
+		ushort previous = 0;
+		int taps = 0;
+		int holds = 0;
+		uint first = 0;
+		for (uint tick = since; tick < since + 64; tick++)
+		{
+			InputFrame frame = BotBrain.Frame(tick, 1073741826, Tapping(BotBrain.UseDown(tick, since)), Steady);
+			UseIntent intent = tracker.Sample(new InputContext(frame, previous, SimConfig.TickDelta));
+			previous = frame.Buttons;
+			taps += intent == UseIntent.Tap ? 1 : 0;
+			holds += intent == UseIntent.Hold ? 1 : 0;
+			if (intent == UseIntent.Tap && first == 0)
+			{
+				first = tick;
+			}
+		}
+
+		Assert.Equal(8, taps);
+		Assert.Equal(0, holds);
+		Assert.Equal(since + (uint)BotBrain.UseTapTicks, first);
+		Assert.True(BotBrain.UseTapTicks < UseTracker.HoldTicks);
+	}
+
+	[Fact]
+	public void ABotNotTapping_NeverHasTheUseKeyDown()
+	{
+		for (uint tick = 0; tick < 64; tick++)
+		{
+			Assert.False(BotBrain.Frame(tick, 1073741826, Tapping(false), Steady).Held(InputButtons.Use));
+		}
+
+		// And a tap asked for from a later tick is not down before it.
+		Assert.False(BotBrain.UseDown(99, 100));
+		Assert.True(BotBrain.UseDown(100, 100));
+	}
 }

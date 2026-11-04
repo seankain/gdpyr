@@ -28,7 +28,8 @@ namespace Gdpyr.Fps;
 /// puppet at the render clock (§8.1), predicts the one it drives from its own frames and
 /// replays it against each record (§8.2), and puts every seated body on its seat as it
 /// draws the vehicle (§8.3). Who sits where on a client is what the records say, and
-/// nothing else. People ride; bots never drive or ride (GV-D15).</para>
+/// nothing else. People drive and ride; bots never drive or fly (GV-D15), and an HTN bot
+/// rides — at the gun or as a passenger — with a person at the controls (GV8).</para>
 ///
 /// <para><b>The kiosk</b> (§6.6, <c>CrewVehicleManager.Kiosk.cs</c>): the map's
 /// <see cref="VehicleKiosk"/>, each kind's timer and cap, the pads' check at the start, a
@@ -527,10 +528,14 @@ public partial class CrewVehicleManager : Node
 		_scratch.Clear();
 		foreach (KeyValuePair<int, SeatRef> entry in _seated)
 		{
-			// A seat whose policy has detached is a bot again, and bots never ride (GV-D15).
+			// A seat whose policy has detached is a bot again: a bot never drives (GV-D15),
+			// and only an HTN bot rides, at the gun or as a passenger (GV8). A rider whose
+			// driver has gone is not put down here: it gets out by the use key, at an exit
+			// point, as a person does (§10).
 			PlayerCombat player = combat?.Find(entry.Key);
-			if (player?.Character == null || !player.IsAlive || VehicleAt(entry.Value.Slot) == null
-				|| !CanBeSeated(entry.Key))
+			CrewVehicle vehicle = VehicleAt(entry.Value.Slot);
+			if (player?.Character == null || !player.IsAlive || vehicle == null || !CanBeSeated(entry.Key)
+				|| (!IsPerson(entry.Key) && !CrewSeats.MayRide(vehicle.Seats[entry.Value.Seat].Role, personDriving: true)))
 			{
 				_scratch.Add(entry.Key);
 			}
@@ -574,15 +579,82 @@ public partial class CrewVehicleManager : Node
 	}
 
 	/// <summary>
-	/// Whether this peer may be put in a seat at all: a person, on whichever process they
-	/// play — the vehicles are on the wire, so a remote client sees the hull it is put in
-	/// (§7) — or a seat an external policy is driving (§11, GV7), whose frames are the
-	/// policy's and not a bot's. Bots never drive or ride (GV-D15): a seat whose policy
-	/// detaches is a bot again, and is put down (<see cref="ReleaseTheGone"/>). The rule the
-	/// strategist's cargo keeps for who may load it (<c>UnitManager.IsSeatedStrategist</c>).
+	/// Whether this peer is a person to the seats: anybody who is not a bot, on whichever
+	/// process they play — the vehicles are on the wire, so a remote client sees the hull it
+	/// is put in (§7) — or a seat an external policy is driving (§11, GV7), whose frames are
+	/// the policy's and not a bot's. A person may sit in any seat, the driver's included. The
+	/// rule the strategist's cargo keeps for who may load it (<c>UnitManager.IsSeatedStrategist</c>).
 	/// </summary>
-	public static bool CanBeSeated(int peerId) =>
+	public static bool IsPerson(int peerId) =>
 		peerId != 0 && (!BotRoster.IsBot(peerId) || (Gdpyr.Agent.AgentServer.Instance?.IsAttached(peerId) ?? false));
+
+	/// <summary>
+	/// Whether this peer is a bot that may ride with a person (docs/GROUND_VEHICLES.md §10,
+	/// GV8): a ground bot that plans with the HTN, and no policy on its seat. Only at the gun
+	/// or as a passenger, and only while a person is at the controls
+	/// (<see cref="CrewSeats.MayRide"/>): bots never drive or fly (GV-D15). The legacy bots
+	/// never get in — they are the baseline policies are measured against.
+	/// </summary>
+	public static bool IsRider(int peerId) =>
+		peerId != 0 && BotRoster.IsBot(peerId) && !(Gdpyr.Agent.AgentServer.Instance?.IsAttached(peerId) ?? false)
+		&& (PlayerManager.Instance?.Bots?.PilotOf(peerId)?.Plans ?? false);
+
+	/// <summary>
+	/// Whether this peer may be put in a seat at all: a person (<see cref="IsPerson"/>), or a
+	/// bot that rides with one (<see cref="IsRider"/>). A seat whose policy detaches is a bot
+	/// again: put down when it may not ride, or sits at the controls
+	/// (<see cref="ReleaseTheGone"/>).
+	/// </summary>
+	public static bool CanBeSeated(int peerId) => IsPerson(peerId) || IsRider(peerId);
+
+	/// <summary>Whether a person is at <paramref name="vehicle"/>'s controls (GV8): what a bot rides with.</summary>
+	public static bool PersonDriving(CrewVehicle vehicle) => vehicle != null && IsPerson(vehicle.DriverPeerId);
+
+	/// <summary>
+	/// The seat a bot getting into <paramref name="vehicle"/> would get (GV8): the gunner's,
+	/// then the passenger's, while a person is at the controls; −1 for none
+	/// (<see cref="CrewSeats.PickRiderSeat"/>).
+	/// </summary>
+	public static int RiderSeat(CrewVehicle vehicle) =>
+		vehicle == null ? -1 : CrewSeats.PickRiderSeat(vehicle.Seats, vehicle.Occupants, PersonDriving(vehicle));
+
+	/// <summary>
+	/// The ride on offer to an HTN bot whose feet are at <paramref name="feet"/>
+	/// (docs/GROUND_VEHICLES.md §10, GV8): the nearest vehicle whose hull is within
+	/// <paramref name="offerMeters"/>, that is stopped, a helicopter on the ground, with a
+	/// person at the controls and the gun or the passenger's seat free
+	/// (<see cref="CrewSeats.OffersRide"/>). Where to stand to get in is the door of the
+	/// seat it would get. −1 with nothing on offer. Server only.
+	/// </summary>
+	public int NearestRide(Vector3 feet, float offerMeters, out Vector3 door, out float distance)
+	{
+		door = Vector3.Zero;
+		distance = float.MaxValue;
+		int best = -1;
+		for (int slot = 0; slot < _vehicles.Length; slot++)
+		{
+			CrewVehicle vehicle = VehicleAt(slot);
+			if (vehicle == null || vehicle.IsPuppet)
+			{
+				continue;
+			}
+
+			int seat = RiderSeat(vehicle);
+			float d = vehicle.HullDistance(feet);
+			if (!CrewSeats.OffersRide(vehicle.Destroyed, vehicle.Speed, vehicle.Kind, vehicle.Grounded, seat, d,
+					offerMeters)
+				|| d >= distance)
+			{
+				continue;
+			}
+
+			distance = d;
+			best = slot;
+			door = vehicle.Pose.ToWorld(vehicle.Seats[seat].Door);
+		}
+
+		return best;
+	}
 
 	/// <summary>
 	/// The vehicle a player at <paramref name="feet"/> could get into with a tap of the use
@@ -599,12 +671,15 @@ public partial class CrewVehicleManager : Node
 			return -1;
 		}
 
+		// A bot rides only where it has a seat it may take (GV8): the gun or the passenger's,
+		// with a person at the controls.
+		bool rider = !IsPerson(peerId);
 		int best = -1;
 		for (int slot = 0; slot < _vehicles.Length; slot++)
 		{
 			CrewVehicle vehicle = VehicleAt(slot);
 			if (vehicle == null || vehicle.Destroyed || !vehicle.HasFreeSeat || !vehicle.Grounded
-				|| vehicle.Speed > CrewSeats.MaxEnterSpeedMetersPerSecond)
+				|| vehicle.Speed > CrewSeats.MaxEnterSpeedMetersPerSecond || (rider && RiderSeat(vehicle) < 0))
 			{
 				continue;
 			}
@@ -652,7 +727,11 @@ public partial class CrewVehicleManager : Node
 			return false;
 		}
 
-		int seat = CrewSeats.PickSeat(vehicle.Seats, vehicle.Occupants, vehicle.Pose, combat.Character.SimPosition);
+		// A person gets the free seat whose door is nearest; a bot the gun, else the
+		// passenger's seat, and only with a person at the controls (GV8).
+		int seat = IsPerson(combat.PeerId)
+			? CrewSeats.PickSeat(vehicle.Seats, vehicle.Occupants, vehicle.Pose, combat.Character.SimPosition)
+			: RiderSeat(vehicle);
 		if (seat < 0)
 		{
 			return false;
@@ -688,9 +767,9 @@ public partial class CrewVehicleManager : Node
 			return $"seat {peerId} has no character this tick";
 		}
 
-		if (!CanBeSeated(peerId))
+		if (!IsPerson(peerId))
 		{
-			return $"seat {peerId} is a bot with no policy on it, and bots never ride (GV-D15)";
+			return $"seat {peerId} is a bot with no policy on it: a bot gets in only by the use key, beside a person at the controls (GV8)";
 		}
 
 		if (!combat.IsAlive || combat.Team != Team.GroundForce)
@@ -759,7 +838,8 @@ public partial class CrewVehicleManager : Node
 	/// <summary>A hold of the use key (§5.3): to the next free seat in seat order, if there is one.</summary>
 	public bool ChangeSeat(int peerId)
 	{
-		if (!TrySeat(peerId, out CrewVehicle vehicle, out int seat))
+		// A bot stays in the seat it got (GV8): the next free one could be the controls.
+		if (!IsPerson(peerId) || !TrySeat(peerId, out CrewVehicle vehicle, out int seat))
 		{
 			return false;
 		}
@@ -1069,11 +1149,15 @@ public partial class CrewVehicleManager : Node
 		return false;
 	}
 
-	/// <summary>Whether the segment passes through any hull on the field, grown by <paramref name="sweepRadius"/> (§10).</summary>
-	public bool HullInLine(Vector3 from, Vector3 to, float sweepRadius)
+	/// <summary>
+	/// Whether the segment passes through any hull on the field, grown by
+	/// <paramref name="sweepRadius"/> (§10) — but the one <paramref name="ownerId"/> sits in,
+	/// which a round fired from its seat never hits (GV-D6, GV8).
+	/// </summary>
+	public bool HullInLine(Vector3 from, Vector3 to, float sweepRadius, int ownerId = OwnerId.None)
 	{
 		float nearest = 1f + 1e-6f;
-		return QuerySegment(from, to, sweepRadius, OwnerId.None, ref nearest, out _) != null;
+		return QuerySegment(from, to, sweepRadius, ownerId, ref nearest, out _) != null;
 	}
 
 	/// <summary>

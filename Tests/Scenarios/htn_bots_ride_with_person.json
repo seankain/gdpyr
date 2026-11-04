@@ -1,0 +1,38 @@
+{
+  "name": "HTN ground bots get into a person's stopped 4x4, gunner first, ride it, and get out when the person does",
+  "bot_ai": "htn",
+  "seeds": [1, 2, 3],
+  "duration_ticks": 900,
+  "warmup_ticks": 60,
+  "roster": { "ground": 3, "strategists": 0 },
+
+  "seats": [
+    { "id": "driver", "team": "ground", "policy": "ground", "step_mul": 4,
+      "script": { "repeat": false, "steps": [
+        { "ticks": 360 },
+        { "ticks": 120, "move": [0, -1] },
+        { "ticks": 90, "move": [0, 1] },
+        { "ticks": 60 },
+        { "ticks": 8, "buttons": ["use"] },
+        { "ticks": 262 }
+      ] } }
+  ],
+
+  "spawns": [
+    { "vehicle": "4x4", "id": "truck", "at": [-92.4, 0.5, 103.4], "yaw": 3.1416 },
+    { "peer": "driver", "seat": { "vehicle": "truck", "role": "driver" } }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.vehicle_entered.count", "op": "==", "value": 3 },
+    { "metric": "events.vehicle_entered[seat=1,peer!=@driver].count", "op": "==", "value": 1 },
+    { "metric": "events.vehicle_entered[seat=2,peer!=@driver].count", "op": "==", "value": 1 },
+    { "metric": "events.vehicle_entered[seat=0,peer!=@driver].count", "op": "==", "value": 0 },
+    { "metric": "events.vehicle_entered[peer!=@driver].seat.first", "op": "==", "value": 1 },
+    { "metric": "events.vehicle_exited.count", "op": "==", "value": 3 },
+    { "metric": "events.vehicle_exited.seat.first", "op": "==", "value": 0 },
+    { "metric": "events.vehicle_exited[seat=0,peer=@driver].count", "op": "==", "value": 1 },
+    { "metric": "events.vehicle_exited[peer!=@driver].z.min", "op": ">=", "value": 106 }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "name": "legacy ground bots beside a person's stopped 4x4 never get in: only the HTN bots ride",
+  "bot_ai": "legacy",
+  "seeds": [1, 2],
+  "duration_ticks": 900,
+  "warmup_ticks": 60,
+  "roster": { "ground": 3, "strategists": 0 },
+
+  "seats": [
+    { "id": "driver", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json" }
+  ],
+
+  "spawns": [
+    { "vehicle": "4x4", "id": "truck", "at": [-92.4, 0.5, 103.4], "yaw": 3.1416 },
+    { "peer": "driver", "seat": { "vehicle": "truck", "role": "driver" } }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.vehicle_entered.count", "op": "==", "value": 1 },
+    { "metric": "events.vehicle_entered[peer!=@driver].count", "op": "==", "value": 0 }
+  ]
+}

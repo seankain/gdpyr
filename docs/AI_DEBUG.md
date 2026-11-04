@@ -156,8 +156,9 @@ HTN_BOTS.md §4.2 rule 3 holds.
 
 `HtnSchema` turns a fact byte back into what the domain's conditions call it — `Contact=Visible`,
 `Order=Patrol`, `Task=Attack` — and a goal byte into its name. `AiGoals.Family` puts every goal of
-every domain in one of §5.4's five tasks (plus a unit's Build and Obey), which is what the overlay
-colours by: a retreat is red on every layer.
+every domain in one of §5.4's five tasks (plus a unit's Build, Obey and React, and a ground bot's
+Ride — getting into, riding in and getting out of a person's crew vehicle, GROUND_VEHICLES.md GV8),
+which is what the overlay colours by: a retreat is red on every layer.
 
 ---
 
