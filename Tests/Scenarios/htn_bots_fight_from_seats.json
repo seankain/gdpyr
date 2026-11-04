@@ -1,0 +1,34 @@
+{
+  "name": "HTN ground bots that got into a person's 4x4 with nothing in sight fight from their seats when it brings a rifleman into range",
+  "bot_ai": "htn",
+  "seeds": [1, 2, 3, 4],
+  "duration_ticks": 1500,
+  "warmup_ticks": 60,
+  "roster": { "ground": 3, "strategists": 0 },
+
+  "seats": [
+    { "id": "driver", "team": "ground", "policy": "ground", "step_mul": 4,
+      "script": { "repeat": false, "steps": [
+        { "ticks": 360 },
+        { "ticks": 300, "move": [0, -1] },
+        { "ticks": 120, "move": [0, 1] },
+        { "ticks": 720 }
+      ] } }
+  ],
+
+  "spawns": [
+    { "vehicle": "4x4", "id": "truck", "at": [-92.4, 0.5, 108], "yaw": -1.5708 },
+    { "peer": "driver", "seat": { "vehicle": "truck", "role": "driver" } },
+    { "unit": "infantry", "team": "strategist", "at": [-15, 0.5, 108], "order": "none", "autonomy": "off" }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.vehicle_entered[seat=1,peer!=@driver].count", "op": "==", "value": 1 },
+    { "metric": "events.vehicle_entered[seat=2,peer!=@driver].count", "op": "==", "value": 1 },
+    { "metric": "events.damage[attacker>0,attacker!=@driver,victim<0].count", "op": ">=", "value": 3 },
+    { "metric": "events.kill[attacker>0,attacker!=@driver,weapon=14].count", "op": ">=", "value": 1 },
+    { "metric": "events.vehicle_damaged[attacker>0].count", "op": "==", "value": 0 },
+    { "metric": "events.vehicle_exited[peer!=@driver].count", "op": "==", "value": 0 }
+  ]
+}

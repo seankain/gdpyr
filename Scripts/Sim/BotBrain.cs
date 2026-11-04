@@ -176,11 +176,18 @@ public readonly struct BotSituation
 	/// </summary>
 	public readonly bool PrimaryDry;
 
+	/// <summary>
+	/// The use key is down this tick (docs/GROUND_VEHICLES.md §10, GV8): the pilot taps it to
+	/// get into a vehicle or out of a seat, by <see cref="BotBrain.UseDown"/>.
+	/// </summary>
+	public readonly bool UseDown;
+
 	public BotSituation(bool alive, float yaw, float pitch, float speed, bool hasTarget, Vector3 aimDirection,
 		float targetDistance, bool targetVisible, int ticksOnTarget, bool hasDestination, Vector3 moveDirection,
 		float destinationDistance, bool stuck, bool needsReload, bool semiAutomatic = false, bool holdFire = false,
 		bool keepMoving = false, bool inCover = false, bool reloading = false,
-		Vector3 grenadeAim = default, bool duck = false, int slot = SimConfig.LargeSlot, bool primaryDry = false)
+		Vector3 grenadeAim = default, bool duck = false, int slot = SimConfig.LargeSlot, bool primaryDry = false,
+		bool useDown = false)
 	{
 		Alive = alive;
 		Yaw = yaw;
@@ -205,6 +212,7 @@ public readonly struct BotSituation
 		Duck = duck;
 		Slot = slot;
 		PrimaryDry = primaryDry;
+		UseDown = useDown;
 	}
 }
 
@@ -239,6 +247,21 @@ public static class BotBrain
 
 	/// <summary>Metres past which a bot with nothing to shoot at runs rather than walks.</summary>
 	private const float SprintDistanceMeters = 12f;
+
+	/// <summary>
+	/// Ticks a bot's tap of the use key is held, and then let go for (docs/GROUND_VEHICLES.md
+	/// §10, GV8): a tap is resolved on the release (<see cref="UseTracker"/>), so one is
+	/// made every <c>2 ×</c> this, each far short of <see cref="UseTracker.HoldTicks"/>.
+	/// </summary>
+	public const int UseTapTicks = 4;
+
+	/// <summary>
+	/// Whether a bot tapping the use key since <paramref name="sinceTick"/> has it down on
+	/// <paramref name="tick"/>: down for <see cref="UseTapTicks"/>, up for as many, and again.
+	/// The first tap lands on the first release, <see cref="UseTapTicks"/> ticks in.
+	/// </summary>
+	public static bool UseDown(uint tick, uint sinceTick) =>
+		tick >= sinceTick && ((tick - sinceTick) / (uint)UseTapTicks) % 2u == 0u;
 
 	/// <summary>
 	/// One tick of intent. <paramref name="peerId"/> seeds the aim error and the
@@ -448,6 +471,11 @@ public static class BotBrain
 		else if (situation.Slot == SimConfig.SidearmSlot && !situation.PrimaryDry)
 		{
 			buttons |= InputButtons.Weapon3;
+		}
+
+		if (situation.UseDown)
+		{
+			buttons |= InputButtons.Use;
 		}
 
 		if (situation.Stuck)

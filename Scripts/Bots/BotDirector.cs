@@ -224,10 +224,13 @@ public sealed class BotDirector
 		}
 
 		// A policy's seat in a crew vehicle that has gone quiet holds still, looking where it
-		// looked: its bot would drive it, or press the use key, and bots never drive or ride
-		// (docs/GROUND_VEHICLES.md GV-D15). Only a policy's seat is ever seated; one that
-		// detaches is put down on the next tick (CrewVehicleManager.ReleaseTheGone).
+		// looked: its bot would press the use key, or sit at controls no bot may hold
+		// (docs/GROUND_VEHICLES.md GV-D15). A bot of its own in a seat is an HTN bot riding
+		// with a person (GV8), and its pilot decides for it; a policy's seat that detaches is a
+		// bot again, put down on the next tick unless it may ride where it sits
+		// (CrewVehicleManager.ReleaseTheGone).
 		if (CrewVehicleManager.Instance is { } crew && crew.IsSeated(peerId)
+			&& (AgentServer.Instance?.IsAttached(peerId) ?? false)
 			&& PlayerManager.Instance?.CharacterOf(peerId) is { } seated)
 		{
 			return InputFrame.Neutral(tick, seated.Yaw, seated.Pitch);
@@ -400,7 +403,7 @@ public sealed class BotDirector
 			return string.Empty;
 		}
 
-		Span<int> goals = stackalloc int[(int)GroundGoal.Rearm + 1];
+		Span<int> goals = stackalloc int[(int)GroundGoal.LeaveVehicle + 1];
 		int deniers = 0;
 		int runners = 0;
 		int sweepers = 0;

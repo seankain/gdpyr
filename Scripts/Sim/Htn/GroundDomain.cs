@@ -70,6 +70,12 @@ public enum GroundFact : byte
 	/// </summary>
 	Ammo,
 
+	/// <summary>
+	/// <see cref="RideState"/>: a crew vehicle it may ride in with a person at the
+	/// controls, or the seat it is in (docs/GROUND_VEHICLES.md §10, GV8). Every tick.
+	/// </summary>
+	Ride,
+
 	Count,
 }
 
@@ -175,6 +181,30 @@ public static class AmmoBands
 	}
 }
 
+/// <summary>
+/// A ground bot and the crew vehicles (docs/GROUND_VEHICLES.md §10, GV8): bots never drive
+/// or fly (GV-D15), but an HTN bot rides with a person — at the gun or in the passenger's
+/// seat of a vehicle a person is driving, and out again when the person is.
+/// </summary>
+public enum RideState : byte
+{
+	/// <summary>On foot, and no ride on offer.</summary>
+	None = 0,
+
+	/// <summary>
+	/// On foot, within <see cref="GroundPlanTraits.RideOfferMeters"/> of a vehicle that is
+	/// stopped, has a person at the controls and a free gunner's or passenger's seat
+	/// (<see cref="CrewSeats.OffersRide"/>).
+	/// </summary>
+	Offered = 1,
+
+	/// <summary>In a seat, with a person at the controls.</summary>
+	Riding = 2,
+
+	/// <summary>In a seat, with nobody at the controls, or a bot: the driver has got out, or died.</summary>
+	DriverOut = 3,
+}
+
 /// <summary>What the coordinator wants this bot for (§5.1). Humans are never given one.</summary>
 public enum GroundRole : byte
 {
@@ -217,6 +247,18 @@ public enum GroundGoal : byte
 	/// resupply fills the kit (docs/LOADOUT.md §8).
 	/// </summary>
 	Rearm,
+
+	/// <summary>
+	/// A ride on offer and nothing in sight: to the door of the seat it would get, and a
+	/// tap of the use key there (docs/GROUND_VEHICLES.md §10, GV8).
+	/// </summary>
+	BoardVehicle,
+
+	/// <summary>In a seat with a person at the controls: it fights from it, and goes nowhere.</summary>
+	Ride,
+
+	/// <summary>In a seat with nobody at the controls: a tap of the use key, until it is out.</summary>
+	LeaveVehicle,
 }
 
 /// <summary>How the pilot picks where to walk for an intent.</summary>
@@ -275,6 +317,12 @@ public struct GroundIntent
 	/// holding its fire, until the fire stops or it has been down long enough.
 	/// </summary>
 	public bool Duck;
+
+	/// <summary>
+	/// Tap the use key (docs/GROUND_VEHICLES.md §10, GV8): on foot, to get into the vehicle
+	/// in reach; seated, to get out. The pilot taps only when a tap would mean that.
+	/// </summary>
+	public bool TapUse;
 }
 
 /// <summary>
@@ -341,12 +389,23 @@ public readonly struct GroundPlanTraits
 	/// <summary>How long a walk to rearm that took too long keeps the bot from trying again (§3.4, P4).</summary>
 	public readonly int RearmRetryTicks;
 
+	/// <summary>How near a stopped vehicle with a person at the controls must be for a ride to be on offer (GV8).</summary>
+	public readonly float RideOfferMeters;
+
+	/// <summary>How long a walk to a vehicle and the taps at its door may take before the ride is given up (§3.4, P4).</summary>
+	public readonly int BoardTimeoutTicks;
+
+	/// <summary>How long a ride given up on keeps the bot from trying again.</summary>
+	public readonly int BoardRetryTicks;
+
 	public GroundPlanTraits(float healthOkFraction, float healthCriticalFraction, float healthHysteresis,
 		float alliesNearMeters, float alliesNearHoldMeters, float investigateRadiusMeters, float lockerArriveMeters,
 		int pathToLockerTimeoutTicks, int useLockerTimeoutTicks, float buddyLeashMeters,
 		float coverSearchMeters = 25f, float coverMinThreatMeters = 8f, float coverMaxThreatMeters = 55f,
 		int suppressedTicks = SimConfig.TickRate * 3 / 2, int suppressedMaxTicks = SimConfig.TickRate * 3,
-		int rearmStayTicks = SimConfig.TickRate * 6, int rearmRetryTicks = SimConfig.TickRate * 30)
+		int rearmStayTicks = SimConfig.TickRate * 6, int rearmRetryTicks = SimConfig.TickRate * 30,
+		float rideOfferMeters = 15f, int boardTimeoutTicks = SimConfig.TickRate * 8,
+		int boardRetryTicks = SimConfig.TickRate * 15)
 	{
 		HealthOkFraction = healthOkFraction;
 		HealthCriticalFraction = healthCriticalFraction;
@@ -365,6 +424,9 @@ public readonly struct GroundPlanTraits
 		SuppressedMaxTicks = Math.Max(suppressedMaxTicks, 0);
 		RearmStayTicks = Math.Max(rearmStayTicks, 1);
 		RearmRetryTicks = Math.Max(rearmRetryTicks, 0);
+		RideOfferMeters = MathF.Max(rideOfferMeters, 0f);
+		BoardTimeoutTicks = Math.Max(boardTimeoutTicks, 1);
+		BoardRetryTicks = Math.Max(boardRetryTicks, 0);
 	}
 
 	/// <summary>
@@ -377,7 +439,9 @@ public readonly struct GroundPlanTraits
 	/// that timed out waits thirty before trying again (docs/LOADOUT.md §8). Cover is looked
 	/// for within 25 m, between 8 m and 55 m of the fight (docs/COVER.md §5). A round
 	/// suppresses for 1.5 s after it, and a bot stays down for 3 s of it at most
-	/// (docs/TACTICS.md §5.7).
+	/// (docs/TACTICS.md §5.7). A ride is on offer within 15 m (docs/GROUND_VEHICLES.md §10);
+	/// getting in may take eight seconds — fifteen metres at a walk is four — and one given
+	/// up on is not tried again for fifteen.
 	/// </summary>
 	public static GroundPlanTraits Default => new(
 		healthOkFraction: 0.6f,
@@ -464,6 +528,9 @@ public sealed class GroundContext : BaseContext
 
 	/// <summary>A rearm was given up on and the planner has not yet been told the wait is over.</summary>
 	private bool _rearmBarred;
+
+	/// <summary>A ride was given up on and the planner has not yet been told the wait is over.</summary>
+	private bool _boardBarred;
 
 	public GroundContext(IFactory factory, in GroundPlanTraits traits)
 	{
@@ -558,6 +625,20 @@ public sealed class GroundContext : BaseContext
 
 	/// <summary>The tick the running operator started on.</summary>
 	public uint GoalStartTick;
+
+	// ---- a ride (docs/GROUND_VEHICLES.md §10, GV8), written by the pilot every tick ----
+
+	/// <summary>Where to stand to get in: the door of the seat a tap would give it. Only while a ride is on offer.</summary>
+	public Vector3 RidePoint;
+
+	/// <summary>A tap of the use key where it stands would get it into the ride: the hull in reach, and nothing nearer.</summary>
+	public bool RideInReach;
+
+	/// <summary>A ride was given up on: none is boarded before this tick.</summary>
+	public uint BoardRetryTick;
+
+	/// <summary>Rides given up on: a walk to a vehicle, and taps at its door, that took too long. For the debugger.</summary>
+	public int FailedBoards;
 
 	/// <summary>What its planner has done lately, for the spectator's debugger (docs/AI_DEBUG.md §3.3). Null for a context made outside <see cref="GroundPlanning"/>.</summary>
 	public HtnHistory History { get; internal set; }
@@ -658,6 +739,25 @@ public sealed class GroundContext : BaseContext
 	/// resupply puts back, and no wait after one given up on (§3.4, P4).
 	/// </summary>
 	public bool CanRearm => HasLocker && KitHoldsSpares && Tick >= RearmRetryTick;
+
+	/// <summary>Whether a ride may be boarded: no wait after one given up on (§3.4, P4).</summary>
+	public bool CanBoard => Tick >= BoardRetryTick;
+
+	/// <summary>
+	/// Where it stands with the crew vehicles (docs/GROUND_VEHICLES.md §10, GV8), every
+	/// tick: a seat changes hands on any tick, and a driver gets out on any. The end of the
+	/// wait after a ride given up on is said to the planner here, once, as a rearm's is on
+	/// the scan.
+	/// </summary>
+	public void SenseRide(RideState state)
+	{
+		Sense(GroundFact.Ride, (byte)state);
+		if (_boardBarred && Tick >= BoardRetryTick)
+		{
+			_boardBarred = false;
+			IsDirty = true;
+		}
+	}
 
 	/// <summary>The health band for a fraction, held past its edge by <see cref="GroundPlanTraits.HealthHysteresis"/> once entered.</summary>
 	public static HealthBand Band(float fraction, HealthBand previous, in GroundPlanTraits traits) =>
@@ -817,6 +917,32 @@ public sealed class GroundContext : BaseContext
 			case GroundGoal.Rearm:
 				return Rearm(running);
 
+			case GroundGoal.BoardVehicle:
+				// To the door of the seat it would get, and a tap of the key there. In, the
+				// fact is Riding and the executing condition ends this (GV8).
+				if (running > (uint)Traits.BoardTimeoutTicks)
+				{
+					return GiveUpBoard();
+				}
+
+				Walk(GroundMove.Point, RidePoint);
+				Intent.TapUse = RideInReach;
+				return TaskStatus.Continue;
+
+			case GroundGoal.Ride:
+				// Its movement goals are the vehicle's: it fights from the seat with its own
+				// aim and fire, at the focus target when it has one.
+				Intent.Move = GroundMove.Stay;
+				Intent.TargetOwnerId = FocusOwnerId;
+				return TaskStatus.Continue;
+
+			case GroundGoal.LeaveVehicle:
+				// Tapped until it is out: an exit with nowhere clear, or a helicopter too high,
+				// keeps it in its seat, as it keeps a person (§6.3).
+				Intent.Move = GroundMove.Stay;
+				Intent.TapUse = true;
+				return TaskStatus.Continue;
+
 			default:
 				return TaskStatus.Failure;
 		}
@@ -868,6 +994,15 @@ public sealed class GroundContext : BaseContext
 		return KitFull || Tick - _rearmArrivedTick >= (uint)Traits.RearmStayTicks
 			? TaskStatus.Success
 			: TaskStatus.Continue;
+	}
+
+	/// <summary>A ride given up on: none is boarded for <see cref="GroundPlanTraits.BoardRetryTicks"/> (§3.4, P4).</summary>
+	private TaskStatus GiveUpBoard()
+	{
+		FailedBoards++;
+		BoardRetryTick = Tick + (uint)Traits.BoardRetryTicks;
+		_boardBarred = true;
+		return TaskStatus.Failure;
 	}
 
 	/// <summary>A rearm given up on: none is planned for <see cref="GroundPlanTraits.RearmRetryTicks"/> (§3.4, P4).</summary>
@@ -1004,6 +1139,9 @@ public sealed class GroundDomainBuilder : BaseDomainBuilder<GroundDomainBuilder,
 	/// <summary><see cref="GroundContext.CanRearm"/>: a locker, spare rounds in the kit to put back, and no wait after a give-up.</summary>
 	public GroundDomainBuilder IfCanRearm() => Condition("can rearm", c => c.CanRearm);
 
+	/// <summary><see cref="GroundContext.CanBoard"/>: no wait after a ride given up on.</summary>
+	public GroundDomainBuilder IfCanBoard() => Condition("can board", c => c.CanBoard);
+
 	/// <summary>A predicted outcome: true while planning, forgotten before execution; a scan has to make it true.</summary>
 	public GroundDomainBuilder Predict<TValue>(GroundFact fact, TValue value) where TValue : struct, Enum
 	{
@@ -1029,6 +1167,19 @@ public static class GroundDomain
 {
 	public static Domain<GroundContext> Build(IFactory factory, bool executingConditions = true) =>
 		new GroundDomainBuilder("ground", factory, executingConditions)
+			// In a seat, before everything (docs/GROUND_VEHICLES.md §10, GV8): a seated body
+			// goes nowhere on its own legs, so no other branch has anything to give it. It
+			// fights from the seat while a person drives, and gets out when the person does.
+			.Select("ride")
+				.Sequence("get out")
+					.If(GroundFact.Ride, RideState.DriverOut)
+					.Act(GroundGoal.LeaveVehicle).While(GroundFact.Ride, RideState.DriverOut).End()
+				.End()
+				.Sequence("ride along")
+					.If(GroundFact.Ride, RideState.Riding)
+					.Act(GroundGoal.Ride).While(GroundFact.Ride, RideState.Riding).End()
+				.End()
+			.End()
 			.Select("retreat")
 				.Sequence("leave defences")
 					.If(GroundFact.InsideDefences)
@@ -1071,6 +1222,22 @@ public static class GroundDomain
 					.IfCanRearm()
 					.Act(GroundGoal.Rearm).WhileNot(GroundFact.Contact, ContactLevel.Visible)
 						.While(GroundFact.Suppressed, false).End()
+				.End()
+			.End()
+			// A person stopped beside it with a seat free, and nothing in sight or firing at it:
+			// in, gunner first (docs/GROUND_VEHICLES.md §10, GV8). After the retreat and the
+			// trips to the locker, which a ride would only take it away from; before the attack,
+			// whose ghosts — with the team remembering something most of the time — would
+			// otherwise keep it on foot; and before its role, which a person stopping for it
+			// overrides.
+			.Select("board")
+				.Sequence("board a ride")
+					.If(GroundFact.Ride, RideState.Offered)
+					.IfNot(GroundFact.Contact, ContactLevel.Visible)
+					.If(GroundFact.Suppressed, false)
+					.IfCanBoard()
+					.Act(GroundGoal.BoardVehicle).While(GroundFact.Ride, RideState.Offered)
+						.WhileNot(GroundFact.Contact, ContactLevel.Visible).While(GroundFact.Suppressed, false).End()
 				.End()
 			.End()
 			// In contact, or under fire from what it has lost track of: the second reaches only

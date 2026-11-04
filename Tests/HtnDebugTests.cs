@@ -116,6 +116,22 @@ public class HtnDebugTests
 		Assert.Contains(map.Conditions, c => c.Name == "Ammo=Dry");
 	}
 
+	[Fact]
+	public void TheDebuggersGroundMap_HasTheRideFirst_AndTheBoardingAfterTheResupplyBeforeTheAttack()
+	{
+		// docs/GROUND_VEHICLES.md §10, GV8: a spectator's build numbers the new branches as the server does.
+		HtnDomainMap map = HtnDomains.Ground;
+		int[] top = map[0].Children.ToArray();
+
+		Assert.Equal(new[] { "ride", "retreat", "resupply", "board", "attack", "defend zone", "recon" },
+			top.Select(c => map[c].Name).ToArray());
+		Assert.Equal("ground › ride › get out › LeaveVehicle", map.PathOf(IndexOfPrimitive(map, "LeaveVehicle")));
+		Assert.Equal("ground › ride › ride along › Ride", map.PathOf(IndexOfPrimitive(map, "Ride")));
+		Assert.Equal("ground › board › board a ride › BoardVehicle", map.PathOf(IndexOfPrimitive(map, "BoardVehicle")));
+		Assert.Contains(map.Conditions, c => c.Name == "can board");
+		Assert.Contains(map.Conditions, c => c.Name == "Ride=Offered");
+	}
+
 	// ---- traces ------------------------------------------------------------
 
 	[Fact]
@@ -136,8 +152,9 @@ public class HtnDebugTests
 		Assert.Equal((int)GroundFact.Count, trace.Facts.Count);
 		Assert.Equal(planning.Map.Conditions.Count, trace.Holds.Count);
 
-		// Recon is the fifth top-level task: the record says so, and the path runs through it.
-		Assert.Equal(new[] { 4, 1 }, trace.Traversal);
+		// Recon is the seventh top-level task, after GV8's ride and board (docs/GROUND_VEHICLES.md
+		// §10): the record says so, and the path runs through it.
+		Assert.Equal(new[] { 6, 1 }, trace.Traversal);
 		bool[] path = trace.PathMask(planning.Map);
 		Assert.True(path[0]);
 		Assert.True(path[trace.Current]);
@@ -377,8 +394,9 @@ public class HtnDebugTests
 		var options = new HtnTreeOptions { Collapse = true };
 		string[] lines = HtnText.Tree(planning.Map, trace, HtnTextStyle.Plain, options).Split('\n');
 
-		// The root, five top-level tasks, and recon's two methods with Standoff under one.
-		Assert.Equal(1 + 5 + 2 + 1, lines.Length);
+		// The root, seven top-level tasks — GV8's ride and board among them — and recon's two
+		// methods with Standoff under one.
+		Assert.Equal(1 + 7 + 2 + 1, lines.Length);
 		Assert.Contains(lines, l => l.Contains("attack  (+5)"));
 		Assert.Contains(lines, l => l.Contains(">> Standoff"));
 	}

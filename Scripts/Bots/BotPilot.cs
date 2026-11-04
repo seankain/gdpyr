@@ -148,6 +148,13 @@ public sealed partial class BotPilot
 	private uint _stuckUntilTick;
 	private bool _wantedToMove;
 
+	/// <summary>In a crew vehicle's seat this tick (docs/GROUND_VEHICLES.md §10, GV8): only an HTN bot ever is.</summary>
+	private bool _seated;
+
+	/// <summary>Tapping the use key, and since when (<see cref="BotBrain.UseDown"/>): to get into a vehicle, or out of a seat.</summary>
+	private bool _tapping;
+	private uint _tapSinceTick;
+
 	public BotPilot(int peerId, fps_controller character, in BotTraits traits, ContactMemory teamContacts,
 		GroundPlanning planning = null, CoverClaims coverClaims = null)
 	{
@@ -230,10 +237,15 @@ public sealed partial class BotPilot
 			return InputFrame.Neutral(tick, character.Yaw, character.Pitch);
 		}
 
+		// In a seat (docs/GROUND_VEHICLES.md §10, GV8): only an HTN bot riding with a person
+		// ever is. It goes where the vehicle goes and fights from where it sits.
+		_seated = _plan != null && (CrewVehicleManager.Instance?.IsSeated(_peerId) ?? false);
+
 		// A drone, when the side has one and there is a tank to fly it at, comes before
 		// the plan (docs/CONTROL_POINTS.md §4.5). The HTN bots only: the legacy bots are
-		// the baseline policies are measured against, and stay as they were.
-		if (_plan != null && TrySampleDrone(character, combat, tick, out InputFrame droneFrame))
+		// the baseline policies are measured against, and stay as they were. Never from a
+		// seat (§6.4).
+		if (_plan != null && !_seated && TrySampleDrone(character, combat, tick, out InputFrame droneFrame))
 		{
 			return droneFrame;
 		}
@@ -300,8 +312,9 @@ public sealed partial class BotPilot
 		// (docs/NETCODE.md §10.9). Zero for no throw. Decided at the scan rate, or when
 		// the target changes: working out the arc is a few thousand integration steps,
 		// and a target slow enough to throw at does not go far in a sixth of a second.
+		// Never from a seat (§6.4): a seated bot would wind up a throw the seat never lets go.
 		Vector3 grenadeAim = Vector3.Zero;
-		if (hasTarget && GrenadeSim.AiReady(combat.Grenades, tick))
+		if (hasTarget && !_seated && GrenadeSim.AiReady(combat.Grenades, tick))
 		{
 			if (tick >= _nextThrowDecisionTick || _throwTargetOwnerId != _targetOwnerId)
 			{
@@ -343,10 +356,28 @@ public sealed partial class BotPilot
 			AskForLauncher(combat, tick);
 		}
 
+		// Seated, its movement goals are ignored: the vehicle goes where its driver takes it.
+		if (_seated)
+		{
+			hasGoal = false;
+			keepMoving = false;
+		}
+
 		if (hasGoal)
 		{
 			goal = OutsideDefences(character, combat.Team, goal);
 		}
+
+		// A tap of the use key, when the plan asks for one (GV8): held and let go on a
+		// cycle, so each release is a tap (BotBrain.UseDown), from the tick it was first
+		// asked for. The plan stops asking the tick it is in, or out.
+		bool tapUse = _plan != null && _plan.Intent.TapUse;
+		if (tapUse && !_tapping)
+		{
+			_tapSinceTick = tick;
+		}
+
+		_tapping = tapUse;
 
 		Vector3 moveDirection = SteerDirection(character, tick, hasGoal, goal);
 		float goalDistance = hasGoal ? character.SimPosition.DistanceTo(goal) : 0f;
@@ -384,12 +415,14 @@ public sealed partial class BotPilot
 			grenadeAim: duck ? Vector3.Zero : grenadeAim,
 			duck: duck,
 			slot: combat.Slot,
-			primaryDry: primaryDry);
+			primaryDry: primaryDry,
+			useDown: tapUse && BotBrain.UseDown(tick, _tapSinceTick));
 
 		// Standing in its spot behind cover it means to stay put, target or no: a bot that
 		// counted as wanting to move there was "stuck" every half second, and jumped —
-		// which stands one up from behind its wall (docs/TACTICS.md §5.7).
-		_wantedToMove = hasGoal || (hasTarget && visible && !inCover);
+		// which stands one up from behind its wall (docs/TACTICS.md §5.7). Seated, it goes
+		// nowhere of its own accord.
+		_wantedToMove = !_seated && (hasGoal || (hasTarget && visible && !inCover));
 
 		return BotBrain.Frame(tick, _peerId, situation, _traits);
 	}
@@ -672,6 +705,10 @@ public sealed partial class BotPilot
 		// And whether the strategist's rounds are coming near it, every tick: a burst is
 		// over in a second (docs/TACTICS.md §5.7).
 		plan.SenseSuppressed(combat.LastFiredUponTick);
+
+		// And where it stands with the crew vehicles, every tick: a seat changes hands, and a
+		// driver gets out, on any (docs/GROUND_VEHICLES.md §10, GV8).
+		SenseRide(character, combat, plan);
 		_planning.Tick(plan);
 		_planWasAlive = true;
 
@@ -725,6 +762,39 @@ public sealed partial class BotPilot
 
 				return Objective(tick, character, out goal);
 		}
+	}
+
+	/// <summary>
+	/// Its ride (docs/GROUND_VEHICLES.md §10, GV8): seated, whether a person is still at the
+	/// controls; on foot, the nearest stopped vehicle within
+	/// <see cref="GroundPlanTraits.RideOfferMeters"/> with a person at the controls and the
+	/// gun or the passenger's seat free — where to stand to get in, and whether a tap where it
+	/// stands would — or none. No ray: the vehicles are at most four, and the reach is the use
+	/// key's own table.
+	/// </summary>
+	private void SenseRide(fps_controller character, PlayerCombat combat, GroundContext plan)
+	{
+		CrewVehicleManager crew = CrewVehicleManager.Instance;
+		RideState state = RideState.None;
+		plan.RideInReach = false;
+		if (crew != null && crew.TrySeat(_peerId, out CrewVehicle vehicle, out _))
+		{
+			state = CrewVehicleManager.PersonDriving(vehicle) ? RideState.Riding : RideState.DriverOut;
+		}
+		else if (crew != null)
+		{
+			int slot = crew.NearestRide(character.SimPosition, plan.Traits.RideOfferMeters, out Vector3 door,
+				out float distance);
+			if (slot >= 0)
+			{
+				state = RideState.Offered;
+				plan.RidePoint = door;
+				plan.RideInReach = distance <= SimConfig.EmplacementReachMeters
+					&& (EmplacementManager.Instance?.TapWouldEnter(combat, slot) ?? false);
+			}
+		}
+
+		plan.SenseRide(state);
 	}
 
 	/// <summary>
@@ -889,8 +959,17 @@ public sealed partial class BotPilot
 		// A fight this scan does not see but the team remembers is a ghost now, whatever the
 		// last scan made it; and fire still coming is a fight still on, remembered or not
 		// (docs/TACTICS.md §5.7).
-		sense.Cover = SenseCover(character, team, at, plan,
-			remembered: (sense.VisibleHostiles == 0 && sense.Remembered) || plan.Is(GroundFact.Suppressed));
+		// Seated, no wall is its business: the seat is where it fights from (GV8).
+		if (_seated)
+		{
+			LoseCover();
+			sense.Cover = CoverState.None;
+		}
+		else
+		{
+			sense.Cover = SenseCover(character, team, at, plan,
+				remembered: (sense.VisibleHostiles == 0 && sense.Remembered) || plan.Is(GroundFact.Suppressed));
+		}
 
 		plan.Encode(sense);
 	}
@@ -1494,9 +1573,11 @@ public sealed partial class BotPilot
 		}
 
 		// A friendly hull in the shot is a teammate in the way: the round would stop at it
-		// and hurt it (docs/GROUND_VEHICLES.md §10).
-		if (team == Team.GroundForce
-			&& CrewVehicleManager.Instance?.HullInLine(from, to, FriendlySweepRadiusMeters) == true)
+		// and hurt it (docs/GROUND_VEHICLES.md §10). Not the one it sits in, nor anybody in
+		// it: a round fired from a seat passes through both (GV-D6, GV8).
+		CrewVehicleManager crew = CrewVehicleManager.Instance;
+		int self = OwnerId.ForPeer(_peerId);
+		if (team == Team.GroundForce && crew?.HullInLine(from, to, FriendlySweepRadiusMeters, self) == true)
 		{
 			return true;
 		}
@@ -1505,7 +1586,7 @@ public sealed partial class BotPilot
 		{
 			PlayerCombat other = combat.PlayerAt(i);
 			if (other == null || other.PeerId == _peerId || other.Team != team || !other.IsAlive
-				|| other.Character == null)
+				|| other.Character == null || (_seated && crew?.RidesWithOwner(other.PeerId, self) == true))
 			{
 				continue;
 			}

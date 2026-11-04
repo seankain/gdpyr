@@ -239,6 +239,24 @@ public partial class EmplacementManager : Node
 	}
 
 	/// <summary>
+	/// Whether a tap of the use key where this player stands would get them into the crew
+	/// vehicle in <paramref name="vehicleSlot"/> (docs/GROUND_VEHICLES.md §10, GV8): the
+	/// table's own answer, so a bot taps only for what it means — not for a gun, a can or
+	/// the locker nearer than the hull. Server only; it changes nothing.
+	/// </summary>
+	public bool TapWouldEnter(PlayerCombat combat, int vehicleSlot)
+	{
+		if (combat?.Character == null || vehicleSlot < 0)
+		{
+			return false;
+		}
+
+		EnsureStarted();
+		return Resolve(combat, UseIntent.Tap, out _, out _, out int slot) == UseAction.EnterVehicle
+			&& slot == vehicleSlot;
+	}
+
+	/// <summary>
 	/// What one press means where this player is standing. The tracker is sampled by the
 	/// caller whether or not they are alive, so it stays in step with the frames; a press
 	/// from a corpse simply means nothing.

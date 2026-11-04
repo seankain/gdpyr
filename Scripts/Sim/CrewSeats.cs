@@ -410,6 +410,64 @@ public static class CrewSeats
 	}
 
 	/// <summary>
+	/// Whether a bot may sit in a seat of <paramref name="role"/> (docs/GROUND_VEHICLES.md
+	/// §10, GV8): never at the controls — bots never drive or fly (GV-D15) — and only while
+	/// a person is at them. A person is anybody who is not a bot, or a seat an external
+	/// policy holds.
+	/// </summary>
+	public static bool MayRide(SeatRole role, bool personDriving) => personDriving && role != SeatRole.Driver;
+
+	/// <summary>
+	/// The seat a bot that rides with a person gets (GV8): the gunner's first, then the
+	/// passenger's, the lower of two of a role; never the driver's; −1 when none is free or
+	/// nobody but a bot, or nobody at all, is at the controls. Where the bot stands does not
+	/// matter: the gun is the one seat a bot is most use in.
+	/// </summary>
+	public static int PickRiderSeat(ReadOnlySpan<CrewSeat> seats, ReadOnlySpan<int> occupants, bool personDriving)
+	{
+		if (!personDriving)
+		{
+			return -1;
+		}
+
+		int passenger = -1;
+		for (int i = 0; i < seats.Length; i++)
+		{
+			if (!IsFree(occupants, i) || !MayRide(seats[i].Role, personDriving))
+			{
+				continue;
+			}
+
+			if (seats[i].Role == SeatRole.Gunner)
+			{
+				return i;
+			}
+
+			if (passenger < 0)
+			{
+				passenger = i;
+			}
+		}
+
+		return passenger;
+	}
+
+	/// <summary>
+	/// Whether a vehicle offers an HTN bot a ride (GV8): not destroyed; stopped, which is
+	/// moving no faster than anybody may get in (<see cref="MaxEnterSpeedMetersPerSecond"/>);
+	/// a helicopter on the ground; a seat a bot may take with a person at the controls
+	/// (<paramref name="riderSeat"/>, from <see cref="PickRiderSeat"/>); and its hull within
+	/// <paramref name="offerMeters"/> of the bot.
+	/// </summary>
+	public static bool OffersRide(bool destroyed, float speed, CrewVehicleKind kind, bool grounded, int riderSeat,
+		float hullDistance, float offerMeters) =>
+		!destroyed
+		&& speed <= MaxEnterSpeedMetersPerSecond
+		&& (kind != CrewVehicleKind.Helicopter || grounded)
+		&& riderSeat >= 0
+		&& hullDistance <= offerMeters;
+
+	/// <summary>
 	/// The seat a hold of the use key moves the occupant of <paramref name="current"/>
 	/// to (§5.3): the next free one in seat order, round past the last; −1 when none is.
 	/// </summary>

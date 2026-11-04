@@ -51,7 +51,8 @@ public sealed class HtnSchema
 		typeof(bool), // Sweep
 		typeof(CoverState), // Cover
 		typeof(bool), // Suppressed
-		typeof(AmmoBand)); // Ammo
+		typeof(AmmoBand), // Ammo
+		typeof(RideState)); // Ride
 
 	public static readonly HtnSchema Unit = new(HtnDomainKind.Unit, typeof(UnitFact), typeof(UnitGoal),
 		typeof(OrderKind), // Order

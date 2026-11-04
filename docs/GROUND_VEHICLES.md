@@ -11,7 +11,10 @@ GV7's agent API, scenarios and demos (§12): a policy asks the kiosk (`vehicle`)
 (`list_vehicles`), gets in, drives and gets out with the use key and the axes; a scenario puts a
 vehicle down and seats its seats in it; §11's ten scenarios and an eleventh pass in every seed, and
 the old ones read as at GV0 within its spread; and a demo records the vehicles and plays them
-back, version 5. GV8's riding bots and GV9's docs are left.** Written against `6699b03`; GV4 amends GV-D16 (§3). The
+back, version 5. And GV8's riding bots (§12): an HTN ground bot with nothing in sight beside a
+person's stopped 4x4 or helicopter gets in by the use key, at the gun first, fights from the seat
+and gets out when the person does; with nobody or nobody but a bot at the controls none gets in, and
+a legacy bot never does. GV9's docs are left.** Written against `6699b03`; GV4 amends GV-D16 (§3). The
 decisions (GV-D1–GV-D17, §3) are the defaults the plan is written against; each is one line to
 change, so flag any you disagree with before GV2 starts. The phases (GV0–GV9, §12) say what each builds, what checks it, and what is
 left for a person at the controls.
@@ -651,7 +654,11 @@ runs a unit over, the drive and flight traits), `Weapons/vehicle_gun/vehicle_gun
 - **GV8, optional — HTN ground bots ride with a person:** a bot within 15 m of a stopped vehicle with
   a person driving and a free gunner's or passenger's seat, and nothing in sight, gets in, gunner
   first; it fights from the seat with its existing aim and fire, its movement goals ignored; it gets
-  out when the driver does. The legacy bots never get in.
+  out when the driver does. The legacy bots never get in. **As built in GV8** (§12): a fifteenth
+  fact, `Ride`, every tick; a `ride` branch before `retreat` and a `board` branch between `resupply`
+  and `attack`; the bot gets in and out by the use key, through the table a person's tap goes
+  through. "Stopped" is the speed anybody may get in at (3 m/s), "nothing in sight" also means
+  nothing firing at it, and "a person" is anybody who is not a bot, or a seat a policy holds.
 
 ---
 
@@ -1774,6 +1781,168 @@ What the phase left open, and what GV7 chose:
 §10's last item, with an `htn_*` scenario and `UnitHtnTests`-style facts for the ground domain's new
 task.
 
+**Built on `16211f0`**, with GV0's .NET SDK and Godot (8.0.133 and `4.6.stable.mono.official`,
+installed afresh; the project imported once with `--headless --import`, whose rewritten `.import`
+files and four new `.uid` files are not committed, as at GV0).
+
+- **New, engine-free.** In `Scripts/Sim/CrewSeats.cs`: `MayRide` — a bot never at the controls, and
+  only while a person is at them; `PickRiderSeat` — the gun, then the passenger's seat, the lower of
+  two of a role, never the driver's, and −1 with nobody or nobody but a bot at the controls;
+  `OffersRide` — not destroyed, at or under the 3 m/s anybody may get in at, a helicopter on the
+  ground, a seat a bot may take, the hull within 15 m. In the ground domain
+  (`Scripts/Sim/Htn/GroundDomain.cs`): a fifteenth fact, `Ride` (`RideState`: none, offered, riding,
+  driver out), written every tick (`GroundContext.SenseRide`); three goals appended,
+  `BoardVehicle`, `Ride` and `LeaveVehicle`; the intent's `TapUse`; the knobs `RideOfferMeters` 15,
+  `BoardTimeoutTicks` 8 s and `BoardRetryTicks` 15 s, with `FailedBoards`, and the wait's end told
+  to the planner as a rearm's is; and two branches:
+
+  ```
+  ground
+  ├─ ride                                                            (new, first)
+  │   ├─ get out          [Ride=driver out]                             LeaveVehicle {Ride=driver out}: tap E until out
+  │   └─ ride along       [Ride=riding]                                 Ride {Ride=riding}: stay, fight from the seat
+  ├─ retreat · resupply                                                 (as before)
+  ├─ board                                                           (new, after resupply)
+  │   └─ board a ride     [Ride=offered ∧ Contact≠visible ∧ ¬Suppressed ∧ can board]
+  │                         BoardVehicle {Ride=offered, Contact≠visible, ¬Suppressed}: to the door, tap E there
+  └─ attack · defend zone · recon                                       (as before)
+  ```
+
+  `BotBrain.UseDown` and `UseTapTicks` (4): a bot's tap is the key down four ticks and up four, so
+  each release is one tap and none is a hold (`BotSituation.UseDown`). The debugger:
+  `HtnSchema.Ground` names `Ride`, and `AiTaskFamily.Ride` (9), with a colour of its own, is the
+  three goals' family.
+- **New, engine side.** `CrewVehicleManager`: `IsPerson` (what `CanBeSeated` was: anybody who is not
+  a bot, or a seat a policy holds), `IsRider` (a bot with no policy on it whose pilot plans with the
+  HTN), `PersonDriving`, `RiderSeat` and `NearestRide`. `EmplacementManager.TapWouldEnter`: the use
+  key's own table asked what a tap where the bot stands would do, so it taps only when the tap gets
+  it into that vehicle — not for a gun, a can or the locker nearer than the hull. `BotPilot.SenseRide`,
+  every tick before the planner: seated, whether a person is still at the controls; on foot, the
+  ride on offer, the door of the seat it would get, and whether a tap there would get it in.
+- **Changed.** `CrewVehicleManager` — `CanBeSeated` is a person or a rider; `NearestEnterable`
+  offers a rider only a vehicle with a seat it may take; `Enter` seats a rider by `RiderSeat`, a
+  person by the nearest door as before; `ChangeSeat` refuses a bot, whose next free seat could be the
+  controls; `ReleaseTheGone` puts down a bot at the controls, and leaves a rider whose driver has gone
+  to get out by the key, at an exit point, as a person does; `ServerSeatPlaced` still seats no bot
+  without a policy (its refusal now says so); `HullInLine` takes the owner whose own hull is
+  skipped, as `QuerySegment` does. A person's path through each is what it was. `BotPilot`, seated:
+  no drone, no grenade, no cover search, no movement goal, never "stuck"; the friendly-fire check
+  skips the hull it sits in and whoever is in it, which its rounds pass through (GV-D6); the plan's
+  `TapUse` becomes the key by `UseDown`. `BotDirector.Sample` — a seated seat holds still on a neutral
+  frame only while a policy is attached to it (GV7's rule); a seated bot of its own is its pilot's.
+  `DescribeGroundPlans` counts the three goals.
+- **Two defects found, and fixed:**
+  - **Every seated bot held still.** GV7's branch in `BotDirector.Sample` gave any seated peer a
+    neutral frame, on the word that only a policy's seat is ever seated. Found reading the director
+    before the first run, but the first run of `htn_bots_ride_with_person` was on a build from before
+    the fix, and showed it: both bots got in, at the gun and in the bed, and in every seed neither got
+    out (`vehicle_exited` 1 of 3, the driver's) — a neutral frame never taps the key.
+  - **A gunner's own hull was a friend in its line of fire.** `FriendlyInLineOfFire` asked
+    `HullInLine` about every hull on the field, the one the shooter sits in included, so the gun
+    shield in front of a gunner's eye held its fire. Found reading the pilot; what it costs is in the
+    guard table below.
+- **The check's own mistake:** `htn_bot_rides_helicopter`'s first run claimed the door at `seat=1`
+  and failed in every seed. A vehicle event's `seat` is the seat's role, not its index (§11); the
+  helicopter's door is a passenger's, 2. `htn_bots_fight_from_seats` was set up three times before
+  its claims held: with the rifleman at x −5 and three seconds of throttle the gunner hit it once in
+  one seed of three; with four, it killed it in two of three, from 61 m; with the rifleman at x −15
+  and five seconds, as committed, it kills it in every seed.
+- **Tests:** `dotnet test` **3,052 of 3,052 pass**, 26 of them new: `GroundHtnTests` (+16 — a ride
+  on offer boarded at the door, the key tapped only where a tap gets it in, nothing boarded with a
+  fight in sight or fire coming, a fight coming into sight ending it, a ghost, a denier's node and a
+  sweep not keeping a bot off a ride, leaving defences, a reload and a rearm coming first, getting in
+  ending the boarding on the tick, riding whatever else is true and asking for nothing, the driver out
+  and the key tapped until it is out, a person back at the controls first, the boarding's give-up and
+  its retry, the three numbers, the debugger's names and family; and three rows of the premises
+  theory, one per new operator), `CrewSeatTests` (+7 — who may ride, gunner first wherever the bot
+  stands, never the controls, nothing without a person at them, the files' seats, each gate of an
+  offer), `BotBrainTests` (+2 — a tap every eight ticks and never a hold; no key without one) and
+  `HtnDebugTests` (+1 — the two branches where the server numbers them). Two of `HtnDebugTests`'
+  facts move as GV8 means them to: recon is now the seventh top-level task, and the collapsed tree
+  has eleven lines, not nine. The determinism and allocation facts run fifteen situations, three of
+  them GV8's, and still allocate nothing with the pooled factory. Every file in `Tests/Scenarios`
+  parses and names only metrics that exist (`ScenarioTests`). The test project's one warning is still
+  GV0's CS0649.
+- **Builds:** `Gdpyr.csproj`, `tools/Gdpyr.Playtest` and `tools/Gdpyr.AgentClient`, 0 warnings and 0
+  errors each.
+- **The scenario suite**, GV0's way (`--fixed-fps 60` through `GODOT`), on the final code: **50 of
+  57**, in 737 s of scenario wall time. The five new ones pass in every seed; the seven that fail are
+  GV7's seven. Against GV0's two runs (`docs/baselines`), 36 of the 41 old scenarios report every
+  claim's value as one of those runs did, and GV7's eleven read the values GV7 measured, to the
+  digit. The five that differ: `htn_squad_retreats` (2 of 4 seeds fell back, and
+  `squad_task[goal=4]` 6..7, one under GV0's least), `tactics_sniper_overwatch` (`unit_task[goal=21]`
+  7..11, inside GV0's runs, and `[goal=23]` 6..8, one over their most), `tactics_move_to_node`'s
+  kills (five or more in 3 of 3 seeds, as GV7 saw) and `weight_speed`'s 1.123..1.123 against GV0's
+  1.12..1.123 — the first three spread GV0 or GV7 names, the last a rounding —
+  and `htn_ground_denies_node`'s `node_captured[owner=1]` 2..3, where GV0 read 3..3 twice. Run twice
+  more on the final code it read 3..3 both times, and twice on the untouched `16211f0` beside it 3..3
+  and then 2..3: spread, in a scenario no earlier phase saw move. None of the 41 puts a crew vehicle
+  down, so none reaches GV8's code but its fact sensed every tick, which reads none.
+- **Engine checks:** every check runs with `--no-bots`, so none reaches a rider; they were rerun for
+  the person's path through the seat code, which GV8 edited: `physics` 66 of 66, `game` 37 of 37,
+  `heli` 39 of 39, `kiosk` 40 of 40, `combat` 57 of 57 and `demo` 14 of 14, as at GV7. `combat`'s
+  server exited 134 after its last fact in two runs of three — an abort in Godot's C# finalizer at
+  shutdown, over leaked `PhysicsRayQueryParameters3D` references — and did the same in one of two
+  runs of the untouched `16211f0`: older than GV8, like `heli-net`'s crash in GV5 and GV7.
+
+Measured by the five new scenarios on the final code, ticks counted from the tick the vehicle was put
+down (every value the same in each seed but where a range is given):
+
+| Scenario | Set-up as built | Measured |
+|---|---|---|
+| `htn_bots_ride_with_person` | three ground: a person (a policy seat) at the wheel of a 4x4 at the 4x4's pad, (−92.4, 0.5, 103.4), facing north, and two HTN bots at the spawn points, whose centres are 13–19 m from it; 6 s still, 2 s of W, 1.5 s of S, 1 s still, a tap of E | the gun taken at +165..+175, the bed at +170..+221, each by a bot and the gun first; both out 4 ticks after the driver, at z 108.9 and 110.3, 5.5 and 6.9 m north of the pad |
+| `htn_bot_rides_helicopter` | a person as pilot of the helicopter on its pad, two HTN bots: 7 s on the ground, 3 s of Space, 3 s of W, 7 s of Ctrl, a tap of E | one bot in the door at +181..+209; the other never in; the pilot out at (−72.8, 60.7), the bot 4 ticks later at (−75.8, 58.5), 45 m from the pad; no damage |
+| `htn_bots_fight_from_seats` | the 4x4 at (−92.4, 0.5, 108) facing east, a rifleman with its autonomy off at (−15, 0.5, 108), 87 m or more from the spawn points, past the bots' 80 m; 6 s still, 5 s of W, 2 s of S | both in, at +125..+157 and +142..+171; the gunner hits the rifleman three times with the mounted gun (weapon 14) and kills it, from 26–41 m, in every seed; nothing hits the 4x4; nobody out |
+| `htn_bots_need_a_driver` | a person in the bed of a 4x4 with nobody at its wheel at the pad, an empty 4x4 11 m from it towards the spawn, two HTN bots, 15 s | nobody gets into either |
+| `vehicle_legacy_bots_never_ride` | `htn_bots_ride_with_person`'s 4x4 and person, two legacy bots, 15 s | nobody gets in |
+
+Each guard, broken on a copy and the scenarios or facts named run, and what failed:
+
+| Broken | Failed |
+|---|---|
+| `CanBeSeated` a person only, as before GV8 | `htn_bots_ride_with_person` and `htn_bot_rides_helicopter` in every seed: nobody but the driver or pilot gets in |
+| `BotDirector.Sample` holding every seated peer still, as GV7 left it | `htn_bots_ride_with_person`: neither bot gets out (1 exit of 3); `htn_bots_fight_from_seats`: no hit in any seed, and both riders killed by the rifleman (2 exits, by death) |
+| the friendly-fire check counting the hull the bot sits in | `htn_bots_fight_from_seats`: no hit in any seed — the gun shield holds the gunner's fire — and both riders killed |
+| `PickRiderSeat` not asking for a person at the controls | `htn_bots_need_a_driver`: 70 `vehicle_entered` in seed 1, the person's placement among them — both bots into the empty 4x4's gun and bed, out again at once, nobody being at its wheel, and back in, every eight ticks |
+| a seated bot always riding, never "driver out" | `htn_bots_ride_with_person` and `htn_bot_rides_helicopter`: nobody but the driver or pilot gets out |
+| `PickRiderSeat` the passenger's seat first | `ARider_GetsTheGunFirst_…` and `TheFilesSeats_GiveARiderThe4x4sGunThenItsBed_…` |
+| `board` below a ghost (`Contact≠ghost` added to it) | `AGhost_TheRolesNode_AndASweep_DoNotKeepABotFromARide` |
+| `ride along` not while inside defences | `Seated_WithAPersonDriving_ItRides_AndFightsFromTheSeat_WhateverElseIsTrue` |
+| `UseTapTicks` 30, a hold | `ABotsTapOfTheUseKey_IsATapEveryEightTicks_…` |
+
+What the phase left open, and what GV8 chose:
+
+- **"Stopped"** is the speed anybody may get in at, 3 m/s (`CrewSeats.MaxEnterSpeedMetersPerSecond`):
+  a vehicle a bot walks to is one it could get into when it arrives. Faster, the offer goes, and the
+  boarding with it.
+- **"Nothing in sight"** is `Contact≠visible` and not suppressed — fire coming at it is a fight, as for
+  the dry bot's walk to the locker. A ghost is not: the team remembers something most of the time.
+- **"A person driving"** is anybody who is not a bot, or a seat a policy holds — the coordinator's and
+  GV7's rule — which is how the scenarios' drivers are people. A person who moves from the wheel to
+  another seat, by a hold of E, has left the controls: the bots get out.
+- **Gunner first** is by role, wherever the bot stands: `Enter` gives a bot `RiderSeat`, not the
+  nearest door, and the bot walks to the door of the seat it will get. A person's pick is unchanged.
+- **Getting in and out is the use key**, not a call into the seats: the bot taps where the use table
+  says a tap gets it in (`TapWouldEnter`), and the server resolves the tap as it resolves a person's.
+  A tap lands on the key's release, four ticks after the plan asks, so a bot is out four ticks after
+  its driver. One that cannot get out — nowhere clear, or a helicopter higher than 4 m — keeps
+  tapping, as a person would keep pressing; while it is aboard the vehicle is not empty, and is not
+  taken away as abandoned.
+- **Where in the tree:** `ride` before everything, since a seated body goes nowhere on its own legs;
+  `board` after the retreat and the trips to the locker, and before the attack, the zone and recon —
+  so a denier leaves its node for a person who stops for it. The coordinator is unchanged: a riding
+  bot keeps whatever role it had, and its plan sets it aside while it rides.
+- **It fights with its own aim:** the pilot's scan, target and lead, from the seat's eye. A gunner
+  leads by its own weapon's muzzle velocity, not the mounted gun's; the scenario's hits are at 26–41 m,
+  where that is small. In `htn_bots_fight_from_seats` the bed passenger never hit: the rifleman was
+  ahead, outside the bed's arc, which does not fire through the cab (GV-D6).
+- **A policy's seat that detaches while seated** is now, under `--bot-ai htn`, a rider like any other:
+  it stays if its seat is not the controls and gets out when the person driving does; at the controls,
+  or under legacy, it is put down as GV7 put it down. No check reaches this, as none reached GV7's.
+- **Left for a person at the controls:** riding bots seen from a client — a remote client drawing a
+  bot pinned to its seat, and a person on a dedicated server driving bots about. Everything here ran
+  on the authority, headless.
+
 ### GV9 — Docs (alongside; ½ day to close)
 
 README (controls, a paragraph), NETCODE.md (§1's table, §7's table, a §10.11 in §10.10's shape, and
@@ -1801,6 +1970,7 @@ DEMOS.md (version 5), EFFECTS.md (§1's table), and this document's status.
 | A demo records the vehicles and plays them back | `DemoCodecTests`; GV7's `demo` facts | `dotnet test`; `crew-vehicle-checks.sh demo` (a listen host, then `--playdemo`) |
 | Driving feels like driving | GV3's error, misprediction and replay numbers | `crew-vehicle-checks.sh net`: a `--server` process and four clients, 80 ms RTT and 20 ms jitter through a relay; a person, dedicated server with `tc netem` |
 | The helicopter flies the arena, lands on the floor and the bunker's roof, and settles when its pilot gets out at 4 m; its passenger fires from the door | §5.2's facts; GV5's flight, roof, settling and door facts | `dotnet test`; `crew-vehicle-checks.sh heli` (a listen host) and `heli-net` (a `--server` process and two clients through the relay); a person, both |
+| An HTN bot rides with a person — in, gunner first, fighting from the seat, out when the person is — and with nobody else; a legacy bot never | GV8's facts (`GroundHtnTests`, `CrewSeatTests`, `BotBrainTests`, `HtnDebugTests`); `htn_bots_ride_with_person`, `htn_bot_rides_helicopter`, `htn_bots_fight_from_seats`, `htn_bots_need_a_driver`, `vehicle_legacy_bots_never_ride` | `dotnet test`; Godot headless |
 
 ---
 
