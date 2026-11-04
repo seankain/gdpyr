@@ -749,7 +749,7 @@ strategist's defeat condition ([`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md
 | | Gun (`Kind = Gun`) | Mortar (`Kind = Mortar`) |
 |---|---|---|
 | weapon | `turret` (catalog 8): the technical's 12.7 mm round, 450 rpm, **no magazine** | `mortar` (catalog 9): an 81 mm shell at 34 m/s, one every 4 s, **no magazine** |
-| engages | nearest ground-force player within 100 m **it can see** | nearest ground-force player 15–100 m away, **seen or not** |
+| engages | nearest ground-force player within 100 m **it can see** | nearest ground-force player 15–100 m away **its shell can reach**, **seen or not** |
 | before it fires | 0.5 s reaction, then it must have swung to within 2° at 90°/s | 1.5 s laying time |
 | aims | first-order lead on the chest, 1.2° cone | where they are standing now, no lead, 3 m scatter |
 
@@ -760,6 +760,13 @@ seconds later — so what it punishes is **standing still inside the ring**, whi
 camping a door is. The high-arc elevation is found by false position over the real integrator
 (`MortarSolver`, in `Scripts/Sim/Defense.cs`): range falls monotonically above the elevation of
 greatest range, so a bracket on that branch cannot find the low, flat solution a wall would stop.
+Its rings are distances in three dimensions and its reach is not: from the Test map's roof, a target
+25 m up — a helicopter at its ceiling ([`GROUND_VEHICLES.md`](GROUND_VEHICLES.md) §14) — is out of
+reach past about 97 m. So a mortar neither picks up nor keeps a target its shell cannot come down on
+(`MortarSolver.CanReach`: one flight at the high arc's flattest elevation, asked after the cheaper
+questions); before that rule, one that had taken a helicopter in reach kept it as it flew out of
+reach, inside the 110 m it keeps a target to, and fired at nobody. Nobody on the ground is out of
+its reach inside the ring: from 7.1 m it carries 121 m.
 
 **Nothing new is on the wire.** A defence fires through `CombatManager.SpawnProjectile` like a
 unit, so every client already receives its rounds as ordinary spawn records, and the only state a

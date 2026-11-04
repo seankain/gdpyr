@@ -80,8 +80,9 @@ public interface IGunPost
 /// range, held with hysteresis until they leave it, re-scanned every
 /// <see cref="SimConfig.UnitTargetRefreshTicks"/> and staggered by index. A gun
 /// also has to see them, turn to face them and have had its reaction time; a
-/// mortar needs none of that past the laying time, and drops its shell where they
-/// were standing rather than where they are going.
+/// mortar needs none of that past the laying time, only a target its shell can come
+/// down on (docs/GROUND_VEHICLES.md §14), and drops its shell where they were
+/// standing rather than where they are going.
 /// </summary>
 public sealed class DefenseBattery
 {
@@ -243,8 +244,9 @@ public sealed class DefenseBattery
 	/// <summary>
 	/// Keeps the target it has while <see cref="DefenseSim.ShouldKeep"/> says so, and
 	/// otherwise takes the nearest candidate <see cref="DefenseSim.CanEngage"/>
-	/// allows. The line-of-sight ray is the expensive part, so it is only asked of a
-	/// candidate that would otherwise win.
+	/// allows. The line-of-sight ray and a mortar's flight to see whether its shell
+	/// reaches are the expensive parts, so they are only asked of a candidate that
+	/// would otherwise win.
 	/// </summary>
 	private static void Acquire(IGunPost post, uint tick, CombatManager combat, PhysicsDirectSpaceState3D space)
 	{
@@ -256,7 +258,7 @@ public sealed class DefenseBattery
 			Vector3 at = AimPoint(post, held);
 			Vector3 eye = post.EyeToward(at);
 			bool seen = !traits.NeedsLineOfSight || HasLineOfSight(space, eye, held.Character.EyePosition);
-			if (DefenseSim.ShouldKeep(traits, eye.DistanceTo(at), seen))
+			if (DefenseSim.ShouldKeep(traits, eye.DistanceTo(at), seen, InReach(post, eye, at)))
 			{
 				return;
 			}
@@ -282,6 +284,11 @@ public sealed class DefenseBattery
 			}
 
 			if (traits.NeedsLineOfSight && !HasLineOfSight(space, eye, player.Character.EyePosition))
+			{
+				continue;
+			}
+
+			if (!InReach(post, eye, at))
 			{
 				continue;
 			}
@@ -319,8 +326,29 @@ public sealed class DefenseBattery
 		}
 
 		Vector3 at = AimPoint(post, target);
-		float distance = post.EyeToward(at).DistanceTo(at);
-		return DefenseSim.ShouldKeep(post.Traits, distance, lineOfSight: true) ? target : null;
+		Vector3 eye = post.EyeToward(at);
+		return DefenseSim.ShouldKeep(post.Traits, eye.DistanceTo(at), lineOfSight: true, InReach(post, eye, at))
+			? target
+			: null;
+	}
+
+	/// <summary>
+	/// Whether a mortar's shell can come down on <paramref name="at"/> from
+	/// <paramref name="muzzle"/> at all (<see cref="MortarSolver.CanReach"/>): one flight,
+	/// asked after the cheaper questions. Always for a gun, which is not asked.
+	/// </summary>
+	private static bool InReach(IGunPost post, Vector3 muzzle, Vector3 at)
+	{
+		if (!post.Traits.NeedsReach)
+		{
+			return true;
+		}
+
+		byte weaponId = post.WeaponDefinitionId;
+		ProjectileStats projectile = weaponId < WeaponCatalog.Projectiles.Length
+			? WeaponCatalog.Projectiles[weaponId]
+			: default;
+		return MortarSolver.CanReach(muzzle, at, projectile);
 	}
 
 	/// <summary>

@@ -15,9 +15,9 @@
   ],
 
   "spawns": [
-    { "peer": "stripped", "at": [-90, 1, 80], "look": [0, 0] },
-    { "peer": "default", "at": [-80, 1, 80], "look": [0, 0] },
-    { "peer": "heaviest", "at": [-70, 1, 80], "look": [0, 0] }
+    { "peer": "stripped", "at": [-60, 1, 35], "look": [0, 0] },
+    { "peer": "default", "at": [-50, 1, 35], "look": [0, 0] },
+    { "peer": "heaviest", "at": [-40, 1, 35], "look": [0, 0] }
   ],
 
   "assert": [

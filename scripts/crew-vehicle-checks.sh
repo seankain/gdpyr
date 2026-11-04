@@ -1,26 +1,30 @@
 #!/usr/bin/env bash
 #
-# The crew vehicles' engine checks (docs/GROUND_VEHICLES.md §12, GV2 to GV4).
+# The crew vehicles' engine checks (docs/GROUND_VEHICLES.md §12, GV2 to GV5).
 #
 # What the 4x4 relies on the engine for — a body pushed out of a hull by its own
 # MoveAndSlide, a bevelled hull in MotionMode.Floating sliding off a wall's end at
 # 18 m/s, the springs over the test strip — and the 4x4 and the helicopter driven end
 # to end on a listen host, through the input map. Headless, on a copy of the tree with
-# tools/EngineChecks/CrewVehicleChecks.cs, CrewVehicleNetChecks.cs and
-# CrewVehicleCombatChecks.cs added as autoloads: the game itself never compiles or loads them.
+# tools/EngineChecks/CrewVehicleChecks.cs, CrewVehicleNetChecks.cs and CrewVehicleCombatChecks.cs
+# added as autoloads, and CrewHelicopterChecks.cs as well for `heli` and `heli-net`: the game
+# itself never compiles or loads them.
 #
 #   ./scripts/crew-vehicle-checks.sh            # physics, then the listen host
 #   ./scripts/crew-vehicle-checks.sh physics
 #   ./scripts/crew-vehicle-checks.sh game
 #   ./scripts/crew-vehicle-checks.sh net        # GV3: a dedicated server and four clients
 #   ./scripts/crew-vehicle-checks.sh combat     # GV4: a dedicated server, a driver, a gunner, a passenger
+#   ./scripts/crew-vehicle-checks.sh heli       # GV5: the helicopter on a listen host
+#   ./scripts/crew-vehicle-checks.sh heli-net   # GV5: a dedicated server, a pilot and a door passenger
 #
 # `net` runs in real time, not at --fixed-fps: a dedicated server, a UDP relay that
 # delays every datagram NET_DELAY_MS ± NET_JITTER_MS each way (40 ± 10 by default: 80 ms
 # RTT, 20 ms jitter — DEPLOYMENT.md §4's tc netem line, in user space, for kernels
 # without sch_netem), and a driver, a passenger and a strategist through it; a fourth
 # client joins once the server asks. `combat` is the same set-up with a driver, a gunner
-# and a passenger, firing from the 4x4 and at it. Both require python3 as well.
+# and a passenger, firing from the 4x4 and at it; `heli-net` a pilot and a passenger in the
+# helicopter's door. All three require python3 as well.
 #
 # Requires a Godot 4.6 .NET binary on PATH (or $GODOT) and the .NET SDK. One line per
 # fact, PASS or FAIL; exits non-zero when any fails. KEEP=1 keeps the copy and its logs.
@@ -57,9 +61,20 @@ fi
 
 mkdir -p "$COPY/EngineChecks"
 cp "$PROJECT_DIR/tools/EngineChecks/CrewVehicleChecks.cs" "$PROJECT_DIR/tools/EngineChecks/CrewVehicleNetChecks.cs" \
-	"$PROJECT_DIR/tools/EngineChecks/CrewVehicleCombatChecks.cs" "$COPY/EngineChecks/"
+	"$PROJECT_DIR/tools/EngineChecks/CrewVehicleCombatChecks.cs" "$PROJECT_DIR/tools/EngineChecks/CrewHelicopterChecks.cs" \
+	"$COPY/EngineChecks/"
 sed -i 's#^GameConsole="\*res://Scripts/Ui/GameConsole.cs"#&\nCrewVehicleChecks="*res://EngineChecks/CrewVehicleChecks.cs"\nCrewVehicleNetChecks="*res://EngineChecks/CrewVehicleNetChecks.cs"\nCrewVehicleCombatChecks="*res://EngineChecks/CrewVehicleCombatChecks.cs"#' \
 	"$COPY/project.godot"
+
+# GV5's checks are an autoload only while `heli` or `heli-net` runs, so that every other mode
+# runs with the three autoloads it was written against (docs/GROUND_VEHICLES.md §12, GV5).
+heli_autoload() {
+	sed -i '/^CrewHelicopterChecks=/d' "$COPY/project.godot"
+	if [ "$1" = "on" ]; then
+		sed -i 's#^CrewVehicleCombatChecks=.*#&\nCrewHelicopterChecks="*res://EngineChecks/CrewHelicopterChecks.cs"#' \
+			"$COPY/project.godot"
+	fi
+}
 
 if ! (cd "$COPY" && dotnet build Gdpyr.csproj -nologo -v quiet > "$COPY/build.log" 2>&1); then
 	cat "$COPY/build.log" >&2
@@ -181,8 +196,80 @@ run_combat() {
 	return "$status"
 }
 
+# GV5: the dedicated server, the relay, and a pilot and a passenger through it.
+run_heli_net() {
+	local dir="$COPY/heli"
+	mkdir -p "$dir"
+	rm -f "$dir"/*
+
+	CREW_HELI_CHECK=server CREW_NET_DIR="$dir" timeout 900 "$GODOT" --headless --path "$COPY" --max-fps 60 \
+		-- --server "$NET_SERVER_PORT" --no-bots > "$COPY/heli-server.log" 2>&1 &
+	local server=$!
+	python3 "$PROJECT_DIR/tools/EngineChecks/delay_relay.py" --listen "$NET_RELAY_PORT" \
+		--server "127.0.0.1:$NET_SERVER_PORT" --delay-ms "$NET_DELAY_MS" --jitter-ms "$NET_JITTER_MS" \
+		> "$COPY/heli-relay.log" 2>&1 &
+	local relay=$!
+	sleep 5
+
+	local parts=(pilot passenger)
+	local pids=()
+	for part in "${parts[@]}"; do
+		CREW_HELI_CHECK=$part CREW_NET_DIR="$dir" timeout 900 "$GODOT" --headless --path "$COPY" --max-fps 60 \
+			-- --client "127.0.0.1:$NET_RELAY_PORT" > "$COPY/heli-$part.log" 2>&1 &
+		pids+=($!)
+		sleep 2
+	done
+
+	local status=0
+	local code
+	wait "$server"
+	code=$?
+	echo "heli-server: exit $code" >> "$COPY/heli-exits.log"
+	[ "$code" -ne 0 ] && status=1
+	for i in "${!pids[@]}"; do
+		wait "${pids[$i]}"
+		code=$?
+		echo "heli-${parts[$i]}: exit $code" >> "$COPY/heli-exits.log"
+		[ "$code" -ne 0 ] && status=1
+	done
+
+	kill "$relay" 2>/dev/null
+	wait "$relay" 2>/dev/null
+
+	for part in server pilot passenger; do
+		[ -f "$COPY/heli-$part.log" ] && grep '^\[checks\]' "$COPY/heli-$part.log"
+	done
+	tail -n 1 "$COPY/heli-relay.log"
+	cat "$COPY/heli-exits.log"
+	return "$status"
+}
+
 failed=0
 for mode in "${MODES[@]}"; do
+	if [ "$mode" = "heli" ] || [ "$mode" = "heli-net" ]; then
+		heli_autoload on
+	else
+		heli_autoload off
+	fi
+
+	if [ "$mode" = "heli-net" ]; then
+		run_heli_net
+		status=$?
+		echo "heli-net: exit $status"
+		[ "$status" -ne 0 ] && failed=1
+		continue
+	fi
+
+	if [ "$mode" = "heli" ]; then
+		CREW_HELI_CHECK=listen timeout 900 "$GODOT" --headless --path "$COPY" --fixed-fps 60 \
+			-- --listen "$GAME_PORT" --no-bots > "$COPY/heli.log" 2>&1
+		status=$?
+		grep '^\[checks\]' "$COPY/heli.log"
+		echo "heli: exit $status"
+		[ "$status" -ne 0 ] && failed=1
+		continue
+	fi
+
 	if [ "$mode" = "combat" ]; then
 		run_combat
 		status=$?

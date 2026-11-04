@@ -260,10 +260,29 @@ public static class HelicopterSim
 			vertical = MathF.Max(vertical, -traits.UnpilotedDescentSpeed);
 		}
 
-		// No higher than the ceiling over the ground under it — one that finds itself
-		// above it, off the edge of a roof, comes back down at its descent rate — and no
-		// further down than the ground: it arrives on it rather than through it.
-		vertical = MathF.Min(vertical, MathF.Max((traits.CeilingMeters - height) / step, -traits.DescentSpeed));
+		// No higher than the ceiling over the ground under it, and no further down than the
+		// ground: it arrives on it rather than through it.
+		float over = height - traits.CeilingMeters;
+		if (over > 0f && lift)
+		{
+			// Above it, off the edge of a roof: back down at its descent rate, braking at its
+			// vertical acceleration so that it stops at the ceiling rather than past it —
+			// unless the pilot is taking it down faster.
+			float settle = MathF.Max(
+				-MathF.Min(traits.DescentSpeed, MathF.Sqrt(2f * traits.VerticalAcceleration * over)),
+				-over / step);
+			vertical = frame.Held(InputButtons.Crouch) ? MathF.Min(vertical, settle) : settle;
+		}
+		else if (over > 0f)
+		{
+			// Without lift it is coming down already, at its unpiloted rate and no faster.
+			vertical = MathF.Min(vertical, 0f);
+		}
+		else
+		{
+			vertical = MathF.Min(vertical, -over / step);
+		}
+
 		vertical = MathF.Max(vertical, -height / step);
 
 		bool grounded = height + (vertical * step) <= GroundedMeters && vertical <= 0f;
