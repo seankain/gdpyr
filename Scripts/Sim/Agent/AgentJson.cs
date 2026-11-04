@@ -209,6 +209,106 @@ public static class AgentJson
 	public static readonly string[] OrderNames = { "move", "attack", "patrol", "defend", "stop" };
 
 	/// <summary>
+	/// The crew vehicles by <see cref="CrewVehicleKind"/>, as the <c>vehicle</c> op, a
+	/// vehicle spawn and <c>list_vehicles</c> name them (docs/GROUND_VEHICLES.md §11): the
+	/// definitions' <c>Name</c>, which <c>CrewVehicleResourceTests</c> holds the kiosk's
+	/// names to. An op may also name one by its index.
+	/// </summary>
+	public static readonly string[] VehicleNames = { "4x4", "helicopter" };
+
+	/// <summary>
+	/// The seats by <see cref="SeatRole"/>, as a harness seat placement names them and
+	/// <c>list_vehicles</c> reports them: the controls (the 4x4's driver and the
+	/// helicopter's pilot alike), the gun, a passenger's.
+	/// </summary>
+	public static readonly string[] SeatRoleNames = { "driver", "gunner", "passenger" };
+
+	/// <summary>A kiosk line's status by <see cref="KioskStatus"/>, as <c>list_vehicles</c> reports it.</summary>
+	public static readonly string[] KioskStatusNames = { "ready", "out", "counting", "disabled" };
+
+	/// <summary>A crew vehicle's kind by name or by index; false for anything else, which the server refuses.</summary>
+	public static bool TryParseVehicle(string name, out byte kind)
+	{
+		for (int i = 0; i < VehicleNames.Length; i++)
+		{
+			if (name == VehicleNames[i] || name == i.ToString(System.Globalization.CultureInfo.InvariantCulture))
+			{
+				kind = (byte)i;
+				return true;
+			}
+		}
+
+		kind = byte.MaxValue;
+		return false;
+	}
+
+	/// <summary>A seat role by name, <c>pilot</c> being the helicopter's word for the controls; false for anything else.</summary>
+	public static bool TryParseSeatRole(string name, out SeatRole role)
+	{
+		for (int i = 0; i < SeatRoleNames.Length; i++)
+		{
+			if (name == SeatRoleNames[i])
+			{
+				role = (SeatRole)i;
+				return true;
+			}
+		}
+
+		role = SeatRole.Driver;
+		return name == "pilot";
+	}
+
+	/// <summary>A crew vehicle's kind as the API spells it; its index for one this build has no name for.</summary>
+	public static string VehicleName(byte kind) =>
+		kind < VehicleNames.Length ? VehicleNames[kind] : kind.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+	/// <summary>
+	/// One crew vehicle as <c>list_vehicles</c> reports it (docs/GROUND_VEHICLES.md §11), from
+	/// the record the wire carries (§7.1), so the op says what a client is told and to the
+	/// same resolution: slot, kind, position, yaw, health, speed, destroyed, airborne, and
+	/// each seat's role and peer (0 for empty), <paramref name="seats"/> of them.
+	/// <paramref name="fromKiosk"/> is whether it counts against its kind's cap.
+	/// </summary>
+	public static void WriteVehicle(Utf8JsonWriter writer, in CrewVehicleRecord record,
+		ReadOnlySpan<CrewSeat> seats, bool fromKiosk)
+	{
+		writer.WriteStartObject();
+		writer.WriteNumber("slot", record.Slot);
+		writer.WriteString("type", VehicleName(record.KindId));
+		writer.WriteNumber("x", record.Position.X);
+		writer.WriteNumber("y", record.Position.Y);
+		writer.WriteNumber("z", record.Position.Z);
+		writer.WriteNumber("yaw", record.Yaw);
+		writer.WriteNumber("health", record.Health);
+		writer.WriteNumber("speed", record.Velocity.Length());
+		writer.WriteBoolean("destroyed", record.Destroyed);
+		writer.WriteBoolean("airborne", record.Airborne);
+		writer.WriteBoolean("from_kiosk", fromKiosk);
+		writer.WriteStartArray("seats");
+		for (int seat = 0; seat < seats.Length && seat < CrewLayout.MaxSeats; seat++)
+		{
+			writer.WriteStartObject();
+			int role = (int)seats[seat].Role;
+			writer.WriteString("role", role < SeatRoleNames.Length ? SeatRoleNames[role] : "unknown");
+			writer.WriteNumber("peer", record.SeatPeer(seat));
+			writer.WriteEndObject();
+		}
+
+		writer.WriteEndArray();
+		writer.WriteEndObject();
+	}
+
+	/// <summary>One kind's line at the kiosk (§7.1), as <c>list_vehicles</c> reports it.</summary>
+	public static void WriteKioskLine(Utf8JsonWriter writer, byte kind, in KioskLine line)
+	{
+		writer.WriteStartObject();
+		writer.WriteString("type", VehicleName(kind));
+		writer.WriteString("status", (int)line.Status < KioskStatusNames.Length ? KioskStatusNames[(int)line.Status] : "unknown");
+		writer.WriteNumber("seconds_left", line.SecondsLeft);
+		writer.WriteEndObject();
+	}
+
+	/// <summary>
 	/// Reads a kit from a request — the <c>spawn</c> op's <c>kit</c>, a scenario seat's —
 	/// as <c>{"primary":"rifle","magazines":0,"grenades":3,"armour":"none"}</c>
 	/// (docs/LOADOUT.md §9). A field left out is the default kit's: rifle, five

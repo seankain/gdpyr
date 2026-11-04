@@ -86,6 +86,19 @@ public sealed class Runner
 	private int _loadoutsApplied;
 	private readonly Dictionary<string, int> _loadoutsRefused = new(StringComparer.Ordinal);
 
+	/// <summary>This episode's crew vehicle spawns by their labels: the slots the server put them in (docs/GROUND_VEHICLES.md §11).</summary>
+	private readonly Dictionary<string, int> _vehicleSlots = new(StringComparer.Ordinal);
+
+	/// <summary>A script step's kiosk requests this episode that were taken, and that were refused.</summary>
+	private int _vehiclesTaken;
+	private readonly Dictionary<string, int> _vehiclesRefused = new(StringComparer.Ordinal);
+
+	/// <summary>
+	/// Each ground seat's eye as its last two observations put it, with their ticks: what a
+	/// step's <c>look_at</c> aims from (<see cref="ScriptAim"/>).
+	/// </summary>
+	private readonly Dictionary<int, (uint Tick, float[] Eye, uint PreviousTick, float[] Previous)> _eyes = new();
+
 	public Runner(GdpyrConnection connection, string traceDirectory)
 	{
 		_connection = connection;
@@ -206,6 +219,9 @@ public sealed class Runner
 		await _connection.ResetAsync(seed, cancel).ConfigureAwait(false);
 		_loadoutsApplied = 0;
 		_loadoutsRefused.Clear();
+		_vehiclesTaken = 0;
+		_vehiclesRefused.Clear();
+		_eyes.Clear();
 
 		// The backfill settles before the clock starts, so the first seed does not
 		// play alone while the rest play against a full roster.
@@ -252,6 +268,20 @@ public sealed class Runner
 			metrics.Counter($"loadouts_refused.{code}", _loadoutsRefused.GetValueOrDefault(code));
 		}
 
+		// And what a script's kiosk requests came to (docs/GROUND_VEHICLES.md §11).
+		metrics.Counter("vehicles_taken", _vehiclesTaken);
+		int vehiclesRefused = 0;
+		foreach (int count in _vehiclesRefused.Values)
+		{
+			vehiclesRefused += count;
+		}
+
+		metrics.Counter("vehicles_refused", vehiclesRefused);
+		foreach (string code in ScenarioVehicles.Refusals)
+		{
+			metrics.Counter($"vehicles_refused.{code}", _vehiclesRefused.GetValueOrDefault(code));
+		}
+
 		trace.Flush();
 		return metrics;
 	}
@@ -277,6 +307,7 @@ public sealed class Runner
 			foreach (ScenarioSeat seat in scenario.Seats)
 			{
 				await LoadoutAsync(seat, elapsed, commanding, trace, cancel).ConfigureAwait(false);
+				await VehicleAsync(seat, elapsed, commanding, trace, cancel).ConfigureAwait(false);
 				Act(seat, elapsed, commanding, trace);
 			}
 
@@ -324,6 +355,18 @@ public sealed class Runner
 			Buttons = Buttons(step.Buttons),
 		};
 
+		// A step that looks at a point: the absolute look from where the seat's own
+		// observations put its eye, led to the tick this action is stepped on. Before the
+		// seat has been observed twice it holds its look.
+		if (step.LookAt != null && _eyes.TryGetValue(seat.PeerId, out var eye)
+			&& ScriptAim.Toward(eye.Eye, eye.Previous, (int)(eye.Tick - eye.PreviousTick),
+				(int)(_connection.Tick + 1 - eye.Tick), step.LookAt, out float yaw, out float pitch))
+		{
+			action.LookIsAbsolute = true;
+			action.DeltaYaw = yaw;
+			action.DeltaPitch = pitch;
+		}
+
 		_connection.Act(seat.PeerId, action);
 
 		Trace(trace, _connection.Tick, "action", writer =>
@@ -336,6 +379,43 @@ public sealed class Runner
 			writer.WriteNumber("dyaw", step.DeltaYaw);
 			writer.WriteNumber("dpitch", step.DeltaPitch);
 			writer.WriteNumber("buttons", (ushort)action.Buttons);
+			if (action.LookIsAbsolute)
+			{
+				writer.WriteNumber("yaw", action.DeltaYaw);
+				writer.WriteNumber("pitch", action.DeltaPitch);
+			}
+		});
+	}
+
+	/// <summary>
+	/// A scripted ground seat's request at the vehicle kiosk (docs/GROUND_VEHICLES.md §11): on
+	/// the first tick of a step that names a kind, asked once, before that tick's action, and
+	/// answered before the tick is stepped. A refusal is an answer a scenario can claim.
+	/// </summary>
+	private async Task VehicleAsync(ScenarioSeat seat, int elapsed, bool commanding, StreamWriter trace,
+		CancellationToken cancel)
+	{
+		if (!commanding || seat.PeerId == 0 || seat.Script == null || seat.Policy != "ground"
+			|| !seat.Script.TryEnter(elapsed, out ScriptStep step) || step.Vehicle == null)
+		{
+			return;
+		}
+
+		string answer = await _connection.RequestVehicleAsync(seat.PeerId, step.Vehicle, cancel).ConfigureAwait(false);
+		if (answer == "taken")
+		{
+			_vehiclesTaken++;
+		}
+		else
+		{
+			_vehiclesRefused[answer] = _vehiclesRefused.GetValueOrDefault(answer) + 1;
+		}
+
+		Trace(trace, _connection.Tick, "vehicle", writer =>
+		{
+			writer.WriteNumber("seat", seat.PeerId);
+			writer.WriteString("type", step.Vehicle);
+			writer.WriteString("answer", answer);
 		});
 	}
 
@@ -533,6 +613,11 @@ public sealed class Runner
 			? _connection.Schema.StrategistNames
 			: _connection.Schema.Names;
 
+		if (observation.Policy == GdpyrPolicy.Ground)
+		{
+			Observe(observation);
+		}
+
 		// The ground fields beyond the vector, in raw units (docs/LOADOUT.md §9): one
 		// float each, named plainly.
 		if (observation.Policy == GdpyrPolicy.Ground)
@@ -580,11 +665,28 @@ public sealed class Runner
 		}
 	}
 
+	/// <summary>Where a ground seat's eye is, from its observation's position, kept with the one before for <c>look_at</c>.</summary>
+	private void Observe(GdpyrObservation observation)
+	{
+		ReadOnlySpan<float> position = observation.Field(_connection.Schema, "self.position");
+		if (position.Length < 3)
+		{
+			return;
+		}
+
+		float scale = _connection.Schema.PositionScaleMeters;
+		float[] eye = { position[0] * scale, (position[1] * scale) + ScriptAim.EyeHeightMeters, position[2] * scale };
+		_eyes[observation.Seat] = _eyes.TryGetValue(observation.Seat, out var was) && was.Tick < observation.Tick
+			? (observation.Tick, eye, was.Tick, was.Eye)
+			: (observation.Tick, eye, observation.Tick, eye);
+	}
+
 	// ---- scripted spawns ---------------------------------------------------
 
 	private async Task SpawnAsync(Scenario scenario, StreamWriter trace, CancellationToken cancel)
 	{
 		_labels.Clear();
+		_vehicleSlots.Clear();
 
 		// A seat with a kit and nowhere to be put is equipped where it stands; one that
 		// has a spawn below takes its kit with it (docs/LOADOUT.md §9).
@@ -607,6 +709,32 @@ public sealed class Runner
 
 		foreach (ScenarioSpawn spawn in scenario.Spawns)
 		{
+			if (spawn.Vehicle != null)
+			{
+				// A crew vehicle, free and outside the kiosk's cap (docs/GROUND_VEHICLES.md §11).
+				int slot = await _connection.SpawnVehicleAsync(spawn.Vehicle, spawn.At, spawn.Yaw, spawn.Health, cancel)
+					.ConfigureAwait(false);
+				if (spawn.Id != null)
+				{
+					_vehicleSlots[spawn.Id] = slot;
+				}
+
+				Trace(trace, _connection.Tick, "spawn", writer =>
+				{
+					writer.WriteString("vehicle", spawn.Vehicle);
+					writer.WriteNumber("slot", slot);
+					if (spawn.Id != null)
+					{
+						writer.WriteString("label", spawn.Id);
+					}
+
+					writer.WriteNumber("yaw", spawn.Yaw);
+					writer.WriteNumber("health", spawn.Health);
+					WriteVector(writer, "at", spawn.At);
+				});
+				continue;
+			}
+
 			if (spawn.Structure != null)
 			{
 				int slot = await _connection.SpawnStructureAsync(spawn.Structure, spawn.Team, spawn.At, spawn.Yaw,
@@ -670,20 +798,34 @@ public sealed class Runner
 					$"'{scenario.Name}': a spawn places '{spawn.Peer}', and no seat has that id");
 			}
 
-			float yaw = spawn.Look is { Length: > 0 } ? spawn.Look[0] : 0f;
-			float pitch = spawn.Look is { Length: > 1 } ? spawn.Look[1] : 0f;
-			await _connection.SpawnSeatAsync(seat.PeerId, spawn.At, yaw, pitch, cancel, seat.Kit).ConfigureAwait(false);
+			// In a crew vehicle's seat (docs/GROUND_VEHICLES.md §11): put where the vehicle was put
+			// and looking the way it faces, unless the spawn says otherwise, then seated. A pilot's
+			// look is the heading the helicopter turns to.
+			ScenarioSpawn sitsIn = spawn.SeatVehicle != null ? Scenario.FindSpawn(scenario, spawn.SeatVehicle) : null;
+			int vehicleSlot = sitsIn != null ? _vehicleSlots.GetValueOrDefault(spawn.SeatVehicle, -1) : -1;
+			float[] at = spawn.HasAt || sitsIn == null ? spawn.At : sitsIn.At;
+			float yaw = spawn.HasLook || sitsIn == null ? (spawn.Look is { Length: > 0 } ? spawn.Look[0] : 0f) : sitsIn.Yaw;
+			float pitch = spawn.HasLook && spawn.Look is { Length: > 1 } ? spawn.Look[1] : 0f;
+			string role = spawn.SeatRole != null ? ScenarioVehicles.Role(spawn.SeatRole) : null;
+			await _connection.SpawnSeatAsync(seat.PeerId, at, yaw, pitch, cancel, seat.Kit, vehicleSlot, role)
+				.ConfigureAwait(false);
 
 			Trace(trace, _connection.Tick, "spawn", writer =>
 			{
 				writer.WriteString("peer", seat.Id);
 				writer.WriteNumber("seat", seat.PeerId);
-				WriteVector(writer, "at", spawn.At);
+				WriteVector(writer, "at", at);
 				writer.WriteNumber("yaw", yaw);
 				writer.WriteNumber("pitch", pitch);
 				if (seat.Kit != null)
 				{
 					writer.WriteString("kit", seat.Kit.ToString());
+				}
+
+				if (vehicleSlot >= 0)
+				{
+					writer.WriteNumber("vehicle", vehicleSlot);
+					writer.WriteString("role", role);
 				}
 			});
 		}
@@ -704,7 +846,7 @@ public sealed class Runner
 	{
 		foreach (ScenarioSpawn spawn in scenario.Spawns)
 		{
-			if (spawn.Unit == null && spawn.Structure == null && spawn.Peer == seatId)
+			if (spawn.Peer != null && spawn.Peer == seatId)
 			{
 				return true;
 			}

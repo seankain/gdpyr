@@ -1,0 +1,35 @@
+{
+  "name": "a ground seat beside a 4x4's driver's door gets in with a tap of the use key, drives it, stops and gets out with another",
+  "seeds": [1, 2],
+  "duration_ticks": 436,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 0 },
+
+  "seats": [
+    { "id": "me", "team": "ground", "policy": "ground", "step_mul": 4,
+      "script": { "repeat": false, "steps": [
+        { "ticks": 30 },
+        { "ticks": 8, "buttons": ["use"] },
+        { "ticks": 30 },
+        { "ticks": 120, "move": [0, -1] },
+        { "ticks": 60, "move": [0, 1] },
+        { "ticks": 120 },
+        { "ticks": 8, "buttons": ["use"] },
+        { "ticks": 60 }
+      ] } }
+  ],
+
+  "spawns": [
+    { "vehicle": "4x4", "id": "truck", "at": [-60, 0.5, 50], "yaw": -1.5708 },
+    { "peer": "me", "at": [-60.3, 0.6, 48.3], "look": [-1.5708, 0] }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.vehicle_entered.count", "op": "==", "value": 1 },
+    { "metric": "events.vehicle_entered[peer=@me,seat=0].count", "op": "==", "value": 1 },
+    { "metric": "events.vehicle_exited.count", "op": "==", "value": 1 },
+    { "metric": "events.vehicle_exited[peer=@me,seat=0].count", "op": "==", "value": 1 },
+    { "metric": "events.vehicle_exited.x.min", "op": ">=", "value": -55 }
+  ]
+}

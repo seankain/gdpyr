@@ -279,12 +279,22 @@ public partial class CrewVehicleManager
 			? KioskStatus.Disabled
 			: _timers[kind].Status(tick, AliveFromKiosk(kind));
 
+	/// <summary>
+	/// Server: a kind's line at the kiosk as of <paramref name="tick"/>, worked out afresh
+	/// rather than as the last broadcast left it — the agent API's <c>list_vehicles</c> (§11),
+	/// on a server that may have no client to broadcast to.
+	/// </summary>
+	public KioskLine KioskLineAt(byte kind, uint tick)
+	{
+		KioskStatus status = StatusOf(kind, tick);
+		return new KioskLine(status, status == KioskStatus.Counting ? _timers[kind].SecondsLeft(tick) : 0);
+	}
+
 	private void RefreshKioskLines(uint tick)
 	{
 		for (byte kind = 0; kind < _kiosk.Length; kind++)
 		{
-			KioskStatus status = StatusOf(kind, tick);
-			_kiosk[kind] = new KioskLine(status, status == KioskStatus.Counting ? _timers[kind].SecondsLeft(tick) : 0);
+			_kiosk[kind] = KioskLineAt(kind, tick);
 		}
 	}
 
@@ -392,9 +402,14 @@ public partial class CrewVehicleManager
 	/// Every wire slot taken — only the console's vehicles can do that, the kiosk's cap
 	/// being two of four — reads as the kind being out.
 	/// </summary>
-	public bool TryRequest(PlayerCombat combat, byte kind, uint tick, out KioskRefusal refusal)
+	public bool TryRequest(PlayerCombat combat, byte kind, uint tick, out KioskRefusal refusal) =>
+		TryRequest(combat, kind, tick, out refusal, out _);
+
+	/// <summary>As <see cref="TryRequest(PlayerCombat, byte, uint, out KioskRefusal)"/>, with the slot the vehicle took (−1 when refused).</summary>
+	public bool TryRequest(PlayerCombat combat, byte kind, uint tick, out KioskRefusal refusal, out int slot)
 	{
 		refusal = KioskRefusal.Dead;
+		slot = -1;
 		if (combat?.Character == null || NetworkManager.Instance is { IsClient: true })
 		{
 			return false;
@@ -450,11 +465,12 @@ public partial class CrewVehicleManager
 			return false;
 		}
 
-		int slot = Spawn(kind, pose.Position, pose.Yaw, peer);
+		slot = Spawn(kind, pose.Position, pose.Yaw, peer);
 		if (VehicleAt(slot) is not { } vehicle)
 		{
 			// FreeSlot was asked above, on this tick: not reached.
 			refusal = KioskRefusal.Out;
+			slot = -1;
 			return false;
 		}
 

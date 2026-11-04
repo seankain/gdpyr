@@ -83,17 +83,19 @@ public class DemoCodecTests
 	[InlineData(1)]
 	[InlineData(2)]
 	[InlineData(3)]
-	public void TheVersionIsFour_SinceThePlayerRecordCarriesTheKit_AndAnOlderDemoIsRefusedWithItsReason(int older)
+	[InlineData(4)]
+	public void TheVersionIsFive_SinceTheCrewVehiclesAreRecorded_AndAnOlderDemoIsRefusedWithItsReason(int older)
 	{
-		// docs/LOADOUT.md §6.3: the player record is 32 bytes and its zero large weapon
-		// means no primary; a version-3 demo's 29-byte records would misread, so it is
-		// refused, saying why (as version 3 refused version 2's unit records).
-		Assert.Equal(4, DemoFormat.Version);
+		// docs/GROUND_VEHICLES.md §7.4: a crew vehicle record beside the snapshots. A
+		// version-4 demo has none, and would play a seated player standing in the air, so it
+		// is refused, saying why (as version 4 refused version 3's player records, whose
+		// 29 bytes would have misread, docs/LOADOUT.md §6.3).
+		Assert.Equal(5, DemoFormat.Version);
 
 		DemoHeader old = Header();
 		old.Version = (byte)older;
 		Assert.False(old.IsPlayable(out string reason));
-		Assert.Equal($"demo format version {older}; this build reads 4", reason);
+		Assert.Equal($"demo format version {older}; this build reads 5", reason);
 	}
 
 	[Fact]
@@ -145,6 +147,8 @@ public class DemoCodecTests
 	{
 		byte[] players = SnapshotCodec.Encode(101, new[] { new PlayerSnapshot { PeerId = 3, Health = 55 } });
 		byte[] units = UnitSnapshotCodec.Encode(101, new[] { new UnitSnapshot { UnitId = 9, HealthPercent = 200 } });
+		byte[] vehicles = CrewVehicleCodec.Encode(101, new[] { new KioskLine(KioskStatus.Out, 0), new KioskLine(KioskStatus.Counting, 42) },
+			new[] { new CrewVehicleRecord { Slot = 1, Kind = CrewVehicleKind.FourByFour, Health = 412, Seat0 = 3 } });
 
 		using MemoryStream stream = Write(writer =>
 		{
@@ -156,11 +160,12 @@ public class DemoCodecTests
 			writer.WriteUnitSnapshot(101, units);
 			writer.WriteMark(102, "this is the bit");
 			writer.WriteDespawn(103, 3);
+			writer.WriteCrewVehicles(104, vehicles);
 		});
 
 		List<DemoRecord> records = ReadAll(stream, out DemoReader reader);
 		Assert.Null(reader.Error);
-		Assert.Equal(8, records.Count);
+		Assert.Equal(9, records.Count);
 
 		Assert.Equal(DemoRecordKind.Spawn, records[0].Kind);
 		Assert.Equal(100u, records[0].Tick);
@@ -190,6 +195,19 @@ public class DemoCodecTests
 
 		Assert.Equal(DemoRecordKind.Despawn, records[7].Kind);
 		Assert.Equal(103u, records[7].Tick);
+
+		// The crew vehicles' own bytes, which decode to the record, the seat and the kiosk's lines.
+		Assert.Equal(DemoRecordKind.CrewVehicles, records[8].Kind);
+		Assert.Equal(104u, records[8].Tick);
+		Assert.Equal(vehicles, records[8].Payload);
+		var lines = new KioskLine[CrewVehicleCodec.Kinds];
+		var decoded = new CrewVehicleRecord[SimConfig.MaxCrewVehicles];
+		Assert.True(CrewVehicleCodec.TryDecode(records[8].Payload, lines, decoded, out uint tick, out int count));
+		Assert.Equal(101u, tick);
+		Assert.Equal(1, count);
+		Assert.Equal(412, decoded[0].Health);
+		Assert.Equal(3, decoded[0].Seat0);
+		Assert.Equal(42, lines[1].SecondsLeft);
 	}
 
 	[Fact]
@@ -422,6 +440,17 @@ public class DemoCodecTests
 	{
 		Assert.True(SnapshotCodec.MaxPayloadBytes <= DemoFormat.MaxPayloadBytes);
 		Assert.True(UnitSnapshotCodec.MaxPayloadBytes <= DemoFormat.MaxPayloadBytes);
+
+		// Every crew vehicle slot filled: the largest ServerCrewVehicles there is (§7.1, 193 B).
+		var full = new CrewVehicleRecord[SimConfig.MaxCrewVehicles];
+		for (int slot = 0; slot < full.Length; slot++)
+		{
+			full[slot] = new CrewVehicleRecord { Slot = (byte)slot };
+		}
+
+		byte[] vehicles = CrewVehicleCodec.Encode(1, new[] { KioskLine.None, KioskLine.None }, full);
+		Assert.Equal(193, vehicles.Length);
+		Assert.True(vehicles.Length <= DemoFormat.MaxPayloadBytes);
 	}
 
 	[Fact]
@@ -454,6 +483,10 @@ public class DemoCodecTests
 			writer.WriteInput(11, 1, Sample(11));
 			writer.WritePlayerSnapshot(11, players);
 			writer.WriteUnitSnapshot(11, UnitSnapshotCodec.Encode(11, Array.Empty<UnitSnapshot>()));
+			writer.WriteCrewVehicles(11, CrewVehicleCodec.Encode(11, new[] { KioskLine.None, KioskLine.None },
+				Array.Empty<CrewVehicleRecord>()));
+			writer.WriteCrewVehicles(12, CrewVehicleCodec.Encode(12, new[] { KioskLine.None, KioskLine.None },
+				Array.Empty<CrewVehicleRecord>()));
 			writer.WriteMark(12, "watch this");
 			writer.WriteDespawn(13, 1);
 		}, Header(startTick: 10));
@@ -469,6 +502,8 @@ public class DemoCodecTests
 		Assert.Equal(1, summary.Despawns);
 		Assert.Equal(1, summary.PlayerSnapshots);
 		Assert.Equal(1, summary.UnitSnapshots);
+		Assert.Equal(2, summary.CrewVehicles);
+		Assert.Contains(summary.Describe(), line => line.Contains("2 vehicle"));
 		Assert.Single(summary.Marks);
 		Assert.Equal(12u, summary.Marks[0].Tick);
 		Assert.Equal("watch this", summary.Marks[0].Text);

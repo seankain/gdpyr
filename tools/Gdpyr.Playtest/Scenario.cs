@@ -48,6 +48,19 @@ public struct ScriptStep
 
 	/// <summary><c>locker</c> or <c>spawn</c>, as the <c>loadout</c> op takes it.</summary>
 	public string LoadoutWhen;
+
+	/// <summary>
+	/// A ground seat's request at the vehicle kiosk (docs/GROUND_VEHICLES.md §11): the kind
+	/// to ask for, <c>4x4</c> or <c>helicopter</c>, once, on the step's first tick, as the
+	/// <c>vehicle</c> op takes it. Null for none.
+	/// </summary>
+	public string Vehicle;
+
+	/// <summary>
+	/// A point of the map, <c>[x, y, z]</c>, a ground seat keeps its eye on for the step's
+	/// ticks (<see cref="ScriptAim"/>), in place of a <c>look</c>'s deltas; null for none.
+	/// </summary>
+	public float[] LookAt;
 }
 
 /// <summary>
@@ -247,6 +260,44 @@ public static class ScenarioKit
 	public const int MaxGrenades = 3;
 }
 
+/// <summary>
+/// The crew vehicles a scenario may put down and seat its seats in, and what the kiosk may
+/// answer a request with (docs/GROUND_VEHICLES.md §11), checked before a server is started.
+/// The game's own are <c>Vehicles/*.tres</c>' and <c>KioskRules</c>', which the harness does
+/// not compile; <c>ScenarioTests</c> pins these to them.
+/// </summary>
+public static class ScenarioVehicles
+{
+	/// <summary>Each kind as the agent API names it, by <c>CrewVehicleKind</c>.</summary>
+	public static readonly string[] Kinds = { "4x4", "helicopter" };
+
+	/// <summary>Each kind's full health: what a spawn's <c>health</c> may be at most.</summary>
+	public static readonly float[] MaxHealth = { 600f, 450f };
+
+	/// <summary>Each kind's seats, by role, in seat order. <c>pilot</c> is the helicopter's word for <c>driver</c>.</summary>
+	public static readonly string[][] Roles =
+	{
+		new[] { "driver", "gunner", "passenger" },
+		new[] { "driver", "passenger" },
+	};
+
+	/// <summary>
+	/// What the kiosk may answer a step's <c>vehicle</c> with instead of the vehicle: each is a
+	/// counter, <c>counters.vehicles_refused.&lt;code&gt;</c>.
+	/// </summary>
+	public static readonly string[] Refusals =
+	{
+		"dead", "not_ground", "not_at_kiosk", "seated", "mounted", "carrying", "piloting", "invalid", "out",
+		"not_ready", "pad_blocked", "too_soon",
+	};
+
+	/// <summary>A kind's index by name; −1 for none.</summary>
+	public static int KindOf(string name) => Array.IndexOf(Kinds, name);
+
+	/// <summary>A role as the server reads it: <c>pilot</c> is <c>driver</c>.</summary>
+	public static string Role(string named) => named == "pilot" ? "driver" : named;
+}
+
 /// <summary>Something a scenario puts on the map before the clock starts.</summary>
 public sealed class ScenarioSpawn
 {
@@ -298,6 +349,32 @@ public sealed class ScenarioSpawn
 	/// only strategist seat.
 	/// </summary>
 	public string Seat;
+
+	/// <summary>
+	/// A crew vehicle to put down (docs/GROUND_VEHICLES.md §11), <c>4x4</c> or
+	/// <c>helicopter</c>, free and outside the kiosk's cap: <see cref="At"/> the ground it
+	/// stands on — a helicopter's skids, hovering when off the ground — <see cref="Yaw"/> its
+	/// heading in the look convention. Null for anything else.
+	/// </summary>
+	public string Vehicle;
+
+	/// <summary>A crew vehicle spawn's health; 0 for its kind's full health.</summary>
+	public float Health;
+
+	/// <summary>
+	/// For a seat placement: the label of an earlier crew vehicle spawn whose seat it starts
+	/// in — <c>"seat": {"vehicle": "truck", "role": "gunner"}</c> — seated by the server
+	/// directly; null to stand at <see cref="At"/>.
+	/// </summary>
+	public string SeatVehicle;
+
+	/// <summary>For a seat placement in a vehicle: <c>driver</c> (or <c>pilot</c>), <c>gunner</c> or <c>passenger</c>.</summary>
+	public string SeatRole;
+
+	/// <summary>Whether the spawn said where (<c>at</c>) and which way (<c>look</c>): a seat in a vehicle needs neither.</summary>
+	public bool HasAt;
+
+	public bool HasLook;
 }
 
 /// <summary>
@@ -703,11 +780,12 @@ public sealed class Scenario
 			{
 				Ticks = Math.Max(Int(step, "ticks", 1), 1),
 				HasInput = step.TryGetProperty("move", out _) || step.TryGetProperty("look", out _)
-					|| step.TryGetProperty("buttons", out _),
+					|| step.TryGetProperty("buttons", out _) || step.TryGetProperty("look_at", out _),
 				Commands = ReadCommands(scenario, step),
 			};
 
 			ReadLoadout(scenario, step, ref parsed);
+			ReadVehicleStep(scenario, step, ref parsed);
 
 			if (step.TryGetProperty("move", out JsonElement move) && move.ValueKind == JsonValueKind.Array
 				&& move.GetArrayLength() >= 2)
@@ -741,6 +819,42 @@ public sealed class Scenario
 		}
 
 		return new ScenarioScript(read, repeat);
+	}
+
+	/// <summary>
+	/// A ground step's <c>vehicle</c> — a kind to ask the kiosk for — and <c>look_at</c>, a
+	/// point to keep the eye on (docs/GROUND_VEHICLES.md §11). A step looks by deltas or at a
+	/// point, not both.
+	/// </summary>
+	private static void ReadVehicleStep(Scenario scenario, JsonElement step, ref ScriptStep parsed)
+	{
+		if (step.TryGetProperty("vehicle", out JsonElement vehicle))
+		{
+			parsed.Vehicle = vehicle.ValueKind == JsonValueKind.String ? vehicle.GetString() : null;
+			if (ScenarioVehicles.KindOf(parsed.Vehicle) < 0)
+			{
+				throw new ScenarioException(
+					$"'{scenario.Name}': a step's 'vehicle' is the kind to ask the kiosk for, one of"
+					+ $" {string.Join(", ", ScenarioVehicles.Kinds)}");
+			}
+		}
+
+		if (!step.TryGetProperty("look_at", out JsonElement _))
+		{
+			return;
+		}
+
+		parsed.LookAt = Numbers(step, "look_at", null);
+		if (parsed.LookAt is not { Length: 3 })
+		{
+			throw new ScenarioException($"'{scenario.Name}': a step's 'look_at' is a point of the map, [x, y, z]");
+		}
+
+		if (step.TryGetProperty("look", out JsonElement _))
+		{
+			throw new ScenarioException(
+				$"'{scenario.Name}': a step looks by 'look', its deltas, or at 'look_at', a point; not both");
+		}
 	}
 
 	/// <summary>
@@ -880,11 +994,11 @@ public sealed class Scenario
 		bool strategist = seat.Policy == "strategist";
 		foreach (ScriptStep step in seat.Script.Steps)
 		{
-			if (strategist && (step.HasInput || step.Loadout != null))
+			if (strategist && (step.HasInput || step.Loadout != null || step.Vehicle != null))
 			{
 				throw new ScenarioException(
 					$"'{scenario.Name}': seat '{seat.Id}' is a strategist; its script's steps carry 'commands',"
-					+ " not 'move', 'look', 'buttons' or 'loadout'");
+					+ " not 'move', 'look', 'look_at', 'buttons', 'loadout' or 'vehicle'");
 			}
 
 			if (!strategist && step.Commands != null)
@@ -905,7 +1019,8 @@ public sealed class Scenario
 		var labels = new HashSet<string>(StringComparer.Ordinal);
 		foreach (ScenarioSpawn spawn in scenario.Spawns)
 		{
-			if (spawn.Id != null)
+			// A crew vehicle's label is a seat placement's to name, not a strategist's command's.
+			if (spawn.Id != null && spawn.Unit != null)
 			{
 				labels.Add(spawn.Id);
 			}
@@ -991,15 +1106,30 @@ public sealed class Scenario
 				Id = Text(element, "id", null),
 				Aboard = Text(element, "aboard", null),
 				Seat = Text(element, "seat", null),
+				Vehicle = Text(element, "vehicle", null),
+				Health = (float)Number(element, "health", 0.0),
+				HasAt = element.TryGetProperty("at", out _),
+				HasLook = element.TryGetProperty("look", out _),
 			};
 
-			int named = (spawn.Peer != null ? 1 : 0) + (spawn.Unit != null ? 1 : 0) + (spawn.Structure != null ? 1 : 0);
+			int named = (spawn.Peer != null ? 1 : 0) + (spawn.Unit != null ? 1 : 0) + (spawn.Structure != null ? 1 : 0)
+				+ (spawn.Vehicle != null ? 1 : 0);
 			if (named != 1)
 			{
 				throw new ScenarioException(
-					$"'{scenario.Name}': a spawn names exactly one of a 'peer' (a seat to place), a 'unit'"
-					+ " or a 'structure'");
+					$"'{scenario.Name}': a spawn names exactly one of a 'peer' (a seat to place), a 'unit',"
+					+ " a 'structure' or a 'vehicle'");
 			}
+
+			if (element.TryGetProperty("health", out JsonElement health)
+				&& (spawn.Vehicle == null || !health.TryGetDouble(out double given) || given <= 0d))
+			{
+				throw new ScenarioException(
+					$"'{scenario.Name}': only a vehicle spawn takes a 'health', and it is above 0");
+			}
+
+			ReadSeatInVehicle(scenario, element, spawn);
+			CheckCrewVehicle(scenario, spawn);
 
 			if (spawn.Autonomy != null && (spawn.Unit == null || Array.IndexOf(ScriptCommand.Modes, spawn.Autonomy) < 0))
 			{
@@ -1022,10 +1152,12 @@ public sealed class Scenario
 	/// </summary>
 	private static void CheckVehicleFields(Scenario scenario, ScenarioSpawn spawn)
 	{
-		if ((spawn.Id != null || spawn.Aboard != null || spawn.Seat != null) && spawn.Unit == null)
+		if (((spawn.Aboard != null || spawn.Seat != null) && spawn.Unit == null)
+			|| (spawn.Id != null && spawn.Unit == null && spawn.Vehicle == null))
 		{
 			throw new ScenarioException(
-				$"'{scenario.Name}': only a unit spawn takes an 'id', an 'aboard' or a 'seat'");
+				$"'{scenario.Name}': only a unit spawn takes an 'aboard' or a strategist 'seat', and only a unit"
+				+ " or a vehicle spawn an 'id'");
 		}
 
 		if (spawn.Id != null && FindSpawn(scenario, spawn.Id) != null)
@@ -1045,7 +1177,7 @@ public sealed class Scenario
 		}
 
 		ScenarioSpawn vehicle = FindSpawn(scenario, spawn.Aboard);
-		if (vehicle == null || spawn.Aboard == spawn.Id)
+		if (vehicle == null || vehicle.Unit == null || spawn.Aboard == spawn.Id)
 		{
 			throw new ScenarioException(
 				$"'{scenario.Name}': a spawn starts aboard '{spawn.Aboard}', which is not the 'id' of an earlier unit spawn");
@@ -1066,8 +1198,112 @@ public sealed class Scenario
 		}
 	}
 
-	/// <summary>The earlier unit spawn with this label, or null.</summary>
-	private static ScenarioSpawn FindSpawn(Scenario scenario, string id)
+	/// <summary>
+	/// A seat placement's <c>seat</c>: <c>{"vehicle": "truck", "role": "gunner"}</c>, the crew
+	/// vehicle by an earlier vehicle spawn's label (docs/GROUND_VEHICLES.md §11). A unit
+	/// spawn's <c>seat</c> is a strategist seat's id, a string, and is read with the unit.
+	/// </summary>
+	private static void ReadSeatInVehicle(Scenario scenario, JsonElement element, ScenarioSpawn spawn)
+	{
+		if (!element.TryGetProperty("seat", out JsonElement seat) || seat.ValueKind != JsonValueKind.Object)
+		{
+			return;
+		}
+
+		string where = $"'{scenario.Name}': a spawn's 'seat'";
+		if (spawn.Peer == null)
+		{
+			throw new ScenarioException($"{where} in a vehicle is a seat placement's: only a 'peer' sits in one");
+		}
+
+		foreach (JsonProperty field in seat.EnumerateObject())
+		{
+			if (field.Name is not ("vehicle" or "role"))
+			{
+				throw new ScenarioException($"{where} has no field '{field.Name}'; it takes 'vehicle' and 'role'");
+			}
+		}
+
+		spawn.SeatVehicle = Text(seat, "vehicle", null);
+		spawn.SeatRole = Text(seat, "role", null);
+		if (spawn.SeatVehicle == null || spawn.SeatRole == null)
+		{
+			throw new ScenarioException(
+				$"{where} is {{\"vehicle\": <a vehicle spawn's id>, \"role\": <driver, gunner or passenger>}}");
+		}
+	}
+
+	/// <summary>
+	/// A crew vehicle spawn's kind and health, and a seat placement's vehicle and role
+	/// (docs/GROUND_VEHICLES.md §11): the vehicle an earlier vehicle spawn's — earlier, because
+	/// it has to be on the field to be sat in — the role one its kind has, and no seat sat in
+	/// twice.
+	/// </summary>
+	private static void CheckCrewVehicle(Scenario scenario, ScenarioSpawn spawn)
+	{
+		if (spawn.Vehicle != null)
+		{
+			int kind = ScenarioVehicles.KindOf(spawn.Vehicle);
+			if (kind < 0)
+			{
+				throw new ScenarioException(
+					$"'{scenario.Name}': a vehicle spawn's 'vehicle' is one of {string.Join(", ", ScenarioVehicles.Kinds)},"
+					+ $" not '{spawn.Vehicle}'");
+			}
+
+			if (spawn.Health > ScenarioVehicles.MaxHealth[kind])
+			{
+				throw new ScenarioException(
+					$"'{scenario.Name}': a {spawn.Vehicle}'s 'health' is above 0 and at most"
+					+ $" {ScenarioVehicles.MaxHealth[kind]:0}; left out, it is full");
+			}
+		}
+
+		if (spawn.SeatVehicle == null)
+		{
+			return;
+		}
+
+		ScenarioSpawn vehicle = FindSpawn(scenario, spawn.SeatVehicle);
+		if (vehicle?.Vehicle == null)
+		{
+			throw new ScenarioException(
+				$"'{scenario.Name}': a seat is in '{spawn.SeatVehicle}', which is not the 'id' of an earlier vehicle spawn");
+		}
+
+		string[] roles = ScenarioVehicles.Roles[ScenarioVehicles.KindOf(vehicle.Vehicle)];
+		string role = ScenarioVehicles.Role(spawn.SeatRole);
+		if (Array.IndexOf(roles, role) < 0)
+		{
+			throw new ScenarioException(
+				$"'{scenario.Name}': the {vehicle.Vehicle} has no '{spawn.SeatRole}' seat; its seats are"
+				+ $" {string.Join(", ", roles)}");
+		}
+
+		int seats = 0;
+		int taken = 0;
+		foreach (string each in roles)
+		{
+			seats += each == role ? 1 : 0;
+		}
+
+		foreach (ScenarioSpawn earlier in scenario.Spawns)
+		{
+			if (earlier.SeatVehicle == spawn.SeatVehicle && ScenarioVehicles.Role(earlier.SeatRole) == role)
+			{
+				taken++;
+			}
+		}
+
+		if (taken >= seats)
+		{
+			throw new ScenarioException(
+				$"'{scenario.Name}': two spawns sit in '{spawn.SeatVehicle}''s {role} seat, and it has {seats}");
+		}
+	}
+
+	/// <summary>The earlier spawn with this label — a unit's or a crew vehicle's — or null.</summary>
+	public static ScenarioSpawn FindSpawn(Scenario scenario, string id)
 	{
 		foreach (ScenarioSpawn spawn in scenario.Spawns)
 		{

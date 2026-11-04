@@ -66,11 +66,13 @@ A flat sequence of tagged, length-delimited records. Little endian, no padding, 
 | 5 | `PlayerSnapshot` | `u16` length, then a `SnapshotCodec` payload verbatim |
 | 6 | `UnitSnapshot` | `u16` length, then a `UnitSnapshotCodec` payload verbatim |
 | 7 | `Mark` | `u8` length, then UTF-8 |
+| 8 | `CrewVehicles` | `u16` length, then a `CrewVehicleCodec` payload verbatim: the crew vehicles, who sits where and the kiosk's lines ([`GROUND_VEHICLES.md`](GROUND_VEHICLES.md) §7.4; version 5) |
 
 Three things are worth saying about that table.
 
-**The two payloads are the snapshot codecs' own bytes, copied.** A demo costs no second encoding of
-anything, and a codec change is a version bump here rather than a translation layer. The price is
+**The payloads are the codecs' own bytes, copied** — the two snapshots', and since version 5 the
+crew vehicles' message, which the authority records as it sends the ground force (unfogged, as the
+player snapshot is) and a client as it was sent. A demo costs no second encoding of anything, and a codec change is a version bump here rather than a translation layer. The price is
 that the demo version is coupled to the wire version, which is the right way round: those bytes
 already *are* the protocol.
 
@@ -232,6 +234,15 @@ replayed, as it never was. A remote player's vest band is drawn from the same by
 `SnapshotInterpolator` a live client uses and the bodies are drawn an interpolation delay behind the
 newest of them.
 
+**The crew vehicles are keyframes in both** ([`GROUND_VEHICLES.md`](GROUND_VEHICLES.md) §7.4).
+Each `CrewVehicles` record is applied as a client applies the message — a puppet made for a slot it
+names and freed after a wreck, who sits where — and the puppets are drawn at the read head's render
+clock with every seated body on its seat. The journal's step for a seated body is look-only, so the
+records are the only account of who sits where; nobody drives in playback, so nothing is predicted.
+`scripts/crew-vehicle-checks.sh demo` records a 4x4 driven on a listen host and plays the file back
+in a second process: the puppet within 6 mm of the authority's path, the driver seated on every
+frame the recording had them seated and put down on the frame it did.
+
 **Units are keyframes in both.** Units are server-simulated and never predicted, so a client only
 ever sees unit snapshots anyway; playback is that client. One difference from the wire: a unit the
 demo has not mentioned is *created* from the snapshot and one missing from the newest snapshot is
@@ -305,4 +316,7 @@ Stated rather than discovered:
   primary's spare rounds and the vest's points in bytes 29–30, the kit in byte 31, and a zero
   primary meaning none ([`LOADOUT.md`](LOADOUT.md) §6.1, [`NETCODE.md`](NETCODE.md) §7). Version-3
   demos are refused, saying "demo format version 3; this build reads 4". Kit requests are not
-  journalled: the record carries what they changed.
+  journalled: the record carries what they changed. Version 5 is the fourth: the crew vehicles'
+  message as a record of its own, tag 8 ([`GROUND_VEHICLES.md`](GROUND_VEHICLES.md) §7.4). A
+  version-4 demo has no vehicles to draw and would play a seated player standing in the air, so it
+  is refused, saying "demo format version 4; this build reads 5".

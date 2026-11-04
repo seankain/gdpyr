@@ -223,6 +223,16 @@ public sealed class BotDirector
 			return frame;
 		}
 
+		// A policy's seat in a crew vehicle that has gone quiet holds still, looking where it
+		// looked: its bot would drive it, or press the use key, and bots never drive or ride
+		// (docs/GROUND_VEHICLES.md GV-D15). Only a policy's seat is ever seated; one that
+		// detaches is put down on the next tick (CrewVehicleManager.ReleaseTheGone).
+		if (CrewVehicleManager.Instance is { } crew && crew.IsSeated(peerId)
+			&& PlayerManager.Instance?.CharacterOf(peerId) is { } seated)
+		{
+			return InputFrame.Neutral(tick, seated.Yaw, seated.Pitch);
+		}
+
 		return _pilots.TryGetValue(peerId, out BotPilot pilot) ? pilot.Sample(tick) : InputFrame.Neutral(tick);
 	}
 

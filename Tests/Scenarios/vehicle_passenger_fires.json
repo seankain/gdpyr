@@ -1,0 +1,30 @@
+{
+  "name": "a passenger in the bed of a 4x4 at full speed fires at a rifleman 25 m off its line as it passes, and hits it",
+  "seeds": [1, 2],
+  "duration_ticks": 480,
+  "warmup_ticks": 60,
+  "roster": { "ground": 2, "strategists": 0 },
+
+  "seats": [
+    { "id": "driver", "team": "ground", "policy": "ground", "step_mul": 4,
+      "script": { "repeat": false, "steps": [ { "ticks": 480, "move": [0, -1] } ] } },
+    { "id": "passenger", "team": "ground", "policy": "ground", "step_mul": 1,
+      "kit": { "primary": "rifle", "magazines": 5, "grenades": 0, "armour": "none" },
+      "script": { "repeat": false, "steps": [ { "ticks": 480, "look_at": [20, 1.4, 25], "buttons": ["fire"] } ] } }
+  ],
+
+  "spawns": [
+    { "vehicle": "4x4", "id": "truck", "at": [-60, 0.5, 50], "yaw": -1.5708 },
+    { "peer": "driver", "seat": { "vehicle": "truck", "role": "driver" } },
+    { "peer": "passenger", "seat": { "vehicle": "truck", "role": "passenger" } },
+    { "unit": "infantry", "team": "strategist", "at": [20, 0.5, 25], "order": "none", "autonomy": "off" }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.vehicle_entered[seat=2,peer=@passenger].count", "op": "==", "value": 1 },
+    { "metric": "events.damage[attacker=@passenger].count", "op": ">=", "value": 3 },
+    { "metric": "events.vehicle_damaged[attacker=@passenger].count", "op": "==", "value": 0 },
+    { "metric": "events.vehicle_exited.count", "op": "==", "value": 0 }
+  ]
+}

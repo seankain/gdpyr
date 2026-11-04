@@ -56,6 +56,14 @@ public enum DemoRecordKind : byte
 
 	/// <summary>A line of text somebody asked to be put in the file at this tick.</summary>
 	Mark = 7,
+
+	/// <summary>
+	/// A <see cref="CrewVehicleCodec"/> payload, verbatim (docs/GROUND_VEHICLES.md §7.4): the
+	/// ground force's crew vehicles, who sits where and the kiosk's lines. The authority
+	/// records the one it sends the ground force, which no fog has thinned; a client records
+	/// what it was sent.
+	/// </summary>
+	CrewVehicles = 8,
 }
 
 /// <summary>
@@ -102,14 +110,19 @@ public static class DemoFormat
 	/// 4: the player record is 32 bytes, with the primary's spare rounds, the vest's
 	/// points and the kit, and a zero large weapon means no primary rather than "not
 	/// said" (docs/LOADOUT.md §6.1). A version-3 demo's 29-byte records would misread.
+	///
+	/// 5: a <see cref="DemoRecordKind.CrewVehicles"/> record, the crew vehicles' own
+	/// message, beside the two snapshots (docs/GROUND_VEHICLES.md §7.4). A version-4 reader
+	/// stops at its tag as an unknown one, and a version-4 demo has no vehicles to draw,
+	/// so it is refused rather than played with a seated player standing in the air.
 	/// </summary>
-	public const byte Version = 4;
+	public const byte Version = 5;
 
 	/// <summary>
 	/// Ceiling on one recorded payload. Comfortably over the largest thing either
 	/// snapshot codec produces (<see cref="UnitSnapshotCodec.MaxPayloadBytes"/> is
-	/// 901), and the bound on what a corrupt length field can ask a reader to
-	/// allocate.
+	/// 901) and the crew vehicles' 193 B, and the bound on what a corrupt length field
+	/// can ask a reader to allocate.
 	/// </summary>
 	public const int MaxPayloadBytes = 4096;
 

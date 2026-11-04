@@ -128,6 +128,14 @@ public struct AgentGroundAction
 
 	public AgentButtons Buttons;
 
+	/// <summary>
+	/// True when <see cref="DeltaYaw"/> and <see cref="DeltaPitch"/> are the look itself —
+	/// an absolute yaw and pitch, which the server still slews towards at the seat's
+	/// turn-rate ceiling (docs/AGENT_API.md §7.3) — rather than a change to it. A scripted
+	/// seat's <c>look_at</c> (docs/GROUND_VEHICLES.md §11); false, a delta, by default.
+	/// </summary>
+	public bool LookIsAbsolute;
+
 	/// <summary>Seat (i32) · flags (u16) · reserved (u16) · an <c>InputFrame</c> (12).</summary>
 	public const int SizeBytes = 20;
 
@@ -139,7 +147,7 @@ public struct AgentGroundAction
 	{
 		var into = new byte[SizeBytes];
 		BinaryPrimitives.WriteInt32LittleEndian(into, seat);
-		BinaryPrimitives.WriteUInt16LittleEndian(into.AsSpan(4), FlagLookIsDelta);
+		BinaryPrimitives.WriteUInt16LittleEndian(into.AsSpan(4), LookIsAbsolute ? (ushort)0 : FlagLookIsDelta);
 		BinaryPrimitives.WriteUInt16LittleEndian(into.AsSpan(6), 0);
 		BinaryPrimitives.WriteUInt32LittleEndian(into.AsSpan(8), tick);
 		into[12] = unchecked((byte)(sbyte)Math.Clamp(MathF.Round(MoveX * 127f), -127f, 127f));

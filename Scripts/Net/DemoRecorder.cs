@@ -128,6 +128,16 @@ public sealed class DemoRecorder : IDisposable
 		Warn();
 	}
 
+	/// <summary>
+	/// The crew vehicles' message (docs/GROUND_VEHICLES.md §7.4): on the authority the one it
+	/// sends the ground force, which no fog has thinned, and on a client what it was sent.
+	/// </summary>
+	public void CrewVehicles(uint tick, ReadOnlySpan<byte> payload)
+	{
+		_writer.WriteCrewVehicles(tick, payload);
+		Warn();
+	}
+
 	public void Mark(uint tick, string text)
 	{
 		_writer.WriteMark(tick, text);

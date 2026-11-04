@@ -527,8 +527,10 @@ public partial class CrewVehicleManager : Node
 		_scratch.Clear();
 		foreach (KeyValuePair<int, SeatRef> entry in _seated)
 		{
+			// A seat whose policy has detached is a bot again, and bots never ride (GV-D15).
 			PlayerCombat player = combat?.Find(entry.Key);
-			if (player?.Character == null || !player.IsAlive || VehicleAt(entry.Value.Slot) == null)
+			if (player?.Character == null || !player.IsAlive || VehicleAt(entry.Value.Slot) == null
+				|| !CanBeSeated(entry.Key))
 			{
 				_scratch.Add(entry.Key);
 			}
@@ -574,9 +576,13 @@ public partial class CrewVehicleManager : Node
 	/// <summary>
 	/// Whether this peer may be put in a seat at all: a person, on whichever process they
 	/// play — the vehicles are on the wire, so a remote client sees the hull it is put in
-	/// (§7). Bots never drive or ride (GV-D15).
+	/// (§7) — or a seat an external policy is driving (§11, GV7), whose frames are the
+	/// policy's and not a bot's. Bots never drive or ride (GV-D15): a seat whose policy
+	/// detaches is a bot again, and is put down (<see cref="ReleaseTheGone"/>). The rule the
+	/// strategist's cargo keeps for who may load it (<c>UnitManager.IsSeatedStrategist</c>).
 	/// </summary>
-	public static bool CanBeSeated(int peerId) => peerId != 0 && !BotRoster.IsBot(peerId);
+	public static bool CanBeSeated(int peerId) =>
+		peerId != 0 && (!BotRoster.IsBot(peerId) || (Gdpyr.Agent.AgentServer.Instance?.IsAttached(peerId) ?? false));
 
 	/// <summary>
 	/// The vehicle a player at <paramref name="feet"/> could get into with a tap of the use
@@ -652,6 +658,77 @@ public partial class CrewVehicleManager : Node
 			return false;
 		}
 
+		SeatAt(combat, vehicle, seat);
+		return true;
+	}
+
+	/// <summary>
+	/// Seats a player in a seat of a vehicle for a scenario (docs/GROUND_VEHICLES.md §11): the
+	/// first free seat of <paramref name="role"/>, directly, as V5's riders are placed
+	/// (<c>UnitManager.ServerSeatPlaced</c>). Harness-only, through the agent API's
+	/// <c>spawn</c>; nothing a person or a policy can ask for, which is the use key's
+	/// <see cref="Enter"/>. Null when seated, or why not.
+	/// </summary>
+	public string ServerSeatPlaced(int peerId, int slot, SeatRole role)
+	{
+		CrewVehicle vehicle = VehicleAt(slot);
+		if (vehicle == null || vehicle.IsPuppet)
+		{
+			return $"no crew vehicle in slot {slot}";
+		}
+
+		if (vehicle.Destroyed)
+		{
+			return $"the {vehicle.KindName} in slot {slot} is a wreck";
+		}
+
+		PlayerCombat combat = CombatManager.Instance?.Find(peerId);
+		if (combat?.Character == null)
+		{
+			return $"seat {peerId} has no character this tick";
+		}
+
+		if (!CanBeSeated(peerId))
+		{
+			return $"seat {peerId} is a bot with no policy on it, and bots never ride (GV-D15)";
+		}
+
+		if (!combat.IsAlive || combat.Team != Team.GroundForce)
+		{
+			return $"seat {peerId} is not alive on the ground force";
+		}
+
+		if (IsSeated(peerId))
+		{
+			return $"seat {peerId} is seated already";
+		}
+
+		bool has = false;
+		for (int seat = 0; seat < vehicle.Seats.Length; seat++)
+		{
+			if (vehicle.Seats[seat].Role != role)
+			{
+				continue;
+			}
+
+			has = true;
+			if (vehicle.Occupants[seat] == 0)
+			{
+				SeatAt(combat, vehicle, seat);
+				return null;
+			}
+		}
+
+		string named = (int)role < AgentJson.SeatRoleNames.Length ? AgentJson.SeatRoleNames[(int)role] : $"#{(int)role}";
+		return has
+			? $"the {vehicle.KindName}'s {named} seat is taken"
+			: $"the {vehicle.KindName} has no {named} seat";
+	}
+
+	/// <summary>A player into one seat of a vehicle, on the authority: the seat's, pinned to it, and announced.</summary>
+	private void SeatAt(PlayerCombat combat, CrewVehicle vehicle, int seat)
+	{
+		int slot = vehicle.Slot;
 		vehicle.Occupants[seat] = combat.PeerId;
 		_seated[combat.PeerId] = new SeatRef(slot, seat);
 		_exitRefusals.Remove(combat.PeerId);
@@ -663,7 +740,6 @@ public partial class CrewVehicleManager : Node
 			(int)vehicle.Seats[seat].Role);
 
 		GD.Print($"[vehicles] peer {combat.PeerId} in the {vehicle.KindName}'s {SeatName(vehicle, seat)} (slot {slot})");
-		return true;
 	}
 
 	/// <summary>
@@ -1102,6 +1178,84 @@ public partial class CrewVehicleManager : Node
 		return slot >= 0;
 	}
 
+	/// <summary>How far a scenario's vehicle spawn looks for the ground under it [m]: below the helicopter's 25 m ceiling.</summary>
+	private const float PlacedGroundProbeMeters = 60f;
+
+	/// <summary>Above the ground by more than this, a helicopter a scenario puts down is in the air [m] (§5.2's grounded).</summary>
+	private const float PlacedAirborneMeters = 0.05f;
+
+	/// <summary>
+	/// Puts a crew vehicle on the field for a scenario (docs/GROUND_VEHICLES.md §11), at rest,
+	/// facing <paramref name="yaw"/>, with <paramref name="health"/>: the 4x4 standing on its
+	/// springs on the ground under <paramref name="at"/> — the first found looking down from a
+	/// metre above it — and the helicopter with its skids at <paramref name="at"/>,
+	/// hovering with its rotor at full speed when that is off the ground, so a pilot seated
+	/// in it holds its height and nobody at the controls brings it down at 4 m/s. Like the
+	/// console's, it counts against no kind's cap and its loss starts no timer. The slot, or
+	/// −1 with why not in <paramref name="refused"/>.
+	/// </summary>
+	public int ServerPlaceVehicle(byte kind, Vector3 at, float yaw, float health, out string refused)
+	{
+		refused = null;
+		if (NetworkManager.Instance is { IsClient: true })
+		{
+			refused = "vehicles are put on the field by the server";
+			return -1;
+		}
+
+		if (CrewVehicleCatalog.Definition(kind) is not { } definition)
+		{
+			refused = $"no crew vehicle kind {kind}";
+			return -1;
+		}
+
+		if (!(health > 0f) || health > definition.MaxHealth)
+		{
+			refused = $"a {definition.Name}'s health is above 0 and at most {definition.MaxHealth:0}, not {health:0.##}";
+			return -1;
+		}
+
+		if (FreeSlot() < 0)
+		{
+			refused = $"{SimConfig.MaxCrewVehicles} crew vehicles are on the field already";
+			return -1;
+		}
+
+		PhysicsDirectSpaceState3D space = _root?.GetWorld3D()?.DirectSpaceState;
+		Vector3 ground = at;
+		if (space != null && !WorldRay(space, at + Vector3.Up, at + (Vector3.Down * PlacedGroundProbeMeters), out ground))
+		{
+			ground = at;
+		}
+
+		bool airborne = definition.VehicleKind == CrewVehicleKind.Helicopter && at.Y - ground.Y > PlacedAirborneMeters;
+		Vector3 origin = definition.VehicleKind == CrewVehicleKind.Helicopter
+			? (airborne ? at : ground)
+			: KioskRules.PadOrigin(definition.VehicleKind, ground, definition.ToFourByFourTraits().RideHeightMeters);
+
+		if (space != null && IsBlocked(space, definition, origin, yaw))
+		{
+			refused = $"something solid is where a {definition.Name} at ({at.X:0.#}, {at.Y:0.#}, {at.Z:0.#}) would stand";
+			return -1;
+		}
+
+		int slot = Spawn(kind, origin, yaw);
+		if (VehicleAt(slot) is not { } vehicle)
+		{
+			refused = "no free slot";
+			return -1;
+		}
+
+		vehicle.Health = health;
+		if (airborne)
+		{
+			vehicle.Flight.Grounded = false;
+			vehicle.Flight.Rotor = 1f;
+		}
+
+		return slot;
+	}
+
 	/// <summary>Whether a vehicle's collider at <paramref name="origin"/>, lifted off the floor, would be in anything solid.</summary>
 	private static bool IsBlocked(PhysicsDirectSpaceState3D space, CrewVehicleDefinition definition, Vector3 origin,
 		float yaw)
@@ -1250,9 +1404,9 @@ public partial class CrewVehicleManager : Node
 	/// one encoding; a strategist only those its side's sensors see (§7.3), whose occupants
 	/// the player snapshot then carries exactly with them.
 	/// </summary>
-	public void Replicate(NetworkManager net, int[] peers)
+	public void Replicate(NetworkManager net, int[] peers, DemoRecorder demo = null)
 	{
-		if (peers.Length == 0)
+		if (peers.Length == 0 && demo == null)
 		{
 			return;
 		}
@@ -1272,6 +1426,15 @@ public partial class CrewVehicleManager : Node
 		CombatManager combat = CombatManager.Instance;
 		VisibilityService fog = combat?.Visibility;
 		byte[] everything = null;
+
+		// A demo the authority records is a record of the round, not of one peer's view of
+		// it: the payload the ground force is sent, which no fog has thinned (§7.4, as the
+		// player snapshot's unfiltered roster, DEMOS.md §4.1).
+		if (demo != null)
+		{
+			everything = CrewVehicleCodec.Encode(net.Tick, _kiosk, _records.AsSpan(0, count));
+			demo.CrewVehicles(net.Tick, everything);
+		}
 
 		for (int i = 0; i < peers.Length; i++)
 		{
@@ -1346,7 +1509,16 @@ public partial class CrewVehicleManager : Node
 	/// still in sight; and the vehicle this client drives is compared with its record and,
 	/// when they disagree, replayed (§8.2).
 	/// </summary>
-	public void ClientApplyPending(NetworkManager net)
+	public void ClientApplyPending(NetworkManager net, DemoRecorder demo = null) =>
+		ApplyPending(net.Tick, net.LocalPeerId, demo);
+
+	/// <summary>
+	/// The records queued since the last tick, on a client or in a demo's playback (§7.4):
+	/// what <see cref="ClientApplyPending"/> does, at <paramref name="now"/>, for
+	/// <paramref name="localPeer"/> — 0 in playback, which drives nothing and predicts
+	/// nothing — each decoded payload written to <paramref name="demo"/> at its own tick.
+	/// </summary>
+	private void ApplyPending(uint now, int localPeer, DemoRecorder demo)
 	{
 		for (int p = 0; p < _pending.Count; p++)
 		{
@@ -1355,6 +1527,10 @@ public partial class CrewVehicleManager : Node
 				RejectedPackets++;
 				continue;
 			}
+
+			// Recorded here rather than where it arrives, as the player snapshot is: this is
+			// where its own tick is decoded, and a demo is ordered by the tick a record is about.
+			demo?.CrewVehicles(tick, _pending[p]);
 
 			if (tick >= _roster.NewestPacketTick)
 			{
@@ -1378,14 +1554,14 @@ public partial class CrewVehicleManager : Node
 		bool fogged = CombatManager.Instance is { Local.Team: Team.Strategist };
 		for (int slot = 0; slot < _vehicles.Length; slot++)
 		{
-			if (_roster.DueToFree(slot, net.Tick, fogged))
+			if (_roster.DueToFree(slot, now, fogged))
 			{
 				FreePuppet(slot);
 				_roster.Free(slot);
 			}
 		}
 
-		ClientSeats(net);
+		ClientSeats(localPeer, now);
 
 		if (_drivenSlot >= 0 && VehicleAt(_drivenSlot) is { } driven && _hasLatest[_drivenSlot])
 		{
@@ -1467,7 +1643,7 @@ public partial class CrewVehicleManager : Node
 	/// out of their seats as the records say, the local player's among them, and the
 	/// vehicle this client drives is the one whose driver's seat names it.
 	/// </summary>
-	private void ClientSeats(NetworkManager net)
+	private void ClientSeats(int localPeer, uint now)
 	{
 		_nextSeated.Clear();
 		int driven = -1;
@@ -1488,7 +1664,7 @@ public partial class CrewVehicleManager : Node
 				}
 
 				_nextSeated[peer] = new SeatRef(slot, seat);
-				if (peer == net.LocalPeerId && vehicle.Seats[seat].Role == SeatRole.Driver && !vehicle.Destroyed)
+				if (peer != 0 && peer == localPeer && vehicle.Seats[seat].Role == SeatRole.Driver && !vehicle.Destroyed)
 				{
 					driven = slot;
 				}
@@ -1511,7 +1687,7 @@ public partial class CrewVehicleManager : Node
 			int peer = _scratch[i];
 			SeatRef was = _seated[peer];
 			_seated.Remove(peer);
-			if (combat?.Find(peer)?.Character is not { } character || !IsInstanceValid(character))
+			if (CharacterOf(peer) is not { } character || !IsInstanceValid(character))
 			{
 				continue;
 			}
@@ -1520,7 +1696,7 @@ public partial class CrewVehicleManager : Node
 			// vehicle — where the server most often puts them — and the next record of theirs
 			// corrects that like any other (§8.2). Anybody else is placed by their record.
 			Vector3 feet = character.SimPosition;
-			if (peer == net.LocalPeerId && VehicleAt(was.Slot) is { } from && was.Seat < from.Seats.Length)
+			if (peer == localPeer && VehicleAt(was.Slot) is { } from && was.Seat < from.Seats.Length)
 			{
 				feet = from.DrawnPose.ToWorld(from.Seats[was.Seat].Exit);
 			}
@@ -1532,14 +1708,14 @@ public partial class CrewVehicleManager : Node
 		{
 			bool wasSeated = _seated.TryGetValue(entry.Key, out SeatRef before);
 			_seated[entry.Key] = entry.Value;
-			if (!wasSeated && combat?.Find(entry.Key)?.Character is { } character && IsInstanceValid(character))
+			if (!wasSeated && CharacterOf(entry.Key) is { } character && IsInstanceValid(character))
 			{
 				character.SetSeated(true);
 			}
 
 			// This client behind the gun now: its box from the last record, its rounds counted
 			// from the first, as the server counts a new gunner's (CrewGun.NewGunner).
-			if (entry.Key == net.LocalPeerId && (!wasSeated || before.Seat != entry.Value.Seat)
+			if (entry.Key == localPeer && (!wasSeated || before.Seat != entry.Value.Seat)
 				&& VehicleAt(entry.Value.Slot) is { } gunned && entry.Value.Seat < gunned.Seats.Length
 				&& gunned.Seats[entry.Value.Seat].Role == SeatRole.Gunner)
 			{
@@ -1560,9 +1736,9 @@ public partial class CrewVehicleManager : Node
 		}
 
 		_drivenSlot = driven;
-		if (VehicleAt(driven) is { } now)
+		if (VehicleAt(driven) is { } drivenNow)
 		{
-			now.IsPuppet = false;
+			drivenNow.IsPuppet = false;
 			_crewLedger ??= new CrewLedger(PlayerManager.Instance.Prediction);
 			_crewLedger.Reset();
 			LastReplayTicks = 0;
@@ -1572,7 +1748,7 @@ public partial class CrewVehicleManager : Node
 			Comparisons = 0;
 			LargestCorrectionMeters = 0f;
 			CorrectionsShownAtOnce = 0;
-			GD.Print($"[vehicles] driving slot {driven}: predicting it from here (tick {net.Tick})");
+			GD.Print($"[vehicles] driving slot {driven}: predicting it from here (tick {now})");
 		}
 	}
 
@@ -1711,11 +1887,10 @@ public partial class CrewVehicleManager : Node
 	/// <summary>Every seated body at its seat on the vehicle as it is drawn here, moving at the vehicle's speed.</summary>
 	private void PinDrawn()
 	{
-		CombatManager combat = CombatManager.Instance;
 		foreach (KeyValuePair<int, SeatRef> entry in _seated)
 		{
 			CrewVehicle vehicle = VehicleAt(entry.Value.Slot);
-			fps_controller character = combat?.Find(entry.Key)?.Character;
+			fps_controller character = CharacterOf(entry.Key);
 			if (vehicle == null || character == null || !IsInstanceValid(character) || entry.Value.Seat >= vehicle.Seats.Length)
 			{
 				continue;
@@ -1734,10 +1909,9 @@ public partial class CrewVehicleManager : Node
 	/// </summary>
 	public void ResetClient()
 	{
-		CombatManager combat = CombatManager.Instance;
 		foreach (KeyValuePair<int, SeatRef> entry in _seated)
 		{
-			if (combat?.Find(entry.Key)?.Character is { } character && IsInstanceValid(character))
+			if (CharacterOf(entry.Key) is { } character && IsInstanceValid(character))
 			{
 				character.LeaveSeat(character.SimPosition, Vector3.Zero);
 			}
@@ -1755,5 +1929,51 @@ public partial class CrewVehicleManager : Node
 		_renderClock.Reset();
 		_drivenSlot = -1;
 		_crewLedger?.Reset();
+	}
+
+	// ---- a demo's playback (§7.4) --------------------------------------------------------
+
+	/// <summary>
+	/// A body by its peer: the round's, or — in a demo's playback, where nobody has combat
+	/// state — the one the demo spawned.
+	/// </summary>
+	private static fps_controller CharacterOf(int peerId) =>
+		CombatManager.Instance?.Find(peerId)?.Character ?? PlayerManager.Instance?.CharacterOf(peerId);
+
+	/// <summary>
+	/// A recorded <c>ServerCrewVehicles</c> payload from a demo (§7.4), queued as a received
+	/// one is and applied by <see cref="PlaybackTick"/>, through the client's own path.
+	/// </summary>
+	public void ApplyRecorded(byte[] payload)
+	{
+		if (payload == null)
+		{
+			return;
+		}
+
+		_pending.Add(payload);
+		if (_pending.Count > MaxPendingPackets)
+		{
+			_pending.RemoveAt(0);
+		}
+	}
+
+	/// <summary>
+	/// One frame of a demo's playback (§7.4): the recorded payloads applied as a client
+	/// applies them — puppets made and freed, who sits where — at the read head's tick, then
+	/// every puppet at <paramref name="renderTick"/> and every seated body on its seat, as
+	/// <see cref="ClientTick"/> places them. Nobody drives: nothing is predicted.
+	/// </summary>
+	public void PlaybackTick(uint tick, float renderTick)
+	{
+		ApplyPending(tick, localPeer: 0, demo: null);
+		ClientTick(renderTick);
+	}
+
+	/// <summary>Every vehicle and puppet off the field, and nobody seated, for a demo that brings its own (§7.4).</summary>
+	public void ClearForPlayback()
+	{
+		ClearAll();
+		ResetClient();
 	}
 }

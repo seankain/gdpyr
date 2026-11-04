@@ -72,6 +72,7 @@
     <Compile Include="../tools/Gdpyr.Playtest/Scenario.cs" />
     <Compile Include="../tools/Gdpyr.Playtest/Assertions.cs" />
     <Compile Include="../tools/Gdpyr.Playtest/EpisodeMetrics.cs" />
+    <Compile Include="../tools/Gdpyr.Playtest/ScriptAim.cs" />
     <!-- FluidHTN, vendored at a pinned commit (docs/HTN_BOTS.md §3.8), and the
          bench's sketch of the ground domain with the scripted population it is
          probed over. HtnPlannerTests holds the library to the behaviours the bot

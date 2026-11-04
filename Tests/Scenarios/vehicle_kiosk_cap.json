@@ -1,0 +1,32 @@
+{
+  "name": "a seat at the vehicle kiosk asks for a 4x4 twice, a second apart: the first is put on its pad, the second refused because one is out",
+  "seeds": [1, 2],
+  "duration_ticks": 180,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 0 },
+
+  "seats": [
+    { "id": "asker", "team": "ground", "policy": "ground", "step_mul": 4,
+      "script": { "repeat": false, "steps": [
+        { "ticks": 60, "vehicle": "4x4" },
+        { "ticks": 120, "vehicle": "4x4" }
+      ] } }
+  ],
+
+  "spawns": [
+    { "peer": "asker", "at": [-82.95, 0.85, 90.6], "look": [3.1416, 0] }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.vehicle_requested.count", "op": "==", "value": 2 },
+    { "metric": "events.vehicle_requested[refusal=0,peer=@asker].count", "op": "==", "value": 1 },
+    { "metric": "events.vehicle_requested[refusal=9,peer=@asker].count", "op": "==", "value": 1 },
+    { "metric": "events.vehicle_requested.refusal.first", "op": "==", "value": 0 },
+    { "metric": "events.vehicle_spawned.count", "op": "==", "value": 1 },
+    { "metric": "events.vehicle_spawned[peer=@asker,type=0].count", "op": "==", "value": 1 },
+    { "metric": "counters.vehicles_taken", "op": "==", "value": 1 },
+    { "metric": "counters.vehicles_refused.out", "op": "==", "value": 1 },
+    { "metric": "counters.vehicles_refused", "op": "==", "value": 1 }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "name": "a 4x4 at full throttle through three riflemen standing abreast across its path kills each one it strikes, in its driver's name",
+  "seeds": [1, 2, 3],
+  "duration_ticks": 480,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 0 },
+
+  "seats": [
+    { "id": "driver", "team": "ground", "policy": "ground", "step_mul": 4,
+      "script": { "repeat": false, "steps": [ { "ticks": 480, "move": [0, -1] } ] } }
+  ],
+
+  "spawns": [
+    { "vehicle": "4x4", "id": "truck", "at": [-60, 0.5, 50], "yaw": -1.5708 },
+    { "peer": "driver", "seat": { "vehicle": "truck", "role": "driver" } },
+    { "unit": "infantry", "team": "strategist", "at": [0, 0.5, 49.2], "order": "none", "autonomy": "off" },
+    { "unit": "infantry", "team": "strategist", "at": [0, 0.5, 50], "order": "none", "autonomy": "off" },
+    { "unit": "infantry", "team": "strategist", "at": [0, 0.5, 50.8], "order": "none", "autonomy": "off" }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.vehicle_entered[seat=0].count", "op": "==", "value": 1 },
+    { "metric": "events.vehicle_rammed.count", "op": "==", "value": 3 },
+    { "metric": "events.vehicle_rammed[killer=@driver].count", "op": "==", "value": 3 },
+    { "metric": "events.vehicle_rammed.speed.min", "op": ">=", "value": 8 },
+    { "metric": "events.kill[weapon=15].count", "op": "==", "value": 3 },
+    { "metric": "events.kill[weapon=15,attacker=@driver].count", "op": "==", "value": 3 },
+    { "metric": "events.unit_lost.count", "op": "==", "value": 3 },
+    { "metric": "events.unit_lost[killer=@driver].count", "op": "==", "value": 3 }
+  ]
+}

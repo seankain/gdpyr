@@ -1,0 +1,29 @@
+{
+  "name": "four strategist riflemen firing at a driver in a 4x4 from 35 m for five seconds hit its hull again and again, and neither destroy it nor kill anybody",
+  "seeds": [1, 2],
+  "duration_ticks": 300,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 0 },
+
+  "seats": [
+    { "id": "driver", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json" }
+  ],
+
+  "spawns": [
+    { "vehicle": "4x4", "id": "truck", "at": [-60, 0.5, 50], "yaw": -1.5708 },
+    { "peer": "driver", "seat": { "vehicle": "truck", "role": "driver" } },
+    { "unit": "infantry", "team": "strategist", "at": [-61.5, 0.5, 15], "order": "none", "autonomy": "off" },
+    { "unit": "infantry", "team": "strategist", "at": [-60.5, 0.5, 15], "order": "none", "autonomy": "off" },
+    { "unit": "infantry", "team": "strategist", "at": [-59.5, 0.5, 15], "order": "none", "autonomy": "off" },
+    { "unit": "infantry", "team": "strategist", "at": [-58.5, 0.5, 15], "order": "none", "autonomy": "off" }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.vehicle_destroyed.count", "op": "==", "value": 0 },
+    { "metric": "events.vehicle_damaged.count", "op": ">=", "value": 60 },
+    { "metric": "events.vehicle_damaged.dealt.max", "op": "==", "value": 3 },
+    { "metric": "events.kill.count", "op": "==", "value": 0 },
+    { "metric": "events.damage[victim=@driver].count", "op": "==", "value": 0 }
+  ]
+}

@@ -531,8 +531,10 @@ obtained by cheating is not a result about this game.
 | `observe` | → ← | the current observation for one seat |
 | `step` | → ← | stepped mode: advance N ticks, return each attached seat's observation |
 | `reset` | → ← | end the round now and start a fresh one. The `seed` labels the episode and is echoed on `round_start`; it does not determine it (§3.1). Every attached ground seat respawns in the kit it was attached with (§2). Scenarios are M7 |
-| `spawn` | → ← | place one of this session's seats, or a unit, where a scenario asked for it (§9.1). M7 |
+| `spawn` | → ← | place one of this session's seats, or a unit, where a scenario asked for it (§9.1). M7. A crew vehicle too, free and outside the kiosk's cap — `{"op":"spawn","vehicle":"4x4","at":[x,y,z],"yaw":0,"health":600}`, answered with its slot — and a seat placement may sit in one, `"vehicle_seat":{"vehicle":0,"role":"gunner"}`, seated by the server directly ([`GROUND_VEHICLES.md`](GROUND_VEHICLES.md) §11, GV7) |
 | `loadout` | → ← | a kit for one of this session's ground seats: `{"op":"loadout","seat":3,"kit":{"primary":"launcher","magazines":3,"grenades":2,"armour":"medium"},"when":"locker"}`. `locker` (the default) takes it at the weapon locker the seat stands at, through the one validator a person's request and a bot's go through; `spawn` keeps it for the next spawn. The answer is `"applied": true`, or `false` with `refusal` — `dead`, `not_at_locker`, `mounted`, `carrying`, `invalid`, `too_soon` ([`LOADOUT.md`](LOADOUT.md) §5.3, §6.2) — which is an answer, not an error; a kit of the wrong shape is `bad_request`, one that breaks a loadout rule `invalid`, as for `spawn` |
+| `vehicle` | → ← | a crew vehicle asked for at the vehicle kiosk by one of this session's ground seats: `{"op":"vehicle","seat":3,"kind":"4x4"}`, through the validator a person's panel goes through (`KioskRules.Check`), paced the same way, and a `vehicle_requested` event either way. The answer's `taken` says whether it went on its pad — then `vehicle` is its slot — and `answer` is `taken` or the refusal's code (`not_at_kiosk`, `out`, `not_ready`, …): an answer, not an error ([`GROUND_VEHICLES.md`](GROUND_VEHICLES.md) §11, GV7) |
+| `list_vehicles` | → ← | every crew vehicle — `slot`, `type`, `x`, `y`, `z`, `yaw`, `health`, `speed`, `destroyed`, `airborne`, `from_kiosk`, and its `seats`' `role` and `peer` — as the vehicle record carries them, and each kind's line at the kiosk (`ready`, `out`, `counting` with `seconds_left`, `disabled`). Named for a strategist seat this session holds, only what its side sees, unless the server is omniscient; with no seat, every one, the control plane's view as `state_hash`'s is (GV7) |
 | `events` | → ← | every event since a tick (§8) |
 | `state_hash` | → ← | a hash of the tick's simulation state, for §3's divergence measurement |
 | `quit` | → | close the session; every seat it holds reverts to a bot |
@@ -891,6 +893,33 @@ two and no `seat` to choose between them. What only the server knows it refuses 
 its vehicle (an `aboard` spawn's `team` defaults to `strategist`, as every unit spawn's does), and one
 rider more than the vehicle seats.
 
+**A spawn can put a crew vehicle down, and a seat placement can sit in one**
+([`GROUND_VEHICLES.md`](GROUND_VEHICLES.md) §11, GV7): `{"vehicle": "4x4", "id": "truck", "at": [x, y,
+z], "yaw": 0, "health": 600}`, `y` the ground the 4x4 stands on and a helicopter's skids — one put
+off the ground hovers with its rotor at full speed, so a pilot seated in it holds its height — and
+`health` left out for full; then `{"peer": "me", "seat": {"vehicle": "truck", "role": "gunner"}}`,
+the role `driver` (or `pilot`), `gunner` or `passenger`. A seat in a vehicle is put where the
+vehicle was and looks the way it faces unless the spawn says otherwise; a pilot's look is the heading
+the helicopter turns to. A crew vehicle's label is only a seat placement's to name: a unit's
+`aboard` and a strategist's command name unit spawns. Refused when the file is read, each with a
+sentence: a kind there is none of, a health above the kind's or not above 0, a `health` on anything
+else, a seat in a label that is not an earlier vehicle spawn's (unknown, or forward), a role the kind
+has no seat for, a seat sat in twice, and a seat object on anything but a `peer`. What only the server
+knows — nowhere to stand, a seat it cannot give — it refuses with `vehicle_refused` or `not_seated`,
+and the harness stops (exit 2).
+
+**A ground step can ask the kiosk for a vehicle, and look at a point.** `"vehicle": "4x4"` is the
+`vehicle` op, sent once on the step's first tick before its action, as a `loadout` is:
+`counters.vehicles_taken`, `counters.vehicles_refused` and `counters.vehicles_refused.<code>` count
+the answers. `"look_at": [x, y, z]` keeps the seat's eye on a point for the step's ticks, in place of
+a `look`'s deltas: each action carries the absolute look (the packed action's look-is-a-delta flag
+clear) from the eye where the seat's last two observations put it, led to the tick the action is
+stepped on — what a policy aiming at a point does, from nothing a policy is not sent, and the one
+way a scripted passenger in a 4x4 at 18 m/s keeps a rifleman 25 m off in its sights. The eye is the
+observed position plus 0.596 m, the body's camera on the headless authority (`tools/Gdpyr.Playtest/
+ScriptAim.cs`). A step with both `look` and `look_at`, a `look_at` that is not three numbers, an
+unknown kind, and either on a strategist's step are refused when the file is read.
+
 **A unit spawn can name its micro-autonomy** ([`TACTICS.md`](TACTICS.md) §5.9): `"autonomy": "on"`
 or `"off"`, through the `spawn` op's field of the same name; left out, the unit starts with the
 side's default for new units. So can the scenario, for every unit the round makes: `"unit_autonomy":
@@ -970,7 +999,7 @@ passes `--agent-api` (§4.1).
 | Metric | Is |
 |---|---|
 | `events.<kind>.count` | how many of that event fired. A kind that never fired reads **zero**; a kind that does not exist **fails** |
-| `events.<kind>.<field>.<agg>` | an aggregate over one event field — `sum`, `mean`, `min`, `max`, `last`, `count` |
+| `events.<kind>.<field>.<agg>` | an aggregate over one event field — `sum`, `mean`, `min`, `max`, `last`, `first`, `count`. `first` is what came first (GV7): `events.damage[victim=@driver].amount.first` is the first hit a seat took |
 | `events.<kind>.<agg>` | shorthand for that kind's own field (`damage` → `amount`, `kill` → `distance`, `squad_task` → `goal`) |
 | `events.<kind>[<cond>,…].<rest>` | any of the three above, over only the events matching every condition: a field, one of `=` `!=` `<` `<=` `>` `>=`, and a number — or `@` and a seat's id, which is that seat's peer id. `events.unit_lost[tier=2].count` is tanks lost; `events.node_captured[owner=1,claimant=2].count` strategist nodes the ground force took; `events.damage[victim=@heavy].count` the hits the seat `heavy` took. Nothing matching reads zero; a field the kind does not have, or a seat the scenario does not, fails |
 | `observation.<field>` | an observation field by its published name, for the scenario's first seat |
@@ -979,6 +1008,13 @@ passes `--agent-api` (§4.1).
 | `observation.<field>.<agg>` | an aggregate over the episode, with the tick the extremum happened on |
 | `round.ticks`, `round.seconds` | how long the measured window ran |
 | `counters.pilot_fallbacks` | ticks a bot had to cover for, because the script had not acted (§2.1) |
+| `counters.loadouts_applied`, `counters.loadouts_refused[.<code>]` | a script's kit requests and their answers |
+| `counters.vehicles_taken`, `counters.vehicles_refused[.<code>]` | a script's kiosk requests and their answers (GV7) |
+
+**An episode's events start after its reset.** What the `reset` itself emitted — the last round's
+`round_end`, and since GV7 a `vehicle_exited` for everybody it unseated — is stamped with the reset's
+tick and arrives after its answer; the C# and Python clients drop events from before one past that
+tick, so the second seed's metrics do not count the first seed's end.
 
 An observation field that answers to nothing **fails** rather than reading zero: the harness samples
 every field the schema publishes, so a name it does not know is a typo, and a typo that read as zero
