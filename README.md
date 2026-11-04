@@ -30,12 +30,13 @@ dedicated-server authoritative.
   journal, and what playback does with it
 - [`docs/VEHICLES.md`](docs/VEHICLES.md) — vehicles that carry units: the technical with seats,
   boarding and unloading, and a vertical take-off and landing dropship
-- [`docs/GROUND_VEHICLES.md`](docs/GROUND_VEHICLES.md) — vehicles the ground force drives, planned
-  and not built: a 4x4 with sprung suspension, a mounted gun and a passenger in the bed, and a
+- [`docs/GROUND_VEHICLES.md`](docs/GROUND_VEHICLES.md) — vehicles the ground force drives; GV0–GV9,
+  all built: a 4x4 with sprung suspension, a mounted gun and a passenger in the bed, and a
   helicopter with a passenger in its door, predicted on the driver's client; passengers fire their
-  own weapons; a kiosk beside the weapon locker hands one of each out on a respawn timer; 200 rifle
-  hits destroy the 4x4, one direct hit from a tank either; and either kills a strategist's unit on
-  foot that it strikes at 8 m/s or more
+  own weapons, from where their own screen drew the seat; a kiosk beside the weapon locker hands one
+  of each out on a respawn timer; 200 rifle hits destroy the 4x4, one direct hit from a tank either;
+  either kills a strategist's unit on foot that it strikes at 8 m/s or more; HTN bots ride along
+  with a person; and what is left for a person at the controls to check
 - [`docs/LOADOUT.md`](docs/LOADOUT.md) — the ground force's loadout: a locker panel for
   the primary, spare magazines or grenades and body armour, weight that sets movement speed, and
   resupply at the locker; L0–L8, all built — how much bots fire in a life,
@@ -400,6 +401,36 @@ jump is as high in any kit, and weight is the kit as taken, not as spent: firing
 makes nobody faster. The HUD's second line reads `load 15.3 kg · 88 %`
 ([`docs/LOADOUT.md`](docs/LOADOUT.md) §4.1).
 
+**Vehicles** ([`docs/GROUND_VEHICLES.md`](docs/GROUND_VEHICLES.md)). Beside the weapon locker
+stands the **vehicle kiosk**: `E` there (`[E] vehicle kiosk`) opens its panel, `1` puts a **4x4** on
+its pad outside the bunker's door and `2` a **helicopter** on its pad round the corner. One of each
+is out at a time; both are ready when a round starts, and the next is ready 45 s (4x4) or 90 s
+(helicopter) after the last is destroyed, or taken away after a minute left empty with nobody near
+it. The line under the round's clock says which (`4x4 ready · helicopter 0:42`), and a refusal says
+why at the panel's foot (`refused (not_ready): ready in 0:42`). Walk up to one, carrying no gun or
+can, and the prompt says which seat a tap gets you (`[E] drive 4x4`, `[E] 4x4 gun`, `[E] 4x4 bed`,
+`[E] fly helicopter`, `[E] helicopter door`); it has to be stopped, and a helicopter on the ground.
+The 4x4 seats a driver, a gunner at its 12.7 mm gun and a passenger in the bed; the helicopter a
+pilot and a passenger in the left door. Drivers and pilots do not shoot; the gunner fires the gun,
+and a passenger their own primary and pistol, within the seat's arc — `· no shot` under the reticle
+says you are looking through the cab or the cabin, or too steeply up or down. The driver and the
+pilot are behind the hull, which takes 200 rifle hits on the 4x4 and 113 on the helicopter; the
+gunner and a passenger are out in the open. A tank's direct hit wrecks either, throwing everybody
+aboard out with 50 damage — out of a helicopter more than 4 m up, nobody lives. At 8 m/s or more the
+hull kills a strategist's unit on foot it strikes, in the driver's name; slower, it pushes them
+aside.
+
+| Seated | |
+|---|---|
+| tap `E` · hold `E` | get out · move to the next free seat (the line under the reticle names it) |
+| 4x4: `W` / `S`, `A` / `D`, Space | throttle, then brake and reverse · steer · handbrake; the mouse looks round, and the camera follows the truck |
+| helicopter: `W` `A` `S` `D`, Space / Ctrl, mouse | fly along and across the heading · climb, descend, up to 25 m above the ground · turn it towards where you look. Out only 4 m or less above the ground (`too high to get out`) |
+| gun · bed or door | left mouse fires · as on foot, with `2` and `3`; no grenade, hammer or drone from a seat |
+
+On the `~` console, `vehicle <4x4|helicopter|clear>` puts one in front of you offline or on a
+listen host, or takes them all away, and `kiosk <4x4|helicopter>` asks the kiosk from wherever you
+stand.
+
 ## Playing on your own
 
 Computer players fill both sides so that one person is enough for a round. They arrive as soon as
@@ -436,6 +467,10 @@ round full of bots starts without waiting for anybody.
   a rifleman 4 spare magazines, 2 grenades and a light vest; a marksman 5, 1 and none; a launcher 3
   pouches, 3 grenades and a medium vest — and `--bot-kits default` gives them the default kit
   instead ([`docs/LOADOUT.md`](docs/LOADOUT.md) §8).
+  Bots never drive or fly, but an HTN bot with nothing in sight within 15 m of a person's stopped
+  4x4 or helicopter gets in — at the gun first, then the bed or the door — fights from the seat, and
+  gets out when the person leaves the controls; the legacy bots never get in
+  ([`docs/GROUND_VEHICLES.md`](docs/GROUND_VEHICLES.md) GV8).
 - **In the strategist's chair** one queues infantry at every barracks while the points last, keeps
   four units home defending, and attack-moves the rest at whatever its units have actually seen —
   it gets no free knowledge of where anybody is. Once it has four fighting units it buys a builder,

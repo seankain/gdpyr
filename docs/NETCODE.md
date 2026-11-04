@@ -1,8 +1,9 @@
 # gdpyr — Netcode & Simulation Design
 
 Technical companion to [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md). Model:
-**server-authoritative fixed-tick simulation, client prediction for the local character only,
-snapshot interpolation for everything else, server-side lag compensation.**
+**server-authoritative fixed-tick simulation, client prediction for the local character and the
+crew vehicle it drives only, snapshot interpolation for everything else, server-side lag
+compensation.**
 
 ---
 
@@ -12,6 +13,7 @@ snapshot interpolation for everything else, server-side lag compensation.**
 |---|---|---|
 | Local FPS character | Server (authoritative) + owning client (predicted) | Predict, reconcile, replay |
 | Remote FPS characters | Server | Interpolate between snapshots (~100 ms behind) |
+| Crew vehicles — the ground force's 4x4 and helicopter (§10.11) | Server (authoritative) + the driver's or pilot's client (predicted) | The driver predicts, reconciles and replays it as it does its character; everybody else interpolates it. A seated body is pinned to its seat on the vehicle as drawn, not reconciled |
 | Projectiles | Server (authoritative hits) | Deterministic replay from spawn parameters — see §4 |
 | RTS units | Server only | Interpolate; never predicted |
 | Strategist commands | Server | Immediate local UI acknowledgement, no prediction |
@@ -467,6 +469,9 @@ route, so there is no second behaviour to write.
 | `MatchState` (tickets, points) | S→C | Reliable | on change | ~22 B |
 | `ServerNodeState` | S→C | Reliable | 5 Hz per *changed* node | ~8 B |
 | `ServerDroneState` | S→C | Unreliable | 30 Hz | 4 B + 20 B per drone the peer may see: a strategist only those its sensors cover ([`CONTROL_POINTS.md`](CONTROL_POINTS.md) §4.3) |
+| `ServerCrewVehicles` | S→C | Unreliable | 30 Hz, on the player snapshot's tick | 9 B + 46 B per crew vehicle the peer may see: a strategist only those its sensors cover (§10.11) |
+| `ClientRequestVehicle` | C→S | Reliable | per request at the vehicle kiosk | ~3 B |
+| `ServerKioskResult` (to the requester) | S→C | Reliable | per `ClientRequestVehicle` | ~3 B |
 | `ServerGunState` / `ServerCanState` | S→C | Reliable | per transition | ~32 B / ~24 B |
 | `ServerSpawnStructure` / `ServerDespawnStructure` | S→C | Reliable | per structure per life | ~26 B / ~8 B |
 | `ServerStructureState` | S→C | Reliable | on a flag change, else 5 Hz while it changes | ~8 B |
@@ -545,6 +550,15 @@ sent the same record and so could read a player's vest; nothing on that side rea
 coming to rest is a `ProjectileHit` with `HitFlags.Landed`, and its blast another; and how many a
 player has left is the last two bits of the same flag byte (bits 6–7). They cost the record nothing,
 and the input frame stays twelve bytes — the key is bit 11 of its button field.
+
+**The crew vehicles are one message and a request** (§10.11). `ServerCrewVehicles` carries every
+vehicle's pose, rates, health, gun box and seats, and the kiosk's line for each kind, on every
+snapshot tick — a 9-byte header when no vehicle is out, 101 B (3.0 KB/s a client) with both kinds
+out. Getting in, changing seat, getting out and driving are the use key, the axes and the look in the
+same twelve-byte frame. The one byte the input packet's header gained is how far behind its newest
+frame the client drew the vehicles, so the server knows where a seated shooter saw the seat
+(the `Input` row above). The player record is unchanged: a seated player's record is where the seat
+was.
 
 **LAN discovery is not on this wire at all.** The server browser answers "who is listening?" before
 there is a connection to ask it over, so it is its own datagram on its own UDP socket
@@ -984,8 +998,12 @@ three grenades and no vest (L-D3).
   sprints at 9.0 m/s, the heaviest kit at 5.6, which is too slow to slide.
 
 A **weapon locker** (`Scripts/Fps/WeaponLocker.cs`, group `weapon_locker`) stands at the ground
-force's spawn — the Test map has one at (8, 0.5, 11), three metres behind the spawn line and clear
-of the cans. Its reach is **1 m, flat, from its 1.2 × 0.5 m cabinet** turned with its node
+force's spawn — the Test map has one at (−79.45, 1.95, 91.38), inside the ground force's concrete
+bunker (`Scenes/Environment/Pillbox.tscn`, solid since [`GROUND_VEHICLES.md`](GROUND_VEHICLES.md)
+GV5), with the vehicle kiosk 3.5 m beside it (§10.11). It was at (8, 0.5, 11), three metres behind
+the old spawn line, until `0a75fc4` moved it and the spawns. Its origin is 1.14 m above the bunker's
+floor, so its cabinet is drawn in the air, which its flat reach does not notice. That reach is
+**1 m, flat, from its 1.2 × 0.5 m cabinet** turned with its node
 (`LockerSupply.FootprintDistance`; guns and cans keep 2.5 m from their origin), and within it two
 things happen:
 
@@ -1046,7 +1064,10 @@ the launcher's: three grenades of 40 into its pillbox. The same lanes with the o
 armour is what stops them. A seat spawned 0.75 m from the locker's footprint with a rifle asks it,
 a second in, for a launcher kit with three pouches (a `loadout` step), and puts four grenades of 40
 into a tank 45 m away, one every 4.3 s — the launcher's 1.5 s cycle and 2.5 s reload, rounded up to
-the script's next pull of the trigger.
+the script's next pull of the trigger. That was with the locker at (8, 0.5, 11). Since it moved,
+`locker_launcher_vs_tank`, `locker_resupply` and `locker_resupply_under_fire` still spawn their
+seats there, 119–121 m from it, and fail: no kit is taken and no resupply paid
+([`GROUND_VEHICLES.md`](GROUND_VEHICLES.md) GV0). Moving those spawns to the locker is the fix.
 
 **Not in it:** the ground observation carries the kit's state — grenades, spare rounds, the vest's
 points and tier, the load's scale, normalized in the vector since `gdpyr-agent-obs-4` and raw in its
@@ -1367,6 +1388,122 @@ airborne dropship to shoot at it.
 unloading at a point; firing from the technical's bed; seat sizes and vehicles carrying vehicles; a
 helipad; a transport block in the agent observation; ground bots leading a launcher round against an
 aircraft, and a door gun.
+
+### 10.11 Crew vehicles: the 4x4 and the helicopter the ground force drives
+
+Added as M12 ([`GROUND_VEHICLES.md`](GROUND_VEHICLES.md)): a 4x4 technical — a sprung chassis, a
+mounted 12.7 mm gun, a passenger in the bed — and a helicopter with a passenger in its door, driven
+and flown by ground-force players from their own input frames. They are not §10.10's vehicles,
+which are the strategist's units, ordered by clicking, their riders hidden and inert: these are
+predicted on the driver's client, and their passengers shoot. In code they are **crew vehicles**
+(`Crew*`), because `Vehicle` and `IsVehicle` already mean a strategist unit that is one; players,
+the HUD and the agent API call them the 4x4 and the helicopter.
+
+**The rule** (engine-free in `Scripts/Sim` — `FourByFour.cs`, `Helicopter.cs`, `CrewSeats.cs`,
+`CrewCombat.cs`, `Ramming.cs`, `PoseHistory.cs`, `CrewLedger.cs`, `VehicleKiosk.cs`, each with its
+`Tests/*Tests.cs`; the engine half is `Scripts/Fps/CrewVehicle.cs` and `CrewVehicleManager.cs`). A
+crew vehicle is a `CharacterBody3D` on a fourth physics layer, Vehicles, in a registry of its own
+with four slots, never a `Unit`: a unit is never predicted, never fogged, and counts towards the
+strategist's defeat. Its step is a pure function of its state, the input frame and its ray contacts
+— four wheel rays and four spring-dampers for the 4x4, one height ray for the helicopter — so a
+replay re-runs it; the collider stays upright and the attitude is drawn on the mesh. **Seats are the
+use key**: beside a hull a tap of `E` gets in at the free seat whose door is nearest; seated, a tap
+gets out and a hold moves to the next free seat — rows of the one table that already answered for
+guns, cans and the locker (`EmplacementSim.Resolve`). Anybody gets in at 3 m/s or less, a helicopter
+only on the ground, and out of a helicopter only 4 m or less above it. A seated body is on no layer
+and is pinned to its seat every tick with the vehicle's velocity and the seat's capsule as its
+hitbox, so units lead it, the fog sees it and the hitbox ring records it with no code of their own.
+Bodies are solid to vehicles and vehicles are not solid to bodies: a hull pushes a player or a unit
+aside through their own `MoveAndSlide`, and nothing on foot stops a truck.
+
+**Combat.** Drivers and pilots do not fire. The gunner fires the 4x4's gun — weapon 14, the
+12.7 mm round at 450 rpm from a 100-round box — through `FireMounted`, as at an emplacement; a
+passenger fires their own primary and pistol inside the seat's arc, never a grenade, the hammer, a
+drone or a locker kit. **A seated shooter's round leaves from the pose that shooter's client drew**:
+each vehicle keeps a 32-tick pose ring, and each input packet says how far behind its newest frame
+the client was drawing the vehicles (§7), so over an 80 ms link at 18 m/s round and tracer left at
+most 0.9 cm apart where the server's own tick put them 3.6 m apart. A round from a seat never hits
+its own vehicle or anybody in it. Hulls are oriented boxes in `FirstContact` after the units and
+structures; an enclosed seat's capsule lies inside its hull box, so a round meets the hull first and
+a blast skips the driver and the pilot, while the gunner and a passenger are exposed. Armour is
+§10.6's one number: bullets do 0.15 to the 4x4 and 0.2 to the helicopter, explosives their damage
+times the round's `VehicleDamageScale`, and a round's `VehicleImpactDamage` replaces its damage on a
+direct hit — the tank's is 1,000, so one direct hit destroys either while its blast still does up to
+80. A wreck throws everybody aboard out, each dealt 50 as an explosive in the killer's name — a
+helicopter destroyed more than 4 m up kills everybody aboard — and burns for 2 s. **Running units
+over**: a hull that strikes one of the strategist's units on foot at 8 m/s or more, measured where
+it touches and towards the unit, kills it with weapon 15, the ram, in the name of whoever is at the
+controls or left them under 3 s before; slower, the unit is pushed aside unhurt, and the strategist's
+vehicles are never run over. The vehicle loses no speed and takes no damage from it, so the driver's
+prediction never depends on units its client sees a round trip late.
+
+**The kiosk.** One beside the weapon locker in the bunker (§10.6), whose panel — a tap of `E` within
+1 m of it — asks for either kind with `ClientRequestVehicle`. One validator (`KioskRules.Check`)
+answers a person, a bot and a policy's `vehicle` op alike, and a vehicle taken goes on its kind's pad
+outside the bunker. At most one of each kind is alive; both are ready when the round starts, and the
+next is ready 45 s or 90 s after the last is lost — destroyed, or taken away after a minute empty
+with nobody of the ground force within 15 m.
+
+| | 4x4 | helicopter |
+|---|---|---|
+| kind id, file | 0, `Vehicles/four_by_four.tres` | 1, `Vehicles/helicopter.tres` |
+| seats | driver (enclosed), gunner at the mounted gun, passenger in the bed | pilot (enclosed), passenger in the left door |
+| health, share of a bullet | 600, 0.15: 200 rifle hits | 450, 0.2: 113 rifle hits |
+| a tank's direct hit | destroyed | destroyed |
+| speed | 18 m/s forward, about 4.5 s from rest; 6 m/s in reverse | 22 m/s forward, 10 m/s sideways or back; climbs at 5 m/s, descends at 6, to 25 m above the ground |
+| controls | `W`/`S` throttle, brake and reverse, `A`/`D` steer, `Space` handbrake; springs at 1.6 Hz, damping ratio 0.3 | `W`/`S`/`A`/`D` move, `Space`/`Ctrl` up and down, the look turns it at up to 90°/s |
+| at the kiosk | one alive; the next 45 s after it is lost | one alive; the next 90 s after |
+| runs a unit over at | 8 m/s | 8 m/s, when its cabin or boom is low enough to touch one |
+| gets in · gets out | at 3 m/s or less · always | on the ground · 4 m or less above it |
+
+**On the wire: one new server message and one request** (§7). `ServerCrewVehicles`, unreliable on
+the player snapshot's tick, is a 9-byte header — the tick, a count, and each kind's line at the
+kiosk — and a 46-byte record a vehicle: slot, kind and flags, position, velocity, yaw and yaw rate,
+the chassis's or the tilt's attitude and its rates, the 4x4's steering or the rotor, health, the
+gun's box, the driver's acknowledgement and the three seats' peers
+(`Scripts/Sim/CrewVehicleCodec.cs`, total on decode). That acknowledgement is the slot the server
+stepped (`ServerInputQueue.ConsumedTick`), its own frame or a repeat, not the last real frame the
+player snapshot acknowledges: a vehicle is stepped once a slot whatever arrives, and acknowledging
+the last real frame corrected a 4x4 by 2 m after seven starved slots. **The driver predicts**
+through the character's input ring and a second ledger (`CrewLedger`: 3 cm, 0.5 m/s, 0.5°),
+replaying the vehicle's step, rays and `MoveAndSlide` over the stored frames; a correction is drawn
+away on the hull at the character's 50 ms half-life. Everybody else interpolates it at the render
+clock, smoothed so that a whole-tick correction of the clock is slewed over ten ticks rather than
+jumping a truck and the passenger looking out of it 30 cm (`SmoothRenderClock`). Over 80 ms RTT with 20 ms of
+jitter the driver's error on the straight at 18 m/s was 0.33–0.47 cm on average, the record's
+resolution, with no replay. **Fog** is the players' rule (§6.2): a strategist's packet carries a
+vehicle while the side's sensors see its hull's centre, and a seated player exactly when it carries
+their vehicle, so the two never disagree about who is in it. The input frame stays twelve bytes and
+the player record 32; the input packet's header gained one byte (§7). `DemoFormat.Version` went to 5
+for a `CrewVehicles` record ([`DEMOS.md`](DEMOS.md) §2). Weapon ids 14, the gun, and 15, the ram,
+are appended to the catalog. The agent API is additive ([`AGENT_API.md`](AGENT_API.md) §7.1, §8,
+§9.1): the `vehicle` and `list_vehicles` ops, seven events, a vehicle spawn and a seat placement,
+with the observation schema `gdpyr-agent-obs-4` unchanged. **One build for everybody**, as §10.10
+says: the new RPCs are on a new autoload, `CrewVehicleManager`, so a server and a client from either
+side of the change misroute or drop them rather than failing a decode.
+
+**Who uses it.** A person, at the kiosk and with `E`, the movement keys and the mouse
+([`README.md`](../README.md)); on the `~` console `vehicle <4x4|helicopter|clear>` puts one in front
+of them offline or on a listen host, and `kiosk <4x4|helicopter>` asks the kiosk from anywhere. A
+policy asks the kiosk with `vehicle` and gets in, drives and gets out with the frame's `use` button,
+axes and look. The playtest harness puts vehicles down and seats players in them, and sixteen
+scenarios check it, all passing in Godot (`vehicle_*`, `heli_*` and four `htn_bot*`). Under
+`--bot-ai htn` a ground bot with nothing in sight gets into a person's stopped vehicle within 15 m,
+at the gun first, fights from the seat with its own aim and gets out when the person leaves the
+controls; with nobody or only a bot at them none gets in, and the legacy bots never do
+([`HTN_BOTS.md`](HTN_BOTS.md) §5.1). Bots never drive or fly. The strategist's units shoot at the
+occupants, leading by the vehicle's velocity, and their rounds meet the hull. The debug HUD's
+`vehicles` row counts them, who is aboard, the kiosk's lines, units run over and, on the driver's
+client, mispredictions and replays.
+
+**Not in it** ([`GROUND_VEHICLES.md`](GROUND_VEHICLES.md) §15): damage from collisions to players or
+to a crew vehicle, and ramming the strategist's vehicles; units that get out of a vehicle's way;
+repair and rearming at the kiosk; bots that drive or fly, and the computer strategist answering
+vehicles; grenades, the hammer and the drone from a seat, and getting out above 4 m; a vehicle block
+in the agent observation; more kinds, more seats or a second kiosk; and rewound hits against hulls,
+which are tested where they are now, as a unit's capsule is (§5). Everything drawn — the greybox,
+the chase camera, the wreck, the kiosk's panel — has been driven headless and never looked at, and
+none of it has run on a dedicated server over a real link.
 
 ---
 

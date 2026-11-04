@@ -17,6 +17,7 @@ the pool), tested by `Tests/ExplosionTests.cs`. The half that draws is `Scripts/
 | a barracks mortar round hits | `shell` | the hit point | 8 m |
 | an FPV drone goes off | `drone` | where it was | 4 m |
 | a technical, tank, supply truck or dropship is destroyed | `vehicle` | the middle of the hull | none |
+| a crew vehicle — the ground force's 4x4 or helicopter — is destroyed ([`GROUND_VEHICLES.md`](GROUND_VEHICLES.md) GV-D12) | `vehicle` | the middle of the hull | none |
 
 The reach ring is the round's own `ExplosionRadiusMeters`: it sweeps out to how far the blast did
 damage, which is what tells a player why they died at 6 m from a grenade. A wreck does no blast
@@ -63,6 +64,13 @@ by the hull against the tank's (`Explosions.HullScale`), debris in the vehicle's
 a column of black smoke for about eight seconds — on the floor, if there is one within the hull's
 half-height and 2.5 m; a dropship killed at altitude gets the fireball, debris and smoke, and no
 fire.
+
+`CrewVehicle.PresentDestroyed` does the same for a crew vehicle, through the same
+`ExplosionEffects.SpawnWreck`: on the authority from `CombatManager.DamageCrewVehicle`, on a client
+when a vehicle record first marks it destroyed — never on a new puppet's first record. It is sized
+by the hull's flat radius, stood on the bottom of its lowest box, in the vehicle's colour; the hull
+is drawn burnt for the two seconds before it is taken away, and a helicopter wrecked with no floor
+within the hull's half-height and 2.5 m gets no fire, as a dropship does not.
 
 ## 3. The placeholder
 
@@ -115,8 +123,9 @@ placeholder is drawn instead. No other code changes to swap one kind's art.
 - `dotnet test --filter ExplosionTests`.
 
 TODO: check on a display, as a client and on a listen host — every kind with `explode`, a grenade
-thrown, a launcher and a tank round on a wall and on the floor, a tank and a dropship (on the
-ground and in the air) destroyed, and the strategist's camera above all of it. Built and compiled
+thrown, a launcher and a tank round on a wall and on the floor, a tank, a 4x4, and a dropship and
+a helicopter (on the ground and in the air) destroyed, and the strategist's camera above all of it.
+Built and compiled
 headless, and the curves and rules tested; never looked at.
 
 ## 6. Not done
