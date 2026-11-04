@@ -183,6 +183,46 @@ public class HelicopterTests
 	}
 
 	[Fact]
+	public void OffARoofsEdge_WithNoKeyHeld_ItComesBackDownToItsCeiling_AndStopsThere()
+	{
+		// GV5's engine check flew off the bunker's roof at its ceiling with nothing held: it
+		// came down at its descent rate, then braked for a hover past the ceiling, 2.25 m
+		// below it (docs/GROUND_VEHICLES.md §12, GV5).
+		const float roof = 7.1f;
+		HelicopterState state = OnThePad();
+		state.Position = new Vector3(0f, roof, 0f);
+		for (int i = 0; i < 60 * 10; i++)
+		{
+			Tick(ref state, Fly(climb: true), ground: roof);
+		}
+
+		Assert.Equal(Traits.CeilingMeters + roof, state.Position.Y, 2);
+
+		float lowest = float.MaxValue;
+		for (int i = 0; i < 60 * 5; i++)
+		{
+			Tick(ref state, Fly());
+			Assert.True(state.Velocity.Y >= -Traits.DescentSpeed - 1e-3f);
+			lowest = MathF.Min(lowest, state.Position.Y);
+		}
+
+		Assert.True(lowest > Traits.CeilingMeters - 0.01f, $"came down to {lowest:0.000} m, past its {Traits.CeilingMeters} m ceiling");
+		Assert.Equal(Traits.CeilingMeters, state.Position.Y, 2);
+		Assert.Equal(0f, state.Velocity.Y, 3);
+
+		// With nobody at the controls — a pilot killed in the seat — it comes down from
+		// there no faster than 4 m/s, ceiling or no ceiling, and lands.
+		state.Position = new Vector3(state.Position.X, Traits.CeilingMeters + roof, state.Position.Z);
+		for (int i = 0; i < 60 * 15; i++)
+		{
+			Tick(ref state, Fly(), piloted: false);
+			Assert.True(state.Velocity.Y >= -Traits.UnpilotedDescentSpeed - 1e-3f, $"{state.Velocity.Y:0.00} m/s");
+		}
+
+		Assert.True(state.Grounded);
+	}
+
+	[Fact]
 	public void CommandedDown_ItLandsOnTheGround_AndStops()
 	{
 		HelicopterState state = Hovering(12f);

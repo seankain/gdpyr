@@ -1,11 +1,12 @@
 # gdpyr — Vehicles the ground force drives: a 4x4 and a helicopter
 
 **Status: GV0's baseline measured, GV1's engine-free rules built, GV2's 4x4 on the authority,
-GV3's wire, fog and prediction, and GV4's combat from and against the vehicles (§12): over an 80 ms
-link a gunner and a passenger fire from a 4x4 at full speed and their rounds leave where their
-tracers do; a rifleman's rounds stop at the hull; a tank's round wrecks it and throws its crew out;
-and it runs riflemen over at speed and pushes them aside at a walk. The helicopter in the game is
-GV5's and the kiosk GV6's.** Written against `6699b03`; GV4 amends GV-D16 (§3). The
+GV3's wire, fog and prediction, GV4's combat from and against the vehicles, and GV5's helicopter
+(§12): on a listen host and over an 80 ms link a pilot takes off, flies the arena to the field's
+edge, lands on the floor and on the bunker's roof — which GV5 made solid — and gets out at 4 m while
+it flies, and it settles; a passenger fires from the door at full speed and their rounds leave
+where their tracers do; and the barracks mortar shells a helicopter in its reach and no longer
+holds one out of it. The kiosk is GV6's.** Written against `6699b03`; GV4 amends GV-D16 (§3). The
 decisions (GV-D1–GV-D17, §3) are the defaults the plan is written against; each is one line to
 change, so flag any you disagree with before GV2 starts. The phases (GV0–GV9, §12) say what each builds, what checks it, and what is
 left for a person at the controls.
@@ -55,7 +56,7 @@ Facts this plan stands on, each read in the source at `6699b03`.
 | The strategist's units on foot — rifleman, builder, sniper, heavy gunner — move at 4.5 m/s at most, are 0.4–0.45 m in radius and set no `BulletDamageScale` (so 1). Its technical, tank, supply truck and dropship are units marked `IsVehicle`. A unit's hitbox is an analytic capsule, and one killed through `UnitManager.Damage` credits its killer and emits `unit_lost` | `Units/*.tres`; `Scripts/Rts/UnitDefinition.cs:72`; `Scripts/Rts/Unit.cs:337`; `UnitManager.cs:1808` |
 | A weapon definition needs no round: the hammer has none and loads as `default` projectile stats | `Weapons/geopick/geopick.tres`; `Scripts/Core/WeaponCatalog.cs` (`Projectile?.ToStats() ?? default`) |
 | Three physics layers: World, Players, Units. Every player, and every unit on foot that is not riding, calls `MoveAndSlide` every tick, idle or not | `Scripts/Core/CollisionLayers.cs`; `project.godot` `[layer_names]`; `Scripts/Fps/State.cs:46`; `UnitManager.cs:643` → `Scripts/Rts/Unit.cs:443` |
-| The Test map's weapon locker is at (−79.45, 1.95, 91.38), inside the ground force's 30 × 30 × 7.1 m concrete bunker (`Scenes/Environment/Pillbox.tscn`, origin (−75.83, 0.5, 87.46)), whose one door — in its local +X wall — is 3.2 m wide and 4 m high. NETCODE.md §10.6 still gives the locker's earlier position, (8, 0.5, 11) | `Scenes/Test.tscn:422`, `:426`; the bunker's collision mesh |
+| The Test map's weapon locker is at (−79.45, 1.95, 91.38), inside the ground force's 30 × 30 × 7.1 m concrete bunker (`Scenes/Environment/Pillbox.tscn`, origin (−75.83, 0.5, 87.46)), whose one door — in its local +X wall — is 3.2 m wide and 4 m high. NETCODE.md §10.6 still gives the locker's earlier position, (8, 0.5, 11). **Not solid until GV5:** the collision mesh hung under a plain `Node3D`, which gives it to no body (§12, GV5) | `Scenes/Test.tscn:422`, `:426`; the bunker's collision mesh |
 | The floor is a flat 240 × 240 m slab; its obstacles are 1.2 m low walls, 2.8–3 m blocks and the range posts | `Scenes/Test.tscn` |
 | The ground force's keys: W A S D, Space, Ctrl, Shift, 1 2 3, R, V, E, G, Q, F1–F3, both mouse buttons. U, T and G are each asserted to carry one action | `project.godot`; `Tests/VehicleControlsTests.cs`; `GrenadeTests.TheGrenadeKeyIsBound` |
 | There is no fall damage: a player's health changes only in `CombatManager.Damage`, which only rounds, blasts and swings reach | `CombatManager.cs:1226`, `:1238` |
@@ -1279,6 +1280,148 @@ checked against a target 25 m up (§14). **Done when**, on a listen host and the
 a person takes off, flies the arena, lands on the floor and on the bunker's roof, and the passenger
 fires from the door; a helicopter whose pilot leaves at 4 m settles.
 
+**Built on `59b048e`**, with GV0's .NET SDK and Godot. GV2 to GV4 had already put the helicopter
+on the authority, on the wire and under fire through the 4x4's paths; GV5 is the checks that fly it,
+and the four defects they found.
+
+- **The bunker was not solid** (§2). `Scenes/Environment/Pillbox.tscn`'s `CollisionShape3D` hung
+  under a plain `Node3D`, which gives a shape to no body: rounds, players, units and vehicles all
+  went through the bunker, and the helicopter, landed on its roof, came down through it onto the
+  floor inside (skids at y 0.500, the roof at 7.625). Its root is now a `StaticBody3D` on the World
+  layer, in the `navmesh` group, so the units' navigation is baked round it. What that changes is
+  measured below: a player walking into its wall stops at it; one walking to its door stops at the
+  door's 0.42 m sill and gets in with a jump, as nothing in the game steps up; the units' path
+  across it goes round it.
+- **Off a roof's edge it sank 2.25 m past its ceiling** (§5.2). Above its ceiling the step forced
+  6 m/s down, and a hover then braked from 6 m/s at 8 m/s² once it got there: flown off the
+  bunker's roof 25 m above it with no key held, it came down to 22.82 m above the floor and stayed
+  there. Above the ceiling it now comes down at `min(6, √(2 · 8 · excess))` m/s, which brakes it to
+  a stop at the ceiling, unless the pilot holds Ctrl. With nobody at the controls — a pilot killed
+  in the seat — the old clamp forced 6 m/s there too, past the unpiloted 4 m/s; now nothing forces
+  it. Fact: `OffARoofsEdge_WithNoKeyHeld_ItComesBackDownToItsCeiling_AndStopsThere`, which read
+  22.801 m before.
+- **The mortar held a target it could not reach** (§14). Its rings are distances in three
+  dimensions — it engages to 100 m and keeps a target to 110 m — and its reach is not: from the
+  barracks' roof a target 25 m up is out of reach past 95.5 m flat, 97.3 m away. A helicopter it
+  had taken in reach and that hovered 103 m flat away was held on 1,200 of 1,200 ticks while the
+  mortar pulled its trigger five times and spawned no shell, and anybody else in its reach was
+  spared. A mortar now neither picks up nor keeps a target its shell cannot come down on:
+  `MortarSolver.CanReach` (one flight at the high arc's flattest elevation), which
+  `DefenseSim.CanEngage` and `ShouldKeep` take as `inReach` and only a mortar is asked
+  (`DefenseTraits.NeedsReach`); `DefenseBattery` asks it after the cheaper questions. Nobody on the
+  floor is out of its reach inside the ring: from 7.1 m it carries 121 m. NETCODE.md §10.4 says so.
+- **The check's own count of shells** first read the mortar's `ShotIndex`, which counts trigger
+  pulls; a pull with no arc spawns nothing (`DefenseBattery.FireMortar`). It counts projectile ids.
+- **New:** `tools/EngineChecks/CrewHelicopterChecks.cs`, run by `scripts/crew-vehicle-checks.sh heli`
+  (a listen host on `Test.tscn` at `--fixed-fps 60`, its own player at the controls through the input
+  map) and `heli-net` (a `--server` process, and a pilot and a passenger through GV3's relay, 40 ± 10
+  ms each way, in real time, keeping in step by marker files).
+- **Tests:** `dotnet test` **2,956 of 2,956 pass**, 10 of them new: `HelicopterTests` (+1) and
+  `DefenseTests` (+9: a shell laid on somebody 25 m up comes down through them, from 20 to 94 m;
+  somebody at the ceiling 103 m off is out of reach inside the ring that holds them; `CanReach` is
+  true exactly where `TrySolve` finds an arc, over 4,290 targets; a mortar neither picks up nor keeps
+  a target out of reach, and a gun is not asked; nothing reaches with no muzzle velocity, straight up
+  or at a NaN). The test project's one warning is still GV0's CS0649.
+- **Builds:** `Gdpyr.csproj`, `tools/Gdpyr.Playtest` and `tools/Gdpyr.AgentClient`, 0 warnings and
+  0 errors each, rebuilt from clean.
+- **Engine checks:** **`heli`, 39 of 39 facts** in each of four runs of the final code; **`heli-net`,
+  39 of 39** — the server's 17, the pilot's 12 and the passenger's 10 — in each of five, every part
+  exiting 0 in four; in the other the pilot's process crashed (signal 11) after its last fact. On
+  the final code, in the last run of each: GV2's `physics` 66 of 66 and `game` 37 of 37, GV3's `net`
+  57 of 57 and GV4's `combat` 57 of 57, every part exiting 0.
+- **GV4's `combat` server aborted as it quit**, after every fact held, on a Godot .NET assertion
+  (`script_bindings.is_empty()`, `csharp_script.cpp`, signal 4) raised once the runtime had
+  finalized — on one host, in seven runs of seven that had `CrewHelicopterChecks.cs` in the build:
+  five of the final tree, one with the bunker not solid, and one of `59b048e` with only the script
+  and this file added; `59b048e` as it stands exited 0 in three runs of three beside them. The
+  script now makes the new check an autoload only for `heli` and `heli-net`, so the other modes run
+  with GV4's three; the next run there aborted all the same. On the host the container then came
+  back on, the final tree's `combat` exited 0 in every process in two runs of two. The cause is not
+  found; GV4 saw the same abort once. One of `combat`'s runs on the first host also failed two
+  timing facts — the gunner's box a tick late, the passenger's origins 4.2 m apart — as GV4's run
+  with a starved buffer did.
+- **The scenario suite**, GV0's way (`--fixed-fps 60` through `GODOT`), on the final tree but
+  `weight_speed`'s lanes, in 705 s of scenario wall time: **32 of 41**. GV0's eight failed, `htn_squad_retreats`
+  among them as in GV0's first run, and so did `weight_speed`, which passed in both of GV0's: two of
+  its three lanes started inside the bunker and the third against its wall, and the default seat
+  sprinted into the inner wall (stripped : default 2.312). Its lanes are now at x −60, −50 and −40
+  from z 35 (LOADOUT.md says so); run alone it passes, reading GV0's values (1.12; 0.698–0.7).
+  Against GV0's two runs four other claims read differently: `htn_squad_retreats`'
+  `squad_task[goal=4]` 6..9, which GV4 saw at 5..10; `tactics_sniper_overwatch`'s
+  `unit_task[goal=21]` 4..9 and `[goal=23]` 4..7, inside GV0's ranges; and `tactics_move_to_node`'s
+  units' kills, five or more in 1 of 3 seeds where both of GV0's runs read 2. Run alone, that claim
+  read 2 and then 3 of 3 on the final tree, and 2 of 3 on a copy with the bunker not solid: spread,
+  which GV0's two runs had not shown. Its three ground bots start behind the bunker and walk round
+  it now. Two other scenarios start somebody beside the bunker — `armour_vs_rifleman`'s target
+  0.2 m off its wall, `sniper_tower_reach`'s unit 1.6 m off another — and read as at GV0.
+
+Measured by `heli`, the listen host (all four runs read the same to the digit):
+
+| | |
+|---|---|
+| Space held from getting in | off the ground 94 ticks after the tap, the rotor at 0.60; full 154 ticks after |
+| 8 s of Space | 5.00 m/s at most; 25.000 m up, and no higher; 2 s with neither key, 25.000 m |
+| The pilot's camera | the chase camera, 9.76 m behind the skids along the look |
+| The look 90° round, then 270° to the left | 60 ticks at 90.0°/s; then 7.5° to the right in 5 ticks, the short way |
+| 12 s of W east, then 8 s north, 25 m up | 22.00 m/s, the nose down to 20.0°; stopped at x 115.000, then z 115.000 |
+| Ctrl to the floor in the corner | 6.00 m/s at most; skids at y 0.500, 0.001 m up; a second of W, D and a look 69° round there: moved 0.0000 m, turned 0.000° |
+| Flown 193 m to the bunker's roof and down | 1.45 m from its middle; skids at y 7.625; out on the roof, standing on it, and back in |
+| 8 s of Space over the roof, then 45 m east, off its edge | 25.000 m above the roof; then down at up to 6.00 m/s to 25.000 m above the floor |
+| Out at 3.75 m, flying at 10.00 m/s | put down on the floor; it came down at 4.00 m/s at most, on the ground 67 ticks later, 11.4 m on; the rotor stopped 5 s after; 0.0000 m moved in the 3 s after that |
+| Hovering 25 m up, 63.0 m from the mortar, 24 s (its two guns stood down, the hull kept whole) | 6 shells, 3 damaged the hull — in the air a shell bursts only on what it strikes, so 3 direct hits |
+| Hovering 25 m up, 103.5 m from it, 20 s | held on 0 ticks, no pull and no shell |
+| On the floor 98.7 m from it, 20 s | held on 1,200 ticks; 5 shells, 5 damaged the hull |
+| Walking 2 s into the bunker's wall | stopped 0.503 m from its face |
+| Walking to its door, then a jump | stopped 0.494 m outside the door's face; over the sill, on the floor inside at y 0.809 |
+| A unit's path across it, 53.9 m as the crow flies | 10 points, 58.7 m, round it |
+
+Measured by `heli-net` (five runs; the relay one-way 40.0–40.1 ms mean, 10.0 ms SD, 1.8–81.8 ms):
+
+| | |
+|---|---|
+| In the door on the floor, the helicopter facing east | `helicopter · door · no shot` to the right and straight down, a shot to the left; half a second of the trigger to the right fires nothing |
+| The pass: 11.67 m up, east at full throttle, a strategist rifleman 25 m off the line | 22.00 m/s; the passenger's 23 rounds in 2.27–2.28 s adopted, tracer and round 0.001–0.005 m apart on average, 0.005–0.034 m at worst; 5 hits on the rifleman; none on their own helicopter. The rifleman hit the hull 7 times, 450 → 422, and the passenger, 100 → 60 or 80 |
+| The pilot's prediction, getting in to the end of the pass | the snap on getting in, then no replay in four runs; in the fifth one replay of 8 ticks, a 1.239 m correction shown at once — why was not logged, as GV3's one 1.32 m was not |
+| The flight to the roof | no replay; the largest correction 0.001 m |
+| The pilot out at 3.75–3.76 m, flying west at 10.21–10.38 m/s | put down on the floor; it came down at 4.00 m/s at most with the passenger in the door, on the ground 70 ticks later, then still; on the passenger's client, still in the door of a helicopter on the ground |
+| Flown to the bunker's roof and down | skids at y 7.625 on the server and the pilot's client; both out on the roof, at y 7.625 on the server and on each client |
+| The pilot hovering 25 m up 103.4–103.5 m from the mortar, the passenger on foot 97.2 m from it, 20 s | the pilot held on 0 ticks; the passenger on 512–516, 2 shells, hurt and killed |
+
+Each guard, broken on a copy and the check run, and what failed:
+
+| Broken | Failed |
+|---|---|
+| the bunker's root a `Node3D` again | 6 of `heli`'s: down on the roof (y 0.500), out on it, its ceiling over the roof (17.875 m), its wall (walked 6.25 m into it), its sill, the units' path (straight through, 53.9 m) |
+| the bunker solid but out of the `navmesh` group | the units' path, straight through it |
+| the ceiling's old clamp | `OffARoofsEdge_…`, 22.801 m; and `heli`'s off the roof's edge, 22.824 m above the floor |
+| the old clamp without lift | `OffARoofsEdge_…`'s unpiloted half: −6.00 m/s |
+| `CanReach` always true | 3 of `DefenseTests` |
+| `ShouldKeep` not taking `inReach` | `AMortarNeitherPicksUpNorHoldsATargetOutOfItsShellsReach_…` |
+| `DefenseBattery` never asking `InReach` | `heli`'s 103 m: held on 1,200 ticks, 5 pulls, 0 shells; `heli-net`'s two: the pilot held on 1,200 ticks, and the passenger on foot 97.2 m from it on none, no shell |
+
+What the phase left open, and what GV5 chose:
+
+- **The mortar keeps shooting at helicopters.** §14's mitigation was to skip airborne players if it
+  misbehaved. In its reach it does not: its shells come down through a hovering helicopter's hull
+  (3 direct hits of 6 at 63 m), which punishes hovering in its ring as it punishes standing in it.
+  What misbehaved was holding a target out of reach, and the rule is about reach, not flight.
+- **The bunker is made solid as authored**, door and sill included. That the ground force now jumps
+  into the locker's room, and that GV6's kiosk will be in it, is the map's to change, not this plan's;
+  no unit can climb the sill, though the navigation mesh, at `AgentMaxClimb` 0.5 m, joins the room to
+  the floor outside. The roof's hatch, 13.3 m west of its middle, is a hole in the roof; the checks
+  land on the middle.
+- **The helicopter's height is one ray from its skids' middle**, as §5.2 has it: over the roof's
+  edge or its hatch, the ground under it is whatever that ray finds.
+- **Presentation is GV2's** — the greybox cabin and boom, skids, two crossed blades and a tail rotor,
+  turning by the rotor's speed, tilted as it flies — and the chase camera is checked by where it is,
+  not by looking.
+- **The rifleman in the pass shoots back** (§11's `vehicle_passenger_fires` set-up), so the passenger
+  can be hurt; in these runs they lived.
+- **Left for a person at the controls**: everything drawn — the helicopter's greybox, the rotor
+  spinning up, the tilt, the chase camera over the arena and the roof, the passenger's view from the
+  door and their tracers — has been flown headless and never looked at (`TODO(GV5…)` in
+  `CrewVehicle.cs`), nor run on a dedicated server over a real link.
+
 ### GV6 — The kiosk (1½ days)
 
 §6.6, `KioskPanel`, the HUD's kiosk line, the kiosk and pads on `Scenes/Test.tscn`, the round's reset.
@@ -1319,6 +1462,7 @@ DEMOS.md (version 5), EFFECTS.md (§1's table), and this document's status.
 | The kiosk's timer and cap | §5.5's facts; `vehicle_kiosk_cap` | `dotnet test`; Godot headless |
 | A collision at 8 m/s or more kills a unit on foot; a slower one does not | §5.9's facts; `vehicle_rams_infantry`, `vehicle_pushes_slowly` | `dotnet test`; Godot headless |
 | Driving feels like driving | GV3's error, misprediction and replay numbers | `crew-vehicle-checks.sh net`: a `--server` process and four clients, 80 ms RTT and 20 ms jitter through a relay; a person, dedicated server with `tc netem` |
+| The helicopter flies the arena, lands on the floor and the bunker's roof, and settles when its pilot gets out at 4 m; its passenger fires from the door | §5.2's facts; GV5's flight, roof, settling and door facts | `dotnet test`; `crew-vehicle-checks.sh heli` (a listen host) and `heli-net` (a `--server` process and two clients through the relay); a person, both |
 
 ---
 
@@ -1330,7 +1474,7 @@ DEMOS.md (version 5), EFFECTS.md (§1's table), and this document's status.
 | A hull catches on corners, or a fast hull swallows a body | trucks stopping dead on wall ends; a player inside a hull | a bevelled collider, checked at 18 m/s in GV2; a body found inside a hull is moved out by the server |
 | Units wedge on a parked vehicle the navmesh knows nothing of | riflemen stuck against a truck | vehicles are few and are removed after 60 s abandoned; if it shows, a `NavigationObstacle3D` on a parked hull |
 | §5.6's view tick is off by a tick or two | tracer and round more than 0.3 m apart at speed | GV4's measured check; the formula is one tested function. **Seen in GV4**: the plan's formula ran 1–3 ticks late; with two terms added and the depth smoothed it still missed by up to a metre, the client's own clock moving by a tick, which only the client knows. The client now says which tick it drew, in the input packet's header (GV-D16, amended) |
-| The barracks mortar aims at a point in the air | shells bursting overhead, or no solution found | checked in GV5; if it misbehaves, the mortar skips airborne players |
+| The barracks mortar aims at a point in the air | shells bursting overhead, or no solution found | checked in GV5; if it misbehaves, the mortar skips airborne players. **Seen in GV5**: in its reach its shells come down on a hovering helicopter (3 direct hits of 6 at 63 m), but it kept one it could not reach, inside the 110 m it keeps a target to, and fired at nobody. It now neither picks up nor keeps a target out of its shells' reach; airborne players are not skipped (§12, GV5) |
 | A truck parked in the bunker's door shuts the spawn in | nobody leaves the bunker | anybody can drive it away with `E`; it is removed after 60 s empty |
 | The vehicles decide rounds | the strategist stops winning against people in them | the cap, the timers and the armour are files (§9); one helicopter at 90 s is the first dial |
 | Running infantry over decides rounds | most of the strategist's infantry losses are `kill[weapon=15]` | one number per kind (`RamKillSpeedMetersPerSecond`), then the 4x4's top speed and acceleration; units that step aside are §15's |

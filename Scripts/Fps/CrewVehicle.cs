@@ -766,6 +766,10 @@ public partial class CrewVehicle : CharacterBody3D
 			return;
 		}
 
+		// TODO(GV5, docs/GROUND_VEHICLES.md §12): check on a display, on a listen host and a dedicated
+		// server: the cabin and boom, the rotor spinning up and its blades at speed, the tilt in flight,
+		// landing on the bunker's roof. Flown headless by scripts/crew-vehicle-checks.sh heli and
+		// heli-net, never looked at.
 		// The helicopter: two skids under the cabin, and the rotors.
 		for (int side = -1; side <= 1; side += 2)
 		{

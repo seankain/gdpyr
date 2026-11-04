@@ -359,6 +359,88 @@ public class DefenseTests
 		Assert.Equal(Vector3.Zero, Spread.Disc(0f, 12345u));
 	}
 
+	// ---- a target in the air (docs/GROUND_VEHICLES.md §14, GV5) ----------------------
+
+	/// <summary>The Test map's mortar: on the barracks' 6 m roof, its muzzle 0.6 m up.</summary>
+	private static readonly Vector3 TestMuzzle = new(100f, 7.1f, -100f);
+
+	/// <summary>A helicopter's pilot at its 25 m ceiling over the Test map's floor: their feet, in the cabin.</summary>
+	private const float AtTheCeiling = 0.5f + 25f + 0.6f;
+
+	[Theory]
+	[InlineData(20f)]
+	[InlineData(40f)]
+	[InlineData(60f)]
+	[InlineData(80f)]
+	[InlineData(94f)]
+	public void AShellLaidOnSomebody25MetresUp_ComesDownThroughWhereTheyAre(float distance)
+	{
+		Vector3 target = new(TestMuzzle.X - distance, AtTheCeiling, TestMuzzle.Z);
+
+		Assert.True(MortarSolver.TrySolve(TestMuzzle, target, Shell, out Vector3 direction, out _));
+
+		Vector3 passed = Fly(TestMuzzle, direction, target.Y, out _);
+		Vector3 miss = passed - target;
+		miss.Y = 0f;
+		Assert.True(miss.Length() < 0.5f, $"missed by {miss.Length():0.00} m at {distance} m");
+	}
+
+	[Fact]
+	public void SomebodyAtTheCeiling_IsOutOfItsShellsReach_InsideTheRingAMortarHoldsATargetIn()
+	{
+		// 103 m flat and 26 m up: 104.8 m away, inside the 110 m a target is held to. The
+		// same 103 m on the floor is in reach.
+		Vector3 up = new(TestMuzzle.X - 103f, AtTheCeiling, TestMuzzle.Z);
+		Vector3 down = new(TestMuzzle.X - 103f, 0.5f, TestMuzzle.Z);
+		float distance = TestMuzzle.DistanceTo(up);
+
+		Assert.True(DefenseSim.ShouldKeep(Mortar(), distance, lineOfSight: true));
+		Assert.False(MortarSolver.CanReach(TestMuzzle, up, Shell));
+		Assert.False(MortarSolver.TrySolve(TestMuzzle, up, Shell, out _, out _));
+		Assert.True(MortarSolver.CanReach(TestMuzzle, down, Shell));
+	}
+
+	[Fact]
+	public void CanReach_IsTrueExactlyWhereThereIsAnArc()
+	{
+		// Every flat distance from the minimum range to past the furthest, at every height
+		// from the bottom of the barracks' wall to a helicopter over the bunker's roof.
+		int reached = 0;
+		for (float height = -6.6f; height <= 26f; height += 1.3f)
+		{
+			for (float distance = 15f; distance <= 130f; distance += 0.7f)
+			{
+				Vector3 target = new(-distance * 0.6f, height, distance * 0.8f);
+				bool solved = MortarSolver.TrySolve(Vector3.Zero, target, Shell, out _, out _);
+				Assert.Equal(solved, MortarSolver.CanReach(Vector3.Zero, target, Shell));
+				reached += solved ? 1 : 0;
+			}
+		}
+
+		Assert.True(reached > 1000, $"{reached} reached");
+	}
+
+	[Fact]
+	public void AMortarNeitherPicksUpNorHoldsATargetOutOfItsShellsReach_AndAGunIsNotAsked()
+	{
+		Assert.True(DefenseSim.CanEngage(Mortar(), 60f, lineOfSight: false, inReach: true));
+		Assert.False(DefenseSim.CanEngage(Mortar(), 60f, lineOfSight: false, inReach: false));
+		Assert.True(DefenseSim.ShouldKeep(Mortar(), 105f, lineOfSight: false, inReach: true));
+		Assert.False(DefenseSim.ShouldKeep(Mortar(), 105f, lineOfSight: false, inReach: false));
+
+		Assert.True(DefenseSim.CanEngage(Gun(), 60f, lineOfSight: true, inReach: false));
+		Assert.True(DefenseSim.ShouldKeep(Gun(), 105f, lineOfSight: true, inReach: false));
+	}
+
+	[Fact]
+	public void NothingReachesWithNoMuzzleVelocity_OrStraightUp()
+	{
+		ProjectileStats dud = new(Shell.Physics, 0f, 100f);
+		Assert.False(MortarSolver.CanReach(Vector3.Zero, new Vector3(0f, 0f, -40f), dud));
+		Assert.False(MortarSolver.CanReach(Vector3.Zero, new Vector3(0f, 80f, -20f), Shell));
+		Assert.False(MortarSolver.CanReach(Vector3.Zero, new Vector3(0f, float.NaN, -20f), Shell));
+	}
+
 	/// <summary>
 	/// Flies a shell through the real projectile pool and returns where it came down
 	/// through <paramref name="height"/>, and after how long.

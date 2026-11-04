@@ -624,7 +624,7 @@ listen-host or dedicated-server check by a person has been taken for any of them
 scenarios first ran in L5's suite, and L8's engine-side checks — the suite against obs-4, the
 legacy baseline's re-measure and a PPO smoke run — have not been taken.
 
-### M12 — Vehicles the ground force drives (~20 days) *in progress: GV0–GV4 done — the rules, the 4x4 driven on the authority, the vehicles on the wire, fogged and predicted, and combat from and against them*
+### M12 — Vehicles the ground force drives (~20 days) *in progress: GV0–GV5 done — the rules, the 4x4 driven on the authority, the vehicles on the wire, fogged and predicted, combat from and against them, and the helicopter*
 
 A 4x4 technical — a sprung chassis, a mounted 12.7 mm gun, a passenger in the bed — and a
 helicopter with a passenger in its door, driven and flown by ground-force players from their own

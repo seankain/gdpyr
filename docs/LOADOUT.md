@@ -845,7 +845,9 @@ through the harness; "listen host" and "dedicated server" need a person at the c
     velocity samples, one a tick at `step_mul` 1, is minus its distance times 60 / 16 (the vector divides
     velocity by 16 m/s), and the ratio of two seats' sums is the ratio of their distances.
   - **Scenario `weight_speed.json`**: three lanes 10 m apart at x = −90, −80 and −70, from z = 80
-    towards −z, which nothing on the Test map stands in; a seat in each at `step_mul` 1 — stripped
+    towards −z, which nothing on the Test map stands in — until GROUND_VEHICLES.md's GV5 made the
+    ground force's bunker solid, which two of them start inside; they are now at x = −60, −50 and −40
+    from z = 35, and read as before; a seat in each at `step_mul` 1 — stripped
     (no primary and nothing else, 2.0 kg), default (9.3 kg) and heaviest (a launcher, nine pouches
     and a heavy vest, 26.1 kg). Its script, `scripts/walk_then_sprint.json`: 60 ticks still, 4
     walking — the sprinting state is entered from walking on a press of sprint, not from idle — and

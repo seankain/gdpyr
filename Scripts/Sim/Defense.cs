@@ -53,6 +53,9 @@ public readonly struct DefenseTraits
 	}
 
 	public bool NeedsLineOfSight => Kind == DefenseKind.Gun;
+
+	/// <summary>Whether its round has to be able to come down on a target: a mortar's (<see cref="MortarSolver.CanReach"/>).</summary>
+	public bool NeedsReach => Kind == DefenseKind.Mortar;
 }
 
 /// <summary>
@@ -79,19 +82,26 @@ public static class DefenseSim
 	/// </summary>
 	public const float KeepRangeScale = 1.1f;
 
-	/// <summary>Whether a candidate is worth picking up.</summary>
-	public static bool CanEngage(in DefenseTraits traits, float distance, bool lineOfSight) =>
+	/// <summary>
+	/// Whether a candidate is worth picking up. <paramref name="inReach"/> is whether a
+	/// mortar's shell can come down on it at all (<see cref="MortarSolver.CanReach"/>); a
+	/// gun's round goes wherever it is pointed, and a gun is not asked.
+	/// </summary>
+	public static bool CanEngage(in DefenseTraits traits, float distance, bool lineOfSight, bool inReach = true) =>
 		distance <= traits.RangeMeters && distance >= traits.MinRangeMeters
-		&& (lineOfSight || !traits.NeedsLineOfSight);
+		&& (lineOfSight || !traits.NeedsLineOfSight) && (inReach || !traits.NeedsReach);
 
 	/// <summary>
 	/// Whether a target already held is still worth holding. Wider than
 	/// <see cref="CanEngage"/> on range, the same on everything else: a gun whose
-	/// target has ducked behind a wall looks for somebody it can see.
+	/// target has ducked behind a wall looks for somebody it can see, and a mortar
+	/// whose target has gone out of its shells' reach — a helicopter climbing away
+	/// (docs/GROUND_VEHICLES.md §14) — for somebody it can hit, rather than holding on
+	/// to them and firing at nobody.
 	/// </summary>
-	public static bool ShouldKeep(in DefenseTraits traits, float distance, bool lineOfSight) =>
+	public static bool ShouldKeep(in DefenseTraits traits, float distance, bool lineOfSight, bool inReach = true) =>
 		distance <= traits.RangeMeters * KeepRangeScale && distance >= traits.MinRangeMeters
-		&& (lineOfSight || !traits.NeedsLineOfSight);
+		&& (lineOfSight || !traits.NeedsLineOfSight) && (inReach || !traits.NeedsReach);
 
 	/// <summary>
 	/// Turns a gun towards where it wants to point, by at most
@@ -286,6 +296,31 @@ public static class MortarSolver
 		direction = Aim.Direction(yaw, pitch);
 		flightSeconds = seconds;
 		return true;
+	}
+
+	/// <summary>
+	/// Whether a round fired from <paramref name="origin"/> can come down on
+	/// <paramref name="target"/> at all: the high arc's flattest elevation carries it at
+	/// least as far — what <see cref="TrySolve"/> asks first, in one flight. Its ring is a
+	/// distance in three dimensions and its reach is not: a target 25 m up — a helicopter
+	/// at its ceiling — is out of reach from the Test map's mortar past about 97 m, inside
+	/// the 100 m it engages to and the 110 m it holds to (docs/GROUND_VEHICLES.md §14,
+	/// GV5). A target too close for the steepest elevation is the mount's minimum range's
+	/// business, not this.
+	/// </summary>
+	public static bool CanReach(Vector3 origin, Vector3 target, in ProjectileStats stats)
+	{
+		Vector3 flat = target - origin;
+		float height = flat.Y;
+		flat.Y = 0f;
+		float distance = flat.Length();
+		if (stats.MuzzleVelocity <= 0f || !float.IsFinite(distance) || !float.IsFinite(height))
+		{
+			return false;
+		}
+
+		float low = (MathF.PI * 0.25f) + (0.5f * MathF.Atan2(height, distance));
+		return low < MaxPitchRadians && TryRange(low, height, stats, out float furthest, out _) && furthest >= distance;
 	}
 
 	/// <summary>
