@@ -1675,8 +1675,13 @@ spread (AGENT_API.md §3).
 - **Builds:** `Gdpyr.csproj`, `tools/Gdpyr.Playtest` and `tools/Gdpyr.AgentClient`, 0 warnings and 0
   errors each.
 - **Engine checks:** **`demo`, 14 of 14 facts** — the recording's 7 and the playback's 7 — in each
-  of two runs of the final code, both processes exiting 0. Reruns of GV2–GV6's checks on the final
-  code are below.
+  of three runs of the final code, both processes exiting 0 each time; every run measured the
+  puppet within 0.006 m of the recorded path on 235 frames, the body seated as recorded on 241 of
+  241, and its eye at the seat's to 0.0000 m on the 180 it sat. GV2–GV6's checks, rerun in one
+  sitting on the final code: `physics` 66 of 66, `game` 37 of 37, `net` 57 of 57, `combat` 57 of
+  57, `heli` 39 of 39, `heli-net` 39 of 39, `kiosk` 40 of 40, `kiosk-pad` 5 of 5 and `kiosk-net` 13
+  of 13, every part exiting 0 but `heli-net`'s pilot, which crashed (signal 11) after its last
+  fact, as one of GV5's five runs did.
 - **The scenario suite**, GV0's way (`--fixed-fps 60` through `GODOT`), on a copy of the final tree
   without `vehicle_policy_gets_in`, which was added after it and run alone on the same code: **44 of
   51**, in 826 s of scenario wall time. §11's ten pass in every seed; the seven that fail are GV0's
