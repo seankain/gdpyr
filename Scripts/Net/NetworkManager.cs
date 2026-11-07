@@ -54,6 +54,17 @@ public partial class NetworkManager : Node
 	public bool IsConnecting => IsClient && !Connected && !ConnectionFailed;
 
 	/// <summary>
+	/// Client only: the id of the map the server is playing (<see cref="MapCatalog"/>),
+	/// or null until it has said. The server says it first thing on every connection,
+	/// before the roster, and the menu loads that map rather than its own default
+	/// (docs/LAN.md §3.4).
+	/// </summary>
+	public string ServerMapId { get; private set; }
+
+	/// <summary>Bytes counted for the map message, for the bandwidth HUD: an id is a few characters.</summary>
+	private const int MapMessageBytes = 16;
+
+	/// <summary>
 	/// True once a transport has been chosen, whether by the command line or in the
 	/// menu. A second choice is refused rather than layered on top of the first.
 	/// </summary>
@@ -211,16 +222,16 @@ public partial class NetworkManager : Node
 	}
 
 	/// <summary>
-	/// Drops a link that never came up, so the menu can try a different address.
+	/// Drops a link that never came up, or one to a host playing a map this build does
+	/// not have, so the menu can try a different address.
 	///
-	/// Only ever called before a round starts: once the map is loaded there is a
-	/// roster, a clock and a prediction ledger built around this peer, and none of
-	/// them is torn down here. Leaving a round you are in is still quitting the
-	/// process (docs/LAN.md §4).
+	/// Only ever called before the map is loaded: once it is there is a roster, a clock
+	/// and a prediction ledger built around this peer, and none of them is torn down
+	/// here. Leaving a round you are in is still quitting the process (docs/LAN.md §4).
 	/// </summary>
 	public void AbandonConnection()
 	{
-		if (!IsClient || Connected)
+		if (!IsClient || Session.InGame)
 		{
 			return;
 		}
@@ -239,6 +250,7 @@ public partial class NetworkManager : Node
 		HasStarted = false;
 		Connected = false;
 		ConnectionFailed = false;
+		ServerMapId = null;
 	}
 
 	/// <summary>A round on your own, against the bots: no peer, no packets (docs/NETCODE.md §9).</summary>
@@ -429,11 +441,37 @@ public partial class NetworkManager : Node
 		Clock.OnClockReply(serverTick, rtt);
 	}
 
+	// ---- the map (docs/LAN.md §3.4) ------------------------------------------
+
+	/// <summary>
+	/// Server -> a client that has just connected: the map this round is played on.
+	/// Reliable, and sent before <see cref="PeerJoined"/> is raised, so it is the
+	/// first thing on the channel — ahead of the roster, which is about characters
+	/// standing on it.
+	/// </summary>
+	[Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
+		TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+	private void ServerMap(string mapId)
+	{
+		if (!IsClient)
+		{
+			return;
+		}
+
+		Stats.RecordReceived(MapMessageBytes);
+		ServerMapId = mapId ?? string.Empty;
+		GD.Print($"[net] the server is playing map '{ServerMapId}'");
+	}
+
 	// ---- peer lifecycle ----------------------------------------------------
 
 	private void OnPeerConnected(long id)
 	{
 		GD.Print($"[net] peer {id} connected ({Multiplayer.GetPeers().Length} total)");
+
+		RpcId(id, MethodName.ServerMap, Session.Map.Id);
+		Stats.RecordSent(MapMessageBytes);
+
 		PeerJoined?.Invoke((int)id);
 	}
 

@@ -41,6 +41,37 @@ public class TeamServiceTests
 	}
 
 	[Fact]
+	public void AHostCanOfferOneChair()
+	{
+		var teams = new TeamService();
+		teams.SetStrategistCap(1);
+		teams.Assign(1, Team.Strategist);
+
+		Assert.Equal(1, teams.StrategistCap);
+		Assert.False(teams.CanJoin(2, Team.Strategist));
+		Assert.Equal(Team.GroundForce, teams.Assign(2, Team.Strategist));
+		Assert.Equal(Team.Strategist, teams.Assign(1, Team.Strategist));
+	}
+
+	[Theory]
+	[InlineData(0, 1)]
+	[InlineData(-1, 1)]
+	[InlineData(3, TeamService.MaxStrategists)]
+	public void TheChairCountStaysBetweenOneAndTheDesigns(int asked, int expected)
+	{
+		var teams = new TeamService();
+		teams.SetStrategistCap(asked);
+
+		Assert.Equal(expected, teams.StrategistCap);
+	}
+
+	[Fact]
+	public void TheChairCountIsTheDesignsUntilAHostSaysOtherwise()
+	{
+		Assert.Equal(TeamService.MaxStrategists, new TeamService().StrategistCap);
+	}
+
+	[Fact]
 	public void AskingForTheSideYouAreAlreadyOnIsNeverRefused()
 	{
 		var teams = new TeamService();

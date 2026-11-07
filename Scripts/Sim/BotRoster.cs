@@ -69,7 +69,7 @@ public readonly struct BotDemand
 	/// <summary>Roster slots the snapshot can carry — <c>SnapshotCodec.MaxPlayers</c>.</summary>
 	public readonly int Seats;
 
-	/// <summary>Strategists allowed at once, from <c>TeamService.MaxStrategists</c>.</summary>
+	/// <summary>Strategists allowed at once, from <c>TeamService.StrategistCap</c>.</summary>
 	public readonly int StrategistCap;
 
 	/// <summary>

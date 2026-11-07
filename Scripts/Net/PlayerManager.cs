@@ -414,7 +414,7 @@ public partial class PlayerManager : Node
 			return;
 		}
 
-		_bots = new BotDirector(CombatManager.Instance?.GameMode, Bootstrap.Options);
+		_bots = new BotDirector(CombatManager.Instance?.GameMode, Bootstrap.Options, Session.Host);
 
 		if (Bootstrap.Options is { HasAgentApi: true })
 		{
@@ -1776,6 +1776,27 @@ public partial class PlayerManager : Node
 		}
 		player.Character.QueueFree();
 		GD.Print($"[players] despawned peer {peerId}");
+	}
+
+	/// <summary>
+	/// Client, before the map is loaded: forgets every character a server announced.
+	/// The menu calls it when it drops a link it will not play on — a server on a map
+	/// this build does not have (docs/LAN.md §3.4) — because the roster arrives on the
+	/// heels of the map's name and would otherwise still be standing about when the
+	/// next server's arrives.
+	/// </summary>
+	public void ForgetClientRoster()
+	{
+		if (Session.InGame || NetworkManager.Instance is not { IsClient: true })
+		{
+			return;
+		}
+
+		var peers = new List<int>(_players.Keys);
+		foreach (int peerId in peers)
+		{
+			Despawn(peerId);
+		}
 	}
 
 	/// <summary>

@@ -40,6 +40,11 @@
          without two machines. -->
     <Compile Include="../Scripts/Match/MatchState.cs" />
     <Compile Include="../Scripts/Match/TeamService.cs" />
+    <!-- What a host picks in the main menu, and the maps it picks from
+         (docs/LAN.md §3.4): what a typed-in number is pulled into, and what a map id
+         the catalog does not have resolves to, are answered without a menu. -->
+    <Compile Include="../Scripts/Match/HostSettings.cs" />
+    <Compile Include="../Scripts/Core/MapCatalog.cs" />
     <!-- LAN discovery's datagrams (docs/LAN.md §4). Engine-free for the reason
          every other codec here is: the socket is open to whatever else is on the
          Wi-Fi, and "what does this do with a malformed packet" is a question for

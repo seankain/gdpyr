@@ -119,7 +119,7 @@ public partial class RoleSelect : CanvasLayer
 			"a rifle, a ticket pool, and whatever the strategist sends at you");
 
 		_strategist = NewChoice(column, "Strategist  (F2)",
-			"the map from above, the units on it, and only what they can see — two seats");
+			"the map from above, the units on it, and only what they can see — up to two seats");
 
 		_spectate = NewChoice(column, "Spectate  (F3)",
 			"a free camera over the whole round, and the AI debugger: what every bot is planning");

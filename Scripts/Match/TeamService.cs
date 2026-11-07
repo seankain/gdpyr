@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Gdpyr.Sim;
 
@@ -32,6 +33,20 @@ public sealed class TeamService
 	public const int MaxStrategists = 2;
 
 	private readonly Dictionary<int, Team> _teams = new();
+
+	/// <summary>
+	/// Strategists allowed at once in this session: <see cref="MaxStrategists"/>
+	/// unless a host picked fewer in the main menu (<see cref="HostSettings"/>,
+	/// docs/LAN.md §3.4). Never below one: a round always has a chair to sit in.
+	/// </summary>
+	public int StrategistCap { get; private set; } = MaxStrategists;
+
+	/// <summary>
+	/// Sets <see cref="StrategistCap"/>, clamped to 1..<see cref="MaxStrategists"/>.
+	/// Nobody already in a chair is moved out of it: the cap is checked when a seat
+	/// is asked for, and a host sets it before anybody has asked.
+	/// </summary>
+	public void SetStrategistCap(int cap) => StrategistCap = Math.Clamp(cap, 1, MaxStrategists);
 
 	/// <summary>
 	/// Peers that have been asked which side they want this round and have not
@@ -81,7 +96,7 @@ public sealed class TeamService
 	/// side you are on must never be refused for want of room on it.
 	/// </summary>
 	public bool CanJoin(int peerId, Team team) =>
-		team != Team.Strategist || TeamOf(peerId) == Team.Strategist || StrategistCount < MaxStrategists;
+		team != Team.Strategist || TeamOf(peerId) == Team.Strategist || StrategistCount < StrategistCap;
 
 	/// <summary>
 	/// Puts a peer on a side and returns the side they actually got. A refused
