@@ -38,6 +38,7 @@ public static class WeaponCatalog
 		"res://Weapons/drone/drone.tres",       // 13 — FPV drone's warhead, a node perk
 		"res://Weapons/vehicle_gun/vehicle_gun.tres", // 14 — the 4x4's mounted gun
 		"res://Weapons/ram/ram.tres",           // 15 — a crew vehicle running a unit over
+		"res://Weapons/mortar_launcher/mortar_launcher.tres", // 16 — the ground force's carried mortar
 	};
 
 	public const byte Hammer = 0;
@@ -120,6 +121,16 @@ public static class WeaponCatalog
 	/// the event stream, in the server's log and in the kill counts as any other kill is.
 	/// </summary>
 	public const byte Ram = 15;
+
+	/// <summary>
+	/// The mortar launcher a ground-force player carries, deploys and mounts as they do
+	/// the heavy gun (<see cref="Fps.MortarLauncher"/>): the barracks mortar's 81 mm shell
+	/// on the same arc, laid by where the gunner looks, five rounds to its tube and no
+	/// reload. What feeds it is an ammunition can set down within a metre of it, five
+	/// rounds a can (<see cref="Sim.EmplacementSim.FeedsFrom"/>). Its shell's direct hit
+	/// is the one number that differs from the barracks': three of them destroy a tank.
+	/// </summary>
+	public const byte MortarLauncher = 16;
 
 	/// <summary>
 	/// No primary (docs/LOADOUT.md L-D1): the large slot's id when a kit carries none.

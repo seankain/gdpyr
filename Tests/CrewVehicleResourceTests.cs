@@ -40,7 +40,7 @@ public class CrewVehicleResourceTests
 	}
 
 	[Fact]
-	public void WeaponIds0To13_AreWhereTheyWere_14IsTheGun_And15TheRam()
+	public void WeaponIds0To13_AreWhereTheyWere_14IsTheGun_15TheRam_And16TheMortarLauncher()
 	{
 		string[] expected =
 		{
@@ -50,6 +50,7 @@ public class CrewVehicleResourceTests
 			"res://Weapons/mortar/mortar.tres", "res://Weapons/marksman/marksman.tres", "res://Weapons/lmg/lmg.tres",
 			"res://Weapons/grenade/grenade.tres", "res://Weapons/drone/drone.tres",
 			"res://Weapons/vehicle_gun/vehicle_gun.tres", "res://Weapons/ram/ram.tres",
+			"res://Weapons/mortar_launcher/mortar_launcher.tres",
 		};
 
 		for (int id = 0; id < expected.Length; id++)
@@ -63,6 +64,7 @@ public class CrewVehicleResourceTests
 		string catalog = File.ReadAllText(TrainedUnitResourceTests.Repo("Scripts/Core/WeaponCatalog.cs"));
 		Assert.Contains("public const byte VehicleGun = 14;", catalog);
 		Assert.Contains("public const byte Ram = 15;", catalog);
+		Assert.Contains("public const byte MortarLauncher = 16;", catalog);
 	}
 
 	[Fact]

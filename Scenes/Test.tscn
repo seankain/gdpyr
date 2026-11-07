@@ -12,6 +12,7 @@
 [ext_resource type="PackedScene" uid="uid://cl1bqr2cnooqw" path="res://Scenes/Environment/Pillbox.tscn" id="10_kq4yt"]
 [ext_resource type="PackedScene" path="res://Scenes/Environment/VehicleTestStrip.tscn" id="11_strip"]
 [ext_resource type="Script" uid="uid://dfryvl8vlrxbw" path="res://Scripts/Fps/VehicleKiosk.cs" id="12_kiosk"]
+[ext_resource type="Script" uid="uid://b6e0kpmpyq4i3" path="res://Scripts/Fps/MortarLauncher.cs" id="13_mortar"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_xaant"]
 sky_top_color = Color(0.335715, 0.270978, 1, 1)
@@ -404,6 +405,10 @@ script = ExtResource("6_emplacement")
 [node name="Emplacement2" type="Node3D" parent="." unique_id=299286092 groups=["emplacement"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14, 0.5, 4)
 script = ExtResource("6_emplacement")
+
+[node name="MortarLauncher1" type="Node3D" parent="." unique_id=1493084744 groups=["emplacement"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0.5, 4)
+script = ExtResource("13_mortar")
 
 [node name="AmmoCan1" type="Node3D" parent="." unique_id=14519601 groups=["ammo_can"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 0.5, 10)

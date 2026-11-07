@@ -628,15 +628,16 @@ public partial class CombatManager : Node
 	}
 
 	/// <summary>
-	/// Runs a deployed heavy gun over its gunner's input
-	/// (docs/IMPLEMENTATION_PLAN.md §M5).
+	/// Runs a deployed heavy gun or mortar launcher over its gunner's input
+	/// (docs/IMPLEMENTATION_PLAN.md §M5), or a crew vehicle's mounted gun.
 	///
 	/// The same <see cref="WeaponSim"/> step a rifle goes through, over the same
 	/// frame, on both ends — so the belt count and the tracer appear on the tick the
 	/// trigger was pulled and the server confirms them a round trip later
 	/// (docs/NETCODE.md §4.3). What differs is where the round comes from and where
 	/// it may be pointed: the muzzle rather than the gunner's eye, and inside the
-	/// traverse arc the gun was deployed at rather than wherever they are looking.
+	/// traverse arc the gun was deployed at rather than wherever they are looking — for
+	/// a mortar, on the arc that comes down where they are looking (<see cref="Sim.MortarLay"/>).
 	/// </summary>
 	private uint FireMounted(PlayerCombat combat, IGunMount gun, in InputContext input, uint tick,
 		bool authoritative)
@@ -655,7 +656,7 @@ public partial class CombatManager : Node
 
 		combat.ShotsFired++;
 
-		Vector3 aim = gun.AimFor(combat.Character.Yaw, combat.Character.Pitch);
+		Vector3 aim = gun.AimFor(combat.Character.EyePosition, combat.Character.Yaw, combat.Character.Pitch);
 		Vector3 direction = WeaponSim.FireDirection(gun.Belt, stats, combat.PeerId, aim);
 		Vector3 muzzle = gun.MuzzleFor(aim);
 

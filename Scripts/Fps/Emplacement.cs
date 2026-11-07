@@ -21,6 +21,10 @@ namespace Gdpyr.Fps;
 /// be a static body that moves, which the navigation bake and the bullet queries
 /// would both have to be taught about; here it is something to stand behind and
 /// shoot with, and rounds pass through it.
+///
+/// <see cref="MortarLauncher"/> is one of these with a tube in place of the barrel: the
+/// same group, the same index on the wire and the same carry, deploy and mount, with its
+/// own lay, muzzle and body, and fed by the cans set down beside it.
 /// </summary>
 public partial class Emplacement : Node3D, IGunMount
 {
@@ -28,7 +32,7 @@ public partial class Emplacement : Node3D, IGunMount
 	public const string Group = "emplacement";
 
 	/// <summary>Where the gun sits on a carrier's back, relative to their feet.</summary>
-	private static readonly Vector3 CarryOffset = new(0f, 1.5f, 0f);
+	protected static readonly Vector3 CarryOffset = new(0f, 1.5f, 0f);
 
 	/// <summary>Which catalog weapon it fires. The one weapon in the catalog with no reload.</summary>
 	[Export]
@@ -62,13 +66,32 @@ public partial class Emplacement : Node3D, IGunMount
 
 	public bool IsDeployed => State != EmplacementStateId.Carried;
 
+	/// <summary>Where the barrel sits above the gun's feet [m].</summary>
+	public virtual float MuzzleHeightMeters => SimConfig.EmplacementMuzzleHeightMeters;
+
 	/// <summary>Where a round leaves from: the barrel, not the gunner's eye.</summary>
-	public Vector3 MuzzlePosition => DeployPosition + (Vector3.Up * SimConfig.EmplacementMuzzleHeightMeters);
+	public Vector3 MuzzlePosition => DeployPosition + (Vector3.Up * MuzzleHeightMeters);
+
+	/// <summary>
+	/// True for a gun fed by the ammunition cans on the ground beside it
+	/// (<see cref="EmplacementSim.FeedsFrom"/>) rather than by a can emptied into it by hand.
+	/// </summary>
+	public virtual bool FedFromGround => false;
+
+	/// <summary>Rounds one can gives this gun: the can's own, for a heavy gun's belt.</summary>
+	public virtual int RoundsPerCan(AmmoCan can) => can?.Rounds ?? 0;
+
+	/// <summary>What the prompts call it.</summary>
+	public virtual string Noun => "heavy gun";
 
 	ref WeaponState IGunMount.Belt => ref Weapon;
 
-	/// <summary>The gunner's look inside the traverse arc it was put down facing (<see cref="EmplacementSim.Traverse"/>).</summary>
-	public Vector3 AimFor(float yaw, float pitch) => EmplacementSim.Traverse(yaw, pitch, DeployYaw);
+	/// <summary>
+	/// The gunner's look inside the traverse arc it was put down facing
+	/// (<see cref="EmplacementSim.Traverse"/>). Where their eye is makes no difference to
+	/// a gun that fires where it points.
+	/// </summary>
+	public virtual Vector3 AimFor(Vector3 eye, float yaw, float pitch) => EmplacementSim.Traverse(yaw, pitch, DeployYaw);
 
 	/// <summary>The barrel's pivot, wherever it points: the tripod does not move.</summary>
 	public Vector3 MuzzleFor(Vector3 aim) => MuzzlePosition;
@@ -107,8 +130,11 @@ public partial class Emplacement : Node3D, IGunMount
 	/// always either standing where it was put down or riding on a character whose
 	/// position is already on the wire.
 	/// </summary>
-	public void Place(Node3D carrier, float gunnerYaw, bool hasGunner)
+	public virtual void Place(Node3D carrier, fps_controller gunner, bool localGunner)
 	{
+		float gunnerYaw = gunner?.Yaw ?? 0f;
+		bool hasGunner = gunner != null;
+
 		if (State == EmplacementStateId.Carried)
 		{
 			if (carrier != null)
@@ -136,7 +162,7 @@ public partial class Emplacement : Node3D, IGunMount
 	/// a .tscn would only be a second place for the muzzle height to disagree with
 	/// where the shots come from.
 	/// </summary>
-	private void BuildBody()
+	protected virtual void BuildBody()
 	{
 		var material = new StandardMaterial3D { AlbedoColor = new Color(0.22f, 0.24f, 0.28f) };
 

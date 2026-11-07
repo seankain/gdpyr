@@ -329,7 +329,7 @@ On the ground, right mouse raises the sights. What that gets you is the weapon's
 |---|---|
 | DMR | a four-power optic — the eyepiece takes the screen, the gun leaves it, and the view goes with it |
 | rifle, launcher, pistol | the sights come to the middle of the screen, with a fraction of the zoom |
-| hammer, a mounted heavy gun | nothing to raise; a mounted gun is aimed over its own sights |
+| hammer, a mounted heavy gun or mortar launcher | nothing to raise; a mounted gun is aimed over its own sights |
 
 Turn rate is divided by whatever magnification is in force, so a pixel of mouse travel is worth the
 same distance on screen at every power — a four-power scope at the hip's sensitivity sweeps four
@@ -400,6 +400,16 @@ speed and each one under it gains 2 %, from a pistol alone at 112 % (sprinting a
 jump is as high in any kit, and weight is the kit as taken, not as spent: firing a magazine away
 makes nobody faster. The HUD's second line reads `load 15.3 kg · 88 %`
 ([`docs/LOADOUT.md`](docs/LOADOUT.md) §4.1).
+
+**The mortar launcher** stands between the two heavy guns in the middle of the map, six metres from
+their ammunition cans, and is handled as they are: hold `E` beside it to pick it up (you walk at
+55 %), tap `E` to put it down
+facing where you look, tap `E` beside it to get behind it. Behind it, look at the ground where you
+want the shell to land — a ring there shows where it will come down, and the prompt gives the range,
+15 m to about 116 m on level ground, inside 45° either side of the way it was put down — and click.
+It holds five shells and never reloads: any ammunition can on the ground within a metre of it gives
+it five more once it is empty, and tapping `E` with a can beside it sets the can down there. A direct
+hit takes 300 off a tank, so three destroy one; the blast of a near miss takes at most 120.
 
 **Vehicles** ([`docs/GROUND_VEHICLES.md`](docs/GROUND_VEHICLES.md)). Beside the weapon locker
 stands the **vehicle kiosk**: `E` there (`[E] vehicle kiosk`) opens its panel, `1` puts a **4x4** on
