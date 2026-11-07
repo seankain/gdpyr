@@ -234,6 +234,33 @@ public partial class CombatManager : Node
 		}
 	}
 
+	/// <summary>
+	/// Puts what a host picked in the main menu over the game mode's numbers
+	/// (docs/LAN.md §3.4): the round's length, the ground force's tickets, how many
+	/// each side is filled to, and how many may sit in the strategist's chairs.
+	///
+	/// Called by the menu before the map loads, so the first round is already played
+	/// on them. The game mode is copied rather than written to: the loaded resource is
+	/// the cache's, and the next process to load it must get the file's numbers.
+	/// </summary>
+	public void ApplyHostSettings(HostSettings settings)
+	{
+		if (settings == null)
+		{
+			return;
+		}
+
+		var mode = (GameModeDefinition)_gameMode.Duplicate();
+		mode.RoundDurationMinutes = settings.RoundMinutes;
+		mode.GroundForceTickets = settings.GroundForceTickets;
+		mode.BotGroundForce = settings.GroundForceSize;
+		mode.BotStrategists = settings.StrategistSize;
+		_gameMode = mode;
+
+		Teams.SetStrategistCap(settings.StrategistSize);
+		GD.Print($"[match] host settings: {settings}");
+	}
+
 	// ---- roster, driven by PlayerManager -----------------------------------
 
 	public PlayerCombat Register(int peerId, fps_controller character, bool isLocal)
@@ -2189,7 +2216,7 @@ public partial class CombatManager : Node
 		}
 
 		GD.Print($"[match] {BotRoster.NameOf(peerId)} is now {granted}"
-			+ $" ({Teams.StrategistCount}/{TeamService.MaxStrategists} strategists)");
+			+ $" ({Teams.StrategistCount}/{Teams.StrategistCap} strategists)");
 		return granted;
 	}
 

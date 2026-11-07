@@ -206,7 +206,7 @@ public partial class Debug : PanelContainer
 		if (CombatManager.Instance is { } combat)
 		{
 			SetProperty("points", $"{combat.Match.StrategistPoints}"
-				+ $"  strategists {combat.Teams.StrategistCount}/{TeamService.MaxStrategists}");
+				+ $"  strategists {combat.Teams.StrategistCount}/{combat.Teams.StrategistCap}");
 		}
 
 		if (NetworkManager.Instance is { IsServer: true })

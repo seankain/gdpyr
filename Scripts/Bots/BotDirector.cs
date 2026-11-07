@@ -61,10 +61,15 @@ public sealed class BotDirector
 	private readonly GroundOrders[] _orders = new GroundOrders[SnapshotCodec.MaxPlayers];
 	private readonly GroundNode[] _nodes = new GroundNode[SimConfig.MaxResourceNodes];
 
-	public BotDirector(GameModeDefinition gameMode, LaunchOptions options)
+	/// <param name="host">
+	/// What a host picked in the main menu (docs/LAN.md §3.4), or null. Its team sizes
+	/// win over the command line's <c>--bots</c>: they were chosen after it, by the
+	/// person the round is for.
+	/// </param>
+	public BotDirector(GameModeDefinition gameMode, LaunchOptions options, HostSettings host = null)
 	{
-		int ground = options?.GroundBots ?? gameMode?.BotGroundForce ?? 0;
-		int strategists = options?.StrategistBots ?? gameMode?.BotStrategists ?? 0;
+		int ground = host?.GroundForceSize ?? options?.GroundBots ?? gameMode?.BotGroundForce ?? 0;
+		int strategists = host?.StrategistSize ?? options?.StrategistBots ?? gameMode?.BotStrategists ?? 0;
 
 		GroundTarget = Math.Clamp(ground, 0, BotRoster.MaxBots);
 		StrategistTarget = Math.Clamp(strategists, 0, TeamService.MaxStrategists);
@@ -525,7 +530,7 @@ public sealed class BotDirector
 		// Spectators are somebody to run the bots for, and nobody a seat is kept for
 		// (docs/AI_DEBUG.md §2).
 		BotFill want = BotFillPolicy.Plan(new BotDemand(GroundTarget, StrategistTarget, groundHumans,
-			strategistHumans, SnapshotCodec.MaxPlayers - reserved, TeamService.MaxStrategists,
+			strategistHumans, SnapshotCodec.MaxPlayers - reserved, combat.Teams.StrategistCap,
 			players.SpectatorCount));
 
 		// Seats an external policy is sitting in are counted as participants in the

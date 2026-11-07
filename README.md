@@ -124,9 +124,12 @@ Default port is 7777/UDP. A dedicated-server export with no mode flag defaults t
 `--server` rather than to offline.
 
 **The main menu** lists the servers on this network, takes an address for one anywhere else, and
-hosts or runs a round on its own. A launch that named a mode on the command line goes straight past
-it into the map, before a widget is built — so the headless server, the playtest harness and the
-training runs are on the path they always were.
+hosts or runs a round on its own. **Host…** opens a panel for the round it hosts: the map, the
+round's length, the ground force's starting tickets, and how many players each side is filled to —
+bots take the seats nobody is in, and the strategist size is also the most strategists at once
+([`docs/LAN.md`](docs/LAN.md) §3.4). A client loads whichever map its host picked. A launch that
+named a mode on the command line goes straight past it into the map, before a widget is built — so
+the headless server, the playtest harness and the training runs are on the path they always were.
 
 The list is LAN discovery and nothing else: each server answers a broadcast query on UDP 7780–7783
 with its name, its game port and its roster, and a row that stops answering ages out
@@ -212,9 +215,9 @@ and again when a round starts, and the server holds you off the field until you 
 spawned into a side they did not pick. Answering with `F1` / `F2` is the same answer as clicking;
 the two keys keep working mid-round for changing your mind.
 
-Two strategists at a time; a third request lands on the ground, and you find that out from the HUD
-rather than from a second menu. A strategist's body leaves the field and the camera moves above the
-map.
+Two strategists at a time — or one, if the host's panel said so; a request for a full chair lands
+on the ground, and you find that out from the HUD rather than from a second menu. A strategist's body
+leaves the field and the camera moves above the map.
 
 The HUD keeps text to a minimum: three short lines top left (points, units and clock; what the
 barracks is building; the nodes) and, bottom right, a **command card** for whatever is selected,

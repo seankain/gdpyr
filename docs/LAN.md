@@ -111,7 +111,7 @@ Two hosts on one LAN want two ports: `--server 7777` and `--server 7778`, one ru
 |---|---|---|
 | Simultaneous clients | 16 | `TransportFactory.MaxClients` |
 | Roster slots in a snapshot (people **and** bots) | 16 | `SnapshotCodec.MaxPlayers` |
-| Strategists at once | 2 | `TeamService.MaxStrategists` |
+| Strategists at once | 2, or 1 if the host panel says so (§3.4) | `TeamService.StrategistCap`, at most `TeamService.MaxStrategists` |
 | The round the design is scoped to | 6v2 | [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) |
 
 The strategist cap is the only one enforced against people: a third `F2` lands on the ground
@@ -133,6 +133,9 @@ Either way bots only hold seats nobody wants and get up when a person takes one
 (`BotFillPolicy.Plan`), and an empty server runs none at all — a host with nobody connected is
 supposed to look idle.
 
+A host started from the main menu sets both numbers in its panel instead (§3.4), and those win over
+`--bots`.
+
 Latecomers need no lobby: a peer that connects mid-round is spawned and sent the existing roster
 (`PlayerManager.OnPeerJoined`), asked which side it wants, and walks in once it has answered.
 
@@ -141,6 +144,48 @@ every round (`TeamService.RequireChoice`). Somebody who leaves the panel open is
 they hold their ground-force slot in the roster and no bot backfills it, which is the behaviour a
 connected player has always had. The round itself does not wait for the last answer, only the
 first — with bots on, that is the tick they join.
+
+### 3.4 Hosting from the menu
+
+**Host…** in the main menu opens a panel in place of the server list. **Start** binds UDP 7777 and
+opens the round on what it says; **Back** or Escape returns to the list. (`--listen <port>` hosts on
+another port, but it skips the menu and so the panel.)
+
+| Setting | Range | Starts at | What it sets |
+|---|---|---|---|
+| Map | `MapCatalog.All` | Greybox (`Scenes/Test.tscn`) | the scene the host and every client load |
+| Round length | 1–60 min | 20 | `GameModeDefinition.RoundDurationMinutes` |
+| Ground force tickets | 1–999 | 50 | `GameModeDefinition.GroundForceTickets`: the respawns the ground force shares |
+| Ground force team size | 1–14 | 6 | ground-force players filled to, humans included |
+| Strategist team size | 1–2 | 1 | strategists filled to, humans included, and the most there may be at once |
+
+The starting values are `Match/default_gamemode.tres`'s, with `--bots` over the team sizes where it
+gave any, so a host who changes nothing gets the round `--listen` would have had — except that the
+strategist team size is also the strategist cap, so leaving it at 1 seats one strategist where
+`--listen` seats two. The ranges are `HostSettings`' and a typed number is pulled into them; 14 is
+the roster's 16 slots less two strategists.
+
+A team size is a seat count, filled the way `--bots <ground>:<strategists>` fills one (§3.3):
+computer players take the seats nobody is in and get up when a person wants one. The strategist team
+size is enforced against people too — a request for a full chair lands on the ground, as a third
+`F2` always has. The ground force has no such ceiling; a person is never turned away from it.
+
+The settings live for the process: they are put over a copy of the game mode before the map loads
+(`CombatManager.ApplyHostSettings`), so every round of the session is played on them. Nothing on the
+command line sets them, and a `--server` or `--listen` launch plays the game mode's numbers and the
+default map as before.
+
+**Clients load the host's map.** The server names its map (`MapInfo.Id`) to every peer the moment
+it connects, ahead of the roster (`NetworkManager.ServerMap`). A client — from the menu or from
+`--client` — loads that map rather than its own default. A map id the client's build does not have
+is refused rather than guessed at: the menu says which map and drops the link, a `--client` launch
+logs it and exits 1. So does a server that names no map within five seconds, which is a server from
+before this panel. Either way, both machines want the same commit (§5).
+
+A map is one entry in `Scripts/Core/MapCatalog.cs`: an id, a name, a scene and a line of
+description. The scene needs what `Scenes/Test.tscn` has — `player_spawn` markers, a barracks,
+resource nodes, a navigation region — and the id must never change once a build with it is out,
+because it is what a client is told.
 
 ---
 
