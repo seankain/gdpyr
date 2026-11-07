@@ -409,6 +409,34 @@ public static class SimConfig
 	/// </summary>
 	public const int AmmoCanRespawnTicks = TickRate * 20;
 
+	// ---- the mortar launcher (Scripts/Fps/MortarLauncher.cs) --------------
+
+	/// <summary>
+	/// How near a deployed mortar launcher an ammunition can on the ground has to be to
+	/// feed it [m], inclusive (<see cref="EmplacementSim.FeedsFrom"/>). Server-side: the
+	/// owning client is told its tube's count, as it is told a can loaded into a belt.
+	/// </summary>
+	public const float MortarFeedReachMeters = 1f;
+
+	/// <summary>Rounds one ammunition can gives a mortar launcher: its whole tube.</summary>
+	public const int MortarRoundsPerCan = 5;
+
+	/// <summary>
+	/// Where the use key sets a carried can down at a launcher, from the launcher's feet
+	/// [m] (<see cref="EmplacementSim.StackPoint"/>): inside <see cref="MortarFeedReachMeters"/>.
+	/// </summary>
+	public const float MortarStackMeters = 0.6f;
+
+	/// <summary>Where the tube's mouth sits above the launcher's feet [m]. Rounds leave from here.</summary>
+	public const float MortarMuzzleHeightMeters = 0.6f;
+
+	/// <summary>
+	/// The nearest a mortar launcher lays a round [m] (<see cref="MortarLay"/>): outside its
+	/// shell's 8 m blast for a gunner standing at the edge of <see cref="EmplacementReachMeters"/>,
+	/// so the steepest the tube goes is not a way to shell yourself.
+	/// </summary>
+	public const float MortarMinRangeMeters = 15f;
+
 	// ---- wire quantization (docs/NETCODE.md §7) ----------------------------
 
 	/// <summary>Position resolution on the wire, in metres.</summary>

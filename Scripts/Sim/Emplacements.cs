@@ -340,4 +340,36 @@ public static class EmplacementSim
 
 	/// <summary>Whether a can is worth spending on this gun at all.</summary>
 	public static bool NeedsAmmo(short ammo, int magazineSize) => ammo < magazineSize;
+
+	// ---- the mortar launcher -----------------------------------------------
+
+	/// <summary>
+	/// Whether an ammunition can resting at <paramref name="can"/> feeds a mortar launcher
+	/// deployed at <paramref name="launcher"/>: within <see cref="SimConfig.MortarFeedReachMeters"/>
+	/// of its feet, inclusive. Nobody loads it: a can set down there is the launcher's,
+	/// and is not one the use key picks up again while the launcher stands there.
+	/// </summary>
+	public static bool FeedsFrom(Vector3 launcher, Vector3 can) =>
+		launcher.DistanceTo(can) <= SimConfig.MortarFeedReachMeters;
+
+	/// <summary>
+	/// Whether a launcher holding <paramref name="ammo"/> of <paramref name="magazineSize"/>
+	/// takes a can's <paramref name="canRounds"/> now: only when every one of them fits, so a
+	/// can beside a tube that is not yet empty waits there whole rather than being wasted.
+	/// </summary>
+	public static bool TakesCan(short ammo, int magazineSize, int canRounds) =>
+		canRounds > 0 && ammo >= 0 && ammo + canRounds <= magazineSize;
+
+	/// <summary>
+	/// Where the use key sets a carried can down at a launcher (<see cref="UseAction.Resupply"/>
+	/// at a mortar): <see cref="SimConfig.MortarStackMeters"/> from the launcher's feet towards
+	/// whoever brought it, on the launcher's ground — inside the feed reach, so it feeds the
+	/// tube once the tube has room. Behind the tube when they are standing on it.
+	/// </summary>
+	public static Vector3 StackPoint(Vector3 launcher, float deployYaw, Vector3 from)
+	{
+		Vector3 towards = new(from.X - launcher.X, 0f, from.Z - launcher.Z);
+		towards = towards.LengthSquared() > 1e-6f ? towards.Normalized() : -Aim.Direction(deployYaw, 0f);
+		return launcher + (towards * SimConfig.MortarStackMeters);
+	}
 }

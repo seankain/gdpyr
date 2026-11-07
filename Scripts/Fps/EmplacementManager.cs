@@ -8,8 +8,8 @@ using Godot;
 namespace Gdpyr.Fps;
 
 /// <summary>
-/// Fifth autoload: the ground force's heavy guns and the cans that feed them
-/// (docs/IMPLEMENTATION_PLAN.md §M5), and the weapon lockers at their spawn
+/// Fifth autoload: the ground force's heavy guns and mortar launchers and the cans
+/// that feed them (docs/IMPLEMENTATION_PLAN.md §M5), and the weapon lockers at their spawn
 /// (docs/LOADOUT.md L-D8) — everything the use key does. A press beside or inside a
 /// crew vehicle is resolved here too, by the same table, and handed to
 /// <see cref="CrewVehicleManager"/> to act on (docs/GROUND_VEHICLES.md §5.3).
@@ -152,13 +152,14 @@ public partial class EmplacementManager : Node
 		}
 
 		CombatManager combat = CombatManager.Instance;
+		int local = NetworkManager.Instance?.LocalPeerId ?? 0;
 
 		for (int i = 0; i < _guns.Count; i++)
 		{
 			Emplacement gun = _guns[i];
 			fps_controller carrier = CharacterOf(combat, gun.CarrierPeerId);
 			fps_controller gunner = CharacterOf(combat, gun.GunnerPeerId);
-			gun.Place(carrier, gunner?.Yaw ?? 0f, gunner != null);
+			gun.Place(carrier, gunner, gunner != null && gun.GunnerPeerId == local);
 		}
 
 		for (int i = 0; i < _cans.Count; i++)
@@ -171,8 +172,9 @@ public partial class EmplacementManager : Node
 	// ---- tick, driven by PlayerManager -------------------------------------
 
 	/// <summary>
-	/// One server tick: bring spent cans back, and take whatever the dead were
-	/// holding off them.
+	/// One server tick: bring spent cans back, take whatever the dead were holding off
+	/// them, and let every mortar launcher with an empty tube take a can off the ground
+	/// beside it.
 	/// </summary>
 	public void ServerTick(uint tick)
 	{
@@ -191,6 +193,7 @@ public partial class EmplacementManager : Node
 		}
 
 		ReleaseTheDead();
+		FeedFromGround(tick);
 	}
 
 	/// <summary>A client has nothing to tick; it only needs the nodes found.</summary>
@@ -332,7 +335,17 @@ public partial class EmplacementManager : Node
 				break;
 
 			case UseAction.Resupply:
-				Resupply(combat.PeerId, gunIndex, tick);
+				// A mortar launcher is fed from the ground, so a can brought to one is set
+				// down beside it, inside its metre, rather than emptied into it by hand.
+				if (GunAt(gunIndex) is { FedFromGround: true } launcher)
+				{
+					DropCan(combat.PeerId, EmplacementSim.StackPoint(launcher.DeployPosition, launcher.DeployYaw,
+						combat.Character.SimPosition));
+				}
+				else
+				{
+					Resupply(combat.PeerId, gunIndex, tick);
+				}
 				break;
 
 			case UseAction.OpenLocker:
@@ -489,18 +502,106 @@ public partial class EmplacementManager : Node
 		}
 
 		short before = gun.Weapon.Ammo;
-		gun.Weapon.Ammo = EmplacementSim.Resupply(before, gun.Stats.MagazineSize, can.Rounds);
+		gun.Weapon.Ammo = EmplacementSim.Resupply(before, gun.Stats.MagazineSize, gun.RoundsPerCan(can));
 		RoundsResupplied += gun.Weapon.Ammo - before;
-		CansSpent++;
 
 		_carriedCan.Remove(peerId);
+		Spend(canIndex, tick);
+		BroadcastGun(gunIndex, forceAmmo: true);
+	}
+
+	/// <summary>
+	/// Every deployed mortar launcher whose tube has room for a whole can takes one off
+	/// the ground within <see cref="SimConfig.MortarFeedReachMeters"/> of it
+	/// (<see cref="EmplacementSim.FeedsFrom"/>, <see cref="EmplacementSim.TakesCan"/>), the
+	/// lowest-numbered first, as many as fit. Nobody has to be behind it: a can set down
+	/// beside a launcher is the launcher's. The belt count is forced on its gunner's
+	/// client, as a resupply's is, because nobody predicts a can they did not carry.
+	/// </summary>
+	private void FeedFromGround(uint tick)
+	{
+		for (int g = 0; g < _guns.Count; g++)
+		{
+			Emplacement gun = _guns[g];
+			if (!gun.FedFromGround || !gun.IsDeployed)
+			{
+				continue;
+			}
+
+			bool fed = false;
+			for (int c = 0; c < _cans.Count; c++)
+			{
+				AmmoCan can = _cans[c];
+				int rounds = gun.RoundsPerCan(can);
+				if (!EmplacementSim.TakesCan(gun.Weapon.Ammo, gun.Stats.MagazineSize, rounds))
+				{
+					break;
+				}
+
+				if (!can.Available || can.IsCarried || !EmplacementSim.FeedsFrom(gun.DeployPosition, can.RestPosition))
+				{
+					continue;
+				}
+
+				gun.Weapon.Ammo += (short)rounds;
+				RoundsResupplied += rounds;
+				Spend(c, tick);
+				fed = true;
+			}
+
+			if (fed)
+			{
+				BroadcastGun(g, forceAmmo: true);
+			}
+		}
+	}
+
+	/// <summary>A can used up: off whoever had it, gone, and back at its home after <see cref="SimConfig.AmmoCanRespawnTicks"/>.</summary>
+	private void Spend(int canIndex, uint tick)
+	{
+		AmmoCan can = CanAt(canIndex);
+		if (can == null)
+		{
+			return;
+		}
+
+		CansSpent++;
 		can.CarrierPeerId = 0;
 		can.Available = false;
 		can.RespawnTick = tick + SimConfig.AmmoCanRespawnTicks;
 		can.RestPosition = can.HomePosition;
-
 		BroadcastCan(canIndex);
-		BroadcastGun(gunIndex, forceAmmo: true);
+	}
+
+	/// <summary>Whether a can resting at <paramref name="can"/> is within a deployed launcher's metre.</summary>
+	private bool FeedsALauncher(Vector3 can)
+	{
+		for (int i = 0; i < _guns.Count; i++)
+		{
+			Emplacement gun = _guns[i];
+			if (gun.FedFromGround && gun.IsDeployed && EmplacementSim.FeedsFrom(gun.DeployPosition, can))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/// <summary>Cans on the ground that feed this launcher, for its gunner's prompt.</summary>
+	private int CansBeside(Emplacement gun)
+	{
+		int count = 0;
+		for (int i = 0; i < _cans.Count; i++)
+		{
+			AmmoCan can = _cans[i];
+			if (can.Available && !can.IsCarried && EmplacementSim.FeedsFrom(gun.DeployPosition, can.RestPosition))
+			{
+				count++;
+			}
+		}
+
+		return count;
 	}
 
 	/// <summary>
@@ -580,6 +681,9 @@ public partial class EmplacementManager : Node
 		return gun != null;
 	}
 
+	/// <summary>The gun or launcher this player is carrying, if any.</summary>
+	public Emplacement CarriedGun(int peerId) => _carriedGun.TryGetValue(peerId, out int index) ? GunAt(index) : null;
+
 	public Emplacement GunAt(int index) => index >= 0 && index < _guns.Count ? _guns[index] : null;
 
 	public AmmoCan CanAt(int index) => index >= 0 && index < _cans.Count ? _cans[index] : null;
@@ -605,6 +709,16 @@ public partial class EmplacementManager : Node
 
 		if (TryMounted(combat.PeerId, out Emplacement mounted))
 		{
+			if (mounted is MortarLauncher mortar)
+			{
+				int cans = CansBeside(mortar);
+				float range = MortarLay.RangeOf(mortar.DeployPosition,
+					mortar.TargetFor(combat.Character.EyePosition, combat.Character.Yaw, combat.Character.Pitch));
+				return $"{mortar.Weapon.Ammo}/{mortar.Stats.MagazineSize} rounds"
+					+ $"  +{cans * SimConfig.MortarRoundsPerCan} in {cans} can{(cans == 1 ? string.Empty : "s")}"
+					+ $"  range {range:0} m   [E] dismount   [hold E] carry";
+			}
+
 			return $"{mounted.Weapon.Ammo}/{mounted.Stats.MagazineSize} belt"
 				+ "   [E] dismount   [hold E] carry";
 		}
@@ -612,12 +726,13 @@ public partial class EmplacementManager : Node
 		switch (CarryOf(combat.PeerId))
 		{
 			case CarryKind.Gun:
-				return "carrying the heavy gun   [E] deploy";
+				return $"carrying the {CarriedGun(combat.PeerId)?.Noun ?? "heavy gun"}   [E] deploy";
 
 			case CarryKind.AmmoCan:
-				return NearestGun(combat.Character.SimPosition, combat.PeerId, out _) >= 0
-					? "carrying a can   [E] load the gun"
-					: "carrying a can   [E] put it down";
+				int near = NearestGun(combat.Character.SimPosition, combat.PeerId, out _);
+				return near < 0 ? "carrying a can   [E] put it down"
+					: GunAt(near).FedFromGround ? "carrying a can   [E] set it down by the mortar"
+					: "carrying a can   [E] load the gun";
 		}
 
 		Vector3 at = combat.Character.SimPosition;
@@ -648,7 +763,9 @@ public partial class EmplacementManager : Node
 			return "[E] take the ammunition can";
 		}
 
-		return gun >= 0 ? "[E] mount   [hold E] carry the gun" : string.Empty;
+		return gun < 0 ? string.Empty
+			: GunAt(gun).FedFromGround ? "[E] mount   [hold E] carry the mortar"
+			: "[E] mount   [hold E] carry the gun";
 	}
 
 	// ---- registry ----------------------------------------------------------
@@ -778,6 +895,12 @@ public partial class EmplacementManager : Node
 		return best;
 	}
 
+	/// <summary>
+	/// The nearest can within reach that is free to pick up, or -1. A can within a
+	/// deployed mortar launcher's metre is the launcher's (<see cref="FeedsALauncher"/>):
+	/// it is not offered to the use key, so the gunner walking back to the tube mounts it
+	/// rather than picking up the can they have just set down beside it.
+	/// </summary>
 	private int NearestCan(Vector3 at, out float distance)
 	{
 		int best = -1;
@@ -786,7 +909,7 @@ public partial class EmplacementManager : Node
 		for (int i = 0; i < _cans.Count; i++)
 		{
 			AmmoCan can = _cans[i];
-			if (!can.Available || can.IsCarried)
+			if (!can.Available || can.IsCarried || FeedsALauncher(can.RestPosition))
 			{
 				continue;
 			}

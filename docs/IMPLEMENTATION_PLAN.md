@@ -314,6 +314,28 @@ call. This makes one person enough to see a round.
   behind would have to be a static body the navigation bake and the projectile queries both knew
   about. The gun is the one weapon in the catalog with no reload: its belt is its ammunition, and
   a can fills it and wastes the rest.
+- **Added after M5: the mortar launcher** (`Scripts/Fps/MortarLauncher.cs`, weapon 16). A heavy gun
+  with a tube in place of the barrel — the same `emplacement` group, index on the wire, carry
+  penalty, hold-to-pick-up, tap-to-deploy and tap-to-mount, and no message of its own. It differs
+  in three things. It is **laid, not pointed**: the shell comes down where the gunner's look meets
+  a level plane through the launcher's feet, inside the heavy gun's ±45° traverse and between 15 m
+  (outside its own 8 m blast for a gunner at arm's length) and the high arc's furthest, about
+  116 m on level ground (`Scripts/Sim/MortarLay.cs`, the barracks mortar's `MortarSolver`). A
+  plane rather than a ray into the world, so the server and the predicting client lay the same
+  arc from the same recorded look; the gunner's client draws a ring where it will land, and the
+  prompt gives the range. It is **fed from the ground**: five rounds to a tube, no reload, and any
+  ammunition can resting within 1 m of the deployed launcher gives it five rounds once the tube is
+  empty (`EmplacementSim.FeedsFrom`, `TakesCan`), so a can is never part-wasted; a can tapped onto
+  it is set down 0.6 m from it, and a can within that metre is the launcher's — the use key no
+  longer offers it, so walking back to the tube mounts the tube. And its **shell** is the barracks
+  mortar's 81 mm with a 300-point direct hit (`mortar_81_launcher.tres`, the barracks' own left at
+  100): two direct hits leave a 700-point tank at 100 and the third destroys it. At 20 rounds a
+  minute the shells come 3 s apart, the length of the resupply lockout, so a tank in a supply ring
+  under steady fire heals at most a tick's worth between them — and three hits destroy one even
+  if it healed the whole time. Tested in `Tests/MortarLauncherTests.cs` from the resource files, and in the engine
+  by `scripts/mortar-checks.sh` (a listen host: carried, deployed, mounted, a tank 60 m off
+  destroyed by the third shell and not the second, a can 1.5 m off left alone and 0.8 m off
+  feeding five).
 - Win/lose: ground team loses at 0 tickets; strategist loses when points < cheapest unit cost
   **and** no units remain alive **and** no resource node is held. Round end → scoreboard → restart.
   Shipped with **a fourth clause: nothing on a barracks queue.** A queued unit has already been

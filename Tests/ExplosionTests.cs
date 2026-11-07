@@ -447,6 +447,7 @@ public class ExplosionTests
 	[Theory]
 	[InlineData("cannon_76", ExplosionKind.Shell)]
 	[InlineData("mortar_81", ExplosionKind.Shell)]
+	[InlineData("mortar_81_launcher", ExplosionKind.Shell)]
 	[InlineData("grenade_40mm", ExplosionKind.LauncherGrenade)]
 	[InlineData("hand_grenade", ExplosionKind.HandGrenade)]
 	[InlineData("fpv_drone", ExplosionKind.Drone)]
@@ -480,7 +481,7 @@ public class ExplosionTests
 			}
 		}
 
-		Assert.Equal(5, explosive);
+		Assert.Equal(6, explosive);
 	}
 
 	private static float Value(Dictionary<string, string> file, string key) =>

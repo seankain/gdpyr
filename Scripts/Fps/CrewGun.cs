@@ -62,5 +62,8 @@ public sealed class CrewGun : IGunMount
 	public Vector3 AimFor(float yaw, float pitch) =>
 		CrewSeats.GunDirection(Pose, yaw, pitch, _traverseRadians, _elevationMin, _elevationMax);
 
+	/// <summary>Its gunner's look, clamped to the mount: where their eye is makes no difference to a direct-fire gun.</summary>
+	Vector3 IGunMount.AimFor(Vector3 eye, float yaw, float pitch) => AimFor(yaw, pitch);
+
 	public Vector3 MuzzleFor(Vector3 aim) => CrewSeats.GunMuzzle(Pose, _mount, aim, _barrelMeters);
 }
