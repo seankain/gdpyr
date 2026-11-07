@@ -1,0 +1,47 @@
+[gd_scene format=3 uid="uid://dblvn46rbxvkb"]
+
+[ext_resource type="Script" uid="uid://bjjcu5mfqiocw" path="res://Scripts/Rts/Barracks.cs" id="1_barracks"]
+[ext_resource type="Script" uid="uid://d30qp6prc0xvt" path="res://Scripts/Rts/DefenseMount.cs" id="2_defense"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_building"]
+size = Vector3(8, 6, 8)
+
+[sub_resource type="BoxMesh" id="BoxMesh_building"]
+size = Vector3(8, 6, 8)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_building"]
+albedo_color = Color(0.5, 0.18, 0.15, 1)
+
+[node name="Barracks" type="Node3D" groups=["barracks"]]
+script = ExtResource("1_barracks")
+
+[node name="SpawnPoint" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -6)
+
+[node name="Building" type="StaticBody3D" parent="." groups=["navmesh"]]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Building"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 0)
+shape = SubResource("BoxShape3D_building")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Building"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 0)
+mesh = SubResource("BoxMesh_building")
+surface_material_override/0 = SubResource("StandardMaterial3D_building")
+
+[node name="DefenseGunA" type="Node3D" parent="." groups=["barracks_defense"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.5, 0, -4.5)
+script = ExtResource("2_defense")
+
+[node name="DefenseGunB" type="Node3D" parent="." groups=["barracks_defense"]]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 5.5, 0, 4.5)
+script = ExtResource("2_defense")
+
+[node name="DefenseMortar" type="Node3D" parent="." groups=["barracks_defense"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6, 0)
+script = ExtResource("2_defense")
+Kind = 1
+WeaponId = 9
+MinRangeMeters = 15.0
+ReactionSeconds = 1.5
+MuzzleHeightMeters = 0.6
