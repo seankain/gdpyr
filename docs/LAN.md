@@ -183,9 +183,10 @@ logs it and exits 1. So does a server that names no map within five seconds, whi
 before this panel. Either way, both machines want the same commit (§5).
 
 A map is one entry in `Scripts/Core/MapCatalog.cs`: an id, a name, a scene and a line of
-description. The scene needs what `Scenes/Test.tscn` has — `player_spawn` markers, a barracks,
-resource nodes, a navigation region — and the id must never change once a build with it is out,
-because it is what a client is told.
+description. The scene inherits `Scenes/Maps/MapBase.tscn`, which holds what a round needs —
+`player_spawn` markers, a barracks, a resource node, a weapon locker, a navigation region — and the
+id must never change once a build with it is out, because it is what a client is told. The full
+list of requirements, and how to check a map against them, is [`MAPS.md`](MAPS.md).
 
 ---
 

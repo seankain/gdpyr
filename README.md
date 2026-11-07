@@ -57,6 +57,9 @@ dedicated-server authoritative.
   a tank shell or a drone goes off and when a vehicle is destroyed, the placeholder that draws it,
   and where art goes to replace it
 - [`docs/LAN.md`](docs/LAN.md) — hosting a room of machines from a checkout, with a dev build
+- [`docs/MAPS.md`](docs/MAPS.md) — making a map: the template scene new maps inherit from
+  (`Scenes/Maps/MapBase.tscn`), what a map scene must hold, and the catalog entry that puts it in
+  the host panel's map picker
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — AWS EC2 dedicated-server runbook
 
 ## Layout
@@ -86,6 +89,8 @@ Scripts/Ui/Spectator/ The spectator's camera, and the AI debugger's panel, graph
 Scripts/Effects/ Explosions as drawn: the pooled manager, the placeholder, and the contract art
                 replaces it under (docs/EFFECTS.md); what they decide is Scripts/Sim/Explosions.cs
 Scenes/         Main menu, greybox map, player, humanoid body, weapon, pause menu
+Scenes/Maps/    The template new maps inherit from (docs/MAPS.md)
+Scenes/Environment/ Map pieces: the barracks, the pillbox, the vehicle test strip
 Units/          UnitDefinition resources: three fighting tiers, the builder, the supply truck, and the
                 sniper and heavy gunner a sniper tower and a pillbox train
 Structures/     StructureDefinition resources: pillbox, sandbag wall, sniper tower
@@ -127,7 +132,8 @@ Default port is 7777/UDP. A dedicated-server export with no mode flag defaults t
 hosts or runs a round on its own. **Host…** opens a panel for the round it hosts: the map, the
 round's length, the ground force's starting tickets, and how many players each side is filled to —
 bots take the seats nobody is in, and the strategist size is also the most strategists at once
-([`docs/LAN.md`](docs/LAN.md) §3.4). A client loads whichever map its host picked. A launch that
+([`docs/LAN.md`](docs/LAN.md) §3.4). A client loads whichever map its host picked. Adding a map
+to the picker is [`docs/MAPS.md`](docs/MAPS.md). A launch that
 named a mode on the command line goes straight past it into the map, before a widget is built — so
 the headless server, the playtest harness and the training runs are on the path they always were.
 

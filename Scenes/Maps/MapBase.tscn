@@ -1,0 +1,133 @@
+[gd_scene format=3 uid="uid://dol2o523xdnox"]
+
+[ext_resource type="Script" uid="uid://dworldroot01" path="res://Scripts/Core/WorldRoot.cs" id="1_worldroot"]
+[ext_resource type="Material" uid="uid://cgh5xjavqxrgv" path="res://Levels/materials/PrototypeMat1.tres" id="2_ground"]
+[ext_resource type="Script" uid="uid://d1v3u2uki6be7" path="res://Scripts/Fps/WeaponLocker.cs" id="3_locker"]
+[ext_resource type="PackedScene" uid="uid://dblvn46rbxvkb" path="res://Scenes/Environment/Barracks.tscn" id="4_barracks"]
+[ext_resource type="Script" uid="uid://cxvwabhyxemfo" path="res://Scripts/Rts/ResourceNode.cs" id="5_resourcenode"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
+sky_top_color = Color(0.335715, 0.270978, 1, 1)
+sky_horizon_color = Color(0.434594, 0.678376, 0.903515, 1)
+sky_curve = 0.344609
+
+[sub_resource type="Sky" id="Sky_sky"]
+sky_material = SubResource("ProceduralSkyMaterial_sky")
+
+[sub_resource type="Environment" id="Environment_world"]
+background_mode = 2
+sky = SubResource("Sky_sky")
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_ground"]
+size = Vector3(240, 1, 240)
+
+[sub_resource type="BoxMesh" id="BoxMesh_ground"]
+size = Vector3(240, 1, 240)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_wall_ns"]
+size = Vector3(240, 4, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_wall_ns"]
+size = Vector3(240, 4, 1)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_wall_ew"]
+size = Vector3(1, 4, 240)
+
+[sub_resource type="BoxMesh" id="BoxMesh_wall_ew"]
+size = Vector3(1, 4, 240)
+
+[sub_resource type="NavigationMesh" id="NavigationMesh_map"]
+
+[node name="MapBase" type="Node3D"]
+script = ExtResource("1_worldroot")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.819152, -0.469846, 0.32899, 0, 0.573576, 0.819152, -0.573576, -0.67101, 0.469846, 0, 30, 0)
+shadow_enabled = true
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_world")
+
+[node name="Geometry" type="Node3D" parent="." groups=["navmesh"]]
+
+[node name="Ground" type="StaticBody3D" parent="Geometry"]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Geometry/Ground"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+shape = SubResource("BoxShape3D_ground")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Geometry/Ground"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+mesh = SubResource("BoxMesh_ground")
+surface_material_override/0 = ExtResource("2_ground")
+
+[node name="Perimeter" type="StaticBody3D" parent="Geometry"]
+
+[node name="NorthShape" type="CollisionShape3D" parent="Geometry/Perimeter"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, -120)
+shape = SubResource("BoxShape3D_wall_ns")
+
+[node name="NorthMesh" type="MeshInstance3D" parent="Geometry/Perimeter"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, -120)
+mesh = SubResource("BoxMesh_wall_ns")
+surface_material_override/0 = ExtResource("2_ground")
+
+[node name="SouthShape" type="CollisionShape3D" parent="Geometry/Perimeter"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 120)
+shape = SubResource("BoxShape3D_wall_ns")
+
+[node name="SouthMesh" type="MeshInstance3D" parent="Geometry/Perimeter"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 120)
+mesh = SubResource("BoxMesh_wall_ns")
+surface_material_override/0 = ExtResource("2_ground")
+
+[node name="WestShape" type="CollisionShape3D" parent="Geometry/Perimeter"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -120, 2, 0)
+shape = SubResource("BoxShape3D_wall_ew")
+
+[node name="WestMesh" type="MeshInstance3D" parent="Geometry/Perimeter"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -120, 2, 0)
+mesh = SubResource("BoxMesh_wall_ew")
+surface_material_override/0 = ExtResource("2_ground")
+
+[node name="EastShape" type="CollisionShape3D" parent="Geometry/Perimeter"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 120, 2, 0)
+shape = SubResource("BoxShape3D_wall_ew")
+
+[node name="EastMesh" type="MeshInstance3D" parent="Geometry/Perimeter"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 120, 2, 0)
+mesh = SubResource("BoxMesh_wall_ew")
+surface_material_override/0 = ExtResource("2_ground")
+
+[node name="Cover" type="Node3D" parent="Geometry"]
+
+[node name="NavigationRegion3D" type="NavigationRegion3D" parent="." groups=["navigation_region"]]
+navigation_mesh = SubResource("NavigationMesh_map")
+
+[node name="PlayerSpawns" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -90, 0, 90)
+
+[node name="Spawn1" type="Marker3D" parent="PlayerSpawns" groups=["player_spawn"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6, 1, 0)
+
+[node name="Spawn2" type="Marker3D" parent="PlayerSpawns" groups=["player_spawn"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 1, 0)
+
+[node name="Spawn3" type="Marker3D" parent="PlayerSpawns" groups=["player_spawn"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 1, 0)
+
+[node name="Spawn4" type="Marker3D" parent="PlayerSpawns" groups=["player_spawn"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 1, 0)
+
+[node name="WeaponLocker1" type="Node3D" parent="." groups=["weapon_locker"]]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -90, 0, 96)
+script = ExtResource("3_locker")
+
+[node name="Barracks1" parent="." instance=ExtResource("4_barracks")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 90, 0, -90)
+
+[node name="ResourceNode1" type="Node3D" parent="." groups=["resource_node"]]
+script = ExtResource("5_resourcenode")
+
+[node name="StrategistAnchor" type="Marker3D" parent="." groups=["strategist_anchor"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 45, 0, -45)

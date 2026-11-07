@@ -41,7 +41,9 @@ public readonly struct MapInfo
 ///
 /// A list in code rather than a scan of a folder: a map is a scene with spawn
 /// points, resource nodes, a barracks, cover and a navigation mesh in it, and a
-/// scene that is merely in the folder is not one. Adding a map is one entry here.
+/// scene that is merely in the folder is not one. Adding a map is one entry here,
+/// for a scene that inherits <c>Scenes/Maps/MapBase.tscn</c> (docs/MAPS.md);
+/// <c>Tests/MapSceneTests.cs</c> holds every entry's scene to what a round needs.
 ///
 /// Engine-free, so "what does a host's unknown map id resolve to" is a test.
 /// </summary>
