@@ -27,3 +27,4 @@ Projectile = ExtResource("2_projectile")
 CarryWeightKg = 3.6
 PouchRounds = 30
 PouchWeightKg = 0.5
+Shot = 2

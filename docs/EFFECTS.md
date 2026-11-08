@@ -130,7 +130,7 @@ headless, and the curves and rules tested; never looked at.
 
 ## 6. Not done
 
-- Sound and camera shake.
+- Sound and camera shake. Weapon shots and rounds going past are heard ([`AUDIO.md`](AUDIO.md)); explosions are not.
 - Structures knocked down — the pillbox, the sniper tower, a sandbag wall. `Structure` has the
   same edge (`ApplyDamage` returning true on the authority, the `Destroyed` flag arriving in
   `ApplyRemoteState` on a client) and could call `ExplosionEffects` as `Unit` does.

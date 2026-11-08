@@ -56,6 +56,9 @@ dedicated-server authoritative.
 - [`docs/EFFECTS.md`](docs/EFFECTS.md) — explosions: what is drawn when a grenade, a launcher round,
   a tank shell or a drone goes off and when a vehicle is destroyed, the placeholder that draws it,
   and where art goes to replace it
+- [`docs/AUDIO.md`](docs/AUDIO.md) — weapon sounds: every weapon's shot, heard at the muzzle and
+  at the ear of whoever fired it, and rounds heard going past the listener where they came closest;
+  the placeholders synthesized for each until there are recordings, and where recordings go
 - [`docs/LAN.md`](docs/LAN.md) — hosting a room of machines from a checkout, with a dev build
 - [`docs/MAPS.md`](docs/MAPS.md) — making a map: the template scene new maps inherit from
   (`Scenes/Maps/MapBase.tscn`), what a map scene must hold, and the catalog entry that puts it in
@@ -87,7 +90,9 @@ Scripts/Ui/     Main menu and server browser, role select, pause menu, reticle, 
                 net debug HUD, the `~` console and the demo camera
 Scripts/Ui/Spectator/ The spectator's camera, and the AI debugger's panel, graph and world overlay
 Scripts/Effects/ Explosions as drawn: the pooled manager, the placeholder, and the contract art
-                replaces it under (docs/EFFECTS.md); what they decide is Scripts/Sim/Explosions.cs
+                replaces it under (docs/EFFECTS.md); what they decide is Scripts/Sim/Explosions.cs.
+                Weapon sounds as played (docs/AUDIO.md); what they are made of and when a round
+                has gone past is Scripts/Sim/WeaponSounds.cs and Scripts/Sim/Flyby.cs
 Scenes/         Main menu, greybox map, player, humanoid body, weapon, pause menu
 Scenes/Maps/    The template new maps inherit from (docs/MAPS.md)
 Scenes/Environment/ Map pieces: the barracks, the pillbox, the vehicle test strip

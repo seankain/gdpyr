@@ -159,6 +159,29 @@ public partial class WeaponDefinition : Resource
 	[Export]
 	public float PouchWeightKg;
 
+	[ExportCategory("Sound")]
+
+	/// <summary>
+	/// Which placeholder firing it plays until it has a recording of its own
+	/// (docs/AUDIO.md §1): <see cref="ShotKind.None"/> for a weapon that fires nothing
+	/// from a muzzle — the hammer, the hand grenade, the drone, the ram. Presentation
+	/// only, and never on the wire.
+	/// </summary>
+	[Export]
+	public ShotKind Shot;
+
+	/// <summary>
+	/// The recording firing it plays, in place of the <see cref="Shot"/> placeholder
+	/// (docs/AUDIO.md §4). Any <see cref="AudioStream"/> — a WAV or an Ogg, or an
+	/// <c>AudioStreamRandomizer</c> over several takes. Mono: it is played in 3D at the
+	/// muzzle for everyone else, and at the ear for whoever fired it. Null plays the
+	/// placeholder; how far a shot carries and how loud it is are still its
+	/// <see cref="Shot"/> kind's, so a weapon given a recording keeps a kind other than
+	/// none — one left at none plays nothing.
+	/// </summary>
+	[Export]
+	public AudioStream ShotSound;
+
 	[ExportCategory("WeaponSway")]
 	[Export]
 	public Vector2 SwayMin = new Vector2(-20,20);

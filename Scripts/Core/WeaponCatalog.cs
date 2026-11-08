@@ -260,6 +260,18 @@ public static class WeaponCatalog
 	public static ExplosionKind ExplosionOf(byte id) => Definition(id)?.Projectile?.Explosion ?? ExplosionKind.None;
 
 	/// <summary>
+	/// What firing a weapon sounds like (docs/AUDIO.md §1); none for a weapon that fires
+	/// nothing from a muzzle, or an id this build does not have. Presentation only.
+	/// </summary>
+	public static ShotKind ShotOf(byte id) => Definition(id)?.Shot ?? ShotKind.None;
+
+	/// <summary>
+	/// What a weapon's round sounds like going past the listener (docs/AUDIO.md §2); none
+	/// for a round nobody hears go by, a swing, or an id this build does not have.
+	/// </summary>
+	public static FlybyKind FlybyOf(byte id) => Definition(id)?.Projectile?.Flyby ?? FlybyKind.None;
+
+	/// <summary>
 	/// What raising this weapon's sights does. <see cref="AimStats.None"/> for an id
 	/// this build does not have, which is the same answer as "there is nothing to
 	/// raise" and keeps the caller from having to ask twice.

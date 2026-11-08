@@ -18,3 +18,4 @@ ReloadSeconds = 0.0
 IsMelee = false
 SpreadDegrees = 1.0
 Projectile = ExtResource("2_projectile")
+Shot = 5

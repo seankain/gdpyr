@@ -154,6 +154,13 @@ public partial class Debug : PanelContainer
 				+ (explosions.Evictions > 0 ? $"  {explosions.Evictions} cut short" : string.Empty));
 		}
 
+		// Whether shots and flybys are being played at all (docs/AUDIO.md §5).
+		if (Effects.WeaponAudio.Instance is { } sounds)
+		{
+			SetProperty("sounds", $"{sounds.Active} playing  {sounds.ShotsPlayed} shots  {sounds.FlybysPlayed} flybys"
+				+ (sounds.Evictions > 0 ? $"  {sounds.Evictions} cut short" : string.Empty));
+		}
+
 		MatchState match = combat.Match;
 		SetProperty("round", $"{match.Phase}  tickets {match.GroundTickets}/{match.StartingGroundTickets}"
 			+ $"  deaths {match.GroundDeaths}");
