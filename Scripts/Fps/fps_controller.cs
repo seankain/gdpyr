@@ -121,6 +121,19 @@ public partial class fps_controller : CharacterBody3D, IHumanoidPoseSource
 	public HumanoidRig Humanoid => _body;
 
 	/// <summary>
+	/// The first-person weapon this character's camera holds; null for anyone but the
+	/// local player, whose rig is the only one kept (<see cref="ConfigureForRole"/>), and
+	/// on a dedicated server. Where the local player's own muzzle effects are drawn from
+	/// (docs/MUZZLE_EFFECTS.md §2.2).
+	/// </summary>
+	public WeaponInit Viewmodel =>
+		_viewmodel != null && IsInstanceValid(_viewmodel) && _viewmodel.IsInsideTree()
+			? _viewmodel
+			: _viewmodel = GetNodeOrNull<WeaponInit>("CameraController/Camera3D/WeaponRig/Weapon");
+
+	private WeaponInit _viewmodel;
+
+	/// <summary>
 	/// The buttons the *previous* simulated tick saw. Read before
 	/// <see cref="Simulate"/> to build the <see cref="InputContext"/> that combat
 	/// needs, so that movement and weapons agree about which presses were edges

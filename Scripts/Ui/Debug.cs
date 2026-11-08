@@ -161,6 +161,15 @@ public partial class Debug : PanelContainer
 				+ (sounds.Evictions > 0 ? $"  {sounds.Evictions} cut short" : string.Empty));
 		}
 
+		// Whether muzzle effects are being drawn, and how many shots were too far from the
+		// camera to draw anything for (docs/MUZZLE_EFFECTS.md §5).
+		if (Effects.MuzzleEffects.Instance is { } muzzles)
+		{
+			SetProperty("muzzle", $"{muzzles.Flashes} flashes  {muzzles.Puffs} puffs  {muzzles.Casings} cases"
+				+ $"  {muzzles.Drawn} drawn  {muzzles.Skipped} too far"
+				+ (muzzles.Evictions > 0 ? $"  {muzzles.Evictions} cut short" : string.Empty));
+		}
+
 		MatchState match = combat.Match;
 		SetProperty("round", $"{match.Phase}  tickets {match.GroundTickets}/{match.StartingGroundTickets}"
 			+ $"  deaths {match.GroundDeaths}");

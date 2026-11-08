@@ -126,6 +126,43 @@ public partial class WeaponInit : Node3D
 		}
 	}
 
+	/// <summary>
+	/// The end of the barrel as it is drawn, in world space, and the line it points along
+	/// (docs/MUZZLE_EFFECTS.md §2.2): the weapon's <see cref="WeaponDefinition.ViewmodelMuzzle"/>
+	/// when it has one, else the face of the mesh's bounds the camera looks out of, where a
+	/// bore would be on it (<see cref="Muzzles.BarrelEnd"/>). False while there is nothing
+	/// drawn to fire from — no weapon yet, or a scope's eyepiece has the screen and the
+	/// viewmodel is out of shot.
+	/// </summary>
+	public bool TryGetMuzzle(out Vector3 muzzle, out Vector3 forward)
+	{
+		muzzle = default;
+		forward = default;
+		if (WeaponType == null || WeaponMesh?.Mesh == null || !WeaponMesh.IsVisibleInTree())
+		{
+			return false;
+		}
+
+		Camera3D camera = GetParentOrNull<Node3D>()?.GetParentOrNull<Camera3D>() ?? GetViewport()?.GetCamera3D();
+		if (camera == null)
+		{
+			return false;
+		}
+
+		forward = (-camera.GlobalBasis.Z).Normalized();
+		Transform3D mesh = WeaponMesh.GlobalTransform;
+		Vector3 local = WeaponType.ViewmodelMuzzle;
+		if (local == Vector3.Zero)
+		{
+			Aabb bounds = WeaponMesh.Mesh.GetAabb();
+			Basis toMesh = mesh.Basis.Inverse();
+			local = Muzzles.BarrelEnd(bounds.Position, bounds.Size, toMesh * forward, toMesh * camera.GlobalBasis.Y);
+		}
+
+		muzzle = mesh * local;
+		return true;
+	}
+
 	private void EquipWeapon(WeaponDefinition weapon)
 	{
 		if (weapon == null || weapon == WeaponType)

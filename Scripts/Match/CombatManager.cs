@@ -695,7 +695,7 @@ public partial class CombatManager : Node
 		}
 
 		ShotsFired++;
-		PresentOwnShot(gun.WeaponDefinitionId, muzzle);
+		PresentOwnShot(gun.WeaponDefinitionId, muzzle, direction);
 
 		uint id = PredictedIdBit | _nextPredictedId++;
 		if (_projectiles.TrySpawn(id, tick, OwnerId.ForPeer(combat.PeerId), gun.WeaponDefinitionId, muzzle,
@@ -728,7 +728,7 @@ public partial class CombatManager : Node
 
 		ShotsFired++;
 		ShowFired(ownerId, definitionId);
-		PresentShot(ownerId, definitionId, origin, authoritative: true);
+		PresentShot(ownerId, definitionId, origin, direction, authoritative: true);
 
 		Broadcast(MethodName.ServerProjectileSpawn, ProjectileCodec.EncodeSpawn(new ProjectileSpawn
 		{
@@ -1871,6 +1871,7 @@ public partial class CombatManager : Node
 		_projectiles.Clear();
 		_explosions?.Clear();
 		_sounds?.Clear();
+		_muzzles?.Clear();
 		Visibility.Clear();
 		Economy.Reset();
 		ResetDrones();
@@ -2320,10 +2321,10 @@ public partial class CombatManager : Node
 	{
 		combat.ShotsFired++;
 		ShotsFired++;
-		PresentOwnShot(combat.EquippedDefinitionId, origin);
 
 		Vector3 direction = WeaponSim.FireDirection(combat.Equipped, stats, combat.PeerId,
 			combat.Character.AimDirection);
+		PresentOwnShot(combat.EquippedDefinitionId, origin, direction);
 
 		uint id = PredictedIdBit | _nextPredictedId++;
 		if (_projectiles.TrySpawn(id, tick, OwnerId.ForPeer(combat.PeerId), combat.EquippedDefinitionId, origin,
@@ -2486,11 +2487,12 @@ public partial class CombatManager : Node
 
 		ShowFired(spawn.OwnerPeerId, spawn.DefinitionId);
 
-		// The local player's own shots were heard when they were predicted, adopted or not
-		// (docs/AUDIO.md §2.1): every one with a sound is.
+		// The local player's own shots were heard and drawn when they were predicted,
+		// adopted or not (docs/AUDIO.md §2.1, docs/MUZZLE_EFFECTS.md §2.2): every one with a
+		// sound is.
 		if (!IsLocalOwner(spawn.OwnerPeerId))
 		{
-			PresentShot(spawn.OwnerPeerId, spawn.DefinitionId, spawn.Origin, authoritative: false);
+			PresentShot(spawn.OwnerPeerId, spawn.DefinitionId, spawn.Origin, spawn.Direction, authoritative: false);
 		}
 
 		// Everyone else's shot is fast-forwarded to the tick this client is rendering,
@@ -3238,6 +3240,10 @@ public partial class CombatManager : Node
 		// Shots, and rounds going past the listener (docs/AUDIO.md).
 		_sounds = new WeaponAudio { Name = "WeaponAudio" };
 		AddChild(_sounds);
+
+		// Muzzle flashes, smoke and spent cases, near the camera only (docs/MUZZLE_EFFECTS.md).
+		_muzzles = new MuzzleEffects { Name = "MuzzleEffects" };
+		AddChild(_muzzles);
 
 		// The drones in the air, and the pilot's view out of theirs (docs/CONTROL_POINTS.md §4).
 		_droneView = new DroneView { Name = "DroneView" };

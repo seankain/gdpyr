@@ -59,6 +59,10 @@ dedicated-server authoritative.
 - [`docs/AUDIO.md`](docs/AUDIO.md) — weapon sounds: every weapon's shot, heard at the muzzle and
   at the ear of whoever fired it, and rounds heard going past the listener where they came closest;
   the placeholders synthesized for each until there are recordings, and where recordings go
+- [`docs/MUZZLE_EFFECTS.md`](docs/MUZZLE_EFFECTS.md) — muzzle flashes, smoke and spent cases: drawn
+  for your own shots from the viewmodel's barrel, and for anyone else's only within a few metres
+  of the camera, each part to its own reach; the placeholders, what they cost, and the console's
+  `muzzle`
 - [`docs/LAN.md`](docs/LAN.md) — hosting a room of machines from a checkout, with a dev build
 - [`docs/MAPS.md`](docs/MAPS.md) — making a map: the template scene new maps inherit from
   (`Scenes/Maps/MapBase.tscn`), what a map scene must hold, and the catalog entry that puts it in
@@ -92,7 +96,9 @@ Scripts/Ui/Spectator/ The spectator's camera, and the AI debugger's panel, graph
 Scripts/Effects/ Explosions as drawn: the pooled manager, the placeholder, and the contract art
                 replaces it under (docs/EFFECTS.md); what they decide is Scripts/Sim/Explosions.cs.
                 Weapon sounds as played (docs/AUDIO.md); what they are made of and when a round
-                has gone past is Scripts/Sim/WeaponSounds.cs and Scripts/Sim/Flyby.cs
+                has gone past is Scripts/Sim/WeaponSounds.cs and Scripts/Sim/Flyby.cs.
+                Muzzle flashes, smoke and cases as drawn (docs/MUZZLE_EFFECTS.md); what each
+                kind draws, how far off, and how a case falls is Scripts/Sim/Muzzles.cs
 Scenes/         Main menu, greybox map, player, humanoid body, weapon, pause menu
 Scenes/Maps/    The template new maps inherit from (docs/MAPS.md)
 Scenes/Environment/ Map pieces: the barracks, the pillbox, the vehicle test strip

@@ -182,6 +182,19 @@ public partial class WeaponDefinition : Resource
 	[Export]
 	public AudioStream ShotSound;
 
+	[ExportCategory("Muzzle")]
+
+	/// <summary>
+	/// Where the end of the barrel is on <see cref="Mesh"/>, in the mesh's own space: where
+	/// the local player's own muzzle flash and smoke are drawn from, and the case thrown
+	/// from behind (docs/MUZZLE_EFFECTS.md §2.2). Zero takes it from the mesh's bounds —
+	/// the face the camera looks out of, three quarters of the way up it — which is right
+	/// for a greybox box and wants setting for a modelled weapon whose bore is elsewhere.
+	/// What a weapon's shot draws is its <see cref="Shot"/> kind's; presentation only.
+	/// </summary>
+	[Export]
+	public Vector3 ViewmodelMuzzle;
+
 	[ExportCategory("WeaponSway")]
 	[Export]
 	public Vector2 SwayMin = new Vector2(-20,20);
