@@ -113,6 +113,25 @@ public partial class ProjectileDefinition : Resource
 	[Export]
 	public ExplosionKind Explosion;
 
+	[ExportCategory("Sound")]
+
+	/// <summary>
+	/// Which placeholder it plays going past the listener until it has a recording of
+	/// its own (docs/AUDIO.md §2): <see cref="FlybyKind.None"/> for a round nobody hears
+	/// go by — a thrown grenade, a drone's warhead. Presentation only, and never on the wire.
+	/// </summary>
+	[Export]
+	public FlybyKind Flyby;
+
+	/// <summary>
+	/// The recording it plays going past, in place of the <see cref="Flyby"/> placeholder
+	/// (docs/AUDIO.md §4): mono, played in 3D where the round came closest. Null plays the
+	/// placeholder; how near a round has to come to be heard is still its
+	/// <see cref="Flyby"/> kind's, so a round given a recording keeps a kind other than none.
+	/// </summary>
+	[Export]
+	public AudioStream FlybySound;
+
 	public ProjectileStats ToStats() => new(
 		ProjectileParams.FromGramsAndMillimeters(MassGrams, RadiusMillimeters, DragCoefficient),
 		MuzzleVelocity,

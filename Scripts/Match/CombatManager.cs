@@ -464,6 +464,7 @@ public partial class CombatManager : Node
 
 		RecordHitboxes(tick);
 		StepProjectiles(tick, authoritative: true);
+		ListenForFlybys();
 
 		// After the rounds and against the same hitboxes; before the wrecks, so a truck a
 		// drone destroys throws its riders out this tick (docs/CONTROL_POINTS.md §4).
@@ -694,6 +695,7 @@ public partial class CombatManager : Node
 		}
 
 		ShotsFired++;
+		PresentOwnShot(gun.WeaponDefinitionId, muzzle);
 
 		uint id = PredictedIdBit | _nextPredictedId++;
 		if (_projectiles.TrySpawn(id, tick, OwnerId.ForPeer(combat.PeerId), gun.WeaponDefinitionId, muzzle,
@@ -726,6 +728,7 @@ public partial class CombatManager : Node
 
 		ShotsFired++;
 		ShowFired(ownerId, definitionId);
+		PresentShot(ownerId, definitionId, origin, authoritative: true);
 
 		Broadcast(MethodName.ServerProjectileSpawn, ProjectileCodec.EncodeSpawn(new ProjectileSpawn
 		{
@@ -1867,6 +1870,7 @@ public partial class CombatManager : Node
 		Match.Reset();
 		_projectiles.Clear();
 		_explosions?.Clear();
+		_sounds?.Clear();
 		Visibility.Clear();
 		Economy.Reset();
 		ResetDrones();
@@ -2316,6 +2320,7 @@ public partial class CombatManager : Node
 	{
 		combat.ShotsFired++;
 		ShotsFired++;
+		PresentOwnShot(combat.EquippedDefinitionId, origin);
 
 		Vector3 direction = WeaponSim.FireDirection(combat.Equipped, stats, combat.PeerId,
 			combat.Character.AimDirection);
@@ -2353,6 +2358,7 @@ public partial class CombatManager : Node
 		ApplyDroneState(tick);
 		PrunePredictions(tick);
 		StepProjectiles(tick, authoritative: false);
+		ListenForFlybys();
 		UpdateHud(tick);
 	}
 
@@ -2479,6 +2485,13 @@ public partial class CombatManager : Node
 		}
 
 		ShowFired(spawn.OwnerPeerId, spawn.DefinitionId);
+
+		// The local player's own shots were heard when they were predicted, adopted or not
+		// (docs/AUDIO.md §2.1): every one with a sound is.
+		if (!IsLocalOwner(spawn.OwnerPeerId))
+		{
+			PresentShot(spawn.OwnerPeerId, spawn.DefinitionId, spawn.Origin, authoritative: false);
+		}
 
 		// Everyone else's shot is fast-forwarded to the tick this client is rendering,
 		// which is where the shooter is drawn too (docs/NETCODE.md §4.3).
@@ -3221,6 +3234,10 @@ public partial class CombatManager : Node
 		// Where rounds go off and vehicles are destroyed (docs/EFFECTS.md).
 		_explosions = new ExplosionEffects { Name = "ExplosionEffects" };
 		AddChild(_explosions);
+
+		// Shots, and rounds going past the listener (docs/AUDIO.md).
+		_sounds = new WeaponAudio { Name = "WeaponAudio" };
+		AddChild(_sounds);
 
 		// The drones in the air, and the pilot's view out of theirs (docs/CONTROL_POINTS.md §4).
 		_droneView = new DroneView { Name = "DroneView" };

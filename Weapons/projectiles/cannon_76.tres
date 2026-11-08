@@ -19,3 +19,4 @@ TracerColor = Color(1, 0.85, 0.4, 1)
 TracerLengthMeters = 1.6
 TracerRadiusMeters = 0.06
 Explosion = 3
+Flyby = 3

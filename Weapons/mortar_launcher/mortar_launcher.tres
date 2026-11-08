@@ -17,3 +17,4 @@ MagazineSize = 5
 ReloadSeconds = 0.0
 IsMelee = false
 Projectile = ExtResource("2_projectile")
+Shot = 8

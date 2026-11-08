@@ -17,3 +17,4 @@ SweepRadiusMeters = 0.0
 TracerColor = Color(1, 0.45, 0.2, 1)
 TracerLengthMeters = 2.2
 TracerRadiusMeters = 0.035
+Flyby = 2

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Gdpyr.Bots;
 using Gdpyr.Core;
 using Gdpyr.Effects;
@@ -373,6 +374,11 @@ public partial class GameConsole : CanvasLayer
 		_commands.Register("explode", ExplodeUsage, "draw an explosion where the camera looks, on this screen only",
 			Explode);
 
+		// A listen to what a weapon or a round going past sounds like, without a fight
+		// (docs/AUDIO.md §5): this peer only, nothing to the simulation.
+		_commands.Register("sound", SoundUsage,
+			"play a weapon's shot ahead of the camera (own: at the ear), or a round going past it", Sound);
+
 		// A crew vehicle in front of you, offline or on a listen host, for driving one
 		// before the kiosk hands them out (docs/GROUND_VEHICLES.md §12, GV2).
 		_commands.Register("vehicle", "vehicle <4x4|helicopter|clear>",
@@ -559,6 +565,71 @@ public partial class GameConsole : CanvasLayer
 
 		effects.Spawn(kind, point, reach);
 		return ConsoleResult.Say($"{Sim.Explosions.NameOf(kind)} at ({point.X:0.0}, {point.Y:0.0}, {point.Z:0.0})");
+	}
+
+	private static readonly string SoundUsage =
+		$"sound <weapon> [own] | sound flyby <{string.Join('|', Array.ConvertAll(Sim.WeaponSounds.Flybys, Sim.WeaponSounds.NameOf))}>";
+
+	/// <summary>How far ahead of the camera a previewed shot is fired from [m].</summary>
+	private const float SoundShotMeters = 20f;
+
+	/// <summary>How far to the camera's right a previewed round goes past [m].</summary>
+	private const float SoundFlybyMeters = 2f;
+
+	private ConsoleResult Sound(IReadOnlyList<string> args)
+	{
+		if (WeaponAudio.Instance is not { } sounds || GetViewport().GetCamera3D() is not { } camera)
+		{
+			return ConsoleResult.Failed("nothing is playing weapon sounds: join or host a round first");
+		}
+
+		Vector3 ear = camera.GlobalPosition;
+		if (args.Count == 2 && string.Equals(args[0], "flyby", StringComparison.OrdinalIgnoreCase))
+		{
+			if (!Sim.WeaponSounds.TryParse(args[1], out Sim.FlybyKind flyby))
+			{
+				return ConsoleResult.Failed(SoundUsage);
+			}
+
+			sounds.PlayFlyby(flyby, null, ear + (camera.GlobalBasis.X * SoundFlybyMeters));
+			return ConsoleResult.Say($"{Sim.WeaponSounds.NameOf(flyby)} going past, {SoundFlybyMeters:0} m to the right");
+		}
+
+		// A weapon's name can be more than one word ("mortar launcher"): taken whole, or
+		// with underscores for its spaces, with "own" after it.
+		bool own = args.Count >= 2 && string.Equals(args[^1], "own", StringComparison.OrdinalIgnoreCase);
+		if (args.Count < 1 || (own && args.Count < 2))
+		{
+			return ConsoleResult.Failed(SoundUsage);
+		}
+
+		string wanted = string.Join('_', own ? args.Take(args.Count - 1) : args);
+		var names = new List<string>();
+		for (byte id = 0; id < WeaponCatalog.Count; id++)
+		{
+			if (WeaponCatalog.ShotOf(id) == Sim.ShotKind.None)
+			{
+				continue;
+			}
+
+			string name = WeaponCatalog.NameOf(id);
+			string typed = name.Replace(' ', '_');
+			if (string.Equals(typed, wanted, StringComparison.OrdinalIgnoreCase))
+			{
+				Vector3 muzzle = ear + (-camera.GlobalBasis.Z * SoundShotMeters);
+				sounds.PlayShot(id, own ? ear : muzzle, own);
+				string source = WeaponCatalog.Definition(id)?.ShotSound != null
+					? "its recording"
+					: $"placeholder {Sim.WeaponSounds.NameOf(WeaponCatalog.ShotOf(id))}";
+				return ConsoleResult.Say(own
+					? $"{name}: your own shot ({source})"
+					: $"{name}: a shot {SoundShotMeters:0} m ahead ({source})");
+			}
+
+			names.Add(typed);
+		}
+
+		return ConsoleResult.Failed($"{SoundUsage}; weapons: {string.Join(' ', names)}");
 	}
 
 	private static string KitLine(in Sim.LoadoutSelection kit) => $"next spawn: {WeaponCatalog.DescribeWithLoad(kit)}";

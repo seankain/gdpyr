@@ -22,4 +22,5 @@ AimSeconds = 0.14
 AimPosition = Vector3(0, -0.09, -0.36)
 AimRotation = Vector3(0, -1.5708, 0)
 Projectile = ExtResource("2_pistolproj")
+Shot = 1
 metadata/_custom_type_script = "uid://ciex5x8gn466d"
