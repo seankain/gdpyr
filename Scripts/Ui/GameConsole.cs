@@ -379,6 +379,12 @@ public partial class GameConsole : CanvasLayer
 		_commands.Register("sound", SoundUsage,
 			"play a weapon's shot ahead of the camera (own: at the ear), or a round going past it", Sound);
 
+		// A look at a weapon's muzzle flash, smoke and spent case without a fight, and how far
+		// from the camera they are drawn (docs/MUZZLE_EFFECTS.md §5): this peer only.
+		_commands.Register("muzzle", MuzzleUsage,
+			"draw a weapon's muzzle effects 3 m ahead (own: from your own weapon), or show or set how far they are drawn",
+			Muzzle);
+
 		// A crew vehicle in front of you, offline or on a listen host, for driving one
 		// before the kiosk hands them out (docs/GROUND_VEHICLES.md §12, GV2).
 		_commands.Register("vehicle", "vehicle <4x4|helicopter|clear>",
@@ -595,16 +601,41 @@ public partial class GameConsole : CanvasLayer
 			return ConsoleResult.Say($"{Sim.WeaponSounds.NameOf(flyby)} going past, {SoundFlybyMeters:0} m to the right");
 		}
 
-		// A weapon's name can be more than one word ("mortar launcher"): taken whole, or
-		// with underscores for its spaces, with "own" after it.
-		bool own = args.Count >= 2 && string.Equals(args[^1], "own", StringComparison.OrdinalIgnoreCase);
+		if (!TryParseShotWeapon(args, out byte id, out bool own, out string names))
+		{
+			return ConsoleResult.Failed(names.Length == 0 ? SoundUsage : $"{SoundUsage}; weapons: {names}");
+		}
+
+		string name = WeaponCatalog.NameOf(id);
+		Vector3 muzzle = ear + (-camera.GlobalBasis.Z * SoundShotMeters);
+		sounds.PlayShot(id, own ? ear : muzzle, own);
+		string source = WeaponCatalog.Definition(id)?.ShotSound != null
+			? "its recording"
+			: $"placeholder {Sim.WeaponSounds.NameOf(WeaponCatalog.ShotOf(id))}";
+		return ConsoleResult.Say(own
+			? $"{name}: your own shot ({source})"
+			: $"{name}: a shot {SoundShotMeters:0} m ahead ({source})");
+	}
+
+	/// <summary>
+	/// A weapon that fires something from a muzzle, named by <paramref name="args"/> — its
+	/// name can be more than one word ("mortar launcher"): taken whole, or with underscores
+	/// for its spaces — and whether "own" follows it. False with no weapon named, and
+	/// <paramref name="names"/> empty; false with a name that is none of them, and
+	/// <paramref name="names"/> every one that is, as typed.
+	/// </summary>
+	private static bool TryParseShotWeapon(IReadOnlyList<string> args, out byte weapon, out bool own, out string names)
+	{
+		weapon = 0;
+		names = string.Empty;
+		own = args.Count >= 2 && string.Equals(args[^1], "own", StringComparison.OrdinalIgnoreCase);
 		if (args.Count < 1 || (own && args.Count < 2))
 		{
-			return ConsoleResult.Failed(SoundUsage);
+			return false;
 		}
 
 		string wanted = string.Join('_', own ? args.Take(args.Count - 1) : args);
-		var names = new List<string>();
+		var typed = new List<string>();
 		for (byte id = 0; id < WeaponCatalog.Count; id++)
 		{
 			if (WeaponCatalog.ShotOf(id) == Sim.ShotKind.None)
@@ -612,24 +643,105 @@ public partial class GameConsole : CanvasLayer
 				continue;
 			}
 
-			string name = WeaponCatalog.NameOf(id);
-			string typed = name.Replace(' ', '_');
-			if (string.Equals(typed, wanted, StringComparison.OrdinalIgnoreCase))
+			string name = WeaponCatalog.NameOf(id).Replace(' ', '_');
+			if (string.Equals(name, wanted, StringComparison.OrdinalIgnoreCase))
 			{
-				Vector3 muzzle = ear + (-camera.GlobalBasis.Z * SoundShotMeters);
-				sounds.PlayShot(id, own ? ear : muzzle, own);
-				string source = WeaponCatalog.Definition(id)?.ShotSound != null
-					? "its recording"
-					: $"placeholder {Sim.WeaponSounds.NameOf(WeaponCatalog.ShotOf(id))}";
-				return ConsoleResult.Say(own
-					? $"{name}: your own shot ({source})"
-					: $"{name}: a shot {SoundShotMeters:0} m ahead ({source})");
+				weapon = id;
+				return true;
 			}
 
-			names.Add(typed);
+			typed.Add(name);
 		}
 
-		return ConsoleResult.Failed($"{SoundUsage}; weapons: {string.Join(' ', names)}");
+		names = string.Join(' ', typed);
+		return false;
+	}
+
+	private const string MuzzleUsage = "muzzle <weapon> [own] | muzzle range [<flash> <smoke> <cases>]";
+
+	/// <summary>How far ahead of the camera a previewed shot's muzzle is [m]: inside every part's default reach.</summary>
+	private const float MuzzlePreviewMeters = 3f;
+
+	private ConsoleResult Muzzle(IReadOnlyList<string> args)
+	{
+		if (MuzzleEffects.Instance is not { } muzzles || GetViewport().GetCamera3D() is not { } camera)
+		{
+			return ConsoleResult.Failed("nothing is drawing muzzle effects: join or host a round first");
+		}
+
+		if (args.Count >= 1 && string.Equals(args[0], "range", StringComparison.OrdinalIgnoreCase))
+		{
+			if (args.Count == 4)
+			{
+				if (!TryMeters(args[1], out float flash) || !TryMeters(args[2], out float smoke)
+					|| !TryMeters(args[3], out float cases))
+				{
+					return ConsoleResult.Failed(MuzzleUsage);
+				}
+
+				muzzles.Ranges = new Sim.MuzzleRanges(flash, smoke, cases);
+			}
+			else if (args.Count != 1)
+			{
+				return ConsoleResult.Failed(MuzzleUsage);
+			}
+
+			Sim.MuzzleRanges ranges = muzzles.Ranges;
+			return ConsoleResult.Say($"muzzle effects for others' shots: flash within {ranges.FlashMeters:0.#} m,"
+				+ $" smoke {ranges.SmokeMeters:0.#} m, cases {ranges.CasingMeters:0.#} m; your own always");
+		}
+
+		if (!TryParseShotWeapon(args, out byte id, out bool own, out string names))
+		{
+			return ConsoleResult.Failed(names.Length == 0 ? MuzzleUsage : $"{MuzzleUsage}; weapons: {names}");
+		}
+
+		Sim.ShotKind kind = WeaponCatalog.ShotOf(id);
+		Sim.MuzzleParts parts;
+		if (own && Match.CombatManager.Instance?.Local?.Character?.Viewmodel is { } viewmodel
+			&& viewmodel.TryGetMuzzle(out Vector3 barrel, out Vector3 forward))
+		{
+			parts = muzzles.Emit(kind, barrel, forward, viewmodel, Vector3.Zero, own: true);
+		}
+		else
+		{
+			// Side on, across the view from left to right, where all of it can be seen.
+			Vector3 muzzle = camera.GlobalPosition + (-camera.GlobalBasis.Z * MuzzlePreviewMeters);
+			parts = muzzles.Emit(kind, muzzle, camera.GlobalBasis.X, null, Vector3.Zero, own);
+		}
+
+		return ConsoleResult.Say($"{WeaponCatalog.NameOf(id)}: {(own ? "your own shot" : $"a shot {MuzzlePreviewMeters:0} m ahead")}"
+			+ $" ({DescribeParts(parts)})");
+	}
+
+	private static bool TryMeters(string text, out float meters) =>
+		float.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture,
+			out meters) && float.IsFinite(meters) && meters >= 0f;
+
+	private static string DescribeParts(Sim.MuzzleParts parts)
+	{
+		if (parts == Sim.MuzzleParts.None)
+		{
+			return "nothing drawn";
+		}
+
+		var drawn = new List<string>(3);
+		if ((parts & Sim.MuzzleParts.Flash) != 0)
+		{
+			drawn.Add("flash");
+		}
+
+		if ((parts & Sim.MuzzleParts.Smoke) != 0)
+		{
+			drawn.Add("smoke");
+		}
+
+		if ((parts & Sim.MuzzleParts.Casing) != 0)
+		{
+			drawn.Add("case");
+		}
+
+		return string.Join(", ", drawn);
 	}
 
 	private static string KitLine(in Sim.LoadoutSelection kit) => $"next spawn: {WeaponCatalog.DescribeWithLoad(kit)}";
