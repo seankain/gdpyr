@@ -674,6 +674,20 @@ with clients behind a relay standing in for `tc netem`, and the suite at 50 of 5
 fail being GV0's own. Nothing drawn — the vehicles, the chase camera, the kiosk's panel, a wreck —
 has been looked at by a person, and none of it has run on a dedicated server over a real link.
 
+### M13 — A level editor, and maps as data (~28 days) *planned; nothing built*
+
+An editor in the game. Terrain is a 241 × 241 heightfield over the 240 m field, raised and lowered
+with brushes whose grade and radius are set, and textured by height and slope: water, sand, mud,
+grass, stone. Prefabs — scenery, the pieces a round needs, strategist structures that stand when a
+round starts — are placed upright, checked against what is already there, on ground levelled to the
+average under them. Roads grade the ground they cross; bridge sections join end to end, floating or
+on piers. A map made this way is a data file, not a scene: saved, cloned and exported from the
+editor, named on the wire by its hash, fetched by a client from the server it joins, and given to a
+dedicated server as a file. The design, decisions (LE-D1–LE-D22) and phases (LE0–LE9) are
+[`LEVEL_EDITOR.md`](LEVEL_EDITOR.md); LE0–LE3 with LE7, about 14 days, is data maps played and
+fetched with no editor yet. It lifts §5's "Multiple maps" cut, which [`MAPS.md`](MAPS.md)'s
+template and the host panel's picker began to.
+
 **Total: ~29–37 engineering days to end of M8.**
 
 > **Renumbering, M6 onwards.** M6 and M7 were "Playtest instrumentation" and "Steam"; they are now

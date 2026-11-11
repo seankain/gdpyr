@@ -9,6 +9,9 @@ Scope: how a map reaches the map select, what the template holds, what the engin
 scene, and how to check a new one. Hosting and the wire are in [`LAN.md`](LAN.md) §3.4. Cover is in
 [`COVER.md`](COVER.md). Nodes and perks are in [`CONTROL_POINTS.md`](CONTROL_POINTS.md).
 
+A second kind of map is planned and not built: a data file made in an editor in the game, which a
+client can fetch from its server ([`LEVEL_EDITOR.md`](LEVEL_EDITOR.md)). Nothing here changes for it.
+
 ---
 
 ## 1. Getting into the map select
