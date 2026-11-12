@@ -1,0 +1,48 @@
+# LE0, docs/LEVEL_EDITOR.md §11. At 67fec82: .NET SDK 8.0.134, Godot 4.6.stable.mono.official.89cea1439, four cores of a cloud VM.
+# By hand, from a scratch copy, while the checks were being written: the net part's own server, relay and client, the
+# same legs, 60 s each. First the slab, the slope on the heightmap and the slope on the triangle meshes, for which "clear
+# of a resync" was by 1 s and not yet by 2 s; then the slope on the triangle meshes in a copy built with
+# SimConfig.MispredictionThreshold at 0.02f, which is what net-2cm now does. These hold the two sessions whose clock was
+# resynchronised throughout, and the first of the two at 2 cm; le0-67fec82-checks-1.txt and -4.txt hold the script's.
+
+[checks] PASS net-server: slab: the client is in
+[checks] PASS net-server: slab: the client walked its legs
+[checks] PASS net-client: slab: connected, in the game, with a character
+[checks] PASS net-client: slab: alive on the ground force
+[checks] measured net-client: slab, on the flat: 60 s walking, 8 turns, 0 ticks off the floor, 0 clock resyncs and 22 nudges: 0.00 mispredictions/s (0), mean prediction error 2.644 mm, worst 5.09 mm; in the 60 s clear of a resync: 0.00 mispredictions/s (0), mean 2.644 mm, worst 5.09 mm
+[checks] measured net-client: slab: this client's clock: 0 resyncs, 24 nudges
+relay: up 4408 down 7774 dropped 0; one-way delay mean 40.0 ms, sd 10.0 ms, min 1.8, max 76.8
+[checks] PASS net-server: ramp:20:12, heightmap: the client is in
+[checks] PASS net-server: ramp:20:12, heightmap: the client walked its legs
+[checks] PASS net-client: ramp:20:12, heightmap: connected, in the game, with a character
+[checks] PASS net-client: ramp:20:12, heightmap: alive on the ground force
+[checks] measured net-client: ramp:20:12, heightmap, on the flat: 60 s walking, 8 turns, 0 ticks off the floor, 5 clock resyncs and 65 nudges: 0.38 mispredictions/s (23), mean prediction error 6.792 mm, worst 587.07 mm; in the 50 s clear of a resync: 0.02 mispredictions/s (1), mean 3.595 mm, worst 90.00 mm
+[checks] measured net-client: ramp:20:12, heightmap, up and down the slope: 60 s walking, 9 turns, 0 ticks off the floor, 9 clock resyncs and 89 nudges: 0.82 mispredictions/s (49), mean prediction error 10.442 mm, worst 628.83 mm; in the 43 s clear of a resync: 0.16 mispredictions/s (7), mean 4.466 mm, worst 96.37 mm
+[checks] measured net-client: ramp:20:12, heightmap, across the slope: 60 s walking, 6 turns, 0 ticks off the floor, 5 clock resyncs and 76 nudges: 1.15 mispredictions/s (69), mean prediction error 9.430 mm, worst 586.84 mm; in the 51 s clear of a resync: 0.80 mispredictions/s (41), mean 6.000 mm, worst 83.41 mm
+[checks] measured net-client: ramp:20:12, heightmap, diagonally on the slope: 60 s walking, 7 turns, 0 ticks off the floor, 5 clock resyncs and 81 nudges: 1.57 mispredictions/s (94), mean prediction error 9.643 mm, worst 607.27 mm; in the 50 s clear of a resync: 1.32 mispredictions/s (66), mean 6.362 mm, worst 83.74 mm
+[checks] measured net-client: ramp:20:12, heightmap, over the crease at its foot: 60 s walking, 21 turns, 0 ticks off the floor, 7 clock resyncs and 89 nudges: 0.63 mispredictions/s (38), mean prediction error 12.445 mm, worst 4039.25 mm; in the 46 s clear of a resync: 0.11 mispredictions/s (5), mean 7.616 mm, worst 4039.25 mm
+[checks] measured net-client: ramp:20:12, heightmap, over the crease at its top: 60 s walking, 21 turns, 0 ticks off the floor, 14 clock resyncs and 129 nudges: 1.22 mispredictions/s (73), mean prediction error 17.927 mm, worst 2169.44 mm; in the 32 s clear of a resync: 0.31 mispredictions/s (10), mean 6.870 mm, worst 96.69 mm
+[checks] measured net-client: ramp:20:12, heightmap: this client's clock: 48 resyncs, 564 nudges
+relay: up 26115 down 45978 dropped 0; one-way delay mean 40.0 ms, sd 10.0 ms, min 0.0, max 81.8
+[checks] PASS net-server: ramp:20:12, trimesh: the client is in
+[checks] PASS net-server: ramp:20:12, trimesh: the client walked its legs
+[checks] PASS net-client: ramp:20:12, trimesh: connected, in the game, with a character
+[checks] PASS net-client: ramp:20:12, trimesh: alive on the ground force
+[checks] measured net-client: ramp:20:12, trimesh, on the flat: 60 s walking, 8 turns, 0 ticks off the floor, 6 clock resyncs and 78 nudges: 0.45 mispredictions/s (27), mean prediction error 8.922 mm, worst 590.12 mm; in the 48 s clear of a resync: 0.08 mispredictions/s (4), mean 4.639 mm, worst 585.03 mm
+[checks] measured net-client: ramp:20:12, trimesh, up and down the slope: 60 s walking, 9 turns, 0 ticks off the floor, 8 clock resyncs and 83 nudges: 0.52 mispredictions/s (31), mean prediction error 10.993 mm, worst 626.83 mm; in the 44 s clear of a resync: 0.05 mispredictions/s (2), mean 4.856 mm, worst 97.07 mm
+[checks] measured net-client: ramp:20:12, trimesh, across the slope: 60 s walking, 6 turns, 0 ticks off the floor, 4 clock resyncs and 50 nudges: 1.63 mispredictions/s (98), mean prediction error 9.365 mm, worst 587.29 mm; in the 52 s clear of a resync: 1.46 mispredictions/s (76), mean 7.106 mm, worst 90.07 mm
+[checks] measured net-client: ramp:20:12, trimesh, diagonally on the slope: 60 s walking, 7 turns, 0 ticks off the floor, 8 clock resyncs and 75 nudges: 2.65 mispredictions/s (159), mean prediction error 17.762 mm, worst 3591.84 mm; in the 44 s clear of a resync: 2.50 mispredictions/s (110), mean 6.462 mm, worst 93.81 mm
+[checks] measured net-client: ramp:20:12, trimesh, over the crease at its foot: 60 s walking, 21 turns, 0 ticks off the floor, 3 clock resyncs and 43 nudges: 0.47 mispredictions/s (28), mean prediction error 10.483 mm, worst 2498.67 mm; in the 54 s clear of a resync: 0.20 mispredictions/s (11), mean 4.492 mm, worst 12.35 mm
+[checks] measured net-client: ramp:20:12, trimesh, over the crease at its top: 60 s walking, 21 turns, 0 ticks off the floor, 5 clock resyncs and 48 nudges: 0.72 mispredictions/s (43), mean prediction error 9.335 mm, worst 1046.19 mm; in the 51 s clear of a resync: 0.41 mispredictions/s (21), mean 6.830 mm, worst 1046.19 mm
+[checks] measured net-client: ramp:20:12, trimesh: this client's clock: 36 resyncs, 406 nudges
+relay: up 26101 down 45900 dropped 0; one-way delay mean 40.0 ms, sd 10.0 ms, min 0.0, max 81.8
+
+# with the threshold at 2 cm:
+
+[checks] measured net-client: ramp:20:12, trimesh, on the flat: 60 s walking, 8 turns, 0 ticks off the floor, 4 clock resyncs and 53 nudges: 0.33 mispredictions/s (20), mean prediction error 7.368 mm, worst 586.37 mm; in the 48 s clear of a resync: 0.00 mispredictions/s (0), mean 3.124 mm, worst 8.25 mm
+[checks] measured net-client: ramp:20:12, trimesh, up and down the slope: 60 s walking, 9 turns, 0 ticks off the floor, 3 clock resyncs and 66 nudges: 0.25 mispredictions/s (15), mean prediction error 6.596 mm, worst 543.07 mm; in the 51 s clear of a resync: 0.00 mispredictions/s (0), mean 4.092 mm, worst 10.21 mm
+[checks] measured net-client: ramp:20:12, trimesh, across the slope: 60 s walking, 6 turns, 0 ticks off the floor, 7 clock resyncs and 86 nudges: 0.50 mispredictions/s (30), mean prediction error 13.697 mm, worst 2124.18 mm; in the 41 s clear of a resync: 0.00 mispredictions/s (0), mean 5.659 mm, worst 12.15 mm
+[checks] measured net-client: ramp:20:12, trimesh, diagonally on the slope: 60 s walking, 7 turns, 0 ticks off the floor, 6 clock resyncs and 80 nudges: 0.43 mispredictions/s (26), mean prediction error 10.505 mm, worst 607.78 mm; in the 43 s clear of a resync: 0.00 mispredictions/s (0), mean 5.685 mm, worst 11.65 mm
+[checks] measured net-client: ramp:20:12, trimesh, over the crease at its foot: 60 s walking, 21 turns, 0 ticks off the floor, 9 clock resyncs and 72 nudges: 0.73 mispredictions/s (44), mean prediction error 16.942 mm, worst 3357.34 mm; in the 35 s clear of a resync: 0.00 mispredictions/s (0), mean 3.589 mm, worst 9.74 mm
+[checks] measured net-client: ramp:20:12, trimesh, over the crease at its top: 60 s walking, 21 turns, 0 ticks off the floor, 4 clock resyncs and 55 nudges: 0.33 mispredictions/s (20), mean prediction error 12.670 mm, worst 3838.15 mm; in the 49 s clear of a resync: 0.00 mispredictions/s (0), mean 6.651 mm, worst 16.04 mm
+[checks] measured net-client: ramp:20:12, trimesh: this client's clock: 36 resyncs, 449 nudges

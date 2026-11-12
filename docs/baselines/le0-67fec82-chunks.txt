@@ -1,0 +1,21 @@
+# LE0, docs/LEVEL_EDITOR.md §11. At 67fec82: .NET SDK 8.0.134, Godot 4.6.stable.mono.official.89cea1439, four cores of a cloud VM doing nothing else.
+# By hand, not by the script: the frame part's two commands (a --server at --fixed-fps 60 with LE0_CHECK=frame, and a client
+# joined to it) on the hills, on triangle meshes whose shapes are LE0_CHUNK cells a side: 240, 48, 8 and 16.
+# What it is for: whether the 16 cells a shape of LE-D5 cost a tick anything. They do not.
+
+== hills, triangle meshes of 240 cells a side
+[checks] terrain: hills, trimesh of 1 shapes, 241 x 241 samples, 67 pads, set in 100.60 ms, decoded in 5.05 ms
+[checks] measured frame: hills, trimesh: a tick, frame to frame, over 300 s of ticks at --fixed-fps 60: n 18000, mean 8.788 ms, p50 8.272, p95 15.348, p99 20.114, max 286.513
+[checks] measured frame: hills, trimesh: the play in those 300 s: 2 round(s), phase Live at the end; units produced 51, lost 16, on the field 18.9 on average and 34 at the most; structures built 0, lost 1; re-bakes 0; rejected orders 0; ground deaths 53; nodes taken 6 times
+== hills, triangle meshes of 48 cells a side
+[checks] terrain: hills, trimesh of 25 shapes, 241 x 241 samples, 67 pads, set in 79.31 ms, decoded in 2.78 ms
+[checks] measured frame: hills, trimesh: a tick, frame to frame, over 300 s of ticks at --fixed-fps 60: n 18000, mean 8.174 ms, p50 7.246, p95 14.994, p99 19.914, max 205.372
+[checks] measured frame: hills, trimesh: the play in those 300 s: 1 round(s), phase Live at the end; units produced 59, lost 20, on the field 19.1 on average and 40 at the most; structures built 4, lost 2; re-bakes 4; rejected orders 9; ground deaths 42; nodes taken 6 times
+== hills, triangle meshes of 8 cells a side
+[checks] terrain: hills, trimesh of 900 shapes, 241 x 241 samples, 67 pads, set in 86.68 ms, decoded in 2.89 ms
+[checks] measured frame: hills, trimesh: a tick, frame to frame, over 300 s of ticks at --fixed-fps 60: n 18000, mean 8.262 ms, p50 7.538, p95 14.854, p99 20.477, max 214.958
+[checks] measured frame: hills, trimesh: the play in those 300 s: 1 round(s), phase Live at the end; units produced 54, lost 13, on the field 22.3 on average and 44 at the most; structures built 4, lost 1; re-bakes 4; rejected orders 8; ground deaths 41; nodes taken 5 times
+== hills, triangle meshes of 16 cells a side
+[checks] terrain: hills, trimesh of 225 shapes, 241 x 241 samples, 67 pads, set in 47.15 ms, decoded in 2.43 ms
+[checks] measured frame: hills, trimesh: a tick, frame to frame, over 300 s of ticks at --fixed-fps 60: n 18000, mean 8.774 ms, p50 8.552, p95 15.027, p99 20.238, max 269.925
+[checks] measured frame: hills, trimesh: the play in those 300 s: 1 round(s), phase Live at the end; units produced 47, lost 14, on the field 21.4 on average and 36 at the most; structures built 1, lost 2; re-bakes 1; rejected orders 0; ground deaths 42; nodes taken 6 times
