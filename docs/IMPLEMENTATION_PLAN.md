@@ -674,7 +674,7 @@ with clients behind a relay standing in for `tc netem`, and the suite at 50 of 5
 fail being GV0's own. Nothing drawn — the vehicles, the chase camera, the kiosk's panel, a wreck —
 has been looked at by a person, and none of it has run on a dedicated server over a real link.
 
-### M13 — A level editor, and maps as data (~28 days) *planned; nothing built*
+### M13 — A level editor, and maps as data (~28 days) *planned; LE0, its baseline and spike, measured; nothing built*
 
 An editor in the game. Terrain is a 241 × 241 heightfield over the 240 m field, raised and lowered
 with brushes whose grade and radius are set, and textured by height and slope: water, sand, mud,
@@ -683,9 +683,13 @@ round starts — are placed upright, checked against what is already there, on g
 average under them. Roads grade the ground they cross; bridge sections join end to end, floating or
 on piers. A map made this way is a data file, not a scene: saved, cloned and exported from the
 editor, named on the wire by its hash, fetched by a client from the server it joins, and given to a
-dedicated server as a file. The design, decisions (LE-D1–LE-D22) and phases (LE0–LE9) are
+dedicated server as a file. The design, decisions (LE-D1–LE-D25) and phases (LE0–LE9) are
 [`LEVEL_EDITOR.md`](LEVEL_EDITOR.md); LE0–LE3 with LE7, about 14 days, is data maps played and
-fetched with no editor yet. It lifts §5's "Multiple maps" cut, which [`MAPS.md`](MAPS.md)'s
+fetched with no editor yet. LE0 measured the plan's ground in the engine
+(`scripts/level-editor-checks.sh`, `docs/baselines/le0-67fec82-*.txt`) and changed it in four
+places: the collider is triangle meshes and not a heightmap, which let rays through; walkable is
+40° and not 45°; the 4x4 is a road vehicle on such a map until its hull pitches with its chassis;
+and a correction is applied from 2 cm. It lifts §5's "Multiple maps" cut, which [`MAPS.md`](MAPS.md)'s
 template and the host panel's picker began to.
 
 **Total: ~29–37 engineering days to end of M8.**

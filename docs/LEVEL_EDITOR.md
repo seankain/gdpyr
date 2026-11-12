@@ -96,7 +96,7 @@ was written; a class reference quoted here is the XML that site is generated fro
 
 | Fact | Where |
 |---|---|
-| `HeightMapShape3D`: grid points 1 unit apart, centred on the shape's origin; each square two triangles; a NaN height is a hole; "faster to check collisions against than `ConcavePolygonShape3D`". For another spacing the node is scaled, and "GodotPhysics3D does not support non-uniform scaling" | `doc/classes/HeightMapShape3D.xml` |
+| `HeightMapShape3D`: grid points 1 unit apart, centred on the shape's origin; each square two triangles; a NaN height is a hole; "faster to check collisions against than `ConcavePolygonShape3D`" — which a round of bots, rays and all, did not bear out (LE0, §10.1). For another spacing the node is scaled, and "GodotPhysics3D does not support non-uniform scaling" | `doc/classes/HeightMapShape3D.xml` |
 | In GodotPhysics3D sample (x, z) is `heights[z * width + x]`, at (x − (width − 1)/2, z − (depth − 1)/2). A cell's triangles are (x,z) (x+1,z) (x,z+1) and (x+1,z) (x+1,z+1) (x,z+1) | `modules/godot_physics_3d/godot_shape_3d.h:406`; `godot_shape_3d.cpp:2015` |
 | Setting its data rebuilds a min/max grid of 16-sample chunks in one pass over every sample. There is no partial update | `godot_shape_3d.cpp:2077`, `:2146` |
 | A heightmap and a triangle mesh both give the collision solver one `GodotFaceShape3D` a triangle | `godot_shape_3d.cpp:1416`, `:2015` |
@@ -199,10 +199,10 @@ Scenes/Maps/MapHost.tscn · Scenes/MapEditor/MapEditor.tscn · Levels/materials/
 ```
 
 **Rejected:** a Godot editor plugin (LE-D2); sending scenes or a PCK (LE-D1); a `HeightMapShape3D`
-collider, which LE0 measured and found rays through (LE-D5); a painted splat map (LE-D7); tilting a prefab to its ground
-(LE-D9, LE-D10); decals or a ribbon mesh for roads (LE-D12); deriving pads and piers on load
-(LE-D14); an engine-free copy of the ground for the simulation to query in place of rays — the
-rays work, and two sources of truth would have to be kept equal.
+collider, which LE0 measured and found rays through (LE-D5); a painted splat map (LE-D7); tilting a
+prefab to its ground (LE-D9, LE-D10); decals or a ribbon mesh for roads (LE-D12); deriving pads and
+piers on load (LE-D14); an engine-free copy of the ground for the simulation to query in place of
+rays — the rays work, and two sources of truth would have to be kept equal.
 
 ---
 
@@ -408,9 +408,10 @@ stays, as any sculpted ground does.
 
 ### 6.6 Roads — `RoadPath.cs`
 
-A road is 2–64 control points, a width (4, 6 or 8 m) and a grade limit g (6–15 %, 10 % unless
-set: 15 % is 8.5°, under the 9.1° a 4x4 was measured to climb from rest, LE-D24). Its corners are rounded to a radius of at least its width, and the centreline is sampled
-every 0.5 m. With f(s) the ground along the centreline:
+A road is 2–64 control points, a width (4, 6 or 8 m) and a grade limit g (6–15 %, 10 % unless set:
+15 % is 8.5°, under the 9.1° a 4x4 was measured to climb from rest, LE-D24). Its corners are rounded
+to a radius of at least its width, and the centreline is sampled every 0.5 m. With f(s) the ground
+along the centreline:
 
     m(s) = min over t of  f(t) + g · |s − t|        the highest profile of grade g under the ground
     M(s) = max over t of  f(t) − g · |s − t|        the lowest over it
@@ -1038,12 +1039,12 @@ sessions gave 0.00 and 2.6–3.4 mm.
 
 What sets a session's place in those ranges is its clock, not its collider. In the two sessions
 where the clock was resynchronised throughout — 36 and 48 times in six minutes, which is the link's
-jitter and happened on the slab 0, 13 and 32 times in a minute — a body crossing the slope was corrected 0.8–2.5 times a
-second; in the four where it was resynchronised four times or not at all, 0.00–0.75. A correction
-on the slope is of 10–16 mm, but for the odd one of a tick's travel, which the level has too. At
-2 cm there were 0.00–0.03 a second in a session of each kind, and the worst error left standing was
-16 mm. The yardstick the repository has for a link like this is GV3's for driving: under one
-correction a second and under 5 cm of error (GROUND_VEHICLES.md §12).
+jitter and happened on the slab 0, 13 and 32 times in a minute — a body crossing the slope was
+corrected 0.8–2.5 times a second; in the four where it was resynchronised four times or not at all,
+0.00–0.75. A correction on the slope is of 10–16 mm, but for the odd one of a tick's travel, which
+the level has too. At 2 cm there were 0.00–0.03 a second in a session of each kind, and the worst
+error left standing was 16 mm. The yardstick the repository has for a link like this is GV3's for
+driving: under one correction a second and under 5 cm of error (GROUND_VEHICLES.md §12).
 
 ---
 
