@@ -1,13 +1,28 @@
 # gdpyr — Level editor: terrain, prefabs, roads and bridges, and maps that travel
 
-**Status: a plan; none of it is built.** Written against `cd0c558`. The facts in §2 were read in
-this repository's source at that commit, and those in §3 in Godot's source at tag `4.6-stable`. The
-arithmetic in §10 was run: `python3 tools/level_editor_checks/design_checks.py` prints every number
-quoted from it. No Godot and no .NET SDK were available where this was written, so nothing was
-compiled and nothing was run in the engine; LE0 (§11) is the phase that measures what could not be.
-The decisions (LE-D1–LE-D22, §4) are the defaults the plan is written against. Each is one line to
-change; LE-D3, LE-D8, LE-D10 and LE-D18 are the ones to flag before LE1 starts. The phases
-(LE0–LE9, §11) say what each builds, what checks it, and what is left for a person.
+**Status: a plan, with LE0 done; nothing of the editor is built.** Written against `cd0c558`. The
+facts in §2 were read in this repository's source at that commit, and those in §3 in Godot's source
+at tag `4.6-stable`. The arithmetic in §10 was run: `python3
+tools/level_editor_checks/design_checks.py` prints every number quoted from it. No Godot and no
+.NET SDK were available where it was written, so nothing was compiled and nothing was run in the
+engine; LE0 (§11) was the phase to measure what could not be, and it has: at `67fec82`, on Godot
+4.6 .NET, by `scripts/level-editor-checks.sh`, whose output is in `docs/baselines/` and is set out
+in §10.1.
+
+**What LE0 changed.** The collider is not a `HeightMapShape3D`: 65 of 20,000 long rays passed
+through one, and it costs a tick more than the same triangles as meshes, which let none through
+(LE-D5). A body and a unit walk a 42° face on triangles and stall on a 43° one, so walkable is 40°
+(LE-D23). The 4x4's hull is level whatever is under it: it beaches on 10° from rest and rides up
+70° at speed, and is a road vehicle on these maps until that is mended (LE-D24). A correction is
+applied from 2 cm (LE-D25). A structure's refusal on a slope is as §7.5 had it (LE-D21). A re-bake
+is not too slow to build on (§7.3). A tick on hills with a round of bots is 2–2.5 times the slab's
+and over its time for 1 in 100, which is a risk and LE3's to measure where the game is served
+(§13). Where a section says "LE0", it is one of these.
+
+The decisions (LE-D1–LE-D25, §4) are the defaults the plan is written against. Each is one line to
+change; LE-D3, LE-D8, LE-D10 and LE-D18 are the ones to flag before LE1 starts, and LE-D24 and
+LE-D25 before LE3. The phases (LE0–LE9, §11) say what each builds, what checks it, and what is
+left for a person.
 
 This is not [`MAPS.md`](MAPS.md)'s way of making a map. That one is the Godot editor, a scene that
 inherits `Scenes/Maps/MapBase.tscn` and a catalog entry, and it stays. This plan adds a second kind
@@ -570,7 +585,7 @@ map with water it sets the bake's box, with its floor 1 m under the water level 
 bake's grid is the 1,200 × 1,200 columns it already is for a 240 m map. What terrain adds is
 115,200 source triangles where a slab was 12, and a surface that is not one polygon.
 
-**LE0 measured what that costs** (`docs/baselines/le0-67fec82-checks.txt`): the greybox on its
+**LE0 measured what that costs** (`docs/baselines/le0-67fec82-checks-1.txt`): the greybox on its
 slab, then on level terrain, then on §10's hills. The two colliders bake alike, to the same mesh;
 the ranges are over both.
 
@@ -923,10 +938,11 @@ road, 212° for 15 % and 164° for 20 %.
 ### 10.1 Measured by LE0
 
 At `67fec82`, where this section had a list of what was not known. Every line is in
-[`baselines/le0-67fec82-checks.txt`](baselines/le0-67fec82-checks.txt), and
-`scripts/level-editor-checks.sh` prints it again; §11 says how it was run. Times are one machine's,
-four cores of a cloud VM doing nothing else, and are for holding its rows against each other.
-"Heightmap" is one `HeightMapShape3D`; "triangle meshes" is LE-D5's collider.
+`docs/baselines/le0-67fec82-*.txt`, as the checks printed it, and
+`scripts/level-editor-checks.sh` prints it again; §11 says which file holds what and how it was
+run. Times are one machine's, four cores of a cloud VM doing nothing else, and are for holding its
+rows against each other. "Heightmap" is one `HeightMapShape3D`; "triangle meshes" is LE-D5's
+collider.
 
 **Rays**, against §6.1's `Sample`, to 1 mm. A slanted ray starts over the ground and ends under it.
 
@@ -1046,9 +1062,9 @@ LE0 ─► LE1 ─► LE2 ─► LE3 ─┬─► LE4 ─► LE5 ─► LE6     
 LE0–LE3 with LE7 is the smallest thing worth having: maps that are data, played and fetched, with
 no editor yet — 14½ days, LE0's 1½ of them spent. Their first maps come from a test's generator.
 
-### LE0 — The baseline and the spike (1½ days)
+### LE0 — The baseline and the spike (1½ days) — done
 
-Nothing is kept from it but numbers, in `docs/baselines/`, and three decisions confirmed or changed.
+What was asked of it:
 
 - `dotnet test` and the scenario suite at the starting commit.
 - In a scratch copy of the greybox, the slab replaced by a 241 × 241 `HeightMapShape3D`: flat, then
@@ -1068,6 +1084,56 @@ Nothing is kept from it but numbers, in `docs/baselines/`, and three decisions c
 **Done when** each is a number, and LE-D5, §7.3's order and LE-D21 are each confirmed or amended
 here. **If the flat heightmap does not match the slab within the suite's spread,** stop: the
 collider is the plan's foundation.
+
+**Measured at `67fec82`**, whose code is `cd0c558`'s: the commits between them change only `docs/`
+and `tools/level_editor_checks/design_checks.py`. .NET SDK 8.0.134 (Ubuntu 24.04's
+`dotnet-sdk-8.0`); Godot `4.6.stable.mono.official.89cea1439` and its export templates; the project
+imported once with `--headless --import`; four cores of a cloud VM. The suite's harness starts its
+server with no frame-rate option, so `--fixed-fps 60` went in through `GODOT`, as GV0's did.
+
+It was to keep nothing but numbers, and it keeps its checks as well:
+`scripts/level-editor-checks.sh` over `tools/EngineChecks/LevelChecks.cs` and `LevelTerrain.cs`, on
+a copy of the tree whose greybox has its slab replaced by terrain, with three helpers in
+`tools/level_editor_checks/`: `le0_terrain.py` (§10's hills as a file's samples; the scene's edit),
+`compare_suites.py` and `heightmap_ray_walk.py`. The later phases are checked by the same script,
+and two of what it found are the engine's and want casting again when the engine changes (§13).
+The game compiles and loads none of it.
+
+| Asked | It came to | Where |
+|---|---|---|
+| `dotnet test` | 3,247 of 3,247 | |
+| The suite at the starting commit | on the slab, twice: 49 and 48 of 57. Eight fail both times: `htn_locker_runner_kit`, `htn_squad_retreats`, `htn_strategist_digs_in`, `locker_launcher_vs_tank`, `locker_resupply`, `locker_resupply_under_fire`, `tactics_move_to_node`, `technical_wreck_ejects`. `tactics_sniper_overwatch` fails once | `suite-slab-1`, `-2` |
+| The slab replaced by a heightmap, flat and hills | done, and by LE-D5's triangle meshes beside it. The hills are §10's, read from a file of `int16`, with the greybox's 67 pieces and its walls levelled into them by §6.3 at 30°: −6.7 to 17.1 m, the steepest face 59.6°, 1.6 % of faces over 45° | `checks-1` |
+| A ray down at 1,000 points, to 1 mm | to 0.016 mm, on both colliders. **Slanted and 16 m or longer, 65 of 20,000 pass through the heightmap** | §10.1; `checks-1` |
+| The bake | 2.0–2.3 s at the first tick on hills, 6–11 ms on the tick at a re-bake | §7.3; `checks-1` |
+| The server's frame time with 6 + 1 bots | 3.5 ms a tick on the slab; on hills 7.8–9.1, and over 20 for 1 tick in 100 | §10.1; `checks-1` to `-3`, `chunks` |
+| A body and a unit walk 44° and not 46° | **they do not walk 44°**: 42.1°, and not 43.0° | §10.1; `checks-1` |
+| Prediction on a 20° slope and over a crease | corrected up to 2.5 times a second crossing it, by 10–16 mm; not at 2 cm | §10.1; `checks-1`, `-4`, `net-by-hand` |
+| The 4x4 from rest, at speed, across a crease | 9.1° from rest; **70° at speed, on its hull** | §10.1; `checks-1` |
+| The helicopter over hills | 19.8–27.7 m over the ground with the climb held, against a ceiling of 25; carried over hills flown at from 5.7 m | §10.1; `checks-1` |
+| Builders on 5° and 10° | `Blocked`: the pillbox turned 45° on 5°; most of what was tried on 10° | §7.5; `checks-1` |
+| The collider's data; the stripped export | 0.2 ms a chunk, 37–48 ms for all; nine facts of nine on the export | §10.1; `checks-1` |
+| The suite on the flat heightmap | SUITE_ON_TERRAIN | `suite-trimesh-1`, `-2`, `suite-heightmap-1`, `-2`, `suites` |
+
+The files are `docs/baselines/le0-67fec82-<name>.txt`. `checks-1` is
+`level-editor-checks.sh ground slopes frame net export`; `checks-2` and `-3` its `frame` part
+again; `checks-4` `net net-2cm`; `chunks` and `net-by-hand` say in their first lines what was run
+by hand; `suites` is `compare_suites.py` over the six runs of the suite.
+
+**Decided here.**
+
+- **LE-D5 is changed** to the fallback it was written with: the triangle meshes. The heightmap lets
+  long rays through, and costs a tick more.
+- **§7.3's order is reversed**: tiles first, if anything. Neither is built ahead of need.
+- **LE-D21 is confirmed**, with its numbers.
+- **LE-D23, LE-D24 and LE-D25 are added**, for three things LE0 was not asked: what is walkable is
+  40°, not 45°; the 4x4 is a road vehicle on a data map; a correction is applied from 2 cm.
+  LE-D24 and LE-D25 are flagged.
+- **A tick on hills is a risk** (§13), not a decision: LE3 measures it on the box.
+
+**Left for a person:** to look at any of it. Every number here is from a headless process: whether
+a correction of 12 mm shows, whether a 4x4 going up a cliff reads as a bug or as a stunt, and what a
+tick costs on the machine the game is served from.
 
 ### LE1 — The ground's rules, engine-free (3 days)
 
@@ -1167,7 +1233,8 @@ and what each phase ran.
 
 | Claim | Checked by | Phase |
 |---|---|---|
-| The collider is where §3 says, and a flat one plays as the slab does | rays against `Sample`; the scenario suite | LE0 |
+| The collider is where §3 says, lets no ray through, and a flat one plays as the slab does | rays against `Sample`, 12,000 of them a ground; the scenario suite | LE0, done; `ground` again at LE3 |
+| A body and a unit walk what the plan calls walkable | faces from 20° to 46°, on the collider and on a box | LE0, done; `slopes` again at LE3 |
 | A brush's grade is its setting | `TerrainBrushTests`, over random strokes | LE1 |
 | A pad is level, minimal and no steeper than its skirt | `TerrainConformTests` | LE1 |
 | The bands keep their order | `TerrainBandsTests`, a sweep | LE1 |
