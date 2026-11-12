@@ -23,21 +23,28 @@ namespace Gdpyr.EngineChecks;
 ///
 /// <c>LE0_CHECK</c> names this process's part:
 /// <list type="bullet">
-/// <item><c>ground</c>: a listen host. Rays against §6.1's <c>Sample</c>; what handing the
-/// collider its data costs; the navigation bake, whole and in its two halves, a tile of
-/// it, and the game's own re-bake around a structure.</item>
+/// <item><c>ground</c>: a listen host. Rays against §6.1's <c>Sample</c>, straight down and
+/// at a slant, short and long; what handing the collider its data costs; the navigation
+/// bake, whole and in its two halves, a tile of it, and the game's own re-bake around a
+/// structure.</item>
 /// <item><c>slopes</c>: a listen host whose ground is changed under it. A body and a unit
-/// on 44°, 45° and 46°; the 4x4 from rest, at speed and over a ridge; the helicopter over
-/// hills; structure sites on slopes, through the computer strategist's entry point and
-/// through a scenario's.</item>
-/// <item><c>frame</c>: a dedicated server with its bots: the time a tick takes.</item>
+/// at faces from 20° to 46°, on the terrain and on a box; the 4x4 from rest, at speed, over
+/// a ridge and parked; the helicopter over hills; structure sites on slopes, through the
+/// computer strategist's entry point and through a scenario's. <c>LE0_ONLY</c> names the
+/// ones to run: <c>body</c>, <c>unit</c>, <c>4x4</c>, <c>heli</c>, <c>sites</c>.</item>
+/// <item><c>frame</c>: a dedicated server with its bots, and a client the script joins to
+/// it: the time a tick takes, and what the bots did.</item>
 /// <item><c>net-server</c>, <c>net-client</c>: a dedicated server and one client behind
-/// the delay relay, walking: mispredictions a second and mean prediction error.</item>
-/// <item><c>export</c>: the stripped server export: the collider from bytes, and the bake.</item>
+/// the delay relay, walking: corrections a second and the prediction's error, on the
+/// level, up, across and diagonally on a slope, and over its two creases.</item>
+/// <item><c>export</c>: the stripped server export: the collider from bytes in the pack,
+/// rays, and the bake.</item>
 /// </list>
 ///
-/// One line per fact, <c>PASS</c> or <c>FAIL</c>, and <c>[checks] measured …</c> lines; the
-/// process exits with the number of its facts that failed.
+/// What the plan's collider is held to is a fact, <c>PASS</c> or <c>FAIL</c>; what was
+/// measured to decide something, or on the heightmap the collider replaced, is a
+/// <c>[checks] measured …</c> line. The process exits with the number of its facts that
+/// failed.
 /// </summary>
 public partial class LevelChecks : Node
 {
@@ -125,6 +132,7 @@ public partial class LevelChecks : Node
 			}
 
 			SetPhysicsProcess(false);
+			Terrain?.Release();
 			GetTree().Quit(_failures);
 		}
 	}
@@ -547,7 +555,7 @@ public partial class LevelChecks : Node
 				}
 			}
 
-			Measured($"{on}: setting one chunk's 512 triangles: {Stats(one)}");
+			Measured($"{on}: setting one chunk's {LevelTerrain.ChunkCells * LevelTerrain.ChunkCells * 2} triangles: {Stats(one)}");
 		}
 
 		// The file's samples to floats: int16 little-endian, 1/256 m.
@@ -1458,38 +1466,61 @@ public partial class LevelChecks : Node
 			yield break;
 		}
 
+		// The round's counters start again with each round, and 300 s can hold more than one:
+		// each is summed over the rounds, its fall to nothing being a round's end.
+		Func<int>[] read =
+		{
+			() => units.UnitsProduced, () => units.UnitsLost, () => units.StructuresBuilt, () => units.StructuresLost,
+			() => units.NavigationRebakes, () => units.RejectedOrders, () => combat.Match.GroundDeaths,
+		};
+		var last = new int[read.Length];
+		var total = new int[read.Length];
+		for (int c = 0; c < read.Length; c++)
+		{
+			last[c] = read[c]();
+		}
+
 		_frameMs.Clear();
 		_recordFrames = true;
 		int most = 0;
+		long fielded = 0;
 		int rounds = 1;
+		int captures = 0;
 		bool live = true;
+		var holders = new NodeHolder[combat.Economy.NodeCount];
 		for (int i = 0; i < seconds * Second; i++)
 		{
 			yield return true;
 			most = Math.Max(most, units.SlotCount);
+			fielded += units.SlotCount;
 			if (combat.Match.IsLive != live)
 			{
 				live = combat.Match.IsLive;
 				rounds += live ? 1 : 0;
 			}
+
+			for (int c = 0; c < read.Length; c++)
+			{
+				int now = read[c]();
+				total[c] += Math.Max(now - last[c], 0);
+				last[c] = now;
+			}
+
+			for (int n = 0; n < holders.Length; n++)
+			{
+				NodeHolder owner = combat.Economy.NodeAt(n).Capture.Owner;
+				captures += owner != holders[n] && owner != NodeHolder.Neutral ? 1 : 0;
+				holders[n] = owner;
+			}
 		}
 
 		_recordFrames = false;
-		int ground = 0;
-		int strategist = 0;
-		for (int i = 0; i < combat.Economy.NodeCount; i++)
-		{
-			NodeHolder owner = combat.Economy.NodeAt(i).Capture.Owner;
-			ground += owner == NodeHolder.GroundForce ? 1 : 0;
-			strategist += owner == NodeHolder.Strategist ? 1 : 0;
-		}
-
 		Measured($"{GroundName}: a tick, frame to frame, over {seconds} s of ticks at --fixed-fps 60: {Stats(_frameMs)}");
-		Measured($"{GroundName}: the play in those {seconds} s: {rounds} round(s), phase {combat.Match.Phase} at the end; units produced {units.UnitsProduced}, lost {units.UnitsLost},"
-			+ $" on the field {units.SlotCount} (most {most}); structures built {units.StructuresBuilt}, lost {units.StructuresLost};"
-			+ $" re-bakes {units.NavigationRebakes}; rejected orders {units.RejectedOrders}; ground deaths {combat.Match.GroundDeaths},"
-			+ $" tickets {combat.Match.GroundTickets}; nodes held: ground {ground}, strategist {strategist} of {combat.Economy.NodeCount}");
-		Fact(units.UnitsProduced > 0, $"{GroundName}: the computer strategist trained units ({units.UnitsProduced})");
+		Measured($"{GroundName}: the play in those {seconds} s: {rounds} round(s), phase {combat.Match.Phase} at the end; units produced {total[0]}, lost {total[1]},"
+			+ $" on the field {F(fielded / (float)(seconds * Second), "0.0")} on average and {most} at the most; structures built {total[2]}, lost {total[3]};"
+			+ $" re-bakes {total[4]}; rejected orders {total[5]};"
+			+ $" ground deaths {total[6]}; nodes taken {captures} times");
+		Fact(total[0] > 0 && captures > 0, $"{GroundName}: the computer strategist trained units ({total[0]}) and nodes were taken ({captures})");
 	}
 
 	// ---- net: prediction on a slope over an 80 ms link ---------------------------------------------
@@ -1684,7 +1715,7 @@ public partial class LevelChecks : Node
 
 		Fact(OS.HasFeature("dedicated_server") && !OS.HasFeature("editor"), "it is the dedicated-server export, not the editor");
 		Fact(Terrain != null && Terrain.Kind == "hills" && Terrain.DecodeMicroseconds > 0,
-			"its ground is the heightmap, read from bytes in the pack");
+			"its ground is the terrain, read from bytes in the pack");
 		if (Terrain == null)
 		{
 			yield break;

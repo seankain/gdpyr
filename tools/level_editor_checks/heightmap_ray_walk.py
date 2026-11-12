@@ -10,8 +10,8 @@ shape's 16-cell chunks, and inside each chunk the ray passes the height of, once
 cells with the piece of the ray inside it (:1757, :1975). It prints which cells each walk visits.
 
 The rays are ones LE0's check cast at a flat 241 x 241 heightmap at y = 0.5
-(scripts/level-editor-checks.sh ground): four the engine let through the ground, and one it met.
-The port lets the same four through, and shows where: the piece of the ray inside the chunk starts
+(scripts/level-editor-checks.sh ground): three the engine let through the ground, and one it met.
+The port lets the same three through, and shows where: the piece of the ray inside the chunk starts
 one float short of a lane between cells -- it was cut there -- so `floor` puts the walk in the cell
 before the lane, and the start is then taken for one exactly on the lane (:1861, "Workaround cases
 where the ray starts at an integer position"), which puts off the walk's first step by a whole
@@ -139,15 +139,15 @@ def cast(begin, end):
     return any(met)
 
 
-# What scripts/level-editor-checks.sh ground printed for the flat heightmap: four rays that met no
-# terrain with nothing else on them, and one that met it.
+# What `scripts/level-editor-checks.sh ground` printed for the flat heightmap
+# (docs/baselines/le0-67fec82-checks.txt): three of the 36 rays in 10,000 that met no terrain, with
+# nothing else on them, and the first that met it.
 PASSED_THROUGH = [
     ((-86.47273, 21.354223, -26.022736), (93.173416, -13.398487, -11.060335)),
     ((85.62552, 6.954612, -103.73263), (-55.3127, -7.9156103, 37.215874)),
-    ((30.08963, 24.983997, -103.35338), (37.236435, -20.0, 104.94833)),
-    ((-100.01831, 21.464357, -84.96715), (17.328178, -20.0, -88.63465)),
+    ((-99.63232, 20.00727, -58.283825), (-40.19373, -5.1430736, 56.678555)),
 ]
-MET = [((-50.0, 30.0, -50.0), (60.0, -10.0, 20.0))]
+MET = [((76.9828, 15.567844, 106.99202), (54.506935, -6.3909655, 91.77502))]
 
 if __name__ == "__main__":
     through = [not cast(a, b) for a, b in PASSED_THROUGH]

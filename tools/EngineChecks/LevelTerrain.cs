@@ -7,11 +7,15 @@ using Godot;
 namespace Gdpyr.EngineChecks;
 
 /// <summary>
-/// LE0's ground (docs/LEVEL_EDITOR.md §11): the greybox's slab replaced by one 241 × 241
-/// <see cref="HeightMapShape3D"/> on layer 1, in group <c>navmesh</c>, samples 1 m apart and
-/// unscaled, as LE-D3 and LE-D5 fix it. A node in a copy of <c>Scenes/Test.tscn</c> that
-/// <c>scripts/level-editor-checks.sh</c> edits; not part of the game, and not what LE1–LE3
-/// build — only what their numbers were measured on.
+/// LE0's ground (docs/LEVEL_EDITOR.md §11): the greybox's slab replaced by terrain of
+/// 241 × 241 samples 1 m apart (LE-D3), on layer 1, in group <c>navmesh</c>. A node in a copy
+/// of <c>Scenes/Test.tscn</c> that <c>scripts/level-editor-checks.sh</c> edits; not part of
+/// the game, and not what LE1–LE3 build — only what their numbers were measured on.
+///
+/// <c>LE0_COLLIDER</c> names what it is made of: <c>trimesh</c>, the plan's collider (LE-D5),
+/// one <see cref="ConcavePolygonShape3D"/> for each 16 × 16 cells, 225 of them; anything
+/// else, the one <see cref="HeightMapShape3D"/> the plan started from, kept to be measured
+/// beside it. Both are the same triangles.
 ///
 /// <c>LE0_TERRAIN</c> names the ground this process starts on:
 /// <list type="bullet">
@@ -24,10 +28,6 @@ namespace Gdpyr.EngineChecks;
 /// one plane of that grade in the open ground at x 10…112, z 52…110.</item>
 /// </list>
 /// <see cref="Set"/> gives the collider other heights while the process runs.
-///
-/// <c>LE0_COLLIDER=trimesh</c> builds LE-D5's fallback in its place: the same triangles as
-/// one <see cref="ConcavePolygonShape3D"/> for each 16 × 16 cells, 225 of them, on the same
-/// body.
 /// </summary>
 public partial class LevelTerrain : StaticBody3D
 {
@@ -48,9 +48,18 @@ public partial class LevelTerrain : StaticBody3D
 
 	public static LevelTerrain Instance { get; private set; }
 
-	/// <summary>Cells along a side of one of the fallback's shapes; the heightmap's own bounds chunks are as big.</summary>
-	public const int ChunkCells = 16;
-	public const int ChunksAcross = (Size - 1) / ChunkCells;
+	/// <summary>
+	/// Cells along a side of one of the triangle-mesh collider's shapes: 16, as the heightmap's
+	/// own bounds chunks are, unless <c>LE0_CHUNK</c> names another that divides 240.
+	/// </summary>
+	public static readonly int ChunkCells = ChunkCellsAsked();
+
+	public static readonly int ChunksAcross = (Size - 1) / ChunkCells;
+
+	private static int ChunkCellsAsked() =>
+		int.TryParse(System.Environment.GetEnvironmentVariable("LE0_CHUNK"), out int cells) && cells > 0 && (Size - 1) % cells == 0
+			? cells
+			: 16;
 
 	public string Kind { get; private set; }
 	public float[] Heights { get; private set; }
@@ -100,7 +109,7 @@ public partial class LevelTerrain : StaticBody3D
 		}
 
 		Set(Build(Kind));
-		GD.Print($"[checks] terrain: {Kind}, {ColliderName}, {Size} x {Size} samples, {Pads.Count} pads,"
+		GD.Print($"[checks] terrain: {Kind}, {ColliderName}{(IsTrimesh ? $" of {Chunks.Length} shapes" : "")}, {Size} x {Size} samples, {Pads.Count} pads,"
 			+ $" set in {LastSetMicroseconds / 1000.0:0.00} ms, decoded in {DecodeMicroseconds / 1000.0:0.00} ms");
 	}
 
@@ -110,6 +119,39 @@ public partial class LevelTerrain : StaticBody3D
 		{
 			Instance = null;
 		}
+	}
+
+	/// <summary>
+	/// Lets go of the shapes while the engine is still up. A process that exits holding
+	/// them leaves it to .NET's finalizer thread to free them as the physics server goes
+	/// down, and the stripped export has been seen to end in a segmentation fault there.
+	/// </summary>
+	public void Release()
+	{
+		foreach (Node child in GetChildren())
+		{
+			if (child is CollisionShape3D shape)
+			{
+				shape.Shape = null;
+				RemoveChild(shape);
+				shape.Free();
+			}
+		}
+
+		if (Chunks != null)
+		{
+			foreach (ConcavePolygonShape3D chunk in Chunks)
+			{
+				chunk.Dispose();
+			}
+		}
+
+		Shape?.Dispose();
+		Chunks = null;
+		Shape = null;
+		Heights = null;
+		GC.Collect();
+		GC.WaitForPendingFinalizers();
 	}
 
 	/// <summary>Hands the collider <paramref name="heights"/>, one float a sample, index z · 241 + x.</summary>
@@ -141,7 +183,7 @@ public partial class LevelTerrain : StaticBody3D
 		return (Stopwatch.GetTimestamp() - before) * 1_000_000L / Stopwatch.Frequency;
 	}
 
-	/// <summary>A chunk's 512 triangles, each cell's two in the heightmap's order and winding (§3): (x,z) (x+1,z) (x,z+1), then (x+1,z) (x+1,z+1) (x,z+1).</summary>
+	/// <summary>A chunk's triangles, 512 of them at 16 cells a side, each cell's two in the heightmap's order and winding (§3): (x,z) (x+1,z) (x,z+1), then (x+1,z) (x+1,z+1) (x,z+1).</summary>
 	public static Vector3[] ChunkFaces(float[] heights, int chunkX, int chunkZ)
 	{
 		var faces = new Vector3[ChunkCells * ChunkCells * 6];

@@ -15,7 +15,22 @@ import re
 import sys
 
 SCENARIO = re.compile(r'^(?P<name>\S.*?) \.{2,} (?P<verdict>PASS|FAIL)\s+\(')
-CLAIM = re.compile(r'^  (?P<claim>\S.*?)\s+(?P<value>-?[\d.]+(?:\.\.-?[\d.]+)?|\d+/\d+ seeds)\s+(?P<rest>.*)$')
+VERDICT = re.compile(r'^  (?P<head>\S.*?)\s\s(?P<rest>ok|FAILED.*)$')
+VALUE = re.compile(r'\s(?P<value>-?[\d.]+(?:\.\.-?[\d.]+)?(?= over \d+ seeds?$|$)|\d+/\d+ seeds$)')
+
+
+def claim_of(line):
+    """A claim's line as (claim, value, held): the value is the last thing before `ok` or `FAILED`."""
+    verdict = VERDICT.match(line)
+    if not verdict:
+        return None
+    head = verdict['head']
+    value = None
+    for value in VALUE.finditer(head):
+        pass
+    if value is None:
+        return None
+    return head[:value.start()].rstrip(), value['value'], verdict['rest'] == 'ok'
 
 
 def numbers(value):
@@ -39,9 +54,9 @@ def read(path):
         if scenario:
             current = suite.setdefault(scenario['name'], {'verdict': scenario['verdict'], 'claims': {}})
             continue
-        claim = CLAIM.match(line) if current is not None else None
-        if claim and not claim['claim'].startswith('traces:'):
-            current['claims'][claim['claim']] = (numbers(claim['value']), 'FAILED' not in claim['rest'])
+        claim = claim_of(line) if current is not None else None
+        if claim:
+            current['claims'][claim[0]] = (numbers(claim[1]), claim[2])
     if not suite:
         sys.exit(f"{path}: no scenario in it")
     return suite
