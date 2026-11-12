@@ -919,9 +919,67 @@ road, 212° for 15 % and 164° for 20 %.
 | 20 m | grass | grass | grass | stone | stone | stone | stone | stone | stone | stone | stone |
 | 25 m | stone | stone | stone | stone | stone | stone | stone | stone | stone | stone | stone |
 
-**Not known until LE0:** what the navigation bake costs on terrain, at the first tick and at a
-re-bake; a body's prediction error on a slope and across a crease; the grade the 4x4 climbs; what
-setting the collider's data costs; the server's frame time with a round of bots on hills.
+### 10.1 Measured by LE0
+
+At `67fec82`, where this section had a list of what was not known. Every line is in
+[`baselines/le0-67fec82-checks.txt`](baselines/le0-67fec82-checks.txt), and
+`scripts/level-editor-checks.sh` prints it again; §11 says how it was run. Times are one machine's,
+four cores of a cloud VM doing nothing else, and are for holding its rows against each other.
+"Heightmap" is one `HeightMapShape3D`; "triangle meshes" is LE-D5's collider.
+
+**Rays**, against §6.1's `Sample`, to 1 mm. A slanted ray starts over the ground and ends under it.
+
+| | Heightmap, level | Heightmap, hills | Triangle meshes, level | Triangle meshes, hills |
+|---|---|---|---|---|
+| 1,000 straight down | all met it, to 0.000 mm | all, to 0.016 mm | all, to 0.000 mm | all, to 0.016 mm |
+| 1,000 slanted, under 16 m in plan | all met it | all | all | all |
+| 10,000 slanted, 16–200 m in plan | **36 met nothing** | **23 met nothing; 6 met ground beyond a hill** | all met it | all met it |
+| the ones that failed, cast again in pieces of at most 12 m | all met it | all met it | | |
+
+Split along a cell's other diagonal, 659 of the 1,000 rays down at the hills would have been over
+1 mm off: the triangles are the ones §3 names. Of the 65 rays that passed through, none was heading
+down both x and z, where a quarter of all the rays were;
+`tools/level_editor_checks/heightmap_ray_walk.py` shows why (§3).
+
+**The collider's data.**
+
+| | Heightmap | Triangle meshes |
+|---|---|---|
+| All 58,081 samples | 0.2 ms | 37–48 ms, for 225 shapes |
+| One chunk of 16 × 16 cells | there is no partial update (§3) | 0.2–0.3 ms |
+| The file's `int16` bytes to floats, all of them; every height reads back bit for bit | 0.2 ms | 0.2 ms |
+| On the stripped server export, from the pack | | 116,162 B read and decoded in 3–4 ms, the shapes set in 40–60 ms; no ray of 12,000 through them; 14,716 vertices baked |
+
+The export took the samples through the preset's include filter, as §9.1 plans, and says "No
+loader found for resource" of the file as it stores it.
+
+**The bake**: §7.3's table.
+
+**Walking**, a body and a rifleman alike, at a plane 8 m high:
+
+| Face | On triangles, either collider | On a box turned to the same grade |
+|---|---|---|
+| 20° to 42.1° | up it. Normals met within 3.5° of the face's | up it. Normals met: the face's |
+| 43.0°, 44.0°, 45.0° | not up it in 12 s: on the floor and on a wall in the same ticks, normals met to 46.6° | up it |
+| 46.0° | not up it | not up it |
+
+The bake at 45° kept the 44.0° face and dropped the 45.0° one; on a box it kept 45.0°. A body makes
+5.00 m/s on the level, 4.36 up 20° and 5.01 down it, and is never off the floor going down.
+
+**The 4x4**, on the triangle meshes:
+
+| | |
+|---|---|
+| From rest, its front axle 1 m short of the foot | over the top of 2.9° to 9.1°, its nose up to 14.6°, off its wheels 4 ticks at the most. On 10.0° and 11.9° it stops on the slope, off its wheels, for the 20 s it was given |
+| At 18 m/s | over the top of every face to 70°, off its wheels for 1.4–2.6 s; from 30° its nose stays level, which is its hull and not its wheels taking it up. 75° and 80° stop it at the foot |
+| At 18 m/s over a ridge, up and down the same grade | the same: across to 70°, its origin up to 7.8 m over the crest |
+| Stopped on a slope with the handbrake | stays put on 4.9°, held or left empty. On 10° and steeper it is not at rest after 3 s of it |
+
+**The helicopter** over the hills, ground from −3.9 to 8.5 m under it: with the climb held,
+19.8–27.7 m over the ground against a ceiling of 25; from 5.7 m with nothing held, 0.9–15.3 m over
+it, its altitude carried from 6.8 to 15.1 m. Neither pass slowed it under 15.2 m/s or put it down.
+
+**Structure sites**: §7.5.
 
 ---
 
