@@ -1114,12 +1114,26 @@ The game compiles and loads none of it.
 | The helicopter over hills | 19.8–27.7 m over the ground with the climb held, against a ceiling of 25; carried over hills flown at from 5.7 m | §10.1; `checks-1` |
 | Builders on 5° and 10° | `Blocked`: the pillbox turned 45° on 5°; most of what was tried on 10° | §7.5; `checks-1` |
 | The collider's data; the stripped export | 0.2 ms a chunk, 37–48 ms for all; nine facts of nine on the export | §10.1; `checks-1` |
-| The suite on the flat heightmap | SUITE_ON_TERRAIN | `suite-trimesh-1`, `-2`, `suite-heightmap-1`, `-2`, `suites` |
+| The suite on the flat heightmap | twice on each collider: 49 and 49 of 57 on the triangle meshes, 49 and 50 on the heightmap. The 48 that pass on the slab both times pass all four times; the slab's eight fail, but `htn_squad_retreats` once | `suite-trimesh-1`, `-2`, `suite-heightmap-1`, `-2`, `suites` |
 
 The files are `docs/baselines/le0-67fec82-<name>.txt`. `checks-1` is
 `level-editor-checks.sh ground slopes frame net export`; `checks-2` and `-3` its `frame` part
 again; `checks-4` `net net-2cm`; `chunks` and `net-by-hand` say in their first lines what was run
 by hand; `suites` is `compare_suites.py` over the six runs of the suite.
+
+**The stop did not come.** Level terrain plays as the slab does, on either collider: no scenario the
+slab passes fails on it, and the eight the slab fails fail on it, `htn_strategist_digs_in` on the
+same one of its two seeds. The suite's own spread on the slab is one scenario,
+`tactics_sniper_overwatch`, which passes once and fails once there and passes four times on terrain;
+`htn_squad_retreats`, whose claim is one over half of its seeds, passes once in four.
+
+The suite needed one thing the plan did not foresee. The greybox's slab is 300 m across, and
+`barracks_mortar` stands its player on the 30 m of it outside the walls, where a 240 m field has no
+ground: run without that rim, the suite on terrain failed that scenario four times of four and no
+other that the slab passes. The suite part keeps the rim, as boxes; nothing else does, since a data
+map ends at its walls (LE-D3). Without the rim `htn_strategist_digs_in` passed four times of four,
+which it does not on the slab: whatever fails it there has to do with the ground outside the walls.
+That is CONTROL_POINTS.md §5.4's to follow, not this plan's.
 
 **Decided here.**
 
