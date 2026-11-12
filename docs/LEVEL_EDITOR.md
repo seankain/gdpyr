@@ -133,7 +133,7 @@ was written; a class reference quoted here is the XML that site is generated fro
 | LE-D21 | **A structure built during a round needs near-level ground**: the ground under its footprint may vary by 0.5 m, else `TooSteep`. It stands on the highest of it, on a plinth down to the lowest. *Confirmed by LE0.* | Today's probe refuses a pillbox on a slope past 4.6–6.5°, by direction, and calls it `Blocked` (§7.5); LE0 measured it at 4.5–6.2°, as `Blocked`, with the downhill edge 0.2 m in the air where it is taken. The rule keeps about that limit, names it, and closes the gap under the downhill edge. |
 | LE-D23 | **Walkable is 40°.** The navigation bake's slope goes from 45° to 40° on a data map; the skirt of §6.3 is 30° and not a setting; the slope overlay turns red at 40°. *Added by LE0.* | On triangles a body and a unit walk a 42.1° face and stall on a 43.0° one, both colliders alike; a box they walk to 45° (§7.4). The bake keeps faces to 45°, so it would route units over ground they stall on. 40° is under what they walk with 2° to spare, and over the 39.2° a 30° skirt can leave. |
 | LE-D24 | **The 4x4 is a road vehicle on a data map, for a first cut.** It keeps the level hull it has. A road's grade limit stops at 15 % and a bridge's ramp stays 1 in 8. *Added by LE0.* | Its collider does not pitch with its chassis and has 0.25 m under it (§2). From rest at the foot it climbs 9.1° and beaches on 10.0°; at 18 m/s it rides up any face to 70° on its hull, off its wheels, and only 75° stops it (§7.4). 15 % is 8.5° and 1 in 8 is 7.1°. **Flag if a 4x4 that cannot leave the road, and that a cliff does not stop, is not acceptable for a first cut**: the fix is the hull taking the chassis's pitch and roll, which is GROUND_VEHICLES.md's to plan (§14). |
-| LE-D25 | **A correction is applied from 2 cm, not 1 cm**: `SimConfig.MispredictionThreshold`. *Added by LE0.* | A position crosses the wire at 1 cm an axis (§2). On level ground two axes of it are rounded and the third is exact; on a slope all three are, which is up to 8.7 mm before anything has gone wrong. Behind an 80 ms link a body crossing a 20° slope was corrected 0.8–2.5 times a second, by at most 16 mm; with the threshold at 2 cm, not once (§10). **Flag if 1 cm is to be kept**: then that rate is the cost. |
+| LE-D25 | **A correction is applied from 2 cm, not 1 cm**: `SimConfig.MispredictionThreshold`. *Added by LE0.* | A position crosses the wire at 1 cm an axis (§2). On level ground two axes of it are rounded and the third is exact; on a slope all three are, which is up to 8.7 mm before anything has gone wrong. Behind an 80 ms link a body crossing a 20° slope was corrected up to 2.5 times a second, by 10–16 mm, in sessions whose clock was being resynchronised, and up to 0.75 times in sessions where it was not; with the threshold at 2 cm, 0.03 at the most in either (§10). **Flag if 1 cm is to be kept**: then that rate is the cost, and it is under GV3's bar of one a second in four sessions of six. |
 | LE-D22 | **Placeholders**: the greybox textures by band; boxes for decks, piers and cover. A palette resource is where art goes. | IMPLEMENTATION_PLAN.md §5: greybox. |
 
 ---
@@ -601,7 +601,7 @@ and tiles need it kept anyway.
 
 | Consumer | On terrain | Change |
 |---|---|---|
-| Bodies and units (`MoveAndSlide`) | walk faces to 42° and stall on them from 43°: the engine's 45° less what a capsule's contact with the next triangle adds (§3). A box they walk to 45°. Slower up, as fast down: 5.0 m/s on the level, 4.4 up 20°, 5.0 down it. Behind an 80 ms link a body crossing a 20° slope is corrected 0.8–2.5 times a second, by at most 16 mm, where on the level it is not (§10) | the bake's slope (LE-D23); the correction's threshold (LE-D25) |
+| Bodies and units (`MoveAndSlide`) | walk faces to 42° and stall on them from 43°: the engine's 45° less what a capsule's contact with the next triangle adds (§3). A box they walk to 45°. Slower up, as fast down: 5.0 m/s on the level, 4.4 up 20°, 5.0 down it. Behind an 80 ms link a body crossing a 20° slope is corrected up to 2.5 times a second, by 10–16 mm, where on the level it is not (§10) | the bake's slope (LE-D23); the correction's threshold (LE-D25) |
 | Rounds, blasts, sight lines, the fog | stop at the ground: a hill hides and shelters. On the collider none of 10,000 rays 16–200 m long passed through it; on a heightmap 36 did over level ground and 29 over hills (LE-D5) | none |
 | The navigation bake | reads the collider; leaves out faces over its slope and deep water. At 45° it kept a 44° face no unit climbed | the bake's slope and box (§7.3) |
 | The 4x4 | its wheel rays follow the ground; its hull, which is level whatever its chassis does, does not (§2). From rest at the foot it climbs 9.1° and beaches on 10.0°, its nose in the slope and its wheels off it. At 18 m/s it rides up a face of anything to 70°, off its wheels for 1.4–2.6 s, and is stopped by 75° (§3). Onto 10° at that speed it is off its wheels for 2.6 s. Parked, it stays put on 5° | LE-D24: roads to 15 %, and a flag |
@@ -981,6 +981,30 @@ it, its altitude carried from 6.8 to 15.1 m. Neither pass slowed it under 15.2 m
 
 **Structure sites**: §7.5.
 
+**Prediction**, a client walking behind the relay — 40 ± 10 ms each way, 80 ms there and back — for
+60 s a leg, on a plane of 20° that is 12 m high. Corrections a second and the mean error, over
+the seconds that are clear of a clock resynchronisation by 2 s. Six sessions on the slope at the
+1 cm threshold, three on each collider, and two with it at 2 cm (LE-D25); the slab's own three
+sessions gave 0.00 and 2.6–3.4 mm.
+
+| Leg | Corrections a second, at 1 cm | Mean error | At 2 cm |
+|---|---|---|---|
+| On the level, beside the slope | 0.00–0.08 | 2.8–4.6 mm | 0.00 |
+| Up and down it | 0.00–0.16 | 3.8–4.9 mm | 0.00 |
+| Across it | 0.00–1.46 | 4.8–7.1 mm | 0.00 |
+| Diagonally on it | 0.00–2.50 | 4.9–6.5 mm | 0.00 |
+| Over the crease at its foot | 0.00–0.20 | 3.3–7.6 mm | 0.00–0.03 |
+| Over the crease at its top | 0.00–0.52 | 3.8–7.0 mm | 0.00–0.03 |
+
+What sets a session's place in those ranges is its clock, not its collider. In the two sessions
+where the clock was resynchronised throughout — 36 and 48 times in six minutes, which is the link's
+jitter and happened on the slab 0, 13 and 32 times in a minute — a body crossing the slope was corrected 0.8–2.5 times a
+second; in the four where it was resynchronised four times or not at all, 0.00–0.75. A correction
+on the slope is of 10–16 mm, but for the odd one of a tick's travel, which the level has too. At
+2 cm there were 0.00–0.03 a second in a session of each kind, and the worst error left standing was
+16 mm. The yardstick the repository has for a link like this is GV3's for driving: under one
+correction a second and under 5 cm of error (GROUND_VEHICLES.md §12).
+
 ---
 
 ## 11. Phases
@@ -1136,7 +1160,7 @@ and what each phase ran.
 | Risk | Signal | Mitigation |
 |---|---|---|
 | **The navigation bake on terrain is slow**, at the first tick or at every structure | `[rts] navigation re-baked … ms of it on the tick` | Measured by LE0 (§7.3): 2.0–2.3 s at the first tick on hills, 6–11 ms on the tick at a re-bake and 2 s to the new mesh. Not too much to build on; if the 2 s shows, tiles first |
-| **Bodies catch on the collider's creases**, or prediction drifts on slopes | mispredictions a second above the flat baseline; visible hitching | Measured by LE0, and decided. They do not catch under 43°, and from there they stall: walkable is 40° (LE-D23). Prediction is corrected 0.8–2.5 times a second crossing a 20° slope, by at most 16 mm, which is the wire's rounding against a 1 cm threshold and stops at 2 cm (LE-D25). Whether any of it shows is a person's to say, at LE3 |
+| **Bodies catch on the collider's creases**, or prediction drifts on slopes | mispredictions a second above the flat baseline; visible hitching | Measured by LE0, and decided. They do not catch under 43°, and from there they stall: walkable is 40° (LE-D23). Prediction is corrected up to 2.5 times a second crossing a 20° slope, by 10–16 mm, which is the wire's rounding against a 1 cm threshold and stops at 2 cm (LE-D25). Whether any of it shows is a person's to say, at LE3 |
 | **A flat-ground assumption §7.4 missed** | a bot round on hills that does what one on the slab does not | LE0 found one, the 4x4's level hull (LE-D24), and played a bot round on hills (§10). LE3 plays another; the list is where to add it |
 | **A hostile map file** from a server | — | A reader that is total, limits before allocation, a known inflated size, no scene and no object decoded, and tests over the hostile cases (§6.8). A client decodes only after the hash matches what it was told |
 | **The upload socket is write access to a public box** | — | Off unless a token was given; the deploy unit gives none; HMAC with a nonce; one upload at a time; the cache directory only; validated before written |
