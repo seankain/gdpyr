@@ -254,7 +254,10 @@ for mode in "${MODES[@]}"; do
 		;;
 
 	suite)
+		# With the slab's 30 m outside the walls kept, as boxes: a scenario stands a player
+		# there, and a 240 m field has no ground there to stand on.
 		ground flat "${COLLIDER:-trimesh}"
+		export LE0_RIM=1
 		out="${SUITE_OUT:-$COPY/suite.txt}"
 		wrapper="$COPY/godot-fixed-fps"
 		printf '#!/usr/bin/env bash\nexec "%s" --fixed-fps 60 "$@"\n' "$(command -v "$GODOT" || echo "$GODOT")" > "$wrapper"
@@ -269,6 +272,7 @@ for mode in "${MODES[@]}"; do
 		echo "suite: exit $status (output: $out)"
 		# A scenario failing is the suite's answer, not this script's: the slab fails some too.
 		[ "$status" -ge 2 ] && failed=1
+		unset LE0_RIM
 		;;
 
 	*)

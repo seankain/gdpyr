@@ -28,6 +28,11 @@ namespace Gdpyr.EngineChecks;
 /// one plane of that grade in the open ground at x 10…112, z 52…110.</item>
 /// </list>
 /// <see cref="Set"/> gives the collider other heights while the process runs.
+///
+/// <c>LE0_RIM=1</c> keeps what the greybox's slab has and a 240 m field has not: the 30 m of
+/// floor outside the walls, as four boxes with their tops at 0.5 m. One scenario stands a
+/// player there (<c>barracks_mortar</c>, at z = −125), so the suite is run with it; nothing
+/// else is, since a data map ends at its walls.
 /// </summary>
 public partial class LevelTerrain : StaticBody3D
 {
@@ -108,8 +113,30 @@ public partial class LevelTerrain : StaticBody3D
 			AddChild(new CollisionShape3D { Name = "CollisionShape3D", Shape = Shape });
 		}
 
+		bool rim = System.Environment.GetEnvironmentVariable("LE0_RIM") == "1";
+		if (rim)
+		{
+			// The slab is 300 m across and 1 m thick, its top at 0.5 m: its four strips outside ±120.
+			(Vector3 Size, Vector3 At)[] strips =
+			{
+				(new Vector3(300f, 1f, 30f), new Vector3(0f, 0f, -135f)),
+				(new Vector3(300f, 1f, 30f), new Vector3(0f, 0f, 135f)),
+				(new Vector3(30f, 1f, 240f), new Vector3(-135f, 0f, 0f)),
+				(new Vector3(30f, 1f, 240f), new Vector3(135f, 0f, 0f)),
+			};
+			for (int i = 0; i < strips.Length; i++)
+			{
+				AddChild(new CollisionShape3D
+				{
+					Name = $"Rim{i}",
+					Shape = new BoxShape3D { Size = strips[i].Size },
+					Position = strips[i].At,
+				});
+			}
+		}
+
 		Set(Build(Kind));
-		GD.Print($"[checks] terrain: {Kind}, {ColliderName}{(IsTrimesh ? $" of {Chunks.Length} shapes" : "")}, {Size} x {Size} samples, {Pads.Count} pads,"
+		GD.Print($"[checks] terrain: {Kind}, {ColliderName}{(IsTrimesh ? $" of {Chunks.Length} shapes" : "")}, {Size} x {Size} samples{(rim ? ", the slab's rim outside the walls" : "")}, {Pads.Count} pads,"
 			+ $" set in {LastSetMicroseconds / 1000.0:0.00} ms, decoded in {DecodeMicroseconds / 1000.0:0.00} ms");
 	}
 
