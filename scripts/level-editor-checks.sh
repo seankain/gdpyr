@@ -13,6 +13,7 @@
 #   ./scripts/level-editor-checks.sh slopes     # a body, a unit, the 4x4, the helicopter, structure sites
 #   ./scripts/level-editor-checks.sh frame      # a dedicated server's tick with its bots: slab, flat, hills
 #   ./scripts/level-editor-checks.sh net        # prediction on a 20° slope, behind an 80 ms link: slab, then the slope
+#   ./scripts/level-editor-checks.sh net-2cm    # the slope again with corrections from 2 cm, not 1 cm (LE-D25)
 #   ./scripts/level-editor-checks.sh export     # the stripped server export: the collider from bytes, the bake
 #   ./scripts/level-editor-checks.sh suite      # the scenario suite on the flat terrain
 #
@@ -170,7 +171,7 @@ for mode in "${MODES[@]}"; do
 		;;
 
 	frame)
-		for spec in "slab" "flat trimesh" "hills trimesh" "hills heightmap"; do
+		for spec in "slab" "flat trimesh" "flat heightmap" "hills trimesh" "hills heightmap"; do
 			# shellcheck disable=SC2086
 			ground $spec
 			name="${spec// /-}"
@@ -205,6 +206,28 @@ for mode in "${MODES[@]}"; do
 			echo "net, $spec: exit $status"
 			[ "$status" -ne 0 ] && failed=1
 		done
+		;;
+
+	net-2cm)
+		# LE-D25's evidence: the slope again, in a copy whose correction threshold is 2 cm
+		# and not 1 cm. The copy is built with it, run, and put back.
+		ground "ramp:20:12" trimesh
+		cp "$COPY/Scripts/Sim/SimConfig.cs" "$COPY/SimConfig.cs.kept"
+		sed -i 's/public const float MispredictionThreshold = 0.01f;/public const float MispredictionThreshold = 0.02f;/' \
+			"$COPY/Scripts/Sim/SimConfig.cs"
+		if cmp -s "$COPY/Scripts/Sim/SimConfig.cs" "$COPY/SimConfig.cs.kept" \
+			|| ! (cd "$COPY" && dotnet build Gdpyr.csproj -nologo -v quiet > "$COPY/build-2cm.log" 2>&1); then
+			echo "net-2cm: SimConfig.MispredictionThreshold is not 0.01f, or the copy did not build with 0.02f"
+			failed=1
+		else
+			echo "net-2cm: SimConfig.MispredictionThreshold is 0.02f in this copy"
+			run_net ramp-20-12-trimesh-2cm
+			status=$?
+			echo "net-2cm, ramp:20:12 trimesh: exit $status"
+			[ "$status" -ne 0 ] && failed=1
+		fi
+		cp "$COPY/SimConfig.cs.kept" "$COPY/Scripts/Sim/SimConfig.cs"
+		(cd "$COPY" && dotnet build Gdpyr.csproj -nologo -v quiet > "$COPY/build.log" 2>&1) || failed=1
 		;;
 
 	export)
