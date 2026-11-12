@@ -15,8 +15,8 @@ through one, and it costs a tick more than the same triangles as meshes, which l
 (LE-D23). The 4x4's hull is level whatever is under it: it beaches on 10° from rest and rides up
 70° at speed, and is a road vehicle on these maps until that is mended (LE-D24). A correction is
 applied from 2 cm (LE-D25). A structure's refusal on a slope is as §7.5 had it (LE-D21). A re-bake
-is not too slow to build on (§7.3). A tick on hills with a round of bots is 2–2.5 times the slab's
-and over its time for 1 in 100, which is a risk and LE3's to measure where the game is served
+is not too slow to build on (§7.3). A tick on hills with a round of bots is 2.2–2.6 times the
+slab's and over its time for 1 in 100, which is a risk and LE3's to measure where the game is served
 (§13). Where a section says "LE0", it is one of these.
 
 The decisions (LE-D1–LE-D25, §4) are the defaults the plan is written against. Each is one line to
