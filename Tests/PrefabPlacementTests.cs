@@ -211,6 +211,24 @@ public class PrefabPlacementTests
 		// Far enough off, it does not.
 		Assert.True(Place(document, PrefabSpecs.CoverBlock, 12f, 0f).IsOk);
 
+		// A skirt that moves a sample of another's pad by less than half a step moves nothing once rounded.
+		// The first block's pad is level at 0 out to x = 3 m. The second's footprint begins at 5.5 m, so
+		// at x = 3 its skirt's floor is 148/256 − tan 30° · (2.5 − 1.5), 0.77 mm over 0: rounded, 0.
+		MapDocument close = Flat();
+		for (int z = 119; z <= 121; z++)
+		{
+			for (int x = 126; x <= 128; x++)
+			{
+				close.Terrain[x, z] = HeightField.ToMeters(148);
+			}
+		}
+
+		Assert.True(Place(close, PrefabSpecs.CoverBlock, 0f, 0f).IsOk);
+		PlacementCheck rounded = Place(close, PrefabSpecs.CoverBlock, 7f, 0f);
+		Assert.True(rounded.IsOk, rounded.ToString());
+		Assert.Equal(HeightField.ToMeters(148), rounded.Level);
+		Assert.Equal(0f, close.Terrain[123, 120]);
+
 		// On level ground two pads side by side are at one level and disturb nothing.
 		MapDocument flat = Flat(2f);
 		Assert.True(Place(flat, PrefabSpecs.CoverBlock, 0f, 0f).IsOk);
@@ -356,15 +374,20 @@ public class PrefabPlacementTests
 	[Fact]
 	public void AFootprintOverFewerThanThreeSamples_TakesTheTriangleUnderItsCentre()
 	{
-		// One sample raised 1 m: the first triangle of its cell is 45° along x, the second level.
+		// Sample (100, 100) raised 1 m: of its cell's two triangles, the first — (x,z) (x+1,z) (x,z+1) —
+		// falls 1 m along both axes, √2 in all, and the second does not hold it and is level.
 		MapDocument document = Flat();
-		document.Terrain[101, 100] = 1f;
+		document.Terrain[100, 100] = 1f;
 		float x = document.Terrain.WorldX(100);
 		float z = document.Terrain.WorldZ(100);
+		float first = HeightField.Degrees(MathF.Sqrt(2f));
 
-		PrecheckCan(document, x + 0.2f, z + 0.2f, 45f);
-		PrecheckCan(document, x + 0.8f, z + 0.8f, 45f);
-		PrecheckCan(document, x - 0.8f, z - 0.2f, 0f);
+		PrecheckCan(document, x + 0.2f, z + 0.2f, first);
+		PrecheckCan(document, x + 0.3f, z + 0.6f, first);
+
+		// Past the diagonal from (x+1, z) to (x, z+1): the second triangle, though x is past z here.
+		PrecheckCan(document, x + 0.9f, z + 0.3f, 0f);
+		PrecheckCan(document, x + 0.6f, z + 0.7f, 0f);
 
 		static void PrecheckCan(MapDocument document, float x, float z, float degrees)
 		{

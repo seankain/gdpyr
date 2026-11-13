@@ -223,25 +223,31 @@ public class MapValidatorTests
 			d.Terrain[(int)(at.X - d.Terrain.OriginX), (int)(at.Z - d.Terrain.OriginZ)] += 0.05f;
 		}, MapIssueCode.OffItsPad, "the ground under it runs");
 
-		// A sample 1.4 m past its footprint lowered 3 cm.
-		Refused(d =>
+		// A sample 1.2–1.5 m past the barracks' footprint, under no other, lowered six steps, 23 mm: the pad
+		// reaches 1.5 m past the footprint, and is held level out there as under it.
+		MapIssue margin = Refused(d =>
 		{
-			MapObject locker = d.Objects[First(d, PrefabSpecs.WeaponLocker)];
-			PrefabSpecs.TryGetPadArea(locker, out PadArea area);
+			int barracks = First(d, PrefabSpecs.Barracks);
+			PrefabSpecs.TryGetPadArea(d.Objects[barracks], out PadArea area);
 			HeightField field = d.Terrain;
 			for (int z = 0; z < field.Depth; z++)
 			{
 				for (int x = 0; x < field.Width; x++)
 				{
-					float distance = area.DistanceTo(field.WorldX(x), field.WorldZ(z));
-					if (distance > 1.2f && distance <= 1.5f)
+					float wx = field.WorldX(x);
+					float wz = field.WorldZ(z);
+					float distance = area.DistanceTo(wx, wz);
+					bool underAnother = d.Objects.Exists(o => o != d.Objects[barracks]
+						&& PrefabSpecs.TryGetPadArea(o, out PadArea other) && other.DistanceTo(wx, wz) <= 1.5f);
+					if (distance > 1.2f && distance <= 1.5f && !underAnother)
 					{
-						field[x, z] -= 3f / 256f * 2f;
+						field[x, z] -= 6f / 256f;
 						return;
 					}
 				}
 			}
 		}, MapIssueCode.OffItsPad);
+		Assert.Equal(First(LevelMaps.Generate(1), PrefabSpecs.Barracks), margin.Object);
 
 		// It stands 3 cm off its level pad.
 		Refused(d =>
