@@ -87,6 +87,10 @@
     <Compile Include="../ThirdParty/FluidHTN/**/*.cs" />
     <Compile Include="../tools/Gdpyr.HtnBench/GroundSketch.cs" />
     <Compile Include="../tools/Gdpyr.HtnBench/Population.cs" />
+    <!-- The map tool's seeded generator (docs/LEVEL_EDITOR.md §11, LE2): the first maps
+         are its, so "every seed tried passes the validator and reads back from its
+         file as it was written" is a test, not a thing to find out from a bundled map. -->
+    <Compile Include="../tools/Gdpyr.MapTool/MapGenerator.cs" />
   </ItemGroup>
 
   <ItemGroup>

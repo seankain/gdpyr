@@ -1,7 +1,8 @@
 # gdpyr — Level editor: terrain, prefabs, roads and bridges, and maps that travel
 
-**Status: a plan, with LE0 and LE1 done: its ground is measured and the ground's rules are written
-and tested, engine-free. Nothing of the editor, of the file or of the world from one is built.**
+**Status: a plan, with LE0, LE1 and LE2 done: its ground is measured; the ground's rules, the map
+in memory, its file and its validator are written and tested, engine-free; and a tool makes, reads
+and checks map files. Nothing of the editor or of the world from a file is built.**
 Written against `cd0c558`. The
 facts in §2 were read in this repository's source at that commit, and those in §3 in Godot's source
 at tag `4.6-stable`. The arithmetic in §10 was run: `python3
@@ -11,7 +12,9 @@ engine; LE0 (§11) was the phase to measure what could not be, and it has: at `6
 4.6 .NET, by `scripts/level-editor-checks.sh`, whose output is in `docs/baselines/` and is set out
 in §10.1. LE1 (§11) wrote §6.1–6.4 as `Scripts/Sim/Level/`, at `744b906`: `dotnet test` holds each
 claim made there, and `tools/level_editor_checks/le1_mutations.py` breaks each rule in turn to show
-that a test fails when it is broken.
+that a test fails when it is broken. LE2 (§11) wrote §6.5, §6.8, §6.9 and §8.6's undo the same way,
+with `tools/Gdpyr.MapTool`, at `ceaaec9`, and `tools/level_editor_checks/le2_mutations.py` does the
+same for its rules.
 
 **What LE0 changed.** The collider is not a `HeightMapShape3D`: 65 of 20,000 long rays passed
 through one, and it costs a tick more than the same triangles as meshes, which let none through
@@ -31,6 +34,19 @@ ends are skirted as its sides are. Rounded to steps, levelled again and rounded,
 was, which is what keeps a pad (§6.3). On rough ground a pad left a face 1.18 times the limit where
 §10's script saw 1.15, and on level ground it cannot pass 1.156 (§10). Where a section says "LE1",
 it is one of these.
+
+**What LE2 changed.** A new map's water is 5 m under its level ground, which is then grass and not
+sand (§6.4). A pad's level is the mean of the ground under it to the centimetre, as the object's
+height is stored, and then the nearest step: a function of what the file holds, so a pad can be
+levelled again from the file alone (§6.5). A pad is kept by levelling every pad again in the order
+they were placed, not only those an edit reaches: one pad levelled again can move ground a later pad
+had set, and only that pad levelled again puts it back (§6.5). Whether a padded piece is under the
+water is asked of its pad's level, by placement and validator alike (§6.5, §6.9). The heights are
+deflated in zlib's format, which is what §10 measured; a file's text is UTF-8 with no control
+character but a description's line break; a file has its four chunks (§6.8). A prefab's boxes, its
+parameters and their ranges, and a bridge section's frame are set (§6.5). One of §6.9's warnings and
+one of §6.5's checks need a road's profile and are LE6's; reach is LE5's (§6.9). Where a section says
+"LE2", it is one of these.
 
 The decisions (LE-D1–LE-D25, §4) are the defaults the plan is written against. Each is one line to
 change; LE-D3, LE-D8, LE-D10 and LE-D18 were the ones to flag before LE1, which was built on them
@@ -189,7 +205,7 @@ found, by group and by script, on the first tick (MAPS.md §3).
 
 ```
 Scripts/Sim/Level/   engine-free; compiled into Tests/ by the existing ../Scripts/Sim/** glob
-  MapLimits.cs         the bounds: the grid, a step, the heights' limits, what is walkable
+  MapLimits.cs         the bounds: the grid, a step, the heights' limits, what is walkable, a file's
   HeightField.cs       the grid: samples, sampling on the collider's triangles, grades, a ray
   TerrainBrush.cs      sculpt, grade-locked, smooth, level, ramp: a dab is a pure function
   TerrainConform.cs    clamp(h, L, U): pads, road ribbons, bridgeheads
@@ -390,6 +406,14 @@ map's when each is from 0 to 65.535, which is what the file holds (§6.8), and t
 their order. The table of what they give is in §10: sand and mud are low and gentle, grass is the
 middle, and stone is anything high or steep — level ground at 22 m, ground 4 m up at 45°.
 
+**A new map's water is at −5 m**, 5 m under the level ground a new map is (`MapBands.NewMap`).
+*Decided by LE2.* With the water at 0 m, as `BandSettings.Default` has it for §10's table, level
+ground at 0 m is sand; 5 m over the water it is grass, clear of the mud's blend, which reaches 4.5 m
+of u. Water is where the ground is dug 5 m down, and sand from 3.5 m down. The other six numbers are
+§6.4's. A document holds the seven as the file does — the water in steps of 1/256 m, the six in
+thousandths — and n / 1000 is the float nearest n thousandths, which is what a literal is, so
+`0.6` read back is `0.6f`.
+
 `Classify` returns the band and, for drawing, a weight for each of two neighbouring bands across a
 blend of 1 m of u: centred on their edge, so each has half on it, and the band is always the
 heavier of the two. The water's edge is not blended; the water's own surface is drawn there. The
@@ -429,32 +453,62 @@ cleared for a new round, through `ServerPlaceStructure` — free, finished, the 
 destructible as one a builder made. Sixteen leaves builders the other half of
 `SimConfig.MaxStructures`.
 
+*Set by LE2*, in `PrefabSpecs`, where the table does not say. A box stands on the object's point,
+centred on it, and is as tall as what it keeps clear: a spawn line 2 m, a locker 2.2 m, a kiosk 3 m,
+a barracks its 6 m building over all of its 13 × 13 m, a gun 1.6 m and a launcher 1.2 m, a can
+0.5 m, the bunker its 7.2 m. A node's box is its pole and ring, 1.2 × 1.2 × 3 m: its disc is ground
+to stand on, and cover may go on it. The structures' boxes are `Structures/*.tres`' and the
+barracks' door and ring are `Barracks.tscn`'s — its `SpawnPoint`, 6 m along its −Z, and its guns'
+7.1 m off its centre and 100 m of reach, 107.1 m — and a test reads each from its file; the other
+scenes are LE5's to hold the catalog to. A bridge section's point is the middle of its deck in plan,
+at the deck's top at its −Z end; its connectors are there and at +6 m along Z, 1.5 m higher on a
+ramp; its boxes are the deck and its two rails, a ramp's in four steps. Parameters are a key and a
+value, and a key a prefab has not, or a value outside its range, is the validator's error: a node's
+perk (key 0, none or drones) and capture radius (key 1, 5–15 m in cm, 10 m unless set); a section's
+supports (key 0, 0 or 1) and its piers at its −Z and +Z ends (keys 1 and 2, 0–81 m in cm). No flag
+is defined.
+
 **The checks**, in order; the first that fails is the answer the ghost shows.
 
 | Result | When |
 |---|---|
 | `LimitReached` | the map already holds as many of the kind as it may |
 | `OutOfBounds` | a box leaves ±120 m, or a round's piece has its origin outside ±115 m |
-| `InTheWay` | a box overlaps a box of another object or a pier, in plan by more than 0.05 m and in height (LE-D11); or a pad's prefab stands on a road's ribbon |
+| `InTheWay` | a box overlaps a box of another object or a pier, in plan by more than 0.05 m and in height (LE-D11); or a pad's prefab stands on a road's ribbon (LE6: the ribbon is `RoadPath`'s) |
 | `TooSteep` | the average grade under the footprint is over the spec's |
-| `InWater` | the pad's level is under the water |
+| `InWater` | the pad's level, or a round's piece, is under the water |
 | `DisturbsNeighbour` | levelling would move a sample inside another object's pad |
-| `BlocksDoor` | a structure within 10 m of a barracks door (`StructurePlacement.DoorClearanceMeters`) |
+| `BlocksDoor` | a structure within 10 m of a barracks door (`StructurePlacement.DoorClearanceMeters`), or a barracks whose door would be |
 | `Ok` | the object and its pad are applied, as one step to undo |
 
 **The average grade and the pad.** Fit `h = a + b·x + c·z` by least squares to the samples under
 the footprint. (b, c) is the average grade as a vector; atan√(b² + c²) is what the ghost shows and
 what the spec's limit is checked against. A least-squares plane passes through its samples'
-centroid, so its height at the footprint's centre is their mean: that is the pad's level, rounded
-to a step. Levelling to the mean cuts as much as it fills under the footprint. Then §6.3: every
-sample within 1.5 m of the footprint is at the level, exactly, and the skirt runs out at 30°. A
-prefab without a pad stands at the ground's height under its origin. A footprint over fewer than
-three samples takes the triangle under its centre.
+centroid, so its height there is their mean: that is the pad's level. Levelling to the mean cuts as
+much as it fills under the footprint. Then §6.3: every sample within 1.5 m of the footprint is at
+the level, exactly, and the skirt runs out at 30°. A prefab without a pad stands at the ground's
+height under its origin. A footprint over fewer than three samples, or over samples in one line,
+takes the triangle under its centre.
 
-**A pad is kept.** When a stroke or a road ends, every pad its rectangle reaches is levelled
-again; by §6.3's fourth property that changes nothing unless the edit had moved it. So in a
-document an object always stands on its pad, and the validator's check of that (§6.9) fails only
-on a file something else wrote.
+*Changed by LE2*, from "rounded to a step": the object's height is the mean to the centimetre, as
+the file stores it, and the pad's level is the step nearest that, round(y · 256 / 100) in integers,
+where there is never a tie. The level is then a function of what the file holds, and a pad can be
+levelled again from the file alone and land on the same step; it is within 7 mm of the mean. An
+object stood at its own level to the centimetre has that level again. Whether a padded piece is
+under the water is asked of its pad's level, by placement and validator alike: its height to the
+centimetre can be 2 mm under a water level its pad is on.
+
+**A pad is kept.** When a stroke or a road ends and its rectangle reaches any pad's level ground,
+the pads are levelled again and rounded; by §6.3's fourth property that changes nothing unless the
+edit had moved them. So in a document an object always stands on its pad, and the validator's check
+of that (§6.9) fails only on a file something else wrote. *Changed by LE2*: every pad is levelled
+again, in the order the objects were placed, as placing them did — not only the pads the rectangle
+reaches. Pads overlap: one levelled again can move ground that a pad placed after it had set, and
+only that pad levelled again puts it back; LE2's test found it, as a whole-field keep after a local
+one that moved two samples. Sample by sample each pad is a clamp, which rounding keeps one on the
+lattice of steps (§6.3), and clamps composed are a clamp or a constant: doing it twice is doing it
+once. No pad moves another's level ground — placing one that would is `DisturbsNeighbour` — so
+every object still stands on its pad.
 
 Yaw is free or in 15° steps. Moving an object is taking it up and placing it again: the old pad
 stays, as any sculpted ground does.
@@ -557,6 +611,20 @@ hostile cases, as `DemoCodecTests` does.
 A map's hash is the SHA-256 of its file. A file is not re-encoded to be hashed, sent or cached
 (LE-D15).
 
+*Set by LE2.* The heights are deflated in zlib's format — `ZLibStream`, whose Adler-32 is a check
+on what inflates, and the format §10's sizes were measured in: a new map's heights are 135 B from
+C# as from Python. The six band numbers are, in order, the slope's gain, the slope that costs
+nothing, the sand's, mud's and grass's tops and the blend. A file has its four chunks, so its chunk
+count is 4; nothing may follow the last, and nothing may be left in a chunk once it is read. Each
+chunk's limit is §10's largest — META 424 B, TERR 116,230, OBJS 26,626, ROAD 8,321 — and is checked
+before anything is allocated. Text is UTF-8 with no control character, but for a line break in a
+description; a parameter given twice is refused. What a map *means* — a count, a place, a pad, a
+number in its range — is the validator's: the reader takes a prefab id past the catalog, a road 5 m
+wide or a set flag, and the validator refuses them. The writer refuses what the reader would: a
+string over its limit, more than 512 objects or 32 roads. `MapDocument` holds what the file holds —
+positions in centimetres, yaw in 1/65,536 of a turn, the bands as integers — so a document read is
+the document written, and written again is the same bytes.
+
 ### 6.9 The validator — `MapValidator.cs`
 
 What `MapSceneTests` asks of a scene, asked of a document; one function for the editor's panel, a
@@ -575,6 +643,16 @@ file about to be listed, a file just received and a server at boot.
 | layout | a node or the spawn line inside a barracks' defended ring (MAPS.md §2.3) |
 | ground | more than 4 m of relief inside a node's capture radius; a road steeper than its limit after later edits; an open bridge end |
 | reach | no path from a barracks door or from the spawn line to a node. The editor's *deep* check, which bakes; not run on a file being listed |
+
+*Built by LE2*, every row but two: a road steeper than its limit after later edits needs a road's
+profile, and is LE6's with `RoadPath`, as is `InTheWay`'s road ribbon (§6.5); reach bakes, and is
+LE5's. "A number outside its range" is the terrain's size, the water outside LE-D4 or the band
+edges out of their order, an object's height outside LE-D4, a flag, a parameter a prefab has not
+or outside its range, a road's style, width (4, 6 or 8 m), grade limit (6–15 %), fewer than two
+points or one off the field, and a text longer than a file holds. A bridge end is joined when
+another section's connector is within 0.1 m of it, or a road's end within 0.5 m in plan; it is
+landed within 0.5 m of the ground. An issue names the object it is about, and a second one where
+there is one — the object in the way, the barracks — and where it is, for the editor to fly to.
 
 ### 6.10 Sending a map — `MapTransfer.cs`
 
@@ -781,6 +859,13 @@ Every edit is a command with its inverse: a stroke keeps the rectangle it touche
 after; an object keeps its record and its pad's rectangle. Two hundred steps; a stroke over a
 64 m square is 17 KB.
 
+*Built by LE2*: `MapEdit` and `EditHistory`. An edit is a rectangle of stored samples before and
+after, and objects put in, taken out or replaced at their indices; it is applied forwards and
+reverted backwards, objects first, so an edit that takes one out and puts another in comes back in
+order. A stroke is pushed once it has been made, since it changes the ground as it goes; a placement
+is done through the history. A new step drops what could have been redone, and an edit that changes
+nothing is not a step.
+
 Save writes `name.map.tmp` and renames it over `name.map`, keeping the last as `name.map.bak`, and
 bumps the revision. An unsaved map is autosaved to `name.autosave.map` every minute, and offered
 back when the editor next opens it.
@@ -928,6 +1013,16 @@ above, 87 and 1.44 s; a new map, one chunk. The largest file a 1 m map can be, w
 bound on what it cannot shrink and every limit of §6.8 reached: 10 + 32 + 424 (`META`) + 116,230
 (`TERR`) + 26,626 (`OBJS`) + 8,321 (`ROAD`) = 151,643 B, 149 chunks, 2.47 s. A file at the 1 MiB
 limit is 17.1 s.
+
+**LE2's files**, written by `MapFile` and measured by `gdpyr-map` (`docs/baselines/le2-ceaaec9-maptool.txt`).
+`MapFileTests` holds the chunk limits above as `MapFile`'s constants, and a file at every limit at
+or under 151,643 B: 151,053 B, its heights noise inside LE-D4, which deflates to 115,620 B, a little
+under raw. A flat map's heights deflate to 135 B, §10's number. The generator's maps, seeds 1–8:
+
+| | Heights | File | To send | Ground | Steepest face | Objects | Validator |
+|---|---|---|---|---|---|---|---|
+| seeds 1–8 | 26,266–26,822 B | 26,867–27,403 B | 27 chunks, 0.44–0.45 s | −3.8 … 10.9 m | 33.2–35.6°, none over 40° | 33 | no error, no warning |
+| seed 1, `--hills 0` | 135 B | 736 B | 1 chunk | 0 m | 0° | 33 | no error, no warning |
 
 **The sculpt brush**: the steepest grade once the centre has risen H.
 
@@ -1124,8 +1219,8 @@ LE0 ─► LE1 ─► LE2 ─► LE3 ─┬─► LE4 ─► LE5 ─► LE6     
 ```
 
 LE0–LE3 with LE7 is the smallest thing worth having: maps that are data, played and fetched, with
-no editor yet — 14½ days, LE0's 1½ and LE1's 3 of them spent. Their first maps come from a test's
-generator.
+no editor yet — 14½ days, LE0's 1½, LE1's 3 and LE2's 3 of them spent. Their first maps come from
+LE2's generator.
 
 ### LE0 — The baseline and the spike (1½ days) — done
 
@@ -1262,16 +1357,73 @@ test now, and the list has those two and nine more.
 **Left for a person:** nothing here is drawn, so nothing here can be looked at: whether a brush's
 rates and radii feel right is LE4's to find out, and what the bands look like is LE3's. One thing
 is LE2's to choose and is not chosen here: a new map's water level. `BandSettings.Default` has the
-water at 0 m, and level ground at 0 m over water at 0 m is sand.
+water at 0 m, and level ground at 0 m over water at 0 m is sand. LE2 chose −5 m (§6.4).
 
-### LE2 — The document, the file, the validator (3 days)
+### LE2 — The document, the file, the validator (3 days) — done
 
-`MapDocument`, `MapFile`, `MapValidator`, `PrefabSpecs`, `PrefabPlacement`, `EditHistory`,
-`tools/Gdpyr.MapTool` (`info`, `hash`, `validate`, and `generate`, which writes a seeded map:
-hills, pads, the pieces a round needs). **Done when** a generated map round-trips to the same
-document; the reader refuses every case of §6.8 with its reason and never throws; the validator
-refuses a map with each of §6.9's errors and passes the generated one; and placing then undoing
-restores every sample.
+What was asked of it: `MapDocument`, `MapFile`, `MapValidator`, `PrefabSpecs`, `PrefabPlacement`,
+`EditHistory`, `tools/Gdpyr.MapTool` (`info`, `hash`, `validate`, and `generate`, which writes a
+seeded map: hills, pads, the pieces a round needs). **Done when** a generated map round-trips to
+the same document; the reader refuses every case of §6.8 with its reason and never throws; the
+validator refuses a map with each of §6.9's errors and passes the generated one; and placing then
+undoing restores every sample.
+
+**Built at `ceaaec9`** — the code at `6f87d96`, and three of its tests made to hold their rules at
+`ceaaec9` — on .NET SDK 8.0.134 (Ubuntu 24.04's `dotnet-sdk-8.0`), four cores of a cloud
+VM, with no Godot: in `Scripts/Sim/Level/`, `MapDocument.cs`, `MapFile.cs`, `MapValidator.cs`,
+`PrefabSpecs.cs`, `PrefabPlacement.cs` and `EditHistory.cs`, and `MapLimits` gains the file's
+limits; in `Tests/`, a class for each, with the maps and the file's layout written out a second
+time in `LevelMaps.cs`; and `tools/Gdpyr.MapTool`, `gdpyr-map`, whose generator the tests compile
+in. Nothing else in the game is changed, and nothing in it calls them yet: LE3's `LevelRoot` and
+`MapLibrary` are their first callers. The game's own assembly compiles with them, `dotnet build
+Gdpyr.csproj` with no warning.
+
+| Asked | It came to | Where |
+|---|---|---|
+| `dotnet test` | 3,506 of 3,506: the 3,369 there were, and 137 in the six classes. One that was there, `HtnDebugTests.PlanningWithHistory_AllocatesNothingOnTheTick`, which counts the bytes its thread allocates, failed 2 of 18 whole runs made while the mutation runs held three cores; alone it passed 12 of 12, and at `aba0179` the whole suite passed 10 of 10 under the same load | `tests` |
+| A generated map round-trips to the same document | seeds 1–4, field by field and sample by sample, and written again from what was read, the same bytes; and a document with every field set at its extremes, and one at every limit of §6.8 | `MapFileTests` |
+| The reader refuses every case of §6.8 with its reason, and never throws | each case, with the words of its reason: not a map; another version or chunk count; a chunk out of order, twice, missing or unknown; a length past the end of the file or past its limit; over 1 MiB; bytes after the last chunk or left in one; another size or spacing; a height outside LE-D4; heights that inflate short, long, or not at all; text too long, not UTF-8, or with a control character; too many objects, parameters, roads or points; a parameter twice. Every truncation of a generated file, 400 splices of two, 3,000 corruptions and 2,000 noises behind a map's header: none throws, and each refusal has a reason | `MapFileTests` |
+| The validator refuses each of §6.9's errors, and passes the generated map | seeds 1–8 pass with no error and no warning, and so do their files read back. Each error from the generated map changed to have it — and, where a change can be made that does, nothing else; each warning LE2 checks (§6.9) | `MapValidatorTests` |
+| Placing then undoing restores every sample | on six seeded hills, 60 steps each of placements of every prefab, and takings-up, through the history: undone, every sample and every object as they were; redone, as they were after | `PrefabPlacementTests`, `EditHistoryTests` |
+| `PrefabSpecs`, `PrefabPlacement` | §6.5's table as values, and the structures, the barracks' door and its ring read from their files; each of §6.5's results from a placement built to produce it, in its order; the grade a least-squares plane's; the pad at the mean, level exactly out to 1.5 m, with no edge past max(30°, before) by more than a step of rounding; of 150 placements tried at random, every one taken stands where the validator finds nothing wrong | `PrefabSpecsTests`, `PrefabPlacementTests` |
+| `tools/Gdpyr.MapTool` | `info`, `hash`, `validate`, `generate`. The same seed is the same bytes; its hash is `sha256sum`'s; it exits 0 for a map that plays, 1 for one refused, 2 for a wrong command line or disk | `maptool` |
+| Every rule's test fails when it is broken | 99 rules broken one at a time in a copy of the tree, each one edit to one file, the six classes run on each: **99 of 99** | `mutations` |
+
+The files are `docs/baselines/le2-ceaaec9-<name>.txt`. `tests` is the six classes' lines and the
+totals; `maptool` is `gdpyr-map` run as its first lines say; `mutations` is
+`python3 tools/level_editor_checks/le2_mutations.py` as it printed. Its first run, at `6f87d96`, is
+`le2-6f87d96-mutations.txt`, and caught 96 of 99: a triangle taken across the other diagonal, which
+the test missed because the sample it raised is in both of its cell's triangles; a pad's skirt left
+between steps, which nothing tested by moving a neighbour's sample less than half a step; and a
+pad's ground taken as its footprint alone, which the test missed because the sample it lowered was
+under another object's footprint too. Each has its test now. A test found one rule wanting:
+a whole-field keep after a local one moved two samples, which is why a pad is kept by levelling them
+all (§6.5). Reading the code found another: placement asked whether a pad was under the water of the
+pad's level and the validator of the object's centimetre, which can be 2 mm apart (§6.5); a test
+holds the two to one answer now.
+
+**Decided here**, each in the section it changes:
+
+- **§6.4, a new map's water is at −5 m**: its level ground is grass.
+- **§6.5, a pad's level is the mean to the centimetre and then the nearest step**, a function of the
+  stored height. **A pad is kept by levelling every pad again**, in the order placed. **Under the
+  water** is asked of a pad's level. `BlocksDoor` is either way round. The boxes, the parameters and
+  their ranges, and a bridge section's frame are set; no flag is defined.
+- **§6.8**: zlib's format; the band numbers' order; four chunks and nothing after or left over; the
+  chunks' limits; text that is UTF-8 with no control character; a parameter once; what is the
+  reader's to refuse and what the validator's; a document held as the file holds it.
+- **§6.9**: what "a number outside its range" is; when a bridge end is joined or landed; an issue
+  names its objects and where it is. A road steeper than its limit, and `InTheWay`'s road ribbon,
+  are LE6's, with `RoadPath`; reach is LE5's.
+- **§8.6**: an edit is applied forwards and reverted backwards, objects first; a stroke is pushed
+  once made; an edit that changes nothing is not a step.
+- **The generator** puts §2.3's layout of MAPS.md on hills gentler than §10's — steepest face 33–36°,
+  none over 40° — and levels a disc under each group of pieces before placing them, so that no seed
+  refuses one. It is seeded, its time is 0 unless given, and its maps carry no author unless given.
+
+**Left for a person:** nothing here is drawn or played. What a generated map looks like, and whether
+it plays as a map should — its layout is MAPS.md §2.3's, with two nodes the seed puts — is LE3's,
+when one is bundled.
 
 ### LE3 — The world from a file (4 days)
 
@@ -1347,7 +1499,7 @@ directory, the token and the restart; the README the editor and the flags;
 IMPLEMENTATION_PLAN.md §5's "Multiple maps" cut, struck. This file's status becomes what was built
 and what each phase ran.
 
-**Total: 28½ days**, LE0's 1½ and LE1's 3 spent.
+**Total: 28½ days**, LE0's 1½, LE1's 3 and LE2's 3 spent.
 
 ---
 
@@ -1362,11 +1514,13 @@ and what each phase ran.
 | A pad is level, minimal and no steeper than its skirt | `TerrainConformTests` | LE1, done |
 | The bands keep their order | `TerrainBandsTests`, a sweep | LE1, done |
 | Each of those tests fails when its rule is broken | `le1_mutations.py`, 75 rules | LE1, done |
-| A file reads back as it was written, and a bad one is refused | `MapFileTests` | LE2 |
-| A map the validator passes holds what a round needs | `MapValidatorTests`; `BundledMapTests`; a bot round | LE2, LE3 |
-| Every peer builds the same ground | no float in the file; exact samples; the hash | LE2, LE7 |
+| A file reads back as it was written, and a bad one is refused | `MapFileTests` | LE2, done |
+| A map the validator passes holds what a round needs | `MapValidatorTests`; `BundledMapTests`; a bot round | LE2, done; LE3 |
+| Placing then undoing restores every sample | `PrefabPlacementTests`, `EditHistoryTests` | LE2, done |
+| Each of LE2's tests fails when its rule is broken | `le2_mutations.py`, 99 rules | LE2, done |
+| Every peer builds the same ground | no float in the file; exact samples; the hash | LE2, done; LE7 |
 | A server without meshes builds and bakes it | the stripped export's check | LE3 |
-| Nothing is in the way of a placed prefab | `PrefabPlacementTests`; LE5's checks | LE2, LE5 |
+| Nothing is in the way of a placed prefab | `PrefabPlacementTests`; LE5's checks | LE2, done; LE5 |
 | A road keeps its grade; a bridge carries units and a 4x4 | `RoadPathTests`; LE6's checks | LE6 |
 | A client gets the map it lacks, and only a whole and valid one | `MapTransferTests`; LE7's checks | LE7 |
 | A server takes no map from anyone without the token | `MapTransferTests`; LE8's checks | LE8 |

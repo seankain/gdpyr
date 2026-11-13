@@ -47,4 +47,31 @@ public static class MapLimits
 	/// one; this is under the first with two degrees to spare.
 	/// </summary>
 	public const float WalkableSlopeDegrees = 40f;
+
+	/// <summary>
+	/// Half the square a round's pieces stand in [m]: spawns, the locker, the kiosk,
+	/// barracks, nodes, guns, cans and the anchor (MAPS.md §3.1, item 7). It is
+	/// <c>Cargo.FieldHalfExtentMeters</c>, and a test holds the two equal.
+	/// </summary>
+	public const float PlayHalfMeters = 115f;
+
+	// ---- the file (docs/LEVEL_EDITOR.md §6.8) ---------------------------------------------
+
+	/// <summary>The largest file a reader takes or a receiver accepts: 1 MiB.</summary>
+	public const int MaxFileBytes = 1 << 20;
+
+	/// <summary>Objects one map may hold.</summary>
+	public const int MaxObjects = 512;
+
+	/// <summary>Parameters one object may carry.</summary>
+	public const int MaxObjectParameters = 8;
+
+	/// <summary>Roads one map may hold.</summary>
+	public const int MaxRoads = 32;
+
+	/// <summary>Control points one road may have.</summary>
+	public const int MaxRoadPoints = 64;
+
+	/// <summary>The fewest control points a road has: a straight.</summary>
+	public const int MinRoadPoints = 2;
 }

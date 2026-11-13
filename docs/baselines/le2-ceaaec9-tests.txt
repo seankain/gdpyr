@@ -1,0 +1,149 @@
+# LE2, docs/LEVEL_EDITOR.md §11. At ceaaec9: .NET SDK 8.0.134, 4 cores of a cloud VM.
+# dotnet test Tests/Gdpyr.Tests.csproj --filter <the six classes> --logger "console;verbosity=normal": its line for each test, sorted, and its total.
+# Then dotnet test Tests/Gdpyr.Tests.csproj: its total. Then dotnet build Gdpyr.csproj: its last lines.
+
+Passed Gdpyr.Tests.EditHistoryTests.ANewStep_DropsWhatCouldHaveBeenRedone
+Passed Gdpyr.Tests.EditHistoryTests.AStrokeOverA64mSquare_Is17KB
+Passed Gdpyr.Tests.EditHistoryTests.AnEdit_ThatPlacesAndLevels_IsOneStep
+Passed Gdpyr.Tests.EditHistoryTests.AnObjectTakenOutOrReplaced_ComesBackAtItsIndex
+Passed Gdpyr.Tests.EditHistoryTests.TwoFieldsOfDifferentSizes_AreNotOneEdit
+Passed Gdpyr.Tests.EditHistoryTests.TwoHundredSteps_AreKept_AndTheOldestGoes
+Passed Gdpyr.Tests.EditHistoryTests.UndoingStrokes_RestoresEverySample_AndRedoingThemRestoresEachAfter
+Passed Gdpyr.Tests.MapDocumentTests.AClone_SharesNothingThatCanChange
+Passed Gdpyr.Tests.MapDocumentTests.ANewMap_IsLevelGroundAt0m_EmptyAndUnsaved_WithThisBuildsCatalogCount
+Passed Gdpyr.Tests.MapDocumentTests.ANewMapsWater_Is5mUnderItsGround_SoTheGroundIsGrass_NotSand
+Passed Gdpyr.Tests.MapDocumentTests.AParentHash_IsAHashOrNone
+Passed Gdpyr.Tests.MapDocumentTests.AnObject_IsStoredQuantizedAsTheWireIs_WithItsParametersSortedAndOnceEach
+Passed Gdpyr.Tests.MapDocumentTests.CountOf_CountsAGroupTogether
+Passed Gdpyr.Tests.MapDocumentTests.SameAs_NamesTheFirstDifference
+Passed Gdpyr.Tests.MapDocumentTests.TheBandNumbers_AsTheFileHoldsThem_AreExactlyTheSettings
+Passed Gdpyr.Tests.MapFileTests.ADocumentWithEveryFieldSet_ReadsBackAsTheSameDocument
+Passed Gdpyr.Tests.MapFileTests.AFileAtEveryLimit_IsAtMostTheLargestA1mMapCanBe_AndReadsBack
+Passed Gdpyr.Tests.MapFileTests.AFileOver1MiB_IsRefused
+Passed Gdpyr.Tests.MapFileTests.AGeneratedMap_ReadsBackAsTheSameDocument(seed: 1)
+Passed Gdpyr.Tests.MapFileTests.AGeneratedMap_ReadsBackAsTheSameDocument(seed: 2)
+Passed Gdpyr.Tests.MapFileTests.AGeneratedMap_ReadsBackAsTheSameDocument(seed: 3)
+Passed Gdpyr.Tests.MapFileTests.AGeneratedMap_ReadsBackAsTheSameDocument(seed: 4)
+Passed Gdpyr.Tests.MapFileTests.AHeightBetweenSteps_OrPastTheLimits_IsWrittenAsTheStepItRoundsTo
+Passed Gdpyr.Tests.MapFileTests.AHeightOutsideLeD4_IsRefused(height: -32768, because: "is -128 m, outside -16 … +64 m")
+Passed Gdpyr.Tests.MapFileTests.AHeightOutsideLeD4_IsRefused(height: -4097, because: "is -16.004 m, outside")
+Passed Gdpyr.Tests.MapFileTests.AHeightOutsideLeD4_IsRefused(height: 16385, because: "is 64.004 m, outside -16 … +64 m")
+Passed Gdpyr.Tests.MapFileTests.AHeightOutsideLeD4_IsRefused(height: 32767, because: "is 127.996 m, outside -16 … +64 m")
+Passed Gdpyr.Tests.MapFileTests.AHeightsStream_ThatInflatesToAnythingButWidthTimesDepthTimesTwo_IsRefused
+Passed Gdpyr.Tests.MapFileTests.ALength_PastTheEnd_OrPastItsLimit_IsRefusedBeforeAnythingIsRead
+Passed Gdpyr.Tests.MapFileTests.ANewMap_IsAFewHundredBytes_ItsHeightsAlmostNothing
+Passed Gdpyr.Tests.MapFileTests.AStream_ReadsAsItsBytesDo_AndOneOver1MiB_IsRefused
+Passed Gdpyr.Tests.MapFileTests.ATerrainOfAnotherSize_OrSpacing_IsRefused
+Passed Gdpyr.Tests.MapFileTests.AWriter_RefusesWhatAFileCannotHold
+Passed Gdpyr.Tests.MapFileTests.AnotherVersion_OrAnotherChunkCount_IsRefused
+Passed Gdpyr.Tests.MapFileTests.BytesAfterTheLastChunk_OrLeftInOne_AreRefused
+Passed Gdpyr.Tests.MapFileTests.ChunksOutOfOrder_Twice_Missing_OrUnknown_AreRefused
+Passed Gdpyr.Tests.MapFileTests.CorruptedFiles_NeverThrow_AndARefusalHasAReason
+Passed Gdpyr.Tests.MapFileTests.EveryTruncation_IsRefusedWithAReason
+Passed Gdpyr.Tests.MapFileTests.NoiseWithAMapsHeader_NeverThrows
+Passed Gdpyr.Tests.MapFileTests.NotAMap_IsRefused
+Passed Gdpyr.Tests.MapFileTests.SplicedFiles_AreRefusedOrReadWhole_AndNeverThrow
+Passed Gdpyr.Tests.MapFileTests.TheHash_IsTheSha256OfTheFile
+Passed Gdpyr.Tests.MapFileTests.TheLimits_AreSection10s
+Passed Gdpyr.Tests.MapFileTests.ThePredictor_IsExactOnAPlane_AndWritesWhatSection6Point8Says
+Passed Gdpyr.Tests.MapFileTests.TheText_LongerThanItsLimit_NotUtf8_OrWithAControlCharacter_IsRefused
+Passed Gdpyr.Tests.MapFileTests.TheWritersFile_IsTheFileSection6Point8Describes
+Passed Gdpyr.Tests.MapFileTests.TooManyObjects_OrParameters_OrAParameterGivenTwice_AreRefused
+Passed Gdpyr.Tests.MapFileTests.TooManyRoads_OrPoints_AreRefused
+Passed Gdpyr.Tests.MapFileTests.Writing_IsDeterministic
+Passed Gdpyr.Tests.MapValidatorTests.AGeneratedMap_Passes_WithNoWarning_AndSoDoesItsFile(seed: 1)
+Passed Gdpyr.Tests.MapValidatorTests.AGeneratedMap_Passes_WithNoWarning_AndSoDoesItsFile(seed: 2)
+Passed Gdpyr.Tests.MapValidatorTests.AGeneratedMap_Passes_WithNoWarning_AndSoDoesItsFile(seed: 3)
+Passed Gdpyr.Tests.MapValidatorTests.AGeneratedMap_Passes_WithNoWarning_AndSoDoesItsFile(seed: 4)
+Passed Gdpyr.Tests.MapValidatorTests.AGeneratedMap_Passes_WithNoWarning_AndSoDoesItsFile(seed: 5)
+Passed Gdpyr.Tests.MapValidatorTests.AGeneratedMap_Passes_WithNoWarning_AndSoDoesItsFile(seed: 6)
+Passed Gdpyr.Tests.MapValidatorTests.AGeneratedMap_Passes_WithNoWarning_AndSoDoesItsFile(seed: 7)
+Passed Gdpyr.Tests.MapValidatorTests.AGeneratedMap_Passes_WithNoWarning_AndSoDoesItsFile(seed: 8)
+Passed Gdpyr.Tests.MapValidatorTests.AHeightOutsideLeD4_IsRefused
+Passed Gdpyr.Tests.MapValidatorTests.ANewMap_IsRefusedForWhatItLacks
+Passed Gdpyr.Tests.MapValidatorTests.ANodeOrTheSpawnLine_InsideABarracksRing_IsWarnedOf
+Passed Gdpyr.Tests.MapValidatorTests.ANumberOutsideItsRange_IsRefused
+Passed Gdpyr.Tests.MapValidatorTests.APaddedObjectNotOnItsPad_IsRefused
+Passed Gdpyr.Tests.MapValidatorTests.APieceLevelWithTheWater_IsNotUnderIt_ToPlacementOrToTheValidator
+Passed Gdpyr.Tests.MapValidatorTests.APrefabPastThisBuildsCatalog_NeedsANewerBuild
+Passed Gdpyr.Tests.MapValidatorTests.ARoadOffTheField_IsRefused_AndOneInRange_IsNot
+Passed Gdpyr.Tests.MapValidatorTests.ARoadsNumbersOutsideTheirRange_AreRefused(style: 0, width: 50, grade: 100, points: 2, because: "a width of 5 m, not 4, 6 or 8")
+Passed Gdpyr.Tests.MapValidatorTests.ARoadsNumbersOutsideTheirRange_AreRefused(style: 0, width: 60, grade: 200, points: 2, because: "a grade limit of 20 %, outside 6–15 %")
+Passed Gdpyr.Tests.MapValidatorTests.ARoadsNumbersOutsideTheirRange_AreRefused(style: 0, width: 60, grade: 50, points: 2, because: "a grade limit of 5 %")
+Passed Gdpyr.Tests.MapValidatorTests.ARoadsNumbersOutsideTheirRange_AreRefused(style: 0, width: 80, grade: 150, points: 1, because: "1 points")
+Passed Gdpyr.Tests.MapValidatorTests.ARoadsNumbersOutsideTheirRange_AreRefused(style: 1, width: 60, grade: 100, points: 2, because: "style 1")
+Passed Gdpyr.Tests.MapValidatorTests.ARoundsPieceUnderTheWater_IsRefused
+Passed Gdpyr.Tests.MapValidatorTests.ATerrainOfAnotherSize_IsRefused
+Passed Gdpyr.Tests.MapValidatorTests.AnObjectOffTheMap_IsRefused
+Passed Gdpyr.Tests.MapValidatorTests.AnOpenBridgeEnd_IsWarnedOf_AndAJoinedOrLandedOneIsNot
+Passed Gdpyr.Tests.MapValidatorTests.BarracksNot1To4_IsRefused
+Passed Gdpyr.Tests.MapValidatorTests.MoreThan4mOfReliefInsideANodesRadius_IsWarnedOf
+Passed Gdpyr.Tests.MapValidatorTests.MoreThanAGroupMayHold_IsRefused(prefab: 10, count: 97, because: "97 cover boxes; a map holds at most 96")
+Passed Gdpyr.Tests.MapValidatorTests.MoreThanAGroupMayHold_IsRefused(prefab: 13, count: 17, because: "17 structures; a map holds at most 16")
+Passed Gdpyr.Tests.MapValidatorTests.MoreThanAGroupMayHold_IsRefused(prefab: 2, count: 2, because: "2 vehicle kiosks; a map holds at most 1")
+Passed Gdpyr.Tests.MapValidatorTests.MoreThanAGroupMayHold_IsRefused(prefab: 5, count: 2, because: "2 strategist anchors; a map holds at most 1")
+Passed Gdpyr.Tests.MapValidatorTests.MoreThanAGroupMayHold_IsRefused(prefab: 6, count: 9, because: "9 guns and launchers; a map holds at most 8")
+Passed Gdpyr.Tests.MapValidatorTests.MoreThanAGroupMayHold_IsRefused(prefab: 8, count: 13, because: "13 ammunition cans; a map holds at most 12")
+Passed Gdpyr.Tests.MapValidatorTests.NoSpawnLine_OrNoLocker_IsRefused
+Passed Gdpyr.Tests.MapValidatorTests.NodesNot1To8_AreRefused
+Passed Gdpyr.Tests.MapValidatorTests.TheGenerator_IsSeeded
+Passed Gdpyr.Tests.MapValidatorTests.TheReport_CountsErrorsAndWarnings_AndAnIssueSaysWhichItIs
+Passed Gdpyr.Tests.MapValidatorTests.TwoObjectsInEachOthersWay_AreRefused
+Passed Gdpyr.Tests.PrefabPlacementTests.AFootprintOverFewerThanThreeSamples_TakesTheTriangleUnderItsCentre
+Passed Gdpyr.Tests.PrefabPlacementTests.APad_IsKept_LevelledAgainWhenAnEditReachesIt_AndOtherwiseLeftAlone
+Passed Gdpyr.Tests.PrefabPlacementTests.APad_IsLevelAtTheMean_ExactlyOutTo1Point5m_AndItsSkirtIsNoSteeperThan30Degrees
+Passed Gdpyr.Tests.PrefabPlacementTests.APadsLevel_IsTheNearestStepToTheObjectsHeight_AndAFixedPoint
+Passed Gdpyr.Tests.PrefabPlacementTests.APlacedObject_IsOneTheValidatorFindsNothingWrongWithWhereItStands
+Passed Gdpyr.Tests.PrefabPlacementTests.BlocksDoor_AStructureWithin10mOfABarracksDoor_EitherWayRound
+Passed Gdpyr.Tests.PrefabPlacementTests.DisturbsNeighbour_WhenLevellingWouldMoveASampleOfAnotherObjectsPad
+Passed Gdpyr.Tests.PrefabPlacementTests.InTheWay_ABoxOverAnothersInPlanAndInHeight_OrAPier
+Passed Gdpyr.Tests.PrefabPlacementTests.InWater_APadsLevelOrARoundPieceUnderTheWater
+Passed Gdpyr.Tests.PrefabPlacementTests.LimitReached_WhenTheMapHoldsAsManyOfTheKindAsItMay_OrAsManyObjects
+Passed Gdpyr.Tests.PrefabPlacementTests.OutOfBounds_ABoxPast120m_ARoundPiecePast115m_OrAHeightOutsideLeD4
+Passed Gdpyr.Tests.PrefabPlacementTests.PlacingThenUndoing_RestoresEverySample_AndRedoingRestoresThePlacements(seed: 1)
+Passed Gdpyr.Tests.PrefabPlacementTests.PlacingThenUndoing_RestoresEverySample_AndRedoingRestoresThePlacements(seed: 2)
+Passed Gdpyr.Tests.PrefabPlacementTests.PlacingThenUndoing_RestoresEverySample_AndRedoingRestoresThePlacements(seed: 3)
+Passed Gdpyr.Tests.PrefabPlacementTests.PlacingThenUndoing_RestoresEverySample_AndRedoingRestoresThePlacements(seed: 4)
+Passed Gdpyr.Tests.PrefabPlacementTests.PlacingThenUndoing_RestoresEverySample_AndRedoingRestoresThePlacements(seed: 5)
+Passed Gdpyr.Tests.PrefabPlacementTests.PlacingThenUndoing_RestoresEverySample_AndRedoingRestoresThePlacements(seed: 6)
+Passed Gdpyr.Tests.PrefabPlacementTests.TakingUp_RemovesTheObject_AndLeavesItsPad
+Passed Gdpyr.Tests.PrefabPlacementTests.TheAverageGrade_OnAPlane_IsThePlanes_AndTheLevelIsTheMean
+Passed Gdpyr.Tests.PrefabPlacementTests.TheAverageGrade_OnRoughGround_IsTheLeastSquaresPlane
+Passed Gdpyr.Tests.PrefabPlacementTests.TheChecks_AreInSection6Point5sOrder_TheFirstThatFailsIsTheAnswer
+Passed Gdpyr.Tests.PrefabPlacementTests.TooSteep_WhenTheAverageGradeUnderTheFootprintIsOverThePrefabs
+Passed Gdpyr.Tests.PrefabPlacementTests.UnknownPrefab_AndOk
+Passed Gdpyr.Tests.PrefabSpecsTests.ABridgeSection_HasAConnectorAtEachEnd_AtTheDecksTop
+Passed Gdpyr.Tests.PrefabSpecsTests.APadArea_IsTheFootprint_OrANodesDisc_OfItsCaptureRadius
+Passed Gdpyr.Tests.PrefabSpecsTests.APier_IsUnderItsEnd_FromTheDecksUnderside_ItsStoredLength_AndOnlyWithSupports
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 0, kind: Round, across: 20, along: 6, pad: True, steepest: 10, most: 0)
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 1, kind: Round, across: 3, along: 3, pad: True, steepest: 10, most: 0)
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 10, kind: Cover, across: 3, along: 3, pad: True, steepest: 25, most: 96)
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 11, kind: Scenery, across: 30, along: 30, pad: True, steepest: 12, most: 0)
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 12, kind: Structure, across: 3.6000000000000001, along: 3.6000000000000001, pad: True, steepest: 8, most: 16)
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 13, kind: Structure, across: 4, along: 0.80000000000000004, pad: True, steepest: 8, most: 16)
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 14, kind: Structure, across: 3.2000000000000002, along: 3.2000000000000002, pad: True, steepest: 8, most: 16)
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 15, kind: Bridge, across: 6, along: 12, pad: False, steepest: NaN, most: 0)
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 16, kind: Bridge, across: 6, along: 12, pad: False, steepest: NaN, most: 0)
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 2, kind: Round, across: 26, along: 10, pad: True, steepest: 8, most: 1)
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 3, kind: Round, across: 13, along: 13, pad: True, steepest: 12, most: 4)
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 4, kind: Round, across: 0, along: 0, pad: True, steepest: 15, most: 8)
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 5, kind: Round, across: 0, along: 0, pad: False, steepest: NaN, most: 1)
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 6, kind: Round, across: 1.5, along: 1.5, pad: False, steepest: 20, most: 8)
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 7, kind: Round, across: 1.5, along: 1.5, pad: False, steepest: 20, most: 8)
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 8, kind: Round, across: 0.59999999999999998, along: 0.59999999999999998, pad: False, steepest: 20, most: 12)
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 9, kind: Cover, across: 4, along: 0.80000000000000004, pad: True, steepest: 25, most: 96)
+Passed Gdpyr.Tests.PrefabSpecsTests.InTheWay_IsOverlapInPlanBeyondTheAllowance_AndInHeight
+Passed Gdpyr.Tests.PrefabSpecsTests.TheBarracks_DoorAndRing_AreItsScenes
+Passed Gdpyr.Tests.PrefabSpecsTests.TheFieldOfPlay_IsCargos
+Passed Gdpyr.Tests.PrefabSpecsTests.TheGroupsCountedTogether_AndTheFewestAMapHolds_AreSection6Point9s
+Passed Gdpyr.Tests.PrefabSpecsTests.TheIds_AreAppendOnly_EachNamedAsSection6Point5Has
+Passed Gdpyr.Tests.PrefabSpecsTests.TheStructures_AreTheirTresFiles
+Passed Gdpyr.Tests.PrefabSpecsTests.TwoSpans_PutEndToEnd_ShareAPointWithOppositeHeadings_AndAreNotInEachOthersWay
+
+Total tests: 137
+Passed: 137
+Passed!  - Failed:     0, Passed:  3506, Skipped:     0, Total:  3506
+
+Build succeeded.
+0 Warning(s)
+0 Error(s)
