@@ -1387,12 +1387,12 @@ Gdpyr.csproj` with no warning.
 | Placing then undoing restores every sample | on six seeded hills, 60 steps each of placements of every prefab, and takings-up, through the history: undone, every sample and every object as they were; redone, as they were after | `PrefabPlacementTests`, `EditHistoryTests` |
 | `PrefabSpecs`, `PrefabPlacement` | §6.5's table as values, and the structures, the barracks' door and its ring read from their files; each of §6.5's results from a placement built to produce it, in its order; the grade a least-squares plane's; the pad at the mean, level exactly out to 1.5 m, with no edge past max(30°, before) by more than a step of rounding; of 150 placements tried at random, every one taken stands where the validator finds nothing wrong | `PrefabSpecsTests`, `PrefabPlacementTests` |
 | `tools/Gdpyr.MapTool` | `info`, `hash`, `validate`, `generate`. The same seed is the same bytes; its hash is `sha256sum`'s; it exits 0 for a map that plays, 1 for one refused, 2 for a wrong command line or disk | `maptool` |
-| Every rule's test fails when it is broken | 99 rules broken one at a time in a copy of the tree, each one edit to one file, the six classes run on each: **96 of 99** at `6f87d96`, and the three missed each given a test at `ceaaec9` | `mutations` |
+| Every rule's test fails when it is broken | 99 rules broken one at a time in a copy of the tree, each one edit to one file, the six classes run on each: **99 of 99** | `mutations` |
 
 The files are `docs/baselines/le2-ceaaec9-<name>.txt`. `tests` is the six classes' lines and the
 totals; `maptool` is `gdpyr-map` run as its first lines say; `mutations` is
-`python3 tools/level_editor_checks/le2_mutations.py` as it printed, at `6f87d96`
-(`le2-6f87d96-mutations.txt`). It caught 96 of 99: a triangle taken across the other diagonal, which
+`python3 tools/level_editor_checks/le2_mutations.py` as it printed. Its first run, at `6f87d96`, is
+`le2-6f87d96-mutations.txt`, and caught 96 of 99: a triangle taken across the other diagonal, which
 the test missed because the sample it raised is in both of its cell's triangles; a pad's skirt left
 between steps, which nothing tested by moving a neighbour's sample less than half a step; and a
 pad's ground taken as its footprint alone, which the test missed because the sample it lowered was
