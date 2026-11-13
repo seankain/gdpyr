@@ -1,13 +1,17 @@
 # gdpyr — Level editor: terrain, prefabs, roads and bridges, and maps that travel
 
-**Status: a plan, with LE0 done; nothing of the editor is built.** Written against `cd0c558`. The
+**Status: a plan, with LE0 and LE1 done: its ground is measured and the ground's rules are written
+and tested, engine-free. Nothing of the editor, of the file or of the world from one is built.**
+Written against `cd0c558`. The
 facts in §2 were read in this repository's source at that commit, and those in §3 in Godot's source
 at tag `4.6-stable`. The arithmetic in §10 was run: `python3
 tools/level_editor_checks/design_checks.py` prints every number quoted from it. No Godot and no
 .NET SDK were available where it was written, so nothing was compiled and nothing was run in the
 engine; LE0 (§11) was the phase to measure what could not be, and it has: at `67fec82`, on Godot
 4.6 .NET, by `scripts/level-editor-checks.sh`, whose output is in `docs/baselines/` and is set out
-in §10.1.
+in §10.1. LE1 (§11) wrote §6.1–6.4 as `Scripts/Sim/Level/`, at `744b906`: `dotnet test` holds each
+claim made there, and `tools/level_editor_checks/le1_mutations.py` breaks each rule in turn to show
+that a test fails when it is broken.
 
 **What LE0 changed.** The collider is not a `HeightMapShape3D`: 65 of 20,000 long rays passed
 through one, and it costs a tick more than the same triangles as meshes, which let none through
@@ -19,10 +23,20 @@ is not too slow to build on (§7.3). A tick on hills with a round of bots is 2.2
 slab's and over its time for 1 in 100, which is a risk and LE3's to measure where the game is served
 (§13). Where a section says "LE0", it is one of these.
 
+**What LE1 changed.** A grade-locked brush rises from the apex the ground about its centre already
+holds, not from the height under the cursor, which stood it still between samples (§6.2). Its
+promise of a walkable face is for ground that was no steeper than its setting. Smooth keeps to a
+sample's neighbours along the field's edge there, so an even slope is not bent at it, and a ramp's
+ends are skirted as its sides are. Rounded to steps, levelled again and rounded, ground is what it
+was, which is what keeps a pad (§6.3). On rough ground a pad left a face 1.18 times the limit where
+§10's script saw 1.15, and on level ground it cannot pass 1.156 (§10). Where a section says "LE1",
+it is one of these.
+
 The decisions (LE-D1–LE-D25, §4) are the defaults the plan is written against. Each is one line to
-change; LE-D3, LE-D8, LE-D10 and LE-D18 are the ones to flag before LE1 starts, and LE-D24 and
-LE-D25 before LE3. The phases (LE0–LE9, §11) say what each builds, what checks it, and what is
-left for a person.
+change; LE-D3, LE-D8, LE-D10 and LE-D18 were the ones to flag before LE1, which was built on them
+as they stand — LE-D3's grid and LE-D10's pad are code now, and changing either is changing that
+code and its tests — and LE-D24 and LE-D25 are the ones before LE3. The phases (LE0–LE9, §11) say
+what each builds, what checks it, and what is left for a person.
 
 This is not [`MAPS.md`](MAPS.md)'s way of making a map. That one is the Godot editor, a scene that
 inherits `Scenes/Maps/MapBase.tscn` and a catalog entry, and it stays. This plan adds a second kind
@@ -175,6 +189,7 @@ found, by group and by script, on the first tick (MAPS.md §3).
 
 ```
 Scripts/Sim/Level/   engine-free; compiled into Tests/ by the existing ../Scripts/Sim/** glob
+  MapLimits.cs         the bounds: the grid, a step, the heights' limits, what is walkable
   HeightField.cs       the grid: samples, sampling on the collider's triangles, grades, a ray
   TerrainBrush.cs      sculpt, grade-locked, smooth, level, ramp: a dab is a pure function
   TerrainConform.cs    clamp(h, L, U): pads, road ribbons, bridgeheads
@@ -231,10 +246,21 @@ steep as its steepest edge**, and is exactly that where a crease crosses it: hei
   down the editor works in `float`, so a slow brush accumulates; when the stroke ends the rectangle
   it touched is rounded to steps and that is the document.
 - `Sample(x, z)` interpolates on the collider's triangle under the point: the first of §3's pair
-  where the fractions sum to at most 1, else the second. `Raycast` walks the cells a ray crosses;
-  it is the editor's cursor, which must not depend on when the physics server last saw the ground.
-- `EdgeGrade`, `FaceGrade`, and a normal by central differences for the mesh and the bands.
+  where the fractions sum to at most 1, else the second. A point off the field takes its edge.
+- `Raycast` is the editor's cursor, which must not depend on when the physics server last saw the
+  ground. Along a ray the ground is a broken line, bent where the ray crosses a lane of samples or
+  a cell's diagonal. It walks those crossings in order and asks `Sample`'s arithmetic for the ray's
+  height over the ground at each: where that changes sign the ray has met the ground, from either
+  side, and between two crossings the ground is one triangle's plane, so the point is exact. No
+  cell is picked by flooring a point that lies on a lane, which is how a heightmap's walk lets a
+  ray through (§3): a crossing found a float early or late moves nothing. There is no ground past
+  the field's edge.
+- `EdgeGrade`, `FaceGrade`, and a normal by central differences for the mesh and the bands: half
+  the difference of the samples either side, or the one difference there is at the field's edge.
 - `MapLimits.MinHeightMeters` −16, `MaxHeightMeters` +64 (LE-D4). Every operation clamps to them.
+  `MapLimits` also holds the grid's size, the step, and the 40° that is walkable (LE-D23).
+- The class takes a size other than 241 × 241, which is what lets a rule about a grid be tested on
+  a smaller one. A file of another size is the reader's to refuse (§6.8).
 
 ### 6.2 Brushes — `TerrainBrush.cs`
 
@@ -253,12 +279,19 @@ grid against the formula in §10.
 **Grade-locked.** With k the set grade, r the distance from the dab's centre, and
 φ(r) = √(r² + ρ²) − ρ a cone rounded over ρ = 2 m at its tip:
 
-    raise:  apex = min(centre + rate · dt,  min over rim samples q of  h(q) + k · φ(r_q))
-            h' = max(h, apex − k · φ(r))    for r ≤ R
+    raise:  apex = min(held + rate · dt,  min over rim samples q of  h(q) + k · φ(r_q))
+            h' = max(h, apex − k · φ(r))    inside the rim
     lower:  the mirror image, with max and min exchanged
 
 The rim is the disc's outer 1.5 m. Holding the apex by every rim sample puts the cone at or under
 the ground on the whole rim, so only samples inside it move.
+
+*held* is the apex the ground about the centre already holds a cone of this grade up to: the least
+of h(q) + k · φ(r_q) over the four corners of the cell the centre is in. Over a sample of level
+ground that is the ground's height. **Changed by LE1**, from the height under the centre. A cursor
+is seldom over a sample, and between four of them the ground under it is their triangles, which lie
+under the cone's tip by up to k · φ(0.71) — 7 cm at 30°. A dab raises less than that at any rate
+under 4.2 m/s, so a brush that rose from the height under the cursor stood still there.
 
 *No edge ends steeper than max(k, what it was).* For any two samples a and b,
 |max(f, g)(a) − max(f, g)(b)| ≤ max(|f(a) − f(b)|, |g(a) − g(b)|). The cone is no steeper than k
@@ -269,13 +302,20 @@ cone is not above the ground there — or has no end that moved.
 Held still on level ground the cone stops when its foot reaches the rim, k · φ(R − 1.5) high —
 7.3 m at 30° and 16 m (§10): a set grade and a radius give a height, and a bigger hill at the same
 grade is a bigger brush or a moving one. The rounded tip is what keeps its faces at the setting:
-sharp, a 45° cone leaves 54.7° faces at its tip, the √2 (§10).
+sharp, a 45° cone leaves 54.7° faces at its tip, the √2 (§10). The rim leaves a brush R − 1.5 m to
+move: at the smallest radius, 2 m, that holds a sample only where the cursor is within 0.5 m of
+one, and from 2.21 m — the rim and half a cell's diagonal — it always does.
 
 **Smooth** moves each sample towards the mean of its four neighbours by `w · strength` ≤ 1: a
-convex combination, so it never raises the highest or lowers the lowest sample it touches.
-**Level** moves each towards the height under the cursor when the stroke began. **Ramp** is two
-clicks and a width: the strip between them is anchored to the straight line between their heights
-and applied with §6.3, so its sides are skirted.
+convex combination, so it never raises the highest or lowers the lowest sample it touches. Every
+sample reads the ground as it was before the dab. At the field's edge a sample has its neighbours
+along the edge only, and a corner none, so an even slope is left alone there as it is anywhere.
+**Level** moves each towards the height under the cursor when the stroke began, by the same share,
+and never past it. Neither reads the time step: a dab is `w · strength` however long it stood for,
+and how often a stroke dabs is the editor's to set (LE4). **Ramp** is two clicks and a width —
+twice the brush's radius, the ring drawn: the strip between them is anchored to the straight line
+between the ground's heights at the clicks and applied with §6.3, so its sides and its ends are
+skirted. A line steeper than the skirt is refused.
 
 | Preset | Family | Radius | Core | Rate or grade | Makes |
 |---|---|---|---|---|---|
@@ -287,9 +327,11 @@ and applied with §6.3, so its sides are skirted.
 | Cliff 60° | grade-locked | 8 m | — | the grade | a wall to bodies and to the bake; not to a 4x4 at speed (LE-D24) |
 | Smooth, Level, Ramp | | 8 m | 0 | 0.5 | |
 
-Radius runs 2–64 m, rate 0.25–8 m/s, core 0–0.9, grade 5–70°. Up to 30° a grade-locked brush
-leaves every face under 40° whatever it is drawn over, by the √2: atan(√2 · tan 30°) = 39.2°. 40° is
-what is walkable (LE-D23); at 35° the same bound is 44.7°, which LE0 found a body does not walk.
+Radius runs 2–64 m, rate 0.25–8 m/s, core 0–0.9, grade 5–70°; a grade-locked preset rises at
+2 m/s. Up to 30° a grade-locked brush leaves every face under 40° on ground that was no steeper
+than its setting, by the √2: atan(√2 · tan 30°) = 39.2°. 40° is what is walkable (LE-D23); at 35°
+the same bound is 44.7°, which LE0 found a body does not walk. Over ground that was steeper an edge
+keeps what it had, as the claim above says, and so may a face.
 
 ### 6.3 Levelling ground to a shape — `TerrainConform.cs`
 
@@ -301,7 +343,8 @@ anchors — points q of a shape, each with a target height S(q) — and a skirt 
     h'(p) = clamp(h(p), L(p), U(p))
 
 d is flat distance. It applies when L ≤ U at every anchor, which is to say when S is itself no
-steeper than k between any two of them; a caller whose targets are steeper is refused. Then:
+steeper than k between any two of them; a caller whose targets are steeper is refused, as is one
+that gives a sample two targets, and nothing is changed. Then:
 
 1. **h′ = S on the anchors.** There L = U = S: no other anchor's cone can pass S(q) when S is no
    steeper than k.
@@ -313,12 +356,19 @@ steeper than k between any two of them; a caller whose targets are steeper is re
 5. **It reaches no further than max|h − S| / k from the anchors**: a sample moves only if it is
    further from some S(q) in height than k times its distance from q.
 
+Heights are `float` through it and are rounded with the edit it is part of (§6.1). Rounded,
+levelled again and rounded, the ground is what it was after the first rounding: a height that
+rounding carried past L or U is put back on that bound, which rounds to the step it came from. In
+a document, then, the fourth property holds to the step, which is what §6.5's kept pad stands on.
+
 For a pad S is one number and d is the distance to the footprint less the margin, so L and U are
 `level ∓ k · max(0, distance − 1.5 m)`. The distance is measured to the footprint's rectangle
 itself, not to the nearest levelled sample: measured from samples, every stair of a rotated edge
 is a crease, and 58 of 120 pads left a face over the limit, at worst by the whole √2; measured
 from the rectangle the worst face seen was 1.15 times the limit, on 0.4 % of the cells changed
-(§10).
+(§10). On level ground it is 1.156 at the most: the skirt is a plane along a side and a cone round
+a corner, and the cone's steepest face is the one with a corner where it starts, 1.5 m out (§10).
+A node's pad is the same operator with d the distance to its disc.
 
 **The skirt is 30°, and is not a setting.** By the √2 it can leave no face steeper than 39.2°,
 under the 40° the bake keeps and the 42° a body and a unit were measured to walk (LE-D23): a unit
@@ -334,15 +384,18 @@ With e the height above the map's water level in metres and s the slope in degre
                sand below u = 1.5,  mud below 4,  grass below 22,  stone above
 
 u does not fall when e or s rises, and a band is how many edges u has passed, so **higher or
-steeper never gives an earlier band**: the order asked for holds everywhere. The six numbers and
-the water level are per map. The table of what they give is in §10: sand and mud are low and
-gentle, grass is the middle, and stone is anything high or steep — level ground at 22 m, ground
-4 m up at 45°.
+steeper never gives an earlier band**: the order asked for holds everywhere. The six numbers —
+0.6, 15, the three edges and the blend's 1 m below — and the water level are per map; they are a
+map's when each is from 0 to 65.535, which is what the file holds (§6.8), and the edges are in
+their order. The table of what they give is in §10: sand and mud are low and gentle, grass is the
+middle, and stone is anything high or steep — level ground at 22 m, ground 4 m up at 45°.
 
 `Classify` returns the band and, for drawing, a weight for each of two neighbouring bands across a
-blend of 1 m of u. The shader computes the same u from the fragment's height and its normal; the
-C# function is what the editor's overlay, a map's preview and the tests use. They need not agree
-to the bit: nothing but the picture reads the shader.
+blend of 1 m of u: centred on their edge, so each has half on it, and the band is always the
+heavier of the two. The water's edge is not blended; the water's own surface is drawn there. The
+shader computes the same u from the fragment's height and its normal; the C# function is what the
+editor's overlay, a map's preview and the tests use. They need not agree to the bit: nothing but
+the picture reads the shader.
 
 ### 6.5 Prefabs — `PrefabSpecs.cs`, `PrefabPlacement.cs`
 
@@ -909,6 +962,16 @@ from the footprint: the steepest face was at worst 1.151 and 1.147 times max(k, 
 and 0.27 % of the cells changed; every pad was level to 0. Measured from the nearest levelled
 sample instead, 58 of 120 pads left a face over the limit, at worst 1.414 times it.
 
+**LE1's tests** assert the same over seeded terrains of their own, and where a number is the
+terrain's and not the rule's it is another number. 300 pads on rough ground and 300 on gentle,
+from the footprint: at worst 1.181 and 1.154 times max(k, before), on 0.48 % and 0.34 % of the
+cells changed. From the nearest levelled sample, 48 of 120 pads left a face over 1.16 times it, at
+worst 1.414. On level ground, 200 pads under rectangles and discs: at worst 1.150, where the most
+there can be is √2 · (√(1.5² + 1.5 · √2 + 1) − 1.5) = 1.156, a face with a corner on the circle a
+corner's cone starts at. What is proven of rough ground is the √2. The tables here that no terrain
+enters — the sculpt brush, the grade-locked brush held still, the skirt, the bands — came out of
+the C# to the decimals printed.
+
 | Skirt | 25° | 30° | 35° | 40° | 45° |
 |---|---|---|---|---|---|
 | Steepest face it can leave, atan(√2 · tan) | 33.40° | 39.23° | 44.72° | 49.88° | 54.74° |
@@ -1061,7 +1124,8 @@ LE0 ─► LE1 ─► LE2 ─► LE3 ─┬─► LE4 ─► LE5 ─► LE6     
 ```
 
 LE0–LE3 with LE7 is the smallest thing worth having: maps that are data, played and fetched, with
-no editor yet — 14½ days, LE0's 1½ of them spent. Their first maps come from a test's generator.
+no editor yet — 14½ days, LE0's 1½ and LE1's 3 of them spent. Their first maps come from a test's
+generator.
 
 ### LE0 — The baseline and the spike (1½ days) — done
 
@@ -1150,12 +1214,55 @@ That is CONTROL_POINTS.md §5.4's to follow, not this plan's.
 a correction of 12 mm shows, whether a 4x4 going up a cliff reads as a bug or as a stunt, and what a
 tick costs on the machine the game is served from.
 
-### LE1 — The ground's rules, engine-free (3 days)
+### LE1 — The ground's rules, engine-free (3 days) — done
 
-`HeightField`, `TerrainBrush`, `TerrainConform`, `TerrainBands`, `MapLimits`, and their tests. The
-tests assert §6's properties as properties — over seeded random terrains, not on one example —
-and §10's tables as values. **Done when** every claim of §6.1–6.4 is a test that fails when its
-rule is broken: the rim rule removed, the skirt measured from samples, a band edge reordered.
+What was asked of it: `HeightField`, `TerrainBrush`, `TerrainConform`, `TerrainBands`, `MapLimits`,
+and their tests. The tests assert §6's properties as properties — over seeded random terrains, not
+on one example — and §10's tables as values. **Done when** every claim of §6.1–6.4 is a test that
+fails when its rule is broken: the rim rule removed, the skirt measured from samples, a band edge
+reordered.
+
+**Built at `744b906`**, on .NET SDK 8.0.134 (Ubuntu 24.04's `dotnet-sdk-8.0`), four cores of a
+cloud VM, with no Godot: `Scripts/Sim/Level/` — `MapLimits.cs`, `HeightField.cs`,
+`TerrainBrush.cs`, `TerrainConform.cs`, `TerrainBands.cs` — and in `Tests/` a class for each, with
+the seeded terrains and the measures they share in `LevelGround.cs`. Nothing else in the game is
+changed, and nothing calls them yet: LE2's document and LE3's `TerrainNode` are their first
+callers. The game's own assembly compiles with them, `dotnet build Gdpyr.csproj` with no warning.
+
+| Asked | It came to | Where |
+|---|---|---|
+| `dotnet test` | 3,369 of 3,369: the 3,247 there were, and 122 in the five classes | `tests` |
+| §6's properties, as properties | each over seeded terrains or strokes, against the definition written out a second time in the test: `Sample` against the triangle the point is in; a ray against every triangle in turn, and 20,000 long ones from over the ground to under it, none through; 200 grade-locked strokes of 80 dabs, edge by edge; §6.3's five over 40 terrains, against L and U from every anchor; the bands over §10's sweep and over 40 maps' own numbers | the five classes |
+| §10's tables, as values | the sculpt brush's seven rows; the grade-locked brush held still, five rows at four tips; the skirt's five; the bands' ten rows of eleven; the grid's samples, cells, triangles and bytes | the same |
+| Every claim fails when its rule is broken | 75 rules broken one at a time in a copy of the tree, each one edit to one file, the five classes run on each: **75 of 75** left a test failing, the three §11 names among them | `mutations` |
+
+The files are `docs/baselines/le1-744b906-<name>.txt`. `mutations` is
+`python3 tools/level_editor_checks/le1_mutations.py` as it printed: a line a rule, with the tests
+that failed. Its first run, of 66 rules, caught 64. A ramp's strip could run on past its two
+clicks, and a blend could be drawn across twice its width, with every test passing; each has its
+test now, and the list has those two and nine more.
+
+**Decided here**, each in the section it changes:
+
+- **§6.2, the grade-locked brush rises from `held`**, the apex the ground about its centre already
+  holds, not from the height under the cursor. Its 30° claim is for ground no steeper than its
+  setting. Under 2.21 m of radius it moves a sample only where the cursor is near one. Its presets
+  rise at 2 m/s, which the table did not say.
+- **§6.2, smooth and level** do not read the time step; smooth reads the ground as it was before the
+  dab and keeps to a sample's neighbours along the field's edge there. **A ramp** is as wide as its
+  ring, its ends are skirted, and a line steeper than the skirt is refused.
+- **§6.3**: a refusal changes nothing; a sample given two targets is refused; heights stay `float`
+  through it, and rounding, levelling and rounding again changes nothing. A pad's worst face on
+  level ground is 1.156 times the skirt, and on rough ground 1.18 was seen (§10).
+- **§6.4**: which the six numbers are, when they are a map's, and that the water's edge is not
+  blended.
+- **§6.1**: how the ray walks, and that the class takes a smaller grid for the tests. `MapLimits`
+  is a file of its own (§5).
+
+**Left for a person:** nothing here is drawn, so nothing here can be looked at: whether a brush's
+rates and radii feel right is LE4's to find out, and what the bands look like is LE3's. One thing
+is LE2's to choose and is not chosen here: a new map's water level. `BandSettings.Default` has the
+water at 0 m, and level ground at 0 m over water at 0 m is sand.
 
 ### LE2 — The document, the file, the validator (3 days)
 
@@ -1240,7 +1347,7 @@ directory, the token and the restart; the README the editor and the flags;
 IMPLEMENTATION_PLAN.md §5's "Multiple maps" cut, struck. This file's status becomes what was built
 and what each phase ran.
 
-**Total: 28½ days**, LE0's 1½ spent.
+**Total: 28½ days**, LE0's 1½ and LE1's 3 spent.
 
 ---
 
@@ -1250,9 +1357,11 @@ and what each phase ran.
 |---|---|---|
 | The collider is where §3 says, lets no ray through, and a flat one plays as the slab does | rays against `Sample`, 12,000 of them a ground; the scenario suite | LE0, done; `ground` again at LE3 |
 | A body and a unit walk what the plan calls walkable | faces from 20° to 46°, on the collider and on a box | LE0, done; `slopes` again at LE3 |
-| A brush's grade is its setting | `TerrainBrushTests`, over random strokes | LE1 |
-| A pad is level, minimal and no steeper than its skirt | `TerrainConformTests` | LE1 |
-| The bands keep their order | `TerrainBandsTests`, a sweep | LE1 |
+| The ground is where the collider's triangles are, and stops a ray | `HeightFieldTests`: every triangle in turn; 20,000 long rays | LE1, done |
+| A brush's grade is its setting | `TerrainBrushTests`, over random strokes | LE1, done |
+| A pad is level, minimal and no steeper than its skirt | `TerrainConformTests` | LE1, done |
+| The bands keep their order | `TerrainBandsTests`, a sweep | LE1, done |
+| Each of those tests fails when its rule is broken | `le1_mutations.py`, 75 rules | LE1, done |
 | A file reads back as it was written, and a bad one is refused | `MapFileTests` | LE2 |
 | A map the validator passes holds what a round needs | `MapValidatorTests`; `BundledMapTests`; a bot round | LE2, LE3 |
 | Every peer builds the same ground | no float in the file; exact samples; the hash | LE2, LE7 |
