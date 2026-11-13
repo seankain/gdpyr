@@ -1,0 +1,105 @@
+# LE2, docs/LEVEL_EDITOR.md §11. At 6f87d96: .NET SDK 8.0.134, 4 cores of a cloud VM.
+# python3 tools/level_editor_checks/le2_mutations.py: the first run, which caught 96 of 99. ceaaec9 gave the three a test each; le2-ceaaec9-mutations.txt is the run there.
+
+PASS the tree as it stands: 137 of 137 tests of MapFileTests, MapDocumentTests, PrefabSpecsTests, PrefabPlacementTests, EditHistoryTests, MapValidatorTests
+PASS reader-magic: a file that does not start GDPYRMAP read as a map -- 1 fail: MapFileTests.NotAMap_IsRefused
+PASS reader-version: another format version read as this one -- 1 fail: MapFileTests.AnotherVersion_OrAnotherChunkCount_IsRefused
+PASS reader-chunk-count: a file with another number of chunks read -- 1 fail: MapFileTests.AnotherVersion_OrAnotherChunkCount_IsRefused
+PASS reader-file-size: a file over 1 MiB read -- 2 fail: MapFileTests.AFileOver1MiB_IsRefused, MapFileTests.AStream_ReadsAsItsBytesDo_AndOneOver1MiB_IsRefused
+PASS reader-tag: a chunk taken whatever its tag -- 1 fail: MapFileTests.ChunksOutOfOrder_Twice_Missing_OrUnknown_AreRefused
+PASS reader-chunk-limit: a chunk longer than its limit read -- 1 fail: MapFileTests.ALength_PastTheEnd_OrPastItsLimit_IsRefusedBeforeAnythingIsRead
+PASS reader-past-the-end: a chunk's length not held to the file -- 3 fail: MapFileTests.ALength_PastTheEnd_OrPastItsLimit_IsRefusedBeforeAnythingIsRead, MapFileTests.EveryTruncation_IsRefusedWithAReason, MapFileTests.SplicedFiles_AreRefusedOrReadWhole_AndNeverThrow
+PASS reader-trailing: bytes after the last chunk taken -- 2 fail: MapFileTests.AFileOver1MiB_IsRefused, MapFileTests.BytesAfterTheLastChunk_OrLeftInOne_AreRefused
+PASS reader-meta-left-over: bytes left in the META chunk taken -- 1 fail: MapFileTests.BytesAfterTheLastChunk_OrLeftInOne_AreRefused
+PASS reader-size: a terrain of another size or spacing read -- 1 fail: MapFileTests.ATerrainOfAnotherSize_OrSpacing_IsRefused
+PASS reader-height-limits: a height outside -16 ... +64 m read -- 1 fail: MapFileTests.AHeightOutsideLeD4_IsRefused
+PASS reader-inflates-short: heights that inflate to fewer bytes than the grid's taken -- 1 fail: MapFileTests.AHeightsStream_ThatInflatesToAnythingButWidthTimesDepthTimesTwo_IsRefused
+PASS reader-inflates-long: heights that inflate to more bytes than the grid's taken -- 1 fail: MapFileTests.AHeightsStream_ThatInflatesToAnythingButWidthTimesDepthTimesTwo_IsRefused
+PASS reader-inflate-throws: a stream that does not inflate let throw -- 3 fail: MapFileTests.AHeightsStream_ThatInflatesToAnythingButWidthTimesDepthTimesTwo_IsRefused, MapFileTests.CorruptedFiles_NeverThrow_AndARefusalHasAReason, MapFileTests.SplicedFiles_AreRefusedOrReadWhole_AndNeverThrow
+PASS reader-text-limit: a name longer than its limit read -- 1 fail: MapFileTests.TheText_LongerThanItsLimit_NotUtf8_OrWithAControlCharacter_IsRefused
+PASS reader-utf8: text that is not UTF-8 decoded anyway -- 2 fail: MapFileTests.CorruptedFiles_NeverThrow_AndARefusalHasAReason, MapFileTests.TheText_LongerThanItsLimit_NotUtf8_OrWithAControlCharacter_IsRefused
+PASS reader-control: a control character taken in a name -- 1 fail: MapFileTests.TheText_LongerThanItsLimit_NotUtf8_OrWithAControlCharacter_IsRefused
+PASS reader-objects-limit: more than 512 objects read -- 1 fail: MapFileTests.TooManyObjects_OrParameters_OrAParameterGivenTwice_AreRefused
+PASS reader-parameters-limit: more than 8 parameters read -- 2 fail: MapFileTests.CorruptedFiles_NeverThrow_AndARefusalHasAReason, MapFileTests.TooManyObjects_OrParameters_OrAParameterGivenTwice_AreRefused
+PASS reader-parameter-twice: a parameter given twice passed to the document -- 1 fail: MapFileTests.TooManyObjects_OrParameters_OrAParameterGivenTwice_AreRefused
+PASS reader-roads-limit: more than 32 roads read -- 1 fail: MapFileTests.TooManyRoads_OrPoints_AreRefused
+PASS reader-points-limit: more than 64 points to a road read -- 1 fail: MapFileTests.TooManyRoads_OrPoints_AreRefused
+PASS writer-predictor: each sample predicted from the one above only -- 2 fail: MapFileTests.ThePredictor_IsExactOnAPlane_AndWritesWhatSection6Point8Says, MapFileTests.TheWritersFile_IsTheFileSection6Point8Describes
+PASS writer-revision: the revision not written -- 1 fail: MapFileTests.ADocumentWithEveryFieldSet_ReadsBackAsTheSameDocument
+PASS writer-band-order: the slope's gain written where the free slope is read -- 4 fail: MapFileTests.ADocumentWithEveryFieldSet_ReadsBackAsTheSameDocument, MapFileTests.AFileAtEveryLimit_IsAtMostTheLargestA1mMapCanBe_AndReadsBack, MapFileTests.AGeneratedMap_ReadsBackAsTheSameDocument, MapFileTests.AStream_ReadsAsItsBytesDo_AndOneOver1MiB_IsRefused
+PASS writer-name-limit: a name over 48 bytes written -- 1 fail: MapFileTests.AWriter_RefusesWhatAFileCannotHold
+PASS writer-limits: the limits of a chunk taken from another's -- 2 fail: MapFileTests.AFileAtEveryLimit_IsAtMostTheLargestA1mMapCanBe_AndReadsBack, MapFileTests.TheLimits_AreSection10s
+PASS document-thousandths: a band number read as 1/1024 -- 2 fail: MapDocumentTests.ANewMapsWater_Is5mUnderItsGround_SoTheGroundIsGrass_NotSand, MapDocumentTests.TheBandNumbers_AsTheFileHoldsThem_AreExactlyTheSettings
+PASS document-new-water: a new map's water at 0 m, where level ground is sand -- 6 fail: MapDocumentTests.ANewMapsWater_Is5mUnderItsGround_SoTheGroundIsGrass_NotSand, MapValidatorTests.AGeneratedMap_Passes_WithNoWarning_AndSoDoesItsFile, MapValidatorTests.TheGenerator_IsSeeded, PrefabPlacementTests.APad_IsLevelAtTheMean_ExactlyOutTo1Point5m_AndItsSkirtIsNoSteeperThan30Degrees, and 2 more
+PASS document-clone-shares: a clone that shares its ground -- 16 fail: MapDocumentTests.SameAs_NamesTheFirstDifference, MapValidatorTests.AHeightOutsideLeD4_IsRefused, MapValidatorTests.ANodeOrTheSpawnLine_InsideABarracksRing_IsWarnedOf, MapValidatorTests.ANumberOutsideItsRange_IsRefused, and 12 more
+PASS document-unsorted: an object's parameters kept in the order given -- 1 fail: MapDocumentTests.AnObject_IsStoredQuantizedAsTheWireIs_WithItsParametersSortedAndOnceEach
+PASS document-same-ignores-objects: two documents the same whatever their objects -- 1 fail: MapDocumentTests.SameAs_NamesTheFirstDifference
+PASS specs-door: a barracks' door at its back -- 3 fail: PrefabPlacementTests.BlocksDoor_AStructureWithin10mOfABarracksDoor_EitherWayRound, PrefabPlacementTests.TheChecks_AreInSection6Point5sOrder_TheFirstThatFailsIsTheAnswer, PrefabSpecsTests.TheBarracks_DoorAndRing_AreItsScenes
+PASS specs-no-allowance: two boxes in each other's way when they only touch -- 1 fail: PrefabSpecsTests.InTheWay_IsOverlapInPlanBeyondTheAllowance_AndInHeight
+PASS specs-flat-way: "in the way" asked in plan only, so no bridge passes over anything -- 3 fail: PrefabPlacementTests.InTheWay_ABoxOverAnothersInPlanAndInHeight_OrAPier, PrefabSpecsTests.APier_IsUnderItsEnd_FromTheDecksUnderside_ItsStoredLength_AndOnlyWithSupports, PrefabSpecsTests.InTheWay_IsOverlapInPlanBeyondTheAllowance_AndInHeight
+PASS specs-piers-always: piers stood up with supports off -- 1 fail: PrefabSpecsTests.APier_IsUnderItsEnd_FromTheDecksUnderside_ItsStoredLength_AndOnlyWithSupports
+PASS specs-pier-at-the-middle: a pier under the section's middle, not its end -- 2 fail: PrefabPlacementTests.InTheWay_ABoxOverAnothersInPlanAndInHeight_OrAPier, PrefabSpecsTests.APier_IsUnderItsEnd_FromTheDecksUnderside_ItsStoredLength_AndOnlyWithSupports
+PASS specs-ring: a barracks' ring without its guns' 7.1 m off its centre -- 2 fail: MapValidatorTests.ANodeOrTheSpawnLine_InsideABarracksRing_IsWarnedOf, PrefabSpecsTests.TheBarracks_DoorAndRing_AreItsScenes
+PASS specs-structures-all: a map's structures allowed every slot, leaving builders none -- 3 fail: MapValidatorTests.MoreThanAGroupMayHold_IsRefused, PrefabSpecsTests.EachPrefab_IsSection6Point5sRow, PrefabSpecsTests.TheGroupsCountedTogether_AndTheFewestAMapHolds_AreSection6Point9s
+PASS specs-two-kiosks: a map allowed two kiosks -- 3 fail: MapValidatorTests.MoreThanAGroupMayHold_IsRefused, PrefabPlacementTests.LimitReached_WhenTheMapHoldsAsManyOfTheKindAsItMay_OrAsManyObjects, PrefabSpecsTests.EachPrefab_IsSection6Point5sRow
+PASS specs-flat-ramp: a ramp whose high end is level with its low one -- 1 fail: PrefabSpecsTests.ABridgeSection_HasAConnectorAtEachEnd_AtTheDecksTop
+PASS specs-renamed: an id given another name -- 1 fail: PrefabSpecsTests.TheIds_AreAppendOnly_EachNamedAsSection6Point5Has
+PASS specs-tower-no-top: the sniper tower without its top -- 1 fail: PrefabSpecsTests.TheStructures_AreTheirTresFiles
+PASS place-limit: a prefab placed past its group's limit -- 3 fail: PrefabPlacementTests.APlacedObject_IsOneTheValidatorFindsNothingWrongWithWhereItStands, PrefabPlacementTests.LimitReached_WhenTheMapHoldsAsManyOfTheKindAsItMay_OrAsManyObjects, PrefabPlacementTests.TheChecks_AreInSection6Point5sOrder_TheFirstThatFailsIsTheAnswer
+PASS place-bounds: a prefab placed off the map -- 2 fail: PrefabPlacementTests.OutOfBounds_ABoxPast120m_ARoundPiecePast115m_OrAHeightOutsideLeD4, PrefabPlacementTests.TheChecks_AreInSection6Point5sOrder_TheFirstThatFailsIsTheAnswer
+PASS place-115: a round's piece held to +-120 m, not +-115 m -- 2 fail: MapValidatorTests.AnObjectOffTheMap_IsRefused, PrefabPlacementTests.OutOfBounds_ABoxPast120m_ARoundPiecePast115m_OrAHeightOutsideLeD4
+PASS place-way: a prefab placed in another's way -- 18 fail: MapValidatorTests.AGeneratedMap_Passes_WithNoWarning_AndSoDoesItsFile, MapValidatorTests.AHeightOutsideLeD4_IsRefused, MapValidatorTests.ANodeOrTheSpawnLine_InsideABarracksRing_IsWarnedOf, MapValidatorTests.ANumberOutsideItsRange_IsRefused, and 14 more
+PASS place-grade: a prefab placed on ground steeper than it takes -- 3 fail: PrefabPlacementTests.AFootprintOverFewerThanThreeSamples_TakesTheTriangleUnderItsCentre, PrefabPlacementTests.TheChecks_AreInSection6Point5sOrder_TheFirstThatFailsIsTheAnswer, PrefabPlacementTests.TooSteep_WhenTheAverageGradeUnderTheFootprintIsOverThePrefabs
+PASS place-water: a pad placed under the water -- 3 fail: MapValidatorTests.APieceLevelWithTheWater_IsNotUnderIt_ToPlacementOrToTheValidator, PrefabPlacementTests.InWater_APadsLevelOrARoundPieceUnderTheWater, PrefabPlacementTests.TheChecks_AreInSection6Point5sOrder_TheFirstThatFailsIsTheAnswer
+PASS place-neighbour: a pad placed that moves another's -- 20 fail: MapValidatorTests.AGeneratedMap_Passes_WithNoWarning_AndSoDoesItsFile, MapValidatorTests.AHeightOutsideLeD4_IsRefused, MapValidatorTests.ANodeOrTheSpawnLine_InsideABarracksRing_IsWarnedOf, MapValidatorTests.ANumberOutsideItsRange_IsRefused, and 16 more
+PASS place-neighbour-skirt: another's pad taken as its footprint alone, not 1.5 m past it -- 17 fail: MapValidatorTests.AGeneratedMap_Passes_WithNoWarning_AndSoDoesItsFile, MapValidatorTests.AHeightOutsideLeD4_IsRefused, MapValidatorTests.ANodeOrTheSpawnLine_InsideABarracksRing_IsWarnedOf, MapValidatorTests.ANumberOutsideItsRange_IsRefused, and 13 more
+PASS place-door: a structure placed at a barracks door -- 2 fail: PrefabPlacementTests.BlocksDoor_AStructureWithin10mOfABarracksDoor_EitherWayRound, PrefabPlacementTests.TheChecks_AreInSection6Point5sOrder_TheFirstThatFailsIsTheAnswer
+PASS place-door-one-way: a barracks placed with its door at a structure -- 1 fail: PrefabPlacementTests.BlocksDoor_AStructureWithin10mOfABarracksDoor_EitherWayRound
+PASS place-order: the door checked before the neighbours -- 1 fail: PrefabPlacementTests.BlocksDoor_AStructureWithin10mOfABarracksDoor_EitherWayRound
+PASS place-level-off: a pad levelled 10 cm over the mean -- 7 fail: MapValidatorTests.APieceLevelWithTheWater_IsNotUnderIt_ToPlacementOrToTheValidator, MapValidatorTests.TwoObjectsInEachOthersWay_AreRefused, PrefabPlacementTests.APad_IsLevelAtTheMean_ExactlyOutTo1Point5m_AndItsSkirtIsNoSteeperThan30Degrees, PrefabPlacementTests.BlocksDoor_AStructureWithin10mOfABarracksDoor_EitherWayRound, and 3 more
+PASS place-level-floor: a pad's step taken by flooring the height, not rounding it -- 2 fail: MapValidatorTests.APieceLevelWithTheWater_IsNotUnderIt_ToPlacementOrToTheValidator, PrefabPlacementTests.APadsLevel_IsTheNearestStepToTheObjectsHeight_AndAFixedPoint
+PASS place-mean-centre: the level taken from the ground at the centre, not the mean -- 1 fail: PrefabPlacementTests.TheAverageGrade_OnAPlane_IsThePlanes_AndTheLevelIsTheMean
+PASS place-fit-swapped: the fitted grade's x taken from z's normal equation -- 4 fail: PrefabPlacementTests.TheAverageGrade_OnAPlane_IsThePlanes_AndTheLevelIsTheMean, PrefabPlacementTests.TheAverageGrade_OnRoughGround_IsTheLeastSquaresPlane, PrefabPlacementTests.TheChecks_AreInSection6Point5sOrder_TheFirstThatFailsIsTheAnswer, PrefabPlacementTests.TooSteep_WhenTheAverageGradeUnderTheFootprintIsOverThePrefabs
+PASS place-no-triangle: a footprint over too few samples given no grade -- 2 fail: PrefabPlacementTests.AFootprintOverFewerThanThreeSamples_TakesTheTriangleUnderItsCentre, PrefabPlacementTests.TooSteep_WhenTheAverageGradeUnderTheFootprintIsOverThePrefabs
+FAIL place-triangle-diagonal: the triangle under a point taken across the other diagonal -- and every test still passed
+FAIL place-unrounded: a pad's skirt left between steps -- and every test still passed
+PASS place-standing-height: a padded piece under the water by its centimetre, not its pad -- 3 fail: MapValidatorTests.APieceLevelWithTheWater_IsNotUnderIt_ToPlacementOrToTheValidator, PrefabPlacementTests.APad_IsKept_LevelledAgainWhenAnEditReachesIt_AndOtherwiseLeftAlone, PrefabPlacementTests.APad_IsLevelAtTheMean_ExactlyOutTo1Point5m_AndItsSkirtIsNoSteeperThan30Degrees
+PASS keep-reached-only: only the pads an edit reaches levelled again, not those after them -- 1 fail: PrefabPlacementTests.APad_IsKept_LevelledAgainWhenAnEditReachesIt_AndOtherwiseLeftAlone
+PASS keep-nothing: a pad not kept -- 1 fail: PrefabPlacementTests.APad_IsKept_LevelledAgainWhenAnEditReachesIt_AndOtherwiseLeftAlone
+PASS keep-reports-touched: what the operator touched reported as moved -- 1 fail: PrefabPlacementTests.APad_IsKept_LevelledAgainWhenAnEditReachesIt_AndOtherwiseLeftAlone
+PASS validate-spawn: a map with no spawn line passed -- 2 fail: MapValidatorTests.ANewMap_IsRefusedForWhatItLacks, MapValidatorTests.NoSpawnLine_OrNoLocker_IsRefused
+PASS validate-locker: a map with no locker passed -- 3 fail: MapValidatorTests.ANewMap_IsRefusedForWhatItLacks, MapValidatorTests.NoSpawnLine_OrNoLocker_IsRefused, MapValidatorTests.TheReport_CountsErrorsAndWarnings_AndAnIssueSaysWhichItIs
+PASS validate-barracks-max: five barracks passed -- 1 fail: MapValidatorTests.BarracksNot1To4_IsRefused
+PASS validate-nodes-min: a map with no node passed -- 2 fail: MapValidatorTests.ANewMap_IsRefusedForWhatItLacks, MapValidatorTests.NodesNot1To8_AreRefused
+PASS validate-too-many: more than a group may hold passed -- 1 fail: MapValidatorTests.MoreThanAGroupMayHold_IsRefused
+PASS validate-unknown: a prefab past the catalog only warned of -- 1 fail: MapValidatorTests.APrefabPastThisBuildsCatalog_NeedsANewerBuild
+PASS validate-bounds: an object off the map passed -- 1 fail: MapValidatorTests.AnObjectOffTheMap_IsRefused
+PASS validate-way: two objects in each other's way passed -- 1 fail: MapValidatorTests.TwoObjectsInEachOthersWay_AreRefused
+PASS validate-pad-spread: a pad not level passed -- 1 fail: MapValidatorTests.APaddedObjectNotOnItsPad_IsRefused
+PASS validate-pad-height: an object off its pad's height passed -- 1 fail: MapValidatorTests.APaddedObjectNotOnItsPad_IsRefused
+PASS validate-pad-tolerance: a pad held to 5 mm, under what a centimetre and a step are apart -- 1 fail: MapValidatorTests.APaddedObjectNotOnItsPad_IsRefused
+FAIL validate-pad-margin: a pad's ground taken as its footprint, not 1.5 m past it -- and every test still passed
+PASS validate-water: a round's piece under the water passed -- 2 fail: MapValidatorTests.APieceLevelWithTheWater_IsNotUnderIt_ToPlacementOrToTheValidator, MapValidatorTests.ARoundsPieceUnderTheWater_IsRefused
+PASS validate-heights: a height over +64 m passed -- 1 fail: MapValidatorTests.AHeightOutsideLeD4_IsRefused
+PASS validate-size: a terrain of another size passed -- 1 fail: MapValidatorTests.ATerrainOfAnotherSize_IsRefused
+PASS validate-bands: water and bands out of their ranges passed -- 1 fail: MapValidatorTests.ANumberOutsideItsRange_IsRefused
+PASS validate-flags: an object with flags this build does not define passed -- 1 fail: MapValidatorTests.ANumberOutsideItsRange_IsRefused
+PASS validate-parameter-key: a parameter a prefab has not passed -- 1 fail: MapValidatorTests.ANumberOutsideItsRange_IsRefused
+PASS validate-parameter-range: a parameter outside its range passed -- 1 fail: MapValidatorTests.ANumberOutsideItsRange_IsRefused
+PASS validate-road-width: a road 5 m wide passed -- 1 fail: MapValidatorTests.ARoadsNumbersOutsideTheirRange_AreRefused
+PASS validate-road-grade: a road graded to 20 % passed -- 1 fail: MapValidatorTests.ARoadsNumbersOutsideTheirRange_AreRefused
+PASS validate-road-field: a road off the field passed -- 1 fail: MapValidatorTests.ARoadOffTheField_IsRefused_AndOneInRange_IsNot
+PASS validate-ring: a node inside a barracks' ring not warned of -- 2 fail: MapValidatorTests.ANodeOrTheSpawnLine_InsideABarracksRing_IsWarnedOf, MapValidatorTests.TheReport_CountsErrorsAndWarnings_AndAnIssueSaysWhichItIs
+PASS validate-relief: relief inside a node's radius not warned of -- 1 fail: MapValidatorTests.MoreThan4mOfReliefInsideANodesRadius_IsWarnedOf
+PASS validate-bridge-landed: every bridge end taken as landed -- 1 fail: MapValidatorTests.AnOpenBridgeEnd_IsWarnedOf_AndAJoinedOrLandedOneIsNot
+PASS validate-bridge-self-joined: a bridge end taken as joined to itself -- 1 fail: MapValidatorTests.AnOpenBridgeEnd_IsWarnedOf_AndAJoinedOrLandedOneIsNot
+PASS validate-bridge-road: a road's end not joining a bridge's -- 1 fail: MapValidatorTests.AnOpenBridgeEnd_IsWarnedOf_AndAJoinedOrLandedOneIsNot
+PASS history-unbounded: every step kept, past two hundred -- 1 fail: EditHistoryTests.TwoHundredSteps_AreKept_AndTheOldestGoes
+PASS history-redo-kept: a new step that keeps what could have been redone -- 1 fail: EditHistoryTests.ANewStep_DropsWhatCouldHaveBeenRedone
+PASS history-empty-step: an edit that changes nothing kept as a step -- 1 fail: EditHistoryTests.ANewStep_DropsWhatCouldHaveBeenRedone
+PASS history-revert-forwards: an edit's objects reverted in the order they were made -- 1 fail: EditHistoryTests.AnObjectTakenOutOrReplaced_ComesBackAtItsIndex
+PASS history-revert-ground: an edit reverted to the ground after it -- 3 fail: EditHistoryTests.AnEdit_ThatPlacesAndLevels_IsOneStep, EditHistoryTests.UndoingStrokes_RestoresEverySample_AndRedoingThemRestoresEachAfter, PrefabPlacementTests.PlacingThenUndoing_RestoresEverySample_AndRedoingRestoresThePlacements
+PASS history-remove-last: an object taken out from the end, not its index -- 1 fail: EditHistoryTests.AnObjectTakenOutOrReplaced_ComesBackAtItsIndex
+PASS history-unrounded: a stored sample taken down to the step below -- 6 fail: EditHistoryTests.AnEdit_ThatPlacesAndLevels_IsOneStep, EditHistoryTests.UndoingStrokes_RestoresEverySample_AndRedoingThemRestoresEachAfter, PrefabPlacementTests.APad_IsKept_LevelledAgainWhenAnEditReachesIt_AndOtherwiseLeftAlone, PrefabPlacementTests.APad_IsLevelAtTheMean_ExactlyOutTo1Point5m_AndItsSkirtIsNoSteeperThan30Degrees, and 2 more
+
+96 of 99 broken rules were caught by a test
