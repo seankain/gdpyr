@@ -67,7 +67,8 @@ dedicated-server authoritative.
 - [`docs/MAPS.md`](docs/MAPS.md) — making a map: the template scene new maps inherit from
   (`Scenes/Maps/MapBase.tscn`), what a map scene must hold, and the catalog entry that puts it in
   the host panel's map picker
-- [`docs/LEVEL_EDITOR.md`](docs/LEVEL_EDITOR.md) — a plan, not built: a level editor in the game —
+- [`docs/LEVEL_EDITOR.md`](docs/LEVEL_EDITOR.md) — a plan, its ground measured in the engine (LE0,
+  `scripts/level-editor-checks.sh`) and nothing of it built: a level editor in the game —
   terrain raised and lowered with brushes that set its grade and textured by height and slope,
   prefabs placed on ground levelled for them, roads and bridges — and maps as data files that are
   saved, cloned and exported, given to a dedicated server, and fetched by clients from the server

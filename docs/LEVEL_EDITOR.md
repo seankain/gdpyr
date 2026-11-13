@@ -1,13 +1,28 @@
 # gdpyr — Level editor: terrain, prefabs, roads and bridges, and maps that travel
 
-**Status: a plan; none of it is built.** Written against `cd0c558`. The facts in §2 were read in
-this repository's source at that commit, and those in §3 in Godot's source at tag `4.6-stable`. The
-arithmetic in §10 was run: `python3 tools/level_editor_checks/design_checks.py` prints every number
-quoted from it. No Godot and no .NET SDK were available where this was written, so nothing was
-compiled and nothing was run in the engine; LE0 (§11) is the phase that measures what could not be.
-The decisions (LE-D1–LE-D22, §4) are the defaults the plan is written against. Each is one line to
-change; LE-D3, LE-D8, LE-D10 and LE-D18 are the ones to flag before LE1 starts. The phases
-(LE0–LE9, §11) say what each builds, what checks it, and what is left for a person.
+**Status: a plan, with LE0 done; nothing of the editor is built.** Written against `cd0c558`. The
+facts in §2 were read in this repository's source at that commit, and those in §3 in Godot's source
+at tag `4.6-stable`. The arithmetic in §10 was run: `python3
+tools/level_editor_checks/design_checks.py` prints every number quoted from it. No Godot and no
+.NET SDK were available where it was written, so nothing was compiled and nothing was run in the
+engine; LE0 (§11) was the phase to measure what could not be, and it has: at `67fec82`, on Godot
+4.6 .NET, by `scripts/level-editor-checks.sh`, whose output is in `docs/baselines/` and is set out
+in §10.1.
+
+**What LE0 changed.** The collider is not a `HeightMapShape3D`: 65 of 20,000 long rays passed
+through one, and it costs a tick more than the same triangles as meshes, which let none through
+(LE-D5). A body and a unit walk a 42° face on triangles and stall on a 43° one, so walkable is 40°
+(LE-D23). The 4x4's hull is level whatever is under it: it beaches on 10° from rest and rides up
+70° at speed, and is a road vehicle on these maps until that is mended (LE-D24). A correction is
+applied from 2 cm (LE-D25). A structure's refusal on a slope is as §7.5 had it (LE-D21). A re-bake
+is not too slow to build on (§7.3). A tick on hills with a round of bots is 2.2–2.6 times the
+slab's and over its time for 1 in 100, which is a risk and LE3's to measure where the game is served
+(§13). Where a section says "LE0", it is one of these.
+
+The decisions (LE-D1–LE-D25, §4) are the defaults the plan is written against. Each is one line to
+change; LE-D3, LE-D8, LE-D10 and LE-D18 are the ones to flag before LE1 starts, and LE-D24 and
+LE-D25 before LE3. The phases (LE0–LE9, §11) say what each builds, what checks it, and what is
+left for a person.
 
 This is not [`MAPS.md`](MAPS.md)'s way of making a map. That one is the Godot editor, a scene that
 inherits `Scenes/Maps/MapBase.tscn` and a catalog entry, and it stays. This plan adds a second kind
@@ -70,6 +85,8 @@ Each read in the source at `cd0c558`.
 | Art on hand: greybox grid textures in blue, yellow, orange, green and grey. No terrain, road or bridge art | `ThirdParty/GreyboxTextures/` |
 | Widths that size a road: the tank is 2.6 m across, the supply truck 2.2 m, the technical 2.0 m; the 4x4's track is 1.7 m and its wheelbase 3.0 m | `Units/*.tres` (`RadiusMeters`); `Vehicles/four_by_four.tres:34`, `:35` |
 | No `dotnet` and no Godot were available where this plan was written | — |
+| *Read for LE0, at `67fec82`.* A crew vehicle's body is put upright each tick, turned to its heading and nothing else, and moved floating: pitch and roll are numbers in its state that its collider does not take. The 4x4's has 0.25 m under it between its axles | `Scripts/Fps/CrewVehicle.cs:283`, `:209`; GROUND_VEHICLES.md §12's table |
+| *Read for LE0.* A player's position and velocity cross the wire at 1 cm an axis, and a client's prediction is corrected when it is more than 1 cm or 0.5 m/s from what came back | `Scripts/Sim/SimConfig.cs:443`, `:97`, `:100`; `Scripts/Sim/Quantize.cs:57`; `Scripts/Sim/PredictionLedger.cs:154` |
 
 ## 3. What the engine does
 
@@ -79,15 +96,19 @@ was written; a class reference quoted here is the XML that site is generated fro
 
 | Fact | Where |
 |---|---|
-| `HeightMapShape3D`: grid points 1 unit apart, centred on the shape's origin; each square two triangles; a NaN height is a hole; "faster to check collisions against than `ConcavePolygonShape3D`". For another spacing the node is scaled, and "GodotPhysics3D does not support non-uniform scaling" | `doc/classes/HeightMapShape3D.xml` |
+| `HeightMapShape3D`: grid points 1 unit apart, centred on the shape's origin; each square two triangles; a NaN height is a hole; "faster to check collisions against than `ConcavePolygonShape3D`" — which a round of bots, rays and all, did not bear out (LE0, §10.1). For another spacing the node is scaled, and "GodotPhysics3D does not support non-uniform scaling" | `doc/classes/HeightMapShape3D.xml` |
 | In GodotPhysics3D sample (x, z) is `heights[z * width + x]`, at (x − (width − 1)/2, z − (depth − 1)/2). A cell's triangles are (x,z) (x+1,z) (x,z+1) and (x+1,z) (x+1,z+1) (x,z+1) | `modules/godot_physics_3d/godot_shape_3d.h:406`; `godot_shape_3d.cpp:2015` |
 | Setting its data rebuilds a min/max grid of 16-sample chunks in one pass over every sample. There is no partial update | `godot_shape_3d.cpp:2077`, `:2146` |
 | A heightmap and a triangle mesh both give the collision solver one `GodotFaceShape3D` a triangle | `godot_shape_3d.cpp:1416`, `:2015` |
 | A ray hits a heightmap from either side by default (`hit_back_faces`) | `doc/classes/PhysicsRayQueryParameters3D.xml` |
+| A ray 16 m or longer in plan is not walked over a heightmap's cells but over its 16-cell chunks, and inside each chunk it passes the height of, over that chunk's cells with the piece of the ray inside it. That piece starts on a lane between cells, give or take a float; a start one float short of the lane is floored into the cell before it and then taken for a start exactly on the lane, which puts the walk one cell behind for the rest of the chunk. A face is not tested from behind on either walk. **Found by LE0** (§11): such a ray can pass through the ground | `modules/godot_physics_3d/godot_shape_3d.h:400`; `godot_shape_3d.cpp:1975`, `:1757`, `:1861`, `:1804`; `tools/level_editor_checks/heightmap_ray_walk.py`, a float32 port that lets through the rays the engine did |
+| A ray against a `ConcavePolygonShape3D` descends a BVH over its faces and tests each face whose box the whole ray crosses: no walk, and no piece of the ray | `godot_shape_3d.cpp:1371`, `:1333` |
 | The bake's static-collider parser reads a `HeightMapShape3D`, into the same two triangles a cell | `scene/3d/physics/static_body_3d.cpp:195` |
 | A bake's box (`filter_baking_aabb`) sets Recast's bounds on all three axes, and Recast drops a span wholly below them | `modules/navigation_3d/3d/nav_mesh_generator_3d.cpp:397`; `thirdparty/recastnavigation/Recast/Source/RecastRasterization.cpp:425` |
 | Source geometry is always parsed on the main thread. It can be parsed once, kept, and baked from on a thread (`bake_from_source_geometry_data_async`). Tiles are baked with `filter_baking_aabb` and `border_size` | `doc/classes/NavigationServer3D.xml`; `doc/classes/NavigationMesh.xml`; godot-docs `tutorials/navigation/navigation_using_navigationmeshes.rst` |
 | `CharacterBody3D`: `floor_max_angle` 45°, `floor_snap_length` 0.1 m, `floor_constant_speed` false — "faster on downward slopes and slower on upward slopes" | `doc/classes/CharacterBody3D.xml` |
+| A contact is a floor when its normal is within `floor_max_angle` + 0.01 rad of up: 45.57°. A slide asks for up to six contacts, those met only in recovery among them, and one of them being a wall is enough, with `floor_block_on_wall` (the default), to cancel a grounded body's motion into it. **Found by LE0:** on triangles a capsule within its margin of an edge touches the next triangle on a normal up to 3.5° off the face's, so a face from 43° is a wall to it (§7.4) | `scene/3d/physics/character_body_3d.cpp:38`, `:543`, `:164`, `:216` |
+| A floating body stops against a wall whose normal is within `wall_min_slide_angle` (15°) + 0.01 rad of its velocity reversed, and slides along anything else: moving level, along any face under 74.4° | `character_body_3d.cpp:429` |
 | ENet: a host made with a channel count of 0 has 255. Transfer channel n > 0 is ENet channel n + 1; the first two are the default's. On a channel of its own, "reliable data will only block delivery of other packets on that channel". Default MTU 1,392 B; a packet may be 32 MiB | `modules/enet/enet_connection.cpp:308`; `modules/enet/enet_multiplayer_peer.cpp:357`; `doc/classes/MultiplayerPeer.xml`; `thirdparty/enet/enet/enet.h:222` |
 | `ENetMultiplayerPeer.create_server` hands `create_host_bound` a channel count of 0 whatever it was given, and puts its own `max_channels` argument, when that is above 0, plus 2 in the incoming-bandwidth position | `modules/enet/enet_multiplayer_peer.cpp:65`; `modules/enet/enet_connection.cpp:45` |
 | An RPC whose only argument is a byte array is sent as those bytes behind a header of 3–7 B: a command byte, a node id, a method id | `modules/multiplayer/scene_rpc_interface.cpp:357` |
@@ -106,9 +127,9 @@ was written; a class reference quoted here is the XML that site is generated fro
 |---|---|---|
 | LE-D1 | **A map made here is a data file, not a scene.** One binary file, `.map`, magic `GDPYRMAP`, that one fixed scene (`Scenes/Maps/MapHost.tscn`) builds the world from. Scene maps and `MapCatalog` stay as they are. | A scene cannot be sent to a peer. It is an object graph that can carry scripts, and the engine's own warning for objects taken off the wire is that they "can contain code which gets executed" (§3). Bytes with no object in them can be hashed, bounded and refused. |
 | LE-D2 | **The editor is in the game**: a button on the main menu and `--edit`. The Godot editor stays the way to make a scene map. | Asked 4: a map has to be made, saved and passed on by somebody running an export, and the server has no editor. One load path — file to world — for the editor, a client and a server. |
-| LE-D3 | **Terrain is a heightfield of 241 × 241 samples, 1 m apart, over the 240 m field. A sample is an `int16` in 1/256 m.** The file carries its dimensions and spacing; this plan builds only this size. | 240 m and ±120 m are the field the code assumes (§2). 1 m is the one spacing GodotPhysics3D takes without scaling the collider (§3). Every `int16`/256 is exact as a `float` (§10), so every peer builds the same collider. 116,162 B raw. |
+| LE-D3 | **Terrain is a heightfield of 241 × 241 samples, 1 m apart, over the 240 m field. A sample is an `int16` in 1/256 m.** The file carries its dimensions and spacing; this plan builds only this size. | 240 m and ±120 m are the field the code assumes (§2). 1 m is the one spacing a heightmap takes without scaling (§3), and the spacing LE0 measured the collider, the bake and a tick at (§10). Every `int16`/256 is exact as a `float` (§10), so every peer builds the same collider. 116,162 B raw. |
 | LE-D4 | **Heights are held to −16 m … +64 m**, by the brushes and by the validator. | Inside every absolute constant in §2 with no change to any: the kill plane (−50), the drone's floor (−20) and ceiling (120), the agent's rays (80 down to −40). |
-| LE-D5 | **The collider is one `HeightMapShape3D` on layer 1 in group `navmesh`. The mesh drawn uses the collider's triangles.** | Every consumer already asks layer 1, and the bake already parses this shape (§3): no consumer learns a new source of truth. Cheaper than a triangle mesh to test and to update (§3). The fallback, if LE0 finds a defect in the shape's own code — its ray walk, its bounds — is `ConcavePolygonShape3D` per chunk from the same triangles. Both hand the same face test to the same solver (§3), so it does not fix how a body meets a face. |
+| LE-D5 | **The collider is the heightfield's triangles as `ConcavePolygonShape3D`s, one for each 16 × 16 cells: 225 of them on one body, on layer 1, in group `navmesh`.** A cell's two triangles are the ones a heightmap would make of it (§3). The mesh drawn uses the same triangles. *Changed by LE0 to the fallback this row was written with.* | Every consumer already asks layer 1, and the bake parses these shapes into the triangles it made of a heightmap, to the same mesh (§10): no consumer learns a new source of truth. One `HeightMapShape3D` was the first choice. LE0 found the defect its fallback was held for, in the shape's ray walk: of 10,000 rays 16 m or longer in plan, each from over the ground to under it, 36 passed through it over level ground and 29 over hills (§3, §10); none passed through the triangle meshes. Rounds, sight lines and the fog are such rays. The heightmap is cheaper to update — 0.2 ms for the whole field, against 0.2–0.3 ms a chunk and 37–48 ms for all 225 — and dearer to tick, by 2–4 ms with a round of bots on it. Both hand the same face test to the same solver (§3), and LE0 measured a body the same on both (§7.4). |
 | LE-D6 | **Two families of brush.** *Sculpt* adds or removes height under a falloff: radius, rate and core. *Grade-locked* raises or lowers a cone of a set grade. With them, smooth, level and ramp. Named presets are starting points. | Asked 1. Sculpt is what sculpting feels like, and its grade follows from its settings (§6.2). Grade-locked is the one that can promise a grade, which is what "walkable" and "a wall" need. |
 | LE-D7 | **Texture is computed, never painted**: a band from height above the water and slope, by one formula that only moves forward through water, sand, mud, grass, stone as either rises. | Asked 1. Nothing to store, and nothing to go stale when the ground under it is edited. |
 | LE-D8 | **Water is a level, a look, and a floor for the navigation bake**: units do not path where the bed is more than 1 m under the water. Bodies, vehicles and rounds are not affected by it. | A river has to stop something for a bridge to matter, and the bake's box does that in one property (§3). Wading, drowning and fording are rules of their own (§14). **Flag if a player hidden under water is not acceptable for a first cut.** |
@@ -124,8 +145,11 @@ was written; a class reference quoted here is the XML that site is generated fro
 | LE-D18 | **A dedicated server takes a map as a file**: `--map`, and `scripts/deploy-map.sh`. Upload over the game's connection is optional, off unless the server was given a token, and proven by HMAC. **Changing a server's map restarts its process.** | Asked 4. The box has a public address (DEPLOYMENT.md). A round cannot be torn down in place (§2); the unit already restarts the process. |
 | LE-D19 | **Testing a map from the editor starts a second process** on the saved file. | No way back from a round (§2). It also exercises the real load path on every test. |
 | LE-D20 | **Wire and formats: additive.** `ServerMap` gains fields; eight new messages, none in a round's tick; `DemoFormat.Version` 5 → 6; the agent's `welcome` names the map; the observation schema is unchanged. | Every trained checkpoint keeps loading; an old demo is refused, not misread. |
-| LE-D21 | **A structure built during a round needs near-level ground**: the ground under its footprint may vary by 0.5 m, else `TooSteep`. It stands on the highest of it, on a plinth down to the lowest. | Today's probe refuses a pillbox on a slope past 4.6–6.5°, by direction, and calls it `Blocked` (§7.5). The rule keeps about that limit, names it, and closes the gap under the downhill edge. |
+| LE-D21 | **A structure built during a round needs near-level ground**: the ground under its footprint may vary by 0.5 m, else `TooSteep`. It stands on the highest of it, on a plinth down to the lowest. *Confirmed by LE0.* | Today's probe refuses a pillbox on a slope past 4.6–6.5°, by direction, and calls it `Blocked` (§7.5); LE0 measured it at 4.5–6.2°, as `Blocked`, with the downhill edge 0.2 m in the air where it is taken. The rule keeps about that limit, names it, and closes the gap under the downhill edge. |
 | LE-D22 | **Placeholders**: the greybox textures by band; boxes for decks, piers and cover. A palette resource is where art goes. | IMPLEMENTATION_PLAN.md §5: greybox. |
+| LE-D23 | **Walkable is 40°.** The navigation bake's slope goes from 45° to 40° on a data map; the skirt of §6.3 is 30° and not a setting; the slope overlay turns red at 40°. *Added by LE0.* | On triangles a body and a unit walk a 42.1° face and stall on a 43.0° one, both colliders alike; a box they walk to 45° (§7.4). The bake keeps faces to 45°, so it would route units over ground they stall on. 40° is under what they walk with 2° to spare, and over the 39.2° a 30° skirt can leave. |
+| LE-D24 | **The 4x4 is a road vehicle on a data map, for a first cut.** It keeps the level hull it has. A road's grade limit stops at 15 % and a bridge's ramp stays 1 in 8. *Added by LE0.* | Its collider does not pitch with its chassis and has 0.25 m under it (§2). From rest at the foot it climbs 9.1° and beaches on 10.0°; at 18 m/s it rides up any face to 70° on its hull, off its wheels, and only 75° stops it (§7.4). 15 % is 8.5° and 1 in 8 is 7.1°. **Flag if a 4x4 that cannot leave the road, and that a cliff does not stop, is not acceptable for a first cut**: the fix is the hull taking the chassis's pitch and roll, which is GROUND_VEHICLES.md's to plan (§14). |
+| LE-D25 | **A correction is applied from 2 cm, not 1 cm**: `SimConfig.MispredictionThreshold`. *Added by LE0.* | A position crosses the wire at 1 cm an axis (§2). On level ground two axes of it are rounded and the third is exact; on a slope all three are, which is up to 8.7 mm before anything has gone wrong. Behind an 80 ms link a body crossing a 20° slope was corrected up to 2.5 times a second, by 10–16 mm, in sessions whose clock was being resynchronised, and up to 0.75 times in sessions where it was not; with the threshold at 2 cm, 0.03 at the most in either (§10). **Flag if 1 cm is to be kept**: then that rate is the cost, and it is under GV3's bar of one a second in four sessions of six. |
 
 ---
 
@@ -137,7 +161,7 @@ was written; a class reference quoted here is the XML that site is generated fro
              └──────────        stroke is down            SHA-256 of the file: its name on the wire
 
  loading   name.map ─► MapFile.TryRead ─► MapValidator ─► MapDocument ─► LevelRoot builds
-             TerrainNode    HeightMapShape3D on layer 1, in group navmesh; meshes and water on clients
+             TerrainNode    225 triangle-mesh shapes on layer 1, in group navmesh; meshes and water on clients
              LevelBuilder   prefabs, cover, bridges, piers, walls; spawns, locker, kiosk, barracks, nodes
            then Session.EnterGame()
 
@@ -174,11 +198,11 @@ Scripts/MapEditor/   the editor scene's root, its camera, four tools, the panels
 Scenes/Maps/MapHost.tscn · Scenes/MapEditor/MapEditor.tscn · Levels/materials/terrain.gdshader
 ```
 
-**Rejected:** a Godot editor plugin (LE-D2); sending scenes or a PCK (LE-D1); a triangle-mesh
-collider as the first choice (LE-D5); a painted splat map (LE-D7); tilting a prefab to its ground
-(LE-D9, LE-D10); decals or a ribbon mesh for roads (LE-D12); deriving pads and piers on load
-(LE-D14); an engine-free copy of the ground for the simulation to query in place of rays — the
-rays work, and two sources of truth would have to be kept equal.
+**Rejected:** a Godot editor plugin (LE-D2); sending scenes or a PCK (LE-D1); a `HeightMapShape3D`
+collider, which LE0 measured and found rays through (LE-D5); a painted splat map (LE-D7); tilting a
+prefab to its ground (LE-D9, LE-D10); decals or a ribbon mesh for roads (LE-D12); deriving pads and
+piers on load (LE-D14); an engine-free copy of the ground for the simulation to query in place of
+rays — the rays work, and two sources of truth would have to be kept equal.
 
 ---
 
@@ -190,8 +214,8 @@ used, and the difference matters:
 
 - an **edge** grade is between two samples joined by an edge of the collider's triangles: +x, +z,
   or the cell's diagonal from (x+1, z) to (x, z+1);
-- a **face** grade is the length of a triangle's gradient. It is what the navigation bake's 45° and
-  a body's floor test read.
+- a **face** grade is the length of a triangle's gradient. It is what the navigation bake's slope
+  limit and a body's floor test read (LE-D23).
 
 A face's gradient is the differences along its two axis edges, so **a face is at most √2 times as
 steep as its steepest edge**, and is exactly that where a crease crosses it: heights 0, g, g at
@@ -199,8 +223,10 @@ steep as its steepest edge**, and is exactly that where a crease crosses it: hei
 
 ### 6.1 The heightfield — `HeightField.cs`
 
-- 241 × 241 samples; sample (x, z) is index `z * 241 + x`, at (x − 120, z − 120) m. That is the
-  collider's layout (§3), so the array is handed to it as it is.
+- 241 × 241 samples; sample (x, z) is index `z * 241 + x`, at (x − 120, z − 120) m. That is a
+  heightmap's layout (§3), and the collider's triangles are the ones a heightmap makes of it
+  (LE-D5): LE0 cast 1,000 rays down at level ground and at hills, and each met the collider where
+  `Sample` says, to 0.02 mm.
 - A stored sample is an `int16` q; its height is q / 256 m, a step of 3.90625 mm. While a stroke is
   down the editor works in `float`, so a slow brush accumulates; when the stroke ends the rectangle
   it touched is rounded to steps and that is the document.
@@ -258,11 +284,12 @@ and applied with §6.3, so its sides are skirted.
 | Bank | sculpt | 16 m | 0.5 | 2 m/s | 20.4° at 2 m |
 | Bluff | sculpt | 16 m | 0.8 | 2 m/s | 42.1° at 2 m |
 | Mound 10°, 20°, 30° | grade-locked | 16 m | — | the grade | ground a body walks, on every face |
-| Cliff 60° | grade-locked | 8 m | — | the grade | a wall to bodies and to the bake |
+| Cliff 60° | grade-locked | 8 m | — | the grade | a wall to bodies and to the bake; not to a 4x4 at speed (LE-D24) |
 | Smooth, Level, Ramp | | 8 m | 0 | 0.5 | |
 
-Radius runs 2–64 m, rate 0.25–8 m/s, core 0–0.9, grade 5–70°. Up to 35° a grade-locked brush
-leaves every face under 45° whatever it is drawn over, by the √2: atan(√2 · tan 35°) = 44.7°.
+Radius runs 2–64 m, rate 0.25–8 m/s, core 0–0.9, grade 5–70°. Up to 30° a grade-locked brush
+leaves every face under 40° whatever it is drawn over, by the √2: atan(√2 · tan 30°) = 39.2°. 40° is
+what is walkable (LE-D23); at 35° the same bound is 44.7°, which LE0 found a body does not walk.
 
 ### 6.3 Levelling ground to a shape — `TerrainConform.cs`
 
@@ -293,9 +320,10 @@ is a crease, and 58 of 120 pads left a face over the limit, at worst by the whol
 from the rectangle the worst face seen was 1.15 times the limit, on 0.4 % of the cells changed
 (§10).
 
-**The skirt is 30°, and may be set to at most 35°.** By the √2 a 30° skirt can leave no face
-steeper than 39.2° and a 35° one none steeper than 44.7°: a unit and a body walk onto every pad
-and every road from any side, with no further check.
+**The skirt is 30°, and is not a setting.** By the √2 it can leave no face steeper than 39.2°,
+under the 40° the bake keeps and the 42° a body and a unit were measured to walk (LE-D23): a unit
+and a body walk onto every pad and every road from any side, with no further check. A 35° skirt
+could leave 44.7°, which they do not walk.
 
 ### 6.4 Texture bands — `TerrainBands.cs`
 
@@ -380,9 +408,10 @@ stays, as any sculpted ground does.
 
 ### 6.6 Roads — `RoadPath.cs`
 
-A road is 2–64 control points, a width (4, 6 or 8 m) and a grade limit g (6–20 %, 10 % unless
-set). Its corners are rounded to a radius of at least its width, and the centreline is sampled
-every 0.5 m. With f(s) the ground along the centreline:
+A road is 2–64 control points, a width (4, 6 or 8 m) and a grade limit g (6–15 %, 10 % unless set:
+15 % is 8.5°, under the 9.1° a 4x4 was measured to climb from rest, LE-D24). Its corners are rounded
+to a radius of at least its width, and the centreline is sampled every 0.5 m. With f(s) the ground
+along the centreline:
 
     m(s) = min over t of  f(t) + g · |s − t|        the highest profile of grade g under the ground
     M(s) = max over t of  f(t) − g · |s − t|        the lowest over it
@@ -401,9 +430,9 @@ the road's length are refused, `TooSteepToJoin`, with the grade it would take.
 The ribbon is the samples within half the width of the centreline; each is anchored to the
 profile's height at its nearest centreline point, level across. §6.3 then applies, with the skirt
 at 30°, and its condition is checked first. On a straight the ribbon's targets are as steep as the
-profile, and 20 % is under tan 30° = 57.7 %. Round a bend the inside edge is shorter than the
+profile, and 15 % is under tan 30° = 57.7 %. Round a bend the inside edge is shorter than the
 centreline, so they are steeper there: on the tightest corner a 10 % road may turn 258° before
-they pass the skirt, a 15 % one 212° and a 20 % one 164° (§10); past that the road is refused,
+they pass the skirt and a 15 % one 212° (§10); past that the road is refused,
 `BendTooSteep`. So is one that crosses itself at two heights. Each end is a connector: a point, a
 height and a heading.
 
@@ -415,7 +444,7 @@ client when it builds the mesh. It is not in the file and nothing reads it but t
 | Section | Deck | Rise | Connectors |
 |---|---|---|---|
 | `bridge_span` | 12 × 6 × 0.6 m | 0 | one at each end, at the deck's top |
-| `bridge_ramp` | 12 × 6 × 0.6 m | 1.5 m: 1 in 8, 7.1° | one at the low end, one at the high |
+| `bridge_ramp` | 12 × 6 × 0.6 m | 1.5 m: 1 in 8, 7.1°, which a 4x4 climbs from rest (LE-D24) | one at the low end, one at the high |
 
 Each has a rail 1.0 m high and 0.2 m thick along both sides. Deck, rails and piers are static
 boxes on layer 1 under `Geometry`: bodies, wheels, rounds and the navigation bake meet them as
@@ -526,7 +555,7 @@ receiver does with a short, long, repeated, out-of-order or never-finished strea
 
 | Built | As | Found by the game as |
 |---|---|---|
-| `Geometry/Terrain` | `StaticBody3D`, layer 1, one `CollisionShape3D` with the `HeightMapShape3D`: the samples as `float`, unscaled | world geometry; the bake's source |
+| `Geometry/Terrain` | `StaticBody3D`, layer 1, with 225 `CollisionShape3D`s, each a `ConcavePolygonShape3D` of 16 × 16 cells' triangles, two a cell as §3 has a heightmap split it, from the samples as `float` (LE-D5). The node frees them when it leaves the tree: LE0's stripped server ended in a segmentation fault when it left that to the runtime's finalizer | world geometry; the bake's source |
 | `Geometry/Terrain/Chunk_*` | 225 `MeshInstance3D`, 16 × 16 cells each, on the collider's triangles, with the terrain shader. Clients only | — |
 | `Water` | one quad at the water level, when any sample is under it. Clients only | — |
 | `Geometry/Perimeter` | four walls as `MapBase.tscn` has, each from 1 m under its edge's lowest ground to 4 m over its highest | world geometry |
@@ -552,34 +581,58 @@ textures and their scales; replacing art is replacing that resource (LE-D22).
 
 ### 7.3 Navigation
 
-`BakeNavigation` is unchanged but for one thing: on a map with water it sets the bake's box, with
-its floor 1 m under the water level (LE-D8, §3). The bake's grid is the 1,200 × 1,200 columns it
-already is for a 240 m map. What terrain adds is 115,200 source triangles — 345,600 vertices,
-parsed on the main thread — where a slab was 12, and a surface that is not one polygon. **What
-that costs, at the first tick and at each re-bake around a structure, is not known and is LE0's
-first measurement.** The log line that reports it exists (`UnitManager.Structures.cs:1054`). If it
-is too much, in order: parse the terrain's source geometry once and keep it, parsing only the
-structures at a re-bake and baking from data on a thread; then bake tiles, and re-bake only those
-a structure touches (§3).
+`BakeNavigation` changes in two things on a data map: its slope limit is 40° (LE-D23), and on a
+map with water it sets the bake's box, with its floor 1 m under the water level (LE-D8, §3). The
+bake's grid is the 1,200 × 1,200 columns it already is for a 240 m map. What terrain adds is
+115,200 source triangles where a slab was 12, and a surface that is not one polygon.
+
+**LE0 measured what that costs** (`docs/baselines/le0-67fec82-checks-1.txt`): the greybox on its
+slab, then on level terrain, then on §10's hills. The two colliders bake alike, to the same mesh;
+the ranges are over both.
+
+| | Slab | Level terrain | Hills |
+|---|---|---|---|
+| Source geometry | 636 triangles | 115,808 | 115,808 |
+| The mesh | 565 vertices | 533 | 14,716 |
+| The first tick's bake, all of it on the tick | 0.86–1.03 s | 0.48–0.56 s | 2.0–2.3 s |
+| of which reading the geometry | 7 ms | 14–21 ms | 14–15 ms |
+| A re-bake around a structure, on the tick | 0.2–0.3 ms | 6.4–10.6 ms | 6.4–7.2 ms |
+| until the new mesh is in | 0.8–0.9 s | 0.5–0.8 s | 2.0–2.2 s |
+| One 48 m tile, from geometry read once and kept | 19 ms | 23–29 ms | 126–129 ms |
+
+The slab's own bake is the slowest of the level two because its floor is 300 m across, not 240 m.
+The first tick is before anybody is connected, as it is now. A re-bake puts 6–11 ms on a 16.7 ms
+tick, once a structure, and units path on the old mesh for 2 s on hills where it was under 1 s:
+they "walk into a new wall and slide along it", the fallback the re-bake was written with
+(`UnitManager.Structures.cs:1021`). **Neither is too much to build LE3 on, and nothing here is
+built ahead of need.**
+
+If the 2 s shows — units held up at a fresh structure in a playtest — the order is the reverse of
+the one this section had before LE0: **tiles first**. A tile is baked from geometry read once and
+kept, with `filter_baking_aabb` and `border_size` (§3), and the tile a structure stands in takes
+0.13 s on hills, not 2 s. Keeping the geometry without tiles only takes the 6–11 ms off the tick,
+and tiles need it kept anyway.
 
 ### 7.4 Every consumer
 
 | Consumer | On terrain | Change |
 |---|---|---|
-| Bodies and units (`MoveAndSlide`) | walk slopes to 45° and slide off steeper; slower up, faster down (§3) | none. LE0 measures prediction error on a slope |
-| Rounds, blasts, sight lines, the fog | stop at the ground: a hill hides and shelters | none |
-| The navigation bake | reads the collider; leaves out faces over 45° and deep water | the bake's box (§7.3) |
-| The 4x4's wheel rays; the helicopter's height ray and its 25 m ceiling over the ground | follow the ground | none. LE0 measures the grade the 4x4 climbs |
+| Bodies and units (`MoveAndSlide`) | walk faces to 42° and stall on them from 43°: the engine's 45° less what a capsule's contact with the next triangle adds (§3). A box they walk to 45°. Slower up, as fast down: 5.0 m/s on the level, 4.4 up 20°, 5.0 down it. Behind an 80 ms link a body crossing a 20° slope is corrected up to 2.5 times a second, by 10–16 mm, where on the level it is not (§10) | the bake's slope (LE-D23); the correction's threshold (LE-D25) |
+| Rounds, blasts, sight lines, the fog | stop at the ground: a hill hides and shelters. On the collider none of 10,000 rays 16–200 m long passed through it; on a heightmap 36 did over level ground and 29 over hills (LE-D5) | none |
+| The navigation bake | reads the collider; leaves out faces over its slope and deep water. At 45° it kept a 44° face no unit climbed | the bake's slope and box (§7.3) |
+| The 4x4 | its wheel rays follow the ground; its hull, which is level whatever its chassis does, does not (§2). From rest at the foot it climbs 9.1° and stops on 10.0° with its wheels off the ground, as a level hull with 0.25 m under it would. At 18 m/s it rides up a face of anything to 70°, off its wheels for 1.4–2.6 s, and is stopped by 75° (§3). Onto 10° at that speed it is off its wheels for 2.6 s. Parked, it stays put on 5° | LE-D24: roads to 15 %, and a flag |
+| The helicopter's height ray and its 25 m ceiling over the ground | follows the ground. Over the hills with the climb held, 19.8–27.7 m over it: 2.7 m past its ceiling where the ground falls away. Flown at them from 5.7 m with nothing held it is carried over, 0.9 m clear at the least, and is neither slowed nor put down | none |
 | The dropship: cruise height by ray, landing sites | follows the ground. It will not land on a deck, which has ground under it (`IsLandingSite`) | none |
 | The drone's floor (−20 m) and ceiling (120 m); the kill plane (−50 m); the agent's rays from 80 m | all outside LE-D4's limits | none |
-| A builder's structure site | a pillbox is refused as `Blocked` past 4.6–6.5° | LE-D21, §7.5 |
+| A builder's structure site | a pillbox is refused as `Blocked` past 4.5–6.2°, a sandbag wall across a slope past 5.8°, a sniper tower past 8.4–11.5° (§7.5) | LE-D21, §7.5 |
 | The strategist camera | height limits from the anchor's y; a cursor that falls back to the plane y = 0 | held 4 m over the ground under it; the fallback plane goes through the anchor |
 | Cover, spawn slots, lockers, kiosk pads, node discs | stand on pads | none |
 | A capture pad's 4 m vertical tolerance | holds on a pad | none; the validator warns past 4 m |
 | The mortar launcher's level plane | the shell still meets the real ground; the ring drawn is off by the ground's difference in height | none (§14) |
 | A barracks' defended ring | a hill between shortens it | none; the validator's warning stays flat distance |
 | `FlightTraits`' "ground … under 30 m" | ground to 64 m and cruise to 100 m: 164 m, inside ±327.67 m | the comment |
-| HTN planners, bot steering | flat distances and the navigation mesh | none. LE0 plays a bot round on hills |
+| HTN planners, bot steering | flat distances and the navigation mesh. LE0 played ten rounds of 6 + 1 bots on hills: units trained, nodes taken and structures built as on the slab (§10) | none |
+| The server's tick | 3.5 ms on the slab with a round of bots, 5.4–5.9 on level terrain, 7.8–9.1 on hills, where 1 tick in 20 takes over 14–17 ms of its 16.7 and 1 in 100 over 20 (§10) | none decided: a risk (§13), and LE3's to measure on the box |
 
 ### 7.5 A structure on a slope
 
@@ -588,6 +641,15 @@ ground enters it where it rises 0.2 m across the probe's half-width: for the pil
 that is atan(0.2 / 1.75) = 6.5° across a side and 4.6° across its diagonal. Past that the answer
 is `Blocked`, "something is in the way", and short of it the downhill edge hangs up to 0.2 m over
 the ground.
+
+LE0 measured it, grade by grade, through `ServerPlaceStructure`: a pillbox is taken up to 6.2°
+across a side and 4.5° across its diagonal and refused from 6.7° and 4.9°, as `Blocked`, and the
+downhill edge of the last one taken is 0.20 m in the air. A sandbag wall is refused from 6.2°
+across its length and never, to 17°, laid along the slope; a sniper tower from 11.9° across a side
+and 8.9° across its diagonal, its edge 0.33 m up. Through `ServerConstruct`, the computer
+strategist's way in, with a builder and the mesh baked: on 5° only the pillbox turned 45° is
+refused; on 10° the pillbox at any turn, the wall unless it lies along the slope, and the tower
+turned 45°. Every refusal is `Blocked`; none is `OffNavigation`.
 
 LE-D21: sample the ground under the footprint's centre and corners. If the highest is more than
 0.5 m over the lowest, `PlacementResult.TooSteep` (11, appended), "the ground is too steep". Else
@@ -637,10 +699,11 @@ re-draw as they move.
 
 A dab re-meshes the chunks its rectangle touches, and one sample further for their normals: at
 most (⌈(2R + 2) / 16⌉ + 1)² of them, 9 at an 8 m radius and 36 at 32 m, of 289 vertices each. The
-collider is given the heights when the stroke ends: nothing in the editor asks it during one.
+chunks of the collider it touched are given their triangles when the stroke ends, 0.2–0.3 ms
+each (§10): nothing in the editor asks it during one.
 
-Overlays: none; bands, flat-coloured; slope — green under 35°, yellow to 45°, red past it, on
-faces; buildable (§7.5); contours every 2 m.
+Overlays: none; bands, flat-coloured; slope — green under 35°, yellow to 40°, red past it
+(LE-D23), on faces; buildable (§7.5); contours every 2 m.
 
 ### 8.4 Prefabs
 
@@ -873,9 +936,115 @@ road, 212° for 15 % and 164° for 20 %.
 | 20 m | grass | grass | grass | stone | stone | stone | stone | stone | stone | stone | stone |
 | 25 m | stone | stone | stone | stone | stone | stone | stone | stone | stone | stone | stone |
 
-**Not known until LE0:** what the navigation bake costs on terrain, at the first tick and at a
-re-bake; a body's prediction error on a slope and across a crease; the grade the 4x4 climbs; what
-setting the collider's data costs; the server's frame time with a round of bots on hills.
+### 10.1 Measured by LE0
+
+At `67fec82`, where this section had a list of what was not known. Every line is in
+`docs/baselines/le0-67fec82-*.txt`, as the checks printed it, and
+`scripts/level-editor-checks.sh` prints it again; §11 says which file holds what and how it was
+run. Times are one machine's, four cores of a cloud VM doing nothing else, and are for holding its
+rows against each other. "Heightmap" is one `HeightMapShape3D`; "triangle meshes" is LE-D5's
+collider.
+
+**Rays**, against §6.1's `Sample`, to 1 mm. A slanted ray starts over the ground and ends under it.
+
+| | Heightmap, level | Heightmap, hills | Triangle meshes, level | Triangle meshes, hills |
+|---|---|---|---|---|
+| 1,000 straight down | all met it, to 0.000 mm | all, to 0.016 mm | all, to 0.000 mm | all, to 0.016 mm |
+| 1,000 slanted, under 16 m in plan | all met it | all | all | all |
+| 10,000 slanted, 16–200 m in plan | **36 met nothing** | **23 met nothing; 6 met ground beyond a hill** | all met it | all met it |
+| the ones that failed, cast again in pieces of at most 12 m | all met it | all met it | | |
+
+Split along a cell's other diagonal, 659 of the 1,000 rays down at the hills would have been over
+1 mm off: the triangles are the ones §3 names. Of the 65 rays that passed through, none was heading
+down both x and z, where a quarter of all the rays were;
+`tools/level_editor_checks/heightmap_ray_walk.py` shows why (§3).
+
+**The collider's data.**
+
+| | Heightmap | Triangle meshes |
+|---|---|---|
+| All 58,081 samples | 0.2 ms | 37–48 ms, for 225 shapes |
+| One chunk of 16 × 16 cells | there is no partial update (§3) | 0.2–0.3 ms |
+| The file's `int16` bytes to floats, all of them; every height reads back bit for bit | 0.2 ms | 0.2 ms |
+| On the stripped server export, from the pack | | 116,162 B read and decoded in 3–4 ms, the shapes set in 40–60 ms; no ray of 12,000 through them; 14,716 vertices baked |
+
+The export took the samples through the preset's include filter, as §9.1 plans, and says "No
+loader found for resource" of the file as it stores it.
+
+**The bake**: §7.3's table.
+
+**A tick**, on a dedicated server with its 6 + 1 bots and one client joined, frame to frame over
+300 s of ticks at `--fixed-fps 60`. Three runs of each, two of the level heightmap; a tick has
+16.7 ms.
+
+| | Mean | 95 in 100 under | 99 in 100 under |
+|---|---|---|---|
+| Slab | 3.5 ms | 6.2–6.6 ms | 7.8–9.6 ms |
+| Level terrain, triangle meshes | 5.4–5.9 | 8.2–8.8 | 10.5–13.9 |
+| Level terrain, heightmap | 7.8–9.2 | 12.8–17.5 | 16.7–23.8 |
+| Hills, triangle meshes | 7.8–9.1 | 13.8–17.3 | 20.2–23.3 |
+| Hills, heightmap | 11.6–12.5 | 19.9–23.4 | 26.1–30.9 |
+
+Every run had 12–22 units on the field on average and 27–48 at the most, and one or a few frames
+of 80–390 ms, the slab's among them. On the hills the bots did what they do on the slab: 57–62
+units trained in the 300 s against 60–61, nodes taken 5–7 times against 5–7, 1–7 structures built
+against 7–9. Their sandbag walls were refused as "something is in the way" 2–10 times a run on the
+hills and never on level ground: LE-D21's refusal, met in play.
+
+The heightmap costs a tick 2–4 ms more than the triangle meshes on the same ground. How many shapes
+the triangles are cut into costs it nothing: 8.2–8.8 ms on the hills at 1, 25, 225 and 900 of them
+(`baselines/le0-67fec82-chunks.txt`). What the hills cost over level terrain, 2.5–3 ms, and level
+terrain over the slab, 2 ms, LE0 did not take apart (§13).
+
+**Walking**, a body and a rifleman alike, at a plane 8 m high:
+
+| Face | On triangles, either collider | On a box turned to the same grade |
+|---|---|---|
+| 20° to 42.1° | up it. Normals met within 3.5° of the face's | up it. Normals met: the face's |
+| 43.0°, 44.0°, 45.0° | not up it in 12 s: on the floor and on a wall in the same ticks, normals met to 46.6° | up it |
+| 46.0° | not up it | not up it |
+
+The bake at 45° kept the 44.0° face and dropped the 45.0° one; on a box it kept 45.0°. A body makes
+5.00 m/s on the level, 4.36 up 20° and 5.01 down it, and is never off the floor going down.
+
+**The 4x4**, on the triangle meshes:
+
+| | |
+|---|---|
+| From rest, its front axle 1 m short of the foot | over the top of 2.9° to 9.1°, its nose up to 14.6°, off its wheels 4 ticks at the most. On 10.0° and 11.9° it stops on the slope, off its wheels, for the 20 s it was given |
+| At 18 m/s | over the top of every face to 70°, off its wheels for 1.4–2.6 s; from 30° its nose stays level, which is its hull and not its wheels taking it up. 75° and 80° stop it at the foot |
+| At 18 m/s over a ridge, up and down the same grade | the same: across to 70°, its origin up to 7.8 m over the crest |
+| Stopped on a slope with the handbrake | stays put on 4.9°, held or left empty. On 10° and steeper it is not at rest after 3 s of it |
+
+**The helicopter** over the hills, ground from −3.9 to 8.5 m under it: with the climb held,
+19.8–27.7 m over the ground against a ceiling of 25; from 5.7 m with nothing held, 0.9–15.3 m over
+it, its altitude carried from 6.8 to 15.1 m. Neither pass slowed it under 15.2 m/s or put it down.
+
+**Structure sites**: §7.5.
+
+**Prediction**, a client walking behind the relay — 40 ± 10 ms each way, 80 ms there and back — for
+60 s a leg, on a plane of 20° that is 12 m high. Corrections a second and the mean error, over
+the seconds that are clear of a clock resynchronisation by 2 s. Six sessions on the slope at the
+1 cm threshold, three on each collider, and two with it at 2 cm (LE-D25); the slab's own three
+sessions gave 0.00 and 2.6–3.4 mm.
+
+| Leg | Corrections a second, at 1 cm | Mean error | At 2 cm |
+|---|---|---|---|
+| On the level, beside the slope | 0.00–0.08 | 2.8–4.6 mm | 0.00 |
+| Up and down it | 0.00–0.16 | 3.8–4.9 mm | 0.00 |
+| Across it | 0.00–1.46 | 4.8–7.1 mm | 0.00 |
+| Diagonally on it | 0.00–2.50 | 4.9–6.5 mm | 0.00 |
+| Over the crease at its foot | 0.00–0.20 | 3.3–7.6 mm | 0.00–0.03 |
+| Over the crease at its top | 0.00–0.52 | 3.8–7.0 mm | 0.00–0.03 |
+
+What sets a session's place in those ranges is its clock, not its collider. In the two sessions
+where the clock was resynchronised throughout — 36 and 48 times in six minutes, which is the link's
+jitter and happened on the slab 0, 13 and 32 times in a minute — a body crossing the slope was
+corrected 0.8–2.5 times a second; in the four where it was resynchronised four times or not at all,
+0.00–0.75. A correction on the slope is of 10–16 mm, but for the odd one of a tick's travel, which
+the level has too. At 2 cm there were 0.00–0.03 a second in a session of each kind, and the worst
+error left standing was 16 mm. The yardstick the repository has for a link like this is GV3's for
+driving: under one correction a second and under 5 cm of error (GROUND_VEHICLES.md §12).
 
 ---
 
@@ -892,11 +1061,11 @@ LE0 ─► LE1 ─► LE2 ─► LE3 ─┬─► LE4 ─► LE5 ─► LE6     
 ```
 
 LE0–LE3 with LE7 is the smallest thing worth having: maps that are data, played and fetched, with
-no editor yet — 14 days. Their first maps come from a test's generator.
+no editor yet — 14½ days, LE0's 1½ of them spent. Their first maps come from a test's generator.
 
-### LE0 — The baseline and the spike (1½ days)
+### LE0 — The baseline and the spike (1½ days) — done
 
-Nothing is kept from it but numbers, in `docs/baselines/`, and three decisions confirmed or changed.
+What was asked of it:
 
 - `dotnet test` and the scenario suite at the starting commit.
 - In a scratch copy of the greybox, the slab replaced by a 241 × 241 `HeightMapShape3D`: flat, then
@@ -917,6 +1086,70 @@ Nothing is kept from it but numbers, in `docs/baselines/`, and three decisions c
 here. **If the flat heightmap does not match the slab within the suite's spread,** stop: the
 collider is the plan's foundation.
 
+**Measured at `67fec82`**, whose code is `cd0c558`'s: the commits between them change only `docs/`
+and `tools/level_editor_checks/design_checks.py`. .NET SDK 8.0.134 (Ubuntu 24.04's
+`dotnet-sdk-8.0`); Godot `4.6.stable.mono.official.89cea1439` and its export templates; the project
+imported once with `--headless --import`; four cores of a cloud VM. The suite's harness starts its
+server with no frame-rate option, so `--fixed-fps 60` went in through `GODOT`, as GV0's did.
+
+It was to keep nothing but numbers, and it keeps its checks as well:
+`scripts/level-editor-checks.sh` over `tools/EngineChecks/LevelChecks.cs` and `LevelTerrain.cs`, on
+a copy of the tree whose greybox has its slab replaced by terrain, with three helpers in
+`tools/level_editor_checks/`: `le0_terrain.py` (§10's hills as a file's samples; the scene's edit),
+`compare_suites.py` and `heightmap_ray_walk.py`. The later phases are checked by the same script,
+and two of what it found are the engine's and want casting again when the engine changes (§13).
+The game compiles and loads none of it.
+
+| Asked | It came to | Where |
+|---|---|---|
+| `dotnet test` | 3,247 of 3,247 | |
+| The suite at the starting commit | on the slab, twice: 49 and 48 of 57. Eight fail both times: `htn_locker_runner_kit`, `htn_squad_retreats`, `htn_strategist_digs_in`, `locker_launcher_vs_tank`, `locker_resupply`, `locker_resupply_under_fire`, `tactics_move_to_node`, `technical_wreck_ejects`. `tactics_sniper_overwatch` fails once | `suite-slab-1`, `-2` |
+| The slab replaced by a heightmap, flat and hills | done, and by LE-D5's triangle meshes beside it. The hills are §10's, read from a file of `int16`, with the greybox's 67 pieces and its walls levelled into them by §6.3 at 30°: −6.7 to 17.1 m, the steepest face 59.6°, 1.6 % of faces over 45° | `checks-1` |
+| A ray down at 1,000 points, to 1 mm | to 0.016 mm, on both colliders. **Slanted and 16 m or longer, 65 of 20,000 pass through the heightmap** | §10.1; `checks-1` |
+| The bake | 2.0–2.3 s at the first tick on hills, 6–11 ms on the tick at a re-bake | §7.3; `checks-1` |
+| The server's frame time with 6 + 1 bots | 3.5 ms a tick on the slab; on hills 7.8–9.1, and over 20 for 1 tick in 100 | §10.1; `checks-1` to `-3`, `chunks` |
+| A body and a unit walk 44° and not 46° | **they do not walk 44°**: 42.1°, and not 43.0° | §10.1; `checks-1` |
+| Prediction on a 20° slope and over a crease | corrected up to 2.5 times a second crossing it, by 10–16 mm; not at 2 cm | §10.1; `checks-1`, `-4`, `net-by-hand` |
+| The 4x4 from rest, at speed, across a crease | 9.1° from rest; **70° at speed, on its hull** | §10.1; `checks-1` |
+| The helicopter over hills | 19.8–27.7 m over the ground with the climb held, against a ceiling of 25; carried over hills flown at from 5.7 m | §10.1; `checks-1` |
+| Builders on 5° and 10° | `Blocked`: the pillbox turned 45° on 5°; most of what was tried on 10° | §7.5; `checks-1` |
+| The collider's data; the stripped export | 0.2 ms a chunk, 37–48 ms for all; nine facts of nine on the export | §10.1; `checks-1` |
+| The suite on the flat heightmap | twice on each collider: 49 and 49 of 57 on the triangle meshes, 49 and 50 on the heightmap. The 48 that pass on the slab both times pass all four times; the slab's eight fail, but `htn_squad_retreats` once | `suite-trimesh-1`, `-2`, `suite-heightmap-1`, `-2`, `suites` |
+
+The files are `docs/baselines/le0-67fec82-<name>.txt`. `checks-1` is
+`level-editor-checks.sh ground slopes frame net export`; `checks-2` and `-3` its `frame` part
+again; `checks-4` `net net-2cm`; `chunks` and `net-by-hand` say in their first lines what was run
+by hand; `suites` is `compare_suites.py` over the six runs of the suite.
+
+**The stop did not come.** Level terrain plays as the slab does, on either collider: no scenario the
+slab passes fails on it, and the eight the slab fails fail on it, `htn_strategist_digs_in` on the
+same one of its two seeds. The suite's own spread on the slab is one scenario,
+`tactics_sniper_overwatch`, which passes once and fails once there and passes four times on terrain;
+`htn_squad_retreats`, whose claim is one over half of its seeds, passes once in four.
+
+The suite needed one thing the plan did not foresee. The greybox's slab is 300 m across, and
+`barracks_mortar` stands its player on the 30 m of it outside the walls, where a 240 m field has no
+ground: run without that rim, the suite on terrain failed that scenario four times of four and no
+other that the slab passes. The suite part keeps the rim, as boxes; nothing else does, since a data
+map ends at its walls (LE-D3). Without the rim `htn_strategist_digs_in` passed four times of four,
+which it does not on the slab: whatever fails it there has to do with the ground outside the walls.
+That is CONTROL_POINTS.md §5.4's to follow, not this plan's.
+
+**Decided here.**
+
+- **LE-D5 is changed** to the fallback it was written with: the triangle meshes. The heightmap lets
+  long rays through, and costs a tick more.
+- **§7.3's order is reversed**: tiles first, if anything. Neither is built ahead of need.
+- **LE-D21 is confirmed**, with its numbers.
+- **LE-D23, LE-D24 and LE-D25 are added**, for three things LE0 was not asked: what is walkable is
+  40°, not 45°; the 4x4 is a road vehicle on a data map; a correction is applied from 2 cm.
+  LE-D24 and LE-D25 are flagged.
+- **A tick on hills is a risk** (§13), not a decision: LE3 measures it on the box.
+
+**Left for a person:** to look at any of it. Every number here is from a headless process: whether
+a correction of 12 mm shows, whether a 4x4 going up a cliff reads as a bug or as a stunt, and what a
+tick costs on the machine the game is served from.
+
 ### LE1 — The ground's rules, engine-free (3 days)
 
 `HeightField`, `TerrainBrush`, `TerrainConform`, `TerrainBands`, `MapLimits`, and their tests. The
@@ -933,18 +1166,22 @@ document; the reader refuses every case of §6.8 with its reason and never throw
 refuses a map with each of §6.9's errors and passes the generated one; and placing then undoing
 restores every sample.
 
-### LE3 — The world from a file (3½ days)
+### LE3 — The world from a file (4 days)
 
 `LevelRoot`, `TerrainNode`, `LevelBuilder`, `MapLibrary`, `MapHost.tscn`, the shader and palette,
 `--map` and `--practice`, `MapInfo`'s kind, one bundled map from LE2's generator, the export
-preset's filter, and §7.4's two changes: the camera, the bake's box. LE-D21 if LE0 confirmed it.
+preset's filter, and §7.4's changes: the camera, the bake's box and its slope (LE-D23), and the
+correction's threshold with its tests (LE-D25). LE-D21, which LE0 confirmed. `TerrainNode` frees its
+shapes when it leaves the tree (§7.1).
 
 Engine checks: `--practice --map` on the bundled map logs `navigation baked` with vertices and
 `round live`; the spawn count, barracks, nodes and locker are the file's; a ray meets the ground
 where the file says; a bot round runs ten minutes with units trained, a node taken and nothing in
 MAPS.md §4's list of lines that must not appear; the same on a `--server` process with a client;
-the same from the stripped export. Scenarios: two of the existing ones re-run on the bundled map
-by `"map"`.
+the same from the stripped export. `level-editor-checks.sh ground slopes` as LE0 left them: no ray
+through the collider, and a body and a unit up the faces a skirt can leave. A tick's time with a
+round of bots on the bundled map, on the box, against the slab's there (§13). Scenarios: two of the
+existing ones re-run on the bundled map by `"map"`.
 
 **Done when** those pass. **Left for a person:** to look at it — the bands, the water, the seams
 between chunks — and to walk, drive and fly over it.
@@ -1003,7 +1240,7 @@ directory, the token and the restart; the README the editor and the flags;
 IMPLEMENTATION_PLAN.md §5's "Multiple maps" cut, struck. This file's status becomes what was built
 and what each phase ran.
 
-**Total: 28 days.**
+**Total: 28½ days**, LE0's 1½ spent.
 
 ---
 
@@ -1011,7 +1248,8 @@ and what each phase ran.
 
 | Claim | Checked by | Phase |
 |---|---|---|
-| The collider is where §3 says, and a flat one plays as the slab does | rays against `Sample`; the scenario suite | LE0 |
+| The collider is where §3 says, lets no ray through, and a flat one plays as the slab does | rays against `Sample`, 12,000 of them a ground; the scenario suite | LE0, done; `ground` again at LE3 |
+| A body and a unit walk what the plan calls walkable | faces from 20° to 46°, on the collider and on a box | LE0, done; `slopes` again at LE3 |
 | A brush's grade is its setting | `TerrainBrushTests`, over random strokes | LE1 |
 | A pad is level, minimal and no steeper than its skirt | `TerrainConformTests` | LE1 |
 | The bands keep their order | `TerrainBandsTests`, a sweep | LE1 |
@@ -1028,16 +1266,19 @@ and what each phase ran.
 
 | Risk | Signal | Mitigation |
 |---|---|---|
-| **The navigation bake on terrain is slow**, at the first tick or at every structure | LE0's numbers; `[rts] navigation re-baked … ms of it on the tick` | §7.3's order: keep the parsed terrain; then tiles. Decided at LE0, before anything is built on it |
-| **Bodies catch on the collider's creases**, or prediction drifts on slopes | mispredictions a second above the flat baseline; visible hitching | LE0 measures. The fallback collider shares the heightmap's face test (§3), so it would not help; smoother ground from the default brushes would. Stop and decide at LE0 |
-| **A flat-ground assumption §7.4 missed** | a bot round on hills that does what one on the slab does not | LE0 and LE3 play one; the list is where to add it |
+| **The navigation bake on terrain is slow**, at the first tick or at every structure | `[rts] navigation re-baked … ms of it on the tick` | Measured by LE0 (§7.3): 2.0–2.3 s at the first tick on hills, 6–11 ms on the tick at a re-bake and 2 s to the new mesh. Not too much to build on; if the 2 s shows, tiles first |
+| **Bodies catch on the collider's creases**, or prediction drifts on slopes | mispredictions a second above the flat baseline; visible hitching | Measured by LE0, and decided. They do not catch under 43°, and from there they stall: walkable is 40° (LE-D23). Prediction is corrected up to 2.5 times a second crossing a 20° slope, by 10–16 mm, which is the wire's rounding against a 1 cm threshold and stops at 2 cm (LE-D25). Whether any of it shows is a person's to say, at LE3 |
+| **A flat-ground assumption §7.4 missed** | a bot round on hills that does what one on the slab does not | LE0 found one, the 4x4's level hull (LE-D24), and played ten bot rounds on hills (§10). LE3 plays another; the list is where to add it |
 | **A hostile map file** from a server | — | A reader that is total, limits before allocation, a known inflated size, no scene and no object decoded, and tests over the hostile cases (§6.8). A client decodes only after the hash matches what it was told |
 | **The upload socket is write access to a public box** | — | Off unless a token was given; the deploy unit gives none; HMAC with a nonce; one upload at a time; the cache directory only; validated before written |
 | **Two builds disagree about a prefab** | a wall drawn where the server has a box of another size | The catalog is append-only and a test holds it; the file names the count it was made against; a client refuses ids it lacks. Sizes changing under an id is LAN.md §5's problem, unchanged |
 | **The editor grows** | LE4–LE6 overrun | Destructive edits, one field size, no painting, no layers (§14). LE0–LE3 with LE7 ships without it |
 | **Hand-built UI is slow to make** | LE4's four days gone on panels | The decisions are engine-free and tested; the widgets are the menu's kind, and the console's commands do everything a panel does |
 | **Water that only stops units** reads as a bug | a player found under it | LE-D8 is flagged; §14 names the rules that would follow |
-| **The √2 on faces** leaves a speck the bake will not walk | a hole in the mesh at a pad's corner or a cone's foot | The skirt is 30° and capped at 35°, which the √2 keeps walkable; the slope overlay draws faces; the deep check catches a cut-off pad |
+| **The √2 on faces** leaves a speck the bake will not walk | a hole in the mesh at a pad's corner or a cone's foot | The skirt is 30°, which the √2 keeps under the 40° that is walkable (LE-D23); the slope overlay draws faces; the deep check catches a cut-off pad |
+| **A tick on hills runs out of time**: with a round of bots, 1 in 20 over 14–17 ms and 1 in 100 over 20–23 ms of a 16.7 ms tick, where the slab's worst 1 in 100 is under 10 ms | `level-editor-checks.sh frame`; a server that falls behind its ticks | Measured by LE0 on four cores of a cloud VM; the box is DEPLOYMENT.md's and is LE3's to measure. The collider is the cheaper of the two and its chunks cost nothing; what terrain and hills add is not taken apart. LE3 does that before it bundles a map with hills on it, and a first bundled map can be gentler than §10's hills, whose steepest face is 59.6° |
+| **A ray through the ground** | a round or a sight line that a hill should have stopped | Found by LE0 in `HeightMapShape3D` and designed out (LE-D5); `level-editor-checks.sh ground` casts 10,000 at the collider, and holds it to none |
+| **The engine moves under the plan**: a later Godot mends the heightmap's walk, or changes what a capsule's contacts are | `level-editor-checks.sh ground` and `slopes` on the new version | The checks are kept for this: the heightmap's rays are measured beside the collider's every time, and the steepest face walked is a number in the output |
 
 ## 14. Not in this plan
 
@@ -1046,7 +1287,12 @@ and what each phase ran.
 - **Painting.** A texture set by hand over the computed band; more than one road surface.
 - **Live modifiers.** Pads, roads and ramps that follow their object when it moves. Edits are
   destructive, and undo is the session's.
-- **Overhangs, caves, tunnels.** The collider can hold holes (§3); nothing here makes one.
+- **Overhangs, caves, tunnels.** A chunk of the collider can leave triangles out; nothing here
+  does.
+- **A 4x4 that drives hills**: its collider pitched and rolled with its chassis, and a face it
+  could not drive stopping it (LE-D24). GROUND_VEHICLES.md's to plan.
+- **Another physics engine.** `project.godot` pins GodotPhysics3D (§2) and LE0 measured nothing
+  else; Jolt has a heightfield of its own.
 - **Water as a rule**: wading speed, drowning, a vehicle's fording depth, rounds and sight through
   it.
 - **Terrain that changes during a round**: craters, digging in.

@@ -1,0 +1,424 @@
+# LE0, docs/LEVEL_EDITOR.md §11. At 67fec82, on level terrain as triangle meshes (LE-D5's collider), the slab's rim kept: COLLIDER=trimesh ./scripts/level-editor-checks.sh suite
+
+rifle and DMR rounds do nothing to a tank, a pillbox or a sniper tower; a launcher does .. PASS  (1,800 ticks, 30.0 s sim, 5.9 s wall, 2 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 2 seeds  ok
+  observation.rifle.weapon.magazine.min < 1   0..0 over 2 seeds  ok
+  observation.dmr.weapon.magazine.min < 1     0..0 over 2 seeds  ok
+  observation.marksman.weapon.magazine.min < 1 0..0 over 2 seeds  ok
+  events.damage.count >= 2                    3..3 over 2 seeds  ok
+  events.damage.weapon.min == 4               4..4 over 2 seeds  ok
+  events.damage.weapon.max == 4               4..4 over 2 seeds  ok
+  events.damage.victim.min == -65552          -65552..-65552 over 2 seeds  ok
+  events.damage.victim.max == -65552          -65552..-65552 over 2 seeds  ok
+  events.unit_lost.count == 0                 0..0 over 2 seeds  ok
+  observation.rifle.self.alive.min == 1       1..1 over 2 seeds  ok
+  observation.dmr.self.alive.min == 1         1..1 over 2 seeds  ok
+  observation.grenadier.self.alive.min == 1   1..1 over 2 seeds  ok
+  observation.marksman.self.alive.min == 1    1..1 over 2 seeds  ok
+a heavy vest takes twice the rifle hits to die that no vest does, and only it absorbs any .. PASS  (2,400 ticks, 40.0 s sim, 4.8 s wall, 2 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 2 seeds  ok
+  events.kill[victim=@bare].count == 1        1..1 over 2 seeds  ok
+  events.kill[victim=@heavy].count == 1       1..1 over 2 seeds  ok
+  events.damage[victim=@bare].count == 5      5..5 over 2 seeds  ok
+  events.damage[victim=@heavy].count in [8,10] 10..10 over 2 seeds  ok
+  events.damage[victim=@bare].absorbed.max == 0 0..0 over 2 seeds  ok
+  events.damage[victim=@heavy].absorbed.max > 0 13..13 over 2 seeds  ok
+  events.damage[victim=@heavy].absorbed.sum == 100 100..100 over 2 seeds  ok
+  observation.bare.self.armour_max.max == 0   0..0 over 2 seeds  ok
+  observation.heavy.self.armour_max.last == 100 100..100 over 2 seeds  ok
+  observation.heavy.self.armour_tier.last == 3 3..3 over 2 seeds  ok
+  observation.heavy.self.armour.min == 0      0..0 over 2 seeds  ok
+  observation.bare.self.alive.min == 0        0..0 over 2 seeds  ok
+  observation.heavy.self.alive.min == 0       0..0 over 2 seeds  ok
+the barracks guns close the ground in front of the door .. PASS  (720 ticks, 12.0 s sim, 1.5 s wall, 2 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 2 seeds  ok
+  events.kill.count >= 1                      1..1 over 2 seeds  ok
+  events.kill.attacker.max in [-65537,-65536] -65536..-65536 over 2 seeds  ok
+  events.damage.attacker.max in [-65537,-65536] -65536..-65536 over 2 seeds  ok
+  observation.door.self.alive.min == 0        0..0 over 2 seeds  ok
+  observation.field.self.alive.min == 1       1..1 over 2 seeds  ok
+  observation.field.self.health.min == 1      1..1 over 2 seeds  ok
+the barracks mortar finds what its guns cannot see .. PASS  (1,800 ticks, 30.0 s sim, 1.9 s wall, 2 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 2 seeds  ok
+  events.kill.count >= 1                      1..1 over 2 seeds  ok
+  events.damage.attacker.min == -65538        -65538..-65538 over 2 seeds  ok
+  events.damage.attacker.max == -65538        -65538..-65538 over 2 seeds  ok
+  observation.self.alive.min == 0             0..0 over 2 seeds  ok
+with the bots in role kits, a seat on the rifle bot's slot starts its episodes in the default kit .. PASS  (600 ticks, 10.0 s sim, 1.2 s wall, 2 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 2 seeds  ok
+  observation.rifleman.weapon.reserve_max.last == 150 150..150 over 2 seeds  ok
+  observation.rifleman.self.grenades.last == 3 3..3 over 2 seeds  ok
+  observation.rifleman.self.armour_tier.last == 0 0..0 over 2 seeds  ok
+  observation.rifleman.self.armour_max.last == 0 0..0 over 2 seeds  ok
+  observation.rifleman.self.load_scale.last == 1 1..1 over 2 seeds  ok
+the computer strategist buys a builder and puts up a structure at a node .. PASS  (6,600 ticks, 110.0 s sim, 10.7 s wall, 1 seed, bot ai htn, bot kits role, unit autonomy on)
+  events.unit_built.tier.max == 3             3  ok
+  events.structure_placed.count >= 1          2  ok
+  events.structure_built.count >= 1           1  ok
+  events.structure_lost.count == 0            0  ok
+a ground seat acquires at 60 m .... PASS  (900 ticks, 15.0 s sim, 1.4 s wall, 3 seeds, bot ai htn, bot kits role, unit autonomy on)
+  observation.contacts.1.max >= 1 over 100% of seeds 3/3 seeds  ok
+  observation.contacts.2.max >= 1 over 100% of seeds 3/3 seeds  ok
+  p50(observation.contacts.6.max) <= 0.55     p50 = 0.467 over 3 seeds  ok
+  observation.self.alive == 1                 1..1 over 3 seeds  ok
+a ground player who holds the drone node two minutes flies an FPV drone into a tank 50 m off and kills it, and gets none before .. PASS  (17,400 ticks, 290.0 s sim, 22.6 s wall, 2 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 2 seeds  ok
+  events.node_captured[node=1,owner=1].count == 1 1..1 over 2 seeds  ok
+  events.unit_lost[tier=2].count == 1         1..1 over 2 seeds  ok
+  events.kill[weapon=13].count == 1           1..1 over 2 seeds  ok
+  events.damage[weapon=13].count == 1         1..1 over 2 seeds  ok
+  observation.pilot.self.alive.min == 1       1..1 over 2 seeds  ok
+a dropship with eight aboard flies sixty metres, comes down and lets them all out where it landed .. PASS  (1,860 ticks, 31.0 s sim, 2.3 s wall, 1 seed, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0  ok
+  events.dropship_landed.count >= 1           1  ok
+  events.dropship_landed[aboard=8,x>0].count >= 1 1  ok
+  events.unit_disembarked.count == 8          8  ok
+  events.unit_disembarked[x>0].count == 8     8  ok
+  events.unit_lost.count == 0                 0  ok
+a pilot and a passenger on the helicopter's pad climb five seconds, fly forward four, come down and both get out more than 40 m from the pad .. PASS  (2,280 ticks, 38.0 s sim, 5.5 s wall, 2 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 2 seeds  ok
+  events.vehicle_entered.count == 2           2..2 over 2 seeds  ok
+  events.vehicle_exited.count == 2            2..2 over 2 seeds  ok
+  events.vehicle_exited[peer=@pilot].count == 1 1..1 over 2 seeds  ok
+  events.vehicle_exited[peer=@passenger].count == 1 1..1 over 2 seeds  ok
+  events.vehicle_exited.x.min >= -78.5        -49.43..-49.43 over 2 seeds  ok
+  events.vehicle_exited.z.max <= 63.2         39.554..39.554 over 2 seeds  ok
+  events.vehicle_damaged.count == 0           0..0 over 2 seeds  ok
+a helicopter hovering 15 m up at 10 health with two aboard is wrecked by a rifleman 30 m off, and both aboard are killed .. PASS  (2,400 ticks, 40.0 s sim, 4.5 s wall, 2 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 2 seeds  ok
+  events.vehicle_destroyed.count == 1         1..1 over 2 seeds  ok
+  events.kill.count == 2                      2..2 over 2 seeds  ok
+  events.kill[victim=@pilot].count == 1       1..1 over 2 seeds  ok
+  events.kill[victim=@passenger].count == 1   1..1 over 2 seeds  ok
+  events.vehicle_exited.count == 2            2..2 over 2 seeds  ok
+an HTN ground bot gets into the passenger's door of a person's helicopter on its pad, a second finds no seat, and the one aboard gets out after the pilot lands and does .. PASS  (4,140 ticks, 69.0 s sim, 15.0 s wall, 3 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 3 seeds  ok
+  events.vehicle_entered.count == 2           2..2 over 3 seeds  ok
+  events.vehicle_entered[seat=2,peer!=@pilot].count == 1 1..1 over 3 seeds  ok
+  events.vehicle_exited.count == 2            2..2 over 3 seeds  ok
+  events.vehicle_exited.seat.first == 0       0..0 over 3 seeds  ok
+  events.vehicle_exited[seat=0,peer=@pilot].count == 1 1..1 over 3 seeds  ok
+  events.vehicle_exited[peer!=@pilot].x.min >= -90 -75.752..-75.752 over 3 seeds  ok
+  events.vehicle_damaged.count == 0           0..0 over 3 seeds  ok
+HTN ground bots that got into a person's 4x4 with nothing in sight fight from their seats when it brings a rifleman into range .. PASS  (6,000 ticks, 100.0 s sim, 8.2 s wall, 4 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 4 seeds  ok
+  events.vehicle_entered[seat=1,peer!=@driver].count == 1 1..1 over 4 seeds  ok
+  events.vehicle_entered[seat=2,peer!=@driver].count == 1 1..1 over 4 seeds  ok
+  events.damage[attacker>0,attacker!=@driver,victim<0].count >= 3 3..3 over 4 seeds  ok
+  events.kill[attacker>0,attacker!=@driver,weapon=14].count >= 1 1..1 over 4 seeds  ok
+  events.vehicle_damaged[attacker>0].count == 0 0..0 over 4 seeds  ok
+  events.vehicle_exited[peer!=@driver].count == 0 0..0 over 4 seeds  ok
+HTN ground bots beside a 4x4 with a person in its bed and nobody at the controls, and beside an empty one, get into neither .. PASS  (1,800 ticks, 30.0 s sim, 4.5 s wall, 2 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 2 seeds  ok
+  events.vehicle_entered.count == 1           1..1 over 2 seeds  ok
+  events.vehicle_entered[peer!=@rider].count == 0 0..0 over 2 seeds  ok
+HTN ground bots get into a person's stopped 4x4, gunner first, ride it, and get out when the person does .. PASS  (2,700 ticks, 45.0 s sim, 4.6 s wall, 3 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 3 seeds  ok
+  events.vehicle_entered.count == 3           3..3 over 3 seeds  ok
+  events.vehicle_entered[seat=1,peer!=@driver].count == 1 1..1 over 3 seeds  ok
+  events.vehicle_entered[seat=2,peer!=@driver].count == 1 1..1 over 3 seeds  ok
+  events.vehicle_entered[seat=0,peer!=@driver].count == 0 0..0 over 3 seeds  ok
+  events.vehicle_entered[peer!=@driver].seat.first == 1 1..1 over 3 seeds  ok
+  events.vehicle_exited.count == 3            3..3 over 3 seeds  ok
+  events.vehicle_exited.seat.first == 0       0..0 over 3 seeds  ok
+  events.vehicle_exited[seat=0,peer=@driver].count == 1 1..1 over 3 seeds  ok
+  events.vehicle_exited[peer!=@driver].z.min >= 106 108.901..108.901 over 3 seeds  ok
+the HTN strategist trains heavy gunners at its pillbox and snipers at its tower .. PASS  (4,800 ticks, 80.0 s sim, 15.1 s wall, 2 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 2 seeds  ok
+  events.unit_built[tier=6,barracks<0].count >= 2 2..3 over 2 seeds  ok
+  events.unit_built[tier=5,barracks<0].count >= 2 2..2 over 2 seeds  ok
+HTN ground bots deny the strategist its nodes: they take two, and the far one it holds .. PASS  (30,960 ticks, 516.0 s sim, 105.0 s wall, 4 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 4 seeds  ok
+  events.node_captured[node=2,owner=2].count >= 1 1..1 over 4 seeds  ok
+  events.node_captured[owner=1].count >= 2    2..3 over 4 seeds  ok
+  events.node_captured[node=2,owner=1,claimant=2].count >= 1 over 50% of seeds 4/4 seeds  ok
+an HTN bot sent to the weapon locker for armour takes a launcher kit there, and spawns again in its own .. FAIL  (15,480 ticks, 258.0 s sim, 37.9 s wall, 3 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 3 seeds  ok
+  events.kit.count >= 1                       0  FAILED at tick 5222 (seed 1)
+  events.kit.primary.min == 4                 0  FAILED at tick 5222 (seed 1)
+  traces: /tmp/gdpyr-level-checks.NI0ug8/traces
+the HTN strategist sends its technical to scout, and it finds a player hiding at a far node .. PASS  (10,800 ticks, 180.0 s sim, 23.2 s wall, 3 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 3 seeds  ok
+  events.squad_task[goal=5].count >= 1        1..2 over 3 seeds  ok
+  events.contact_spotted[first=1,observer=1].count == 1 1..1 over 3 seeds  ok
+an HTN squad that is losing its fight falls back: the scout, or an assault squad in a strike .. FAIL  (30,960 ticks, 516.0 s sim, 208.9 s wall, 4 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 4 seeds  ok
+  events.squad_task[goal=4].count >= 1        7..10 over 4 seeds  ok
+  events.squad_task[goal=1].count >= 1 over 50% of seeds 0/4 seeds  FAILED at tick 0 (seed 1)
+  traces: /tmp/gdpyr-level-checks.NI0ug8/traces
+the HTN strategist takes the nodes, and sends a squad to one a ground player comes near .. PASS  (10,800 ticks, 180.0 s sim, 34.3 s wall, 3 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 3 seeds  ok
+  events.node_captured[owner=2].count >= 3    3..3 over 3 seeds  ok
+  events.squad_task[goal=2,x<50].count >= 1   2..2 over 3 seeds  ok
+  events.node_captured[claimant=2].count == 0 0..0 over 3 seeds  ok
+the HTN strategist, its garrison full, puts its barracks' units out at a node it holds .. PASS  (36,000 ticks, 600.0 s sim, 131.6 s wall, 3 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 3 seeds  ok
+  events.node_captured[owner=2].count >= 2    3..3 over 3 seeds  ok
+  events.unit_built[barracks=0,x<60].count >= 3 20..28 over 3 seeds  ok
+  events.unit_built[barracks=0,x>90].count >= 4 12..12 over 3 seeds  ok
+the HTN strategist's builder puts up a pillbox at a node, then lays sandbags in front of its garrison at home .. FAIL  (28,800 ticks, 480.0 s sim, 143.6 s wall, 2 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 2 seeds  ok
+  events.structure_placed[type=0].count >= 1  1..3 over 2 seeds  ok
+  events.structure_placed[type=1,x>80].count >= 1 0  FAILED at tick 28922 (seed 2)
+  events.structure_built[type=1,x>80].count >= 1 0  FAILED at tick 28922 (seed 2)
+  events.structure_lost.count == 0            0..0 over 2 seeds  ok
+  traces: /tmp/gdpyr-level-checks.NI0ug8/traces
+a rifleman 3 m from the weapon locker asks it for a launcher kit, is refused, and fights on with the rifle .. PASS  (1,440 ticks, 24.0 s sim, 1.7 s wall, 2 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 2 seeds  ok
+  counters.loadouts_applied == 0              0..0 over 2 seeds  ok
+  counters.loadouts_refused == 1              1..1 over 2 seeds  ok
+  counters.loadouts_refused.not_at_locker == 1 1..1 over 2 seeds  ok
+  events.kit.count == 0                       0..0 over 2 seeds  ok
+  events.damage.count >= 5                    60..60 over 2 seeds  ok
+  events.damage.weapon.min == 3               3..3 over 2 seeds  ok
+  events.damage.weapon.max == 3               3..3 over 2 seeds  ok
+  observation.rifleman.weapon.reserve_max.last == 150 150..150 over 2 seeds  ok
+a rifleman who takes a launcher kit at the weapon locker walks away with a launcher, and a launcher hurts a tank .. FAIL  (1,920 ticks, 32.0 s sim, 2.3 s wall, 2 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 2 seeds  ok
+  counters.loadouts_applied == 1              0  FAILED at tick 1022 (seed 2)
+  events.kit.count == 1                       0  FAILED at tick 1022 (seed 2)
+  events.kit.primary.max == 4                 0  FAILED at tick 1022 (seed 2)
+  events.kit.magazines.max == 3               0  FAILED at tick 1022 (seed 2)
+  events.damage.count >= 3                    0  FAILED at tick 1022 (seed 2)
+  events.damage.weapon.min == 4               0  FAILED at tick 1022 (seed 2)
+  events.damage.weapon.max == 4               0  FAILED at tick 1022 (seed 2)
+  events.damage.victim.max in [-65535,-1]     0  FAILED at tick 1022 (seed 2)
+  observation.grenadier.self.alive.min == 1   1..1 over 2 seeds  ok
+  traces: /tmp/gdpyr-level-checks.NI0ug8/traces
+a rifleman who empties three magazines and throws three grenades 3 m from the weapon locker gets nothing back there, and every pouch back within 3 s of walking up to it .. FAIL  (2,560 ticks, 42.7 s sim, 2.7 s wall, 2 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 2 seeds  ok
+  events.damage.count == 0                    0..0 over 2 seeds  ok
+  events.grenade_thrown.count == 3            3..3 over 2 seeds  ok
+  observation.weapon.reserve.min == 90        90..90 over 2 seeds  ok
+  observation.self.grenades.min == 0          0..0 over 2 seeds  ok
+  observation.weapon.reserve.last == 150      90  FAILED at tick 1342 (seed 6)
+  observation.self.grenades.last == 3         0  FAILED at tick 1342 (seed 6)
+  observation.weapon.magazine.last == 0       0..0 over 2 seeds  ok
+  events.resupply[peer=@gunner].rounds.sum == 60 0  FAILED at tick 1342 (seed 6)
+  events.resupply[peer=@gunner].rounds.max == 30 0  FAILED at tick 1342 (seed 6)
+  events.resupply[peer=@gunner].grenades.sum == 3 0  FAILED at tick 1342 (seed 6)
+  events.resupply[peer=@gunner].armour.sum == 0 0..0 over 2 seeds  ok
+  events.resupply[peer=@gunner].count == 4    0  FAILED at tick 1342 (seed 6)
+  events.resupply.since_hurt.max == -1        0  FAILED at tick 1342 (seed 6)
+  observation.self.alive.min == 1             1..1 over 2 seeds  ok
+  traces: /tmp/gdpyr-level-checks.NI0ug8/traces
+a medium vest a rifleman wears down at the weapon locker gets nothing back within 3 s of a hit, and every point back once the rifleman is dead .. FAIL  (4,800 ticks, 80.0 s sim, 5.7 s wall, 8 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 8 seeds  ok
+  events.unit_lost.count == 1                 1..1 over 8 seeds  ok
+  events.damage[victim=@vest].count in [1,7]  1..4 over 8 seeds  ok
+  events.damage[victim=@vest].absorbed.sum > 0 10..40 over 8 seeds  ok
+  events.resupply[peer=@vest,since_hurt>=0,since_hurt<180].count == 0 0..0 over 8 seeds  ok
+  events.resupply[peer=@vest,armour>0].count >= 1 0  FAILED at tick 662 (seed 1)
+  events.resupply[peer=@vest,armour>0].since_hurt.min >= 180 0  FAILED at tick 662 (seed 1)
+  events.resupply[peer=@vest].armour.sum / events.damage[victim=@vest].absorbed.sum == 1 0  FAILED at tick 662 (seed 1)
+  observation.vest.self.armour.last == 60     20  FAILED at tick 662 (seed 1)
+  observation.vest.self.alive.min == 1        1..1 over 8 seeds  ok
+  traces: /tmp/gdpyr-level-checks.NI0ug8/traces
+a rifle with no spare magazines fires its 30 rounds and no more .. PASS  (1,440 ticks, 24.0 s sim, 1.9 s wall, 2 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 2 seeds  ok
+  events.damage.count in [25,30]              30..30 over 2 seeds  ok
+  events.structure_lost.count == 0            0..0 over 2 seeds  ok
+  observation.weapon.reserve_max.last == 0    0..0 over 2 seeds  ok
+  observation.weapon.reserve.last == 0        0..0 over 2 seeds  ok
+  observation.weapon.magazine.last == 0       0..0 over 2 seeds  ok
+  observation.self.grenades.last == 0         0..0 over 2 seeds  ok
+a kit with no primary spawns on the pistol, and the large-weapon key does nothing .. PASS  (720 ticks, 12.0 s sim, 1.0 s wall, 1 seed, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0  ok
+  events.damage[weapon=1].count >= 3          14  ok
+  events.damage[weapon=3].count == 0          0  ok
+  observation.weapon.slot.1.last == 1         1  ok
+  observation.weapon.slot.2.last == 0         0  ok
+  observation.weapon.reserve.last == -1       -1  ok
+  observation.self.grenades.last == 3         3  ok
+a player and a rifleman on one node contest it until one of them is dead .. PASS  (1,200 ticks, 20.0 s sim, 1.7 s wall, 2 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 2 seeds  ok
+  events.kill.count >= 1                      1..1 over 2 seeds  ok
+  events.node_contested[node=1,contested=1].count >= 1 1..1 over 2 seeds  ok
+  events.node_contested[node=1,contested=0].ticks.max > 0 24..24 over 2 seeds  ok
+a finished pillbox kills what it can reach and nothing past that .. PASS  (720 ticks, 12.0 s sim, 1.8 s wall, 2 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 2 seeds  ok
+  events.kill.count >= 1                      1..1 over 2 seeds  ok
+  events.kill.attacker.max in [-65583,-65552] -65552..-65552 over 2 seeds  ok
+  events.damage.attacker.max in [-65583,-65552] -65552..-65552 over 2 seeds  ok
+  observation.near.self.alive.min == 0        0..0 over 2 seeds  ok
+  observation.far.self.alive.min == 1         1..1 over 2 seeds  ok
+  observation.far.self.health.min == 1        1..1 over 2 seeds  ok
+rifle lethality at 100 m .......... PASS  (900 ticks, 15.0 s sim, 1.0 s wall, 1 seed, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0  ok
+  observation.weapon.magazine.min < 1         0  ok
+  events.damage.count >= 1                    5  ok
+  events.damage.sum in [20,400]               100  ok
+  events.unit_lost.count >= 1                 1  ok
+rifle rounds fired from a crouch stop in a sandbag wall and do 30% of their damage to it .. PASS  (240 ticks, 4.0 s sim, 0.5 s wall, 1 seed, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0  ok
+  events.damage.count >= 5                    30  ok
+  events.damage.victim.max in [-65583,-65552] -65552  ok
+  events.damage.amount.max in [5.9,6.1]       6  ok
+  events.kill.count == 0                      0  ok
+  events.structure_lost.count == 0            0  ok
+crouching behind a sandbag wall hides a player from a rifleman who kills one crouching in the open .. PASS  (1,440 ticks, 24.0 s sim, 3.4 s wall, 2 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 2 seeds  ok
+  observation.exposed.self.alive.min == 0     0..0 over 2 seeds  ok
+  observation.covered.self.alive.min == 1     1..1 over 2 seeds  ok
+  observation.covered.self.health.min == 1    1..1 over 2 seeds  ok
+a sniper tower kills a player at 80 m that no unit can see .. PASS  (1,200 ticks, 20.0 s sim, 1.4 s wall, 2 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 2 seeds  ok
+  events.kill.count >= 1                      1..1 over 2 seeds  ok
+  events.kill.attacker.max in [-65583,-65552] -65552..-65552 over 2 seeds  ok
+  events.damage.amount.max in [59.9,60.1]     60..60 over 2 seeds  ok
+  observation.mark.self.alive.min == 0        0..0 over 2 seeds  ok
+six ground players on the four spawn points of the test map all stay on the ground at a round reset .. PASS  (480 ticks, 8.0 s sim, 2.6 s wall, 2 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 2 seeds  ok
+  observation.s0.self.position.1.max < 0.05   0.016..0.016 over 2 seeds  ok
+  observation.s1.self.position.1.max < 0.05   0.016..0.016 over 2 seeds  ok
+  observation.s2.self.position.1.max < 0.05   0.016..0.016 over 2 seeds  ok
+  observation.s3.self.position.1.max < 0.05   0.016..0.016 over 2 seeds  ok
+  observation.s4.self.position.1.max < 0.05   0.016..0.016 over 2 seeds  ok
+  observation.s5.self.position.1.max < 0.05   0.016..0.016 over 2 seeds  ok
+the strategist spends and builds .. PASS  (900 ticks, 15.0 s sim, 2.4 s wall, 1 seed, bot ai htn, bot kits role, unit autonomy on)
+  events.unit_built.count >= 1                4  ok
+  events.unit_built.count in [1,40]           4  ok
+  observation.round.live_units.max > 0        0.063  ok
+  observation.round.points.max > 0            0.25  ok
+riflemen holding ground beyond their sensor go to cover a builder fired upon at its site, and shoot back .. PASS  (3,600 ticks, 60.0 s sim, 6.7 s wall, 3 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 3 seeds  ok
+  events.unit_task[goal=33].count >= 1 over 100% of seeds 3/3 seeds  ok
+  observation.shooter.self.health.min < 1 over 100% of seeds 3/3 seeds  ok
+riflemen walking up to a wall bomb a player crouched behind it, whom only the side's dropship can see .. PASS  (4,500 ticks, 75.0 s sim, 8.6 s wall, 3 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 3 seeds  ok
+  events.grenade_thrown[hidden=1].count >= 1 over 100% of seeds 3/3 seeds  ok
+  events.grenade_thrown[hidden=0].count == 0  0..0 over 3 seeds  ok
+  observation.hider.self.alive.min == 0 over 50% of seeds 3/3 seeds  ok
+a heavy gunner keeps firing bursts over a wall at a player crouched behind it, whom only the side's dropship can see .. PASS  (5,400 ticks, 90.0 s sim, 8.1 s wall, 3 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 3 seeds  ok
+  events.unit_task[goal=26].count >= 1 over 100% of seeds 3/3 seeds  ok
+  events.unit_task[goal=27].count >= 1 over 100% of seeds 3/3 seeds  ok
+a gunner and six riflemen moved onto a node ground bots hold take it as a squad: to cover, a base of fire, bounds, an assault .. FAIL  (23,220 ticks, 387.0 s sim, 77.0 s wall, 3 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 3 seeds  ok
+  events.squad_drill[phase=5].count >= 1 over 100% of seeds 0/3 seeds  FAILED at tick 0 (seed 1)
+  events.node_captured[node=0,owner=2].count >= 1 over 50% of seeds 3/3 seeds  ok
+  events.kill[attacker<0,attacker>-65536].count >= 5 over 50% of seeds 1/3 seeds  FAILED at tick 0 (seed 1)
+  traces: /tmp/gdpyr-level-checks.NI0ug8/traces
+riflemen moving past fire from out of sight take cover from it on the way, and still get there .. PASS  (8,100 ticks, 135.0 s sim, 14.5 s wall, 3 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 3 seeds  ok
+  events.unit_task[goal=18].count >= 1 over 100% of seeds 3/3 seeds  ok
+  observation.chair.units.last == 1           1..1 over 3 seeds  ok
+  observation.chair.units.15.last == 1        1..1 over 3 seeds  ok
+  observation.chair.units.30.last == 1        1..1 over 3 seeds  ok
+  observation.chair.units.45.last == 1        1..1 over 3 seeds  ok
+  observation.chair.units.13.last <= 0.031    0.004..0.004 over 3 seeds  ok
+  observation.chair.units.28.last <= 0.031    0.013..0.019 over 3 seeds  ok
+  observation.chair.units.43.last <= 0.031    0.007..0.007 over 3 seeds  ok
+  observation.chair.units.58.last <= 0.031    0.013..0.019 over 3 seeds  ok
+a sniper defending between a block and a low wall hides from ground bots coming at it, peeks out to fire, and moves on .. PASS  (15,480 ticks, 258.0 s sim, 32.4 s wall, 3 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 3 seeds  ok
+  events.unit_task[goal=21].count >= 1        5..13 over 3 seeds  ok
+  events.unit_task[goal=23].count >= 1        3..8 over 3 seeds  ok
+six riflemen sent to a technical: the nearest four get in, the other two stay where they are .. PASS  (900 ticks, 15.0 s sim, 1.2 s wall, 1 seed, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0  ok
+  events.unit_embarked.count == 4             4  ok
+  events.unit_disembarked.count == 0          0  ok
+  events.unit_lost.count == 0                 0  ok
+a technical with four aboard drives sixty metres and lets them all out where it stops .. PASS  (1,500 ticks, 25.0 s sim, 1.8 s wall, 1 seed, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0  ok
+  events.unit_disembarked.count == 4          4  ok
+  events.unit_disembarked[x>0].count == 4     4  ok
+  events.unit_lost.count == 0                 0  ok
+a technical destroyed with four aboard throws them all out alive, and the grenadier outranges its gun .. FAIL  (3,120 ticks, 52.0 s sim, 5.3 s wall, 2 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 2 seeds  ok
+  events.unit_lost[tier=1].count == 1         0  FAILED at tick 1621 (seed 2)
+  events.unit_disembarked.count == 4          0  FAILED at tick 1621 (seed 2)
+  events.unit_lost.count == 1                 0  FAILED at tick 1621 (seed 2)
+  observation.grenadier.self.alive.min == 1   1..1 over 2 seeds  ok
+  traces: /tmp/gdpyr-level-checks.NI0ug8/traces
+a driver seated in a 4x4 drives it: four seconds of throttle, two of steering, then the brake, and it ends more than 60 m east of where it stood, unhurt .. PASS  (1,200 ticks, 20.0 s sim, 1.3 s wall, 2 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 2 seeds  ok
+  events.vehicle_entered[seat=0,peer=@driver].count == 1 1..1 over 2 seeds  ok
+  observation.driver.self.position.last >= 0  0.044..0.044 over 2 seeds  ok
+  events.vehicle_damaged.count == 0           0..0 over 2 seeds  ok
+  events.vehicle_exited.count == 0            0..0 over 2 seeds  ok
+four strategist riflemen firing at a driver in a 4x4 from 35 m for five seconds hit its hull again and again, and neither destroy it nor kill anybody .. PASS  (600 ticks, 10.0 s sim, 1.2 s wall, 2 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 2 seeds  ok
+  events.vehicle_destroyed.count == 0         0..0 over 2 seeds  ok
+  events.vehicle_damaged.count >= 60          68..82 over 2 seeds  ok
+  events.vehicle_damaged.dealt.max == 3       3..3 over 2 seeds  ok
+  events.kill.count == 0                      0..0 over 2 seeds  ok
+  events.damage[victim=@driver].count == 0    0..0 over 2 seeds  ok
+a seat at the vehicle kiosk asks for a 4x4 twice, a second apart: the first is put on its pad, the second refused because one is out .. PASS  (360 ticks, 6.0 s sim, 0.6 s wall, 2 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 2 seeds  ok
+  events.vehicle_requested.count == 2         2..2 over 2 seeds  ok
+  events.vehicle_requested[refusal=0,peer=@asker].count == 1 1..1 over 2 seeds  ok
+  events.vehicle_requested[refusal=9,peer=@asker].count == 1 1..1 over 2 seeds  ok
+  events.vehicle_requested.refusal.first == 0 0..0 over 2 seeds  ok
+  events.vehicle_spawned.count == 1           1..1 over 2 seeds  ok
+  events.vehicle_spawned[peer=@asker,type=0].count == 1 1..1 over 2 seeds  ok
+  counters.vehicles_taken == 1                1..1 over 2 seeds  ok
+  counters.vehicles_refused.out == 1          1..1 over 2 seeds  ok
+  counters.vehicles_refused == 1              1..1 over 2 seeds  ok
+legacy ground bots beside a person's stopped 4x4 never get in: only the HTN bots ride .. PASS  (1,800 ticks, 30.0 s sim, 4.3 s wall, 2 seeds, bot ai legacy, bot kits default, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 2 seeds  ok
+  events.vehicle_entered.count == 1           1..1 over 2 seeds  ok
+  events.vehicle_entered[peer!=@driver].count == 0 0..0 over 2 seeds  ok
+a passenger in the bed of a 4x4 at full speed fires at a rifleman 25 m off its line as it passes, and hits it .. PASS  (960 ticks, 16.0 s sim, 2.1 s wall, 2 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 2 seeds  ok
+  events.vehicle_entered[seat=2,peer=@passenger].count == 1 1..1 over 2 seeds  ok
+  events.damage[attacker=@passenger].count >= 3 5..5 over 2 seeds  ok
+  events.vehicle_damaged[attacker=@passenger].count == 0 0..0 over 2 seeds  ok
+  events.vehicle_exited.count == 0            0..0 over 2 seeds  ok
+a ground seat beside a 4x4's driver's door gets in with a tap of the use key, drives it, stops and gets out with another .. PASS  (872 ticks, 14.5 s sim, 1.0 s wall, 2 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 2 seeds  ok
+  events.vehicle_entered.count == 1           1..1 over 2 seeds  ok
+  events.vehicle_entered[peer=@me,seat=0].count == 1 1..1 over 2 seeds  ok
+  events.vehicle_exited.count == 1            1..1 over 2 seeds  ok
+  events.vehicle_exited[peer=@me,seat=0].count == 1 1..1 over 2 seeds  ok
+  events.vehicle_exited.x.min >= -55          -48.156..-48.156 over 2 seeds  ok
+a 4x4 at a quarter throttle into three riflemen standing abreast 15 m ahead pushes them aside and kills none .. PASS  (1,440 ticks, 24.0 s sim, 2.7 s wall, 3 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 3 seeds  ok
+  events.vehicle_entered[seat=0].count == 1   1..1 over 3 seeds  ok
+  observation.driver.self.position.last >= -0.117 -0.102..-0.102 over 3 seeds  ok
+  events.vehicle_rammed.count == 0            0..0 over 3 seeds  ok
+  events.kill.count == 0                      0..0 over 3 seeds  ok
+  events.unit_lost.count == 0                 0..0 over 3 seeds  ok
+a 4x4 at full throttle through three riflemen standing abreast across its path kills each one it strikes, in its driver's name .. PASS  (1,440 ticks, 24.0 s sim, 2.3 s wall, 3 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 3 seeds  ok
+  events.vehicle_entered[seat=0].count == 1   1..1 over 3 seeds  ok
+  events.vehicle_rammed.count == 3            3..3 over 3 seeds  ok
+  events.vehicle_rammed[killer=@driver].count == 3 3..3 over 3 seeds  ok
+  events.vehicle_rammed.speed.min >= 8        18..18 over 3 seeds  ok
+  events.kill[weapon=15].count == 3           3..3 over 3 seeds  ok
+  events.kill[weapon=15,attacker=@driver].count == 3 3..3 over 3 seeds  ok
+  events.unit_lost.count == 3                 3..3 over 3 seeds  ok
+  events.unit_lost[killer=@driver].count == 3 3..3 over 3 seeds  ok
+a tank 30 m off a driver in a 4x4 destroys it with one direct hit, and the driver is thrown out .. PASS  (1,200 ticks, 20.0 s sim, 1.7 s wall, 2 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 2 seeds  ok
+  events.vehicle_damaged.count == 1           1..1 over 2 seeds  ok
+  events.vehicle_damaged.dealt.first == 600   600..600 over 2 seeds  ok
+  events.vehicle_damaged.health.first == 0    0..0 over 2 seeds  ok
+  events.vehicle_destroyed.count == 1         1..1 over 2 seeds  ok
+  events.vehicle_exited.count == 1            1..1 over 2 seeds  ok
+  events.vehicle_exited[peer=@driver,seat=0].count == 1 1..1 over 2 seeds  ok
+  events.damage[victim=@driver].amount.first == 50 50..50 over 2 seeds  ok
+a rifleman 35 m off wrecks a 4x4 at 40 health with a driver alone in it: the driver is thrown out, and the wreck's 50 is the first damage they take .. PASS  (1,800 ticks, 30.0 s sim, 2.5 s wall, 2 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 2 seeds  ok
+  events.vehicle_damaged.count >= 14          14..14 over 2 seeds  ok
+  events.vehicle_destroyed.count == 1         1..1 over 2 seeds  ok
+  events.vehicle_exited.count == 1            1..1 over 2 seeds  ok
+  events.vehicle_exited[peer=@driver].count == 1 1..1 over 2 seeds  ok
+  events.damage[victim=@driver].count >= 1    4..4 over 2 seeds  ok
+  events.damage[victim=@driver].amount.first == 50 50..50 over 2 seeds  ok
+a stripped, a default and the heaviest kit sprint 1.12, 1.00 and 0.70 as far as each other .. PASS  (488 ticks, 8.1 s sim, 2.2 s wall, 2 seeds, bot ai htn, bot kits role, unit autonomy on)
+  counters.pilot_fallbacks == 0               0..0 over 2 seeds  ok
+  observation.stripped.self.load_kg.last == 2 2..2 over 2 seeds  ok
+  observation.default.self.load_kg.last == 9.3 9.3..9.3 over 2 seeds  ok
+  observation.heaviest.self.load_kg.last == 26.1 26.1..26.1 over 2 seeds  ok
+  observation.stripped.self.load_scale.last == 1.12 1.12..1.12 over 2 seeds  ok
+  observation.default.self.load_scale.last == 1 1..1 over 2 seeds  ok
+  observation.heaviest.self.load_scale.last == 0.7 0.7..0.7 over 2 seeds  ok
+  observation.stripped.self.movement_state.2.max == 1 1..1 over 2 seeds  ok
+  observation.default.self.movement_state.2.max == 1 1..1 over 2 seeds  ok
+  observation.heaviest.self.movement_state.2.max == 1 1..1 over 2 seeds  ok
+  observation.default.self.velocity.2.min in [-0.505,-0.495] -0.5..-0.5 over 2 seeds  ok
+  observation.stripped.self.velocity.2.min in [-0.566,-0.554] -0.56..-0.56 over 2 seeds  ok
+  observation.heaviest.self.velocity.2.min in [-0.354,-0.347] -0.35..-0.35 over 2 seeds  ok
+  observation.stripped.self.velocity.2.sum / observation.default.self.velocity.2.sum in [1.086,1.154] 1.12..1.123 over 2 seeds  ok
+  observation.heaviest.self.velocity.2.sum / observation.default.self.velocity.2.sum in [0.679,0.721] 0.7..0.7 over 2 seeds  ok

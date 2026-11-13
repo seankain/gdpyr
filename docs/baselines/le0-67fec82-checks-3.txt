@@ -1,0 +1,92 @@
+# LE0, docs/LEVEL_EDITOR.md §11. At 67fec82: .NET SDK 8.0.134, Godot 4.6.stable.mono.official.89cea1439, four cores of a cloud VM doing nothing else.
+# ./scripts/level-editor-checks.sh frame    (again)
+
+hills: 58081 samples, -7.25 .. 21.80 m, 116162 B
+scene: the slab and the CSG floor are out, Terrain is in
+[checks] level check: frame, ground slab
+[rts] navigation baked: 565 vertices
+[checks] PASS frame: slab: a dedicated server in the game, baked
+[checks] PASS frame: slab: a client is in, the bots are on their sides (1 ready) and the round is live
+[rts] navigation re-baked around the structures in 896 ms, 0.2 ms of it on the tick (1 this round)
+[rts] navigation re-baked around the structures in 1324 ms, 0.2 ms of it on the tick (2 this round)
+[rts] navigation re-baked around the structures in 1211 ms, 0.2 ms of it on the tick (3 this round)
+[rts] navigation re-baked around the structures in 1018 ms, 0.3 ms of it on the tick (4 this round)
+[rts] navigation re-baked around the structures in 950 ms, 0.2 ms of it on the tick (5 this round)
+[rts] navigation re-baked around the structures in 810 ms, 0.3 ms of it on the tick (6 this round)
+[checks] measured frame: slab: a tick, frame to frame, over 300 s of ticks at --fixed-fps 60: n 18000, mean 3.520 ms, p50 2.936, p95 6.644, p99 9.636, max 95.756
+[checks] measured frame: slab: the play in those 300 s: 2 round(s), phase Live at the end; units produced 61, lost 13, on the field 19.1 on average and 48 at the most; structures built 7, lost 2; re-bakes 7; rejected orders 1; ground deaths 52; nodes taken 5 times
+[checks] PASS frame: slab: the computer strategist trained units (61) and nodes were taken (5)
+[checks] frame: 3 of 3 facts hold
+[bots] backfilling to 6 ground force and 1 strategist(s) while anyone is connected, bot ai htn, bot kits role
+      1 [rts] pillbox refused: on top of another structure
+frame, slab: exit 0
+[checks] level check: frame, ground flat, trimesh
+[checks] terrain: flat, trimesh of 225 shapes, 241 x 241 samples, 67 pads, set in 45.92 ms, decoded in 0.00 ms
+[rts] navigation baked: 533 vertices
+[checks] PASS frame: flat, trimesh: a dedicated server in the game, baked
+[checks] PASS frame: flat, trimesh: a client is in, the bots are on their sides (1 ready) and the round is live
+[rts] navigation re-baked around the structures in 498 ms, 7.7 ms of it on the tick (1 this round)
+[rts] navigation re-baked around the structures in 503 ms, 9.3 ms of it on the tick (2 this round)
+[rts] navigation re-baked around the structures in 533 ms, 7.7 ms of it on the tick (3 this round)
+[rts] navigation re-baked around the structures in 563 ms, 9.1 ms of it on the tick (4 this round)
+[rts] navigation re-baked around the structures in 502 ms, 6.2 ms of it on the tick (5 this round)
+[checks] measured frame: flat, trimesh: a tick, frame to frame, over 300 s of ticks at --fixed-fps 60: n 18000, mean 5.746 ms, p50 5.527, p95 8.253, p99 10.481, max 115.275
+[checks] measured frame: flat, trimesh: the play in those 300 s: 1 round(s), phase Live at the end; units produced 50, lost 11, on the field 14.1 on average and 39 at the most; structures built 4, lost 7; re-bakes 5; rejected orders 0; ground deaths 32; nodes taken 5 times
+[checks] PASS frame: flat, trimesh: the computer strategist trained units (50) and nodes were taken (5)
+[checks] frame: 3 of 3 facts hold
+[bots] backfilling to 6 ground force and 1 strategist(s) while anyone is connected, bot ai htn, bot kits role
+frame, flat trimesh: exit 0
+[checks] level check: frame, ground flat, heightmap
+[checks] terrain: flat, heightmap, 241 x 241 samples, 67 pads, set in 0.83 ms, decoded in 0.00 ms
+[rts] navigation baked: 533 vertices
+[checks] PASS frame: flat, heightmap: a dedicated server in the game, baked
+[checks] PASS frame: flat, heightmap: a client is in, the bots are on their sides (1 ready) and the round is live
+[rts] navigation re-baked around the structures in 660 ms, 14.5 ms of it on the tick (1 this round)
+[rts] navigation re-baked around the structures in 609 ms, 11.0 ms of it on the tick (2 this round)
+[rts] navigation re-baked around the structures in 544 ms, 15.3 ms of it on the tick (3 this round)
+[rts] navigation re-baked around the structures in 507 ms, 8.3 ms of it on the tick (4 this round)
+[checks] measured frame: flat, heightmap: a tick, frame to frame, over 300 s of ticks at --fixed-fps 60: n 18000, mean 7.830 ms, p50 7.246, p95 12.794, p99 16.664, max 190.431
+[checks] measured frame: flat, heightmap: the play in those 300 s: 2 round(s), phase Live at the end; units produced 49, lost 8, on the field 14.2 on average and 36 at the most; structures built 3, lost 1; re-bakes 4; rejected orders 2; ground deaths 52; nodes taken 7 times
+[checks] PASS frame: flat, heightmap: the computer strategist trained units (49) and nodes were taken (7)
+[checks] frame: 3 of 3 facts hold
+[bots] backfilling to 6 ground force and 1 strategist(s) while anyone is connected, bot ai htn, bot kits role
+      2 [rts] pillbox refused: on top of another structure
+frame, flat heightmap: exit 0
+[checks] level check: frame, ground hills, trimesh
+[checks] terrain: hills, trimesh of 225 shapes, 241 x 241 samples, 67 pads, set in 53.40 ms, decoded in 2.59 ms
+[rts] navigation baked: 14716 vertices
+[checks] PASS frame: hills, trimesh: a dedicated server in the game, baked
+[checks] PASS frame: hills, trimesh: a client is in, the bots are on their sides (1 ready) and the round is live
+[rts] navigation re-baked around the structures in 2064 ms, 8.4 ms of it on the tick (1 this round)
+[rts] navigation re-baked around the structures in 2087 ms, 6.1 ms of it on the tick (2 this round)
+[rts] navigation re-baked around the structures in 2087 ms, 9.4 ms of it on the tick (3 this round)
+[rts] navigation re-baked around the structures in 2065 ms, 9.1 ms of it on the tick (4 this round)
+[rts] navigation re-baked around the structures in 2255 ms, 9.4 ms of it on the tick (5 this round)
+[rts] navigation re-baked around the structures in 2120 ms, 6.2 ms of it on the tick (6 this round)
+[checks] measured frame: hills, trimesh: a tick, frame to frame, over 300 s of ticks at --fixed-fps 60: n 18000, mean 9.090 ms, p50 8.040, p95 17.285, p99 23.342, max 249.977
+[checks] measured frame: hills, trimesh: the play in those 300 s: 1 round(s), phase Live at the end; units produced 58, lost 10, on the field 21.5 on average and 48 at the most; structures built 6, lost 1; re-bakes 6; rejected orders 10; ground deaths 35; nodes taken 6 times
+[checks] PASS frame: hills, trimesh: the computer strategist trained units (58) and nodes were taken (6)
+[checks] frame: 3 of 3 facts hold
+[bots] backfilling to 6 ground force and 1 strategist(s) while anyone is connected, bot ai htn, bot kits role
+      2 [rts] pillbox refused: on top of another structure
+      8 [rts] sandbag_wall refused: something is in the way
+frame, hills trimesh: exit 0
+[checks] level check: frame, ground hills, heightmap
+[checks] terrain: hills, heightmap, 241 x 241 samples, 67 pads, set in 0.94 ms, decoded in 2.61 ms
+[rts] navigation baked: 14716 vertices
+[checks] PASS frame: hills, heightmap: a dedicated server in the game, baked
+[checks] PASS frame: hills, heightmap: a client is in, the bots are on their sides (1 ready) and the round is live
+[rts] navigation re-baked around the structures in 2201 ms, 12.2 ms of it on the tick (1 this round)
+[rts] navigation re-baked around the structures in 2039 ms, 7.2 ms of it on the tick (2 this round)
+[rts] navigation re-baked around the structures in 2099 ms, 7.1 ms of it on the tick (3 this round)
+[rts] navigation re-baked around the structures in 2126 ms, 7.6 ms of it on the tick (4 this round)
+[rts] navigation re-baked around the structures in 2079 ms, 6.3 ms of it on the tick (5 this round)
+[checks] measured frame: hills, heightmap: a tick, frame to frame, over 300 s of ticks at --fixed-fps 60: n 18000, mean 11.649 ms, p50 10.994, p95 19.863, p99 26.103, max 266.982
+[checks] measured frame: hills, heightmap: the play in those 300 s: 1 round(s), phase Live at the end; units produced 59, lost 23, on the field 19.1 on average and 38 at the most; structures built 5, lost 1; re-bakes 5; rejected orders 8; ground deaths 38; nodes taken 5 times
+[checks] PASS frame: hills, heightmap: the computer strategist trained units (59) and nodes were taken (5)
+[checks] frame: 3 of 3 facts hold
+[bots] backfilling to 6 ground force and 1 strategist(s) while anyone is connected, bot ai htn, bot kits role
+      2 [rts] sandbag_wall refused: on top of another structure
+      6 [rts] sandbag_wall refused: something is in the way
+frame, hills heightmap: exit 0
+exit=0

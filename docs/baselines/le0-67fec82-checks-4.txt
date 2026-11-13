@@ -1,0 +1,130 @@
+# LE0, docs/LEVEL_EDITOR.md §11. At 67fec82: .NET SDK 8.0.134, Godot 4.6.stable.mono.official.89cea1439, four cores of a cloud VM doing nothing else.
+# ./scripts/level-editor-checks.sh net net-2cm    (net again, and the slope with corrections from 2 cm)
+
+hills: 58081 samples, -7.25 .. 21.80 m, 116162 B
+scene: the slab and the CSG floor are out, Terrain is in
+[checks] level check: net-server, ground slab
+[rts] navigation baked: 565 vertices
+[checks] PASS net-server: slab: the client is in
+[checks] net-server marks placed-0
+[checks] PASS net-server: slab: the client walked its legs
+[checks] net-server: 2 of 2 facts hold
+[checks] net-server marks finished-net-server
+[checks] level check: net-client, ground slab
+[checks] PASS net-client: slab: connected, in the game, with a character
+[checks] PASS net-client: slab: alive on the ground force
+[checks] net-client marks client.peer
+[checks] net-client marks want-0
+[checks] measured net-client: slab, on the flat: 60 s walking, 8 turns, 0 ticks off the floor, 13 clock resyncs and 117 nudges: 1.00 mispredictions/s (60), mean prediction error 14.210 mm, worst 666.70 mm; in the 28 s clear of a resync: 0.00 mispredictions/s (0), mean 3.356 mm, worst 7.63 mm
+[checks] measured net-client: slab: this client's clock: 14 resyncs, 125 nudges
+[checks] net-client: 2 of 2 facts hold
+[checks] net-client marks finished-net-client
+relay: up 4383 down 7790 dropped 0; one-way delay mean 40.0 ms, sd 10.0 ms, min 1.8, max 76.8
+net, slab: exit 0
+[checks] level check: net-server, ground ramp:20:12, trimesh
+[checks] terrain: ramp:20:12, trimesh of 225 shapes, 241 x 241 samples, 67 pads, set in 45.78 ms, decoded in 0.00 ms
+[rts] navigation baked: 564 vertices
+[checks] PASS net-server: ramp:20:12, trimesh: the client is in
+[checks] net-server marks placed-0
+[checks] net-server marks placed-1
+[checks] net-server marks placed-2
+[checks] net-server marks placed-3
+[checks] net-server marks placed-4
+[checks] net-server marks placed-5
+[checks] PASS net-server: ramp:20:12, trimesh: the client walked its legs
+[checks] net-server: 2 of 2 facts hold
+[checks] net-server marks finished-net-server
+[checks] level check: net-client, ground ramp:20:12, trimesh
+[checks] terrain: ramp:20:12, trimesh of 225 shapes, 241 x 241 samples, 67 pads, set in 47.62 ms, decoded in 0.00 ms
+[checks] PASS net-client: ramp:20:12, trimesh: connected, in the game, with a character
+[checks] PASS net-client: ramp:20:12, trimesh: alive on the ground force
+[checks] net-client marks client.peer
+[checks] net-client marks want-0
+[checks] measured net-client: ramp:20:12, trimesh, on the flat: 60 s walking, 8 turns, 0 ticks off the floor, 0 clock resyncs and 51 nudges: 0.00 mispredictions/s (0), mean prediction error 2.812 mm, worst 5.21 mm; in the 60 s clear of a resync: 0.00 mispredictions/s (0), mean 2.812 mm, worst 5.21 mm
+[checks] net-client marks want-1
+[checks] measured net-client: ramp:20:12, trimesh, up and down the slope: 60 s walking, 9 turns, 0 ticks off the floor, 0 clock resyncs and 53 nudges: 0.00 mispredictions/s (0), mean prediction error 3.871 mm, worst 7.48 mm; in the 60 s clear of a resync: 0.00 mispredictions/s (0), mean 3.871 mm, worst 7.48 mm
+[checks] net-client marks want-2
+[checks] measured net-client: ramp:20:12, trimesh, across the slope: 60 s walking, 6 turns, 0 ticks off the floor, 0 clock resyncs and 52 nudges: 0.00 mispredictions/s (0), mean prediction error 4.839 mm, worst 8.74 mm; in the 60 s clear of a resync: 0.00 mispredictions/s (0), mean 4.839 mm, worst 8.74 mm
+[checks] net-client marks want-3
+[checks] measured net-client: ramp:20:12, trimesh, diagonally on the slope: 60 s walking, 7 turns, 0 ticks off the floor, 0 clock resyncs and 43 nudges: 0.03 mispredictions/s (2), mean prediction error 5.158 mm, worst 60.52 mm; in the 60 s clear of a resync: 0.03 mispredictions/s (2), mean 5.158 mm, worst 60.52 mm
+[checks] net-client marks want-4
+[checks] measured net-client: ramp:20:12, trimesh, over the crease at its foot: 60 s walking, 21 turns, 0 ticks off the floor, 0 clock resyncs and 26 nudges: 0.00 mispredictions/s (0), mean prediction error 3.317 mm, worst 6.95 mm; in the 60 s clear of a resync: 0.00 mispredictions/s (0), mean 3.317 mm, worst 6.95 mm
+[checks] net-client marks want-5
+[checks] measured net-client: ramp:20:12, trimesh, over the crease at its top: 60 s walking, 21 turns, 0 ticks off the floor, 0 clock resyncs and 32 nudges: 0.00 mispredictions/s (0), mean prediction error 3.830 mm, worst 7.95 mm; in the 60 s clear of a resync: 0.00 mispredictions/s (0), mean 3.830 mm, worst 7.95 mm
+[checks] measured net-client: ramp:20:12, trimesh: this client's clock: 0 resyncs, 279 nudges
+[checks] net-client: 2 of 2 facts hold
+[checks] net-client marks finished-net-client
+relay: up 26034 down 45885 dropped 0; one-way delay mean 40.0 ms, sd 10.0 ms, min 0.0, max 81.8
+net, ramp:20:12 trimesh: exit 0
+[checks] level check: net-server, ground ramp:20:12, heightmap
+[checks] terrain: ramp:20:12, heightmap, 241 x 241 samples, 67 pads, set in 0.98 ms, decoded in 0.00 ms
+[rts] navigation baked: 564 vertices
+[checks] PASS net-server: ramp:20:12, heightmap: the client is in
+[checks] net-server marks placed-0
+[checks] net-server marks placed-1
+[checks] net-server marks placed-2
+[checks] net-server marks placed-3
+[checks] net-server marks placed-4
+[checks] net-server marks placed-5
+[checks] PASS net-server: ramp:20:12, heightmap: the client walked its legs
+[checks] net-server: 2 of 2 facts hold
+[checks] net-server marks finished-net-server
+[checks] level check: net-client, ground ramp:20:12, heightmap
+[checks] terrain: ramp:20:12, heightmap, 241 x 241 samples, 67 pads, set in 0.79 ms, decoded in 0.00 ms
+[checks] PASS net-client: ramp:20:12, heightmap: connected, in the game, with a character
+[checks] PASS net-client: ramp:20:12, heightmap: alive on the ground force
+[checks] net-client marks client.peer
+[checks] net-client marks want-0
+[checks] measured net-client: ramp:20:12, heightmap, on the flat: 60 s walking, 8 turns, 0 ticks off the floor, 0 clock resyncs and 50 nudges: 0.00 mispredictions/s (0), mean prediction error 2.947 mm, worst 5.27 mm; in the 60 s clear of a resync: 0.00 mispredictions/s (0), mean 2.947 mm, worst 5.27 mm
+[checks] net-client marks want-1
+[checks] measured net-client: ramp:20:12, heightmap, up and down the slope: 60 s walking, 9 turns, 0 ticks off the floor, 0 clock resyncs and 61 nudges: 0.00 mispredictions/s (0), mean prediction error 3.836 mm, worst 7.03 mm; in the 60 s clear of a resync: 0.00 mispredictions/s (0), mean 3.836 mm, worst 7.03 mm
+[checks] net-client marks want-2
+[checks] measured net-client: ramp:20:12, heightmap, across the slope: 60 s walking, 6 turns, 0 ticks off the floor, 1 clock resyncs and 72 nudges: 0.85 mispredictions/s (51), mean prediction error 6.148 mm, worst 584.51 mm; in the 57 s clear of a resync: 0.75 mispredictions/s (43), mean 5.648 mm, worst 11.66 mm
+[checks] net-client marks want-3
+[checks] measured net-client: ramp:20:12, heightmap, diagonally on the slope: 60 s walking, 7 turns, 0 ticks off the floor, 0 clock resyncs and 54 nudges: 0.00 mispredictions/s (0), mean prediction error 4.866 mm, worst 8.48 mm; in the 60 s clear of a resync: 0.00 mispredictions/s (0), mean 4.866 mm, worst 8.48 mm
+[checks] net-client marks want-4
+[checks] measured net-client: ramp:20:12, heightmap, over the crease at its foot: 60 s walking, 21 turns, 0 ticks off the floor, 1 clock resyncs and 51 nudges: 0.12 mispredictions/s (7), mean prediction error 4.028 mm, worst 621.50 mm; in the 57 s clear of a resync: 0.07 mispredictions/s (4), mean 3.482 mm, worst 10.80 mm
+[checks] net-client marks want-5
+[checks] measured net-client: ramp:20:12, heightmap, over the crease at its top: 60 s walking, 21 turns, 0 ticks off the floor, 1 clock resyncs and 64 nudges: 0.45 mispredictions/s (27), mean prediction error 11.801 mm, worst 3437.32 mm; in the 57 s clear of a resync: 0.37 mispredictions/s (21), mean 6.955 mm, worst 1331.91 mm
+[checks] measured net-client: ramp:20:12, heightmap: this client's clock: 4 resyncs, 376 nudges
+[checks] net-client: 2 of 2 facts hold
+[checks] net-client marks finished-net-client
+relay: up 25996 down 45993 dropped 0; one-way delay mean 40.0 ms, sd 10.0 ms, min 0.0, max 81.8
+net, ramp:20:12 heightmap: exit 0
+net-2cm: SimConfig.MispredictionThreshold is 0.02f in this copy
+[checks] level check: net-server, ground ramp:20:12, trimesh
+[checks] terrain: ramp:20:12, trimesh of 225 shapes, 241 x 241 samples, 67 pads, set in 47.66 ms, decoded in 0.00 ms
+[rts] navigation baked: 564 vertices
+[checks] PASS net-server: ramp:20:12, trimesh: the client is in
+[checks] net-server marks placed-0
+[checks] net-server marks placed-1
+[checks] net-server marks placed-2
+[checks] net-server marks placed-3
+[checks] net-server marks placed-4
+[checks] net-server marks placed-5
+[checks] PASS net-server: ramp:20:12, trimesh: the client walked its legs
+[checks] net-server: 2 of 2 facts hold
+[checks] net-server marks finished-net-server
+[checks] level check: net-client, ground ramp:20:12, trimesh
+[checks] terrain: ramp:20:12, trimesh of 225 shapes, 241 x 241 samples, 67 pads, set in 44.81 ms, decoded in 0.00 ms
+[checks] PASS net-client: ramp:20:12, trimesh: connected, in the game, with a character
+[checks] PASS net-client: ramp:20:12, trimesh: alive on the ground force
+[checks] net-client marks client.peer
+[checks] net-client marks want-0
+[checks] measured net-client: ramp:20:12, trimesh, on the flat: 60 s walking, 8 turns, 0 ticks off the floor, 0 clock resyncs and 26 nudges: 0.00 mispredictions/s (0), mean prediction error 2.808 mm, worst 5.17 mm; in the 60 s clear of a resync: 0.00 mispredictions/s (0), mean 2.808 mm, worst 5.17 mm
+[checks] net-client marks want-1
+[checks] measured net-client: ramp:20:12, trimesh, up and down the slope: 60 s walking, 9 turns, 0 ticks off the floor, 0 clock resyncs and 28 nudges: 0.00 mispredictions/s (0), mean prediction error 3.854 mm, worst 7.48 mm; in the 60 s clear of a resync: 0.00 mispredictions/s (0), mean 3.854 mm, worst 7.48 mm
+[checks] net-client marks want-2
+[checks] measured net-client: ramp:20:12, trimesh, across the slope: 60 s walking, 6 turns, 0 ticks off the floor, 0 clock resyncs and 32 nudges: 0.00 mispredictions/s (0), mean prediction error 4.820 mm, worst 8.41 mm; in the 60 s clear of a resync: 0.00 mispredictions/s (0), mean 4.820 mm, worst 8.41 mm
+[checks] net-client marks want-3
+[checks] measured net-client: ramp:20:12, trimesh, diagonally on the slope: 60 s walking, 7 turns, 0 ticks off the floor, 0 clock resyncs and 40 nudges: 0.00 mispredictions/s (0), mean prediction error 4.863 mm, worst 8.64 mm; in the 60 s clear of a resync: 0.00 mispredictions/s (0), mean 4.863 mm, worst 8.64 mm
+[checks] net-client marks want-4
+[checks] measured net-client: ramp:20:12, trimesh, over the crease at its foot: 60 s walking, 21 turns, 0 ticks off the floor, 0 clock resyncs and 56 nudges: 0.03 mispredictions/s (2), mean prediction error 3.433 mm, worst 85.45 mm; in the 60 s clear of a resync: 0.03 mispredictions/s (2), mean 3.433 mm, worst 85.45 mm
+[checks] net-client marks want-5
+[checks] measured net-client: ramp:20:12, trimesh, over the crease at its top: 60 s walking, 21 turns, 0 ticks off the floor, 0 clock resyncs and 35 nudges: 0.03 mispredictions/s (2), mean prediction error 3.844 mm, worst 38.21 mm; in the 60 s clear of a resync: 0.03 mispredictions/s (2), mean 3.844 mm, worst 38.21 mm
+[checks] measured net-client: ramp:20:12, trimesh: this client's clock: 0 resyncs, 237 nudges
+[checks] net-client: 2 of 2 facts hold
+[checks] net-client marks finished-net-client
+relay: up 25998 down 45977 dropped 0; one-way delay mean 40.0 ms, sd 10.0 ms, min 0.0, max 81.8
+net-2cm, ramp:20:12 trimesh: exit 0
+exit=0
