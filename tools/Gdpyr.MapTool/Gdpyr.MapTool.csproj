@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Gdpyr.MapTool</RootNamespace>
+    <AssemblyName>gdpyr-map</AssemblyName>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The map's rules are the game's own engine-free code (docs/LEVEL_EDITOR.md §5),
+         compiled in rather than copied, so that what this tool says of a file is what
+         the game will: the reader, the validator and the placement are one source.
+         Scripts/Sim as a whole, as the tests take it, with the planner library its HTN
+         half needs; nothing here needs Godot installed, only its math types. -->
+    <Compile Include="../../Scripts/Sim/**/*.cs" />
+    <Compile Include="../../ThirdParty/FluidHTN/**/*.cs"
+             Exclude="../../ThirdParty/FluidHTN/Properties/**;../../ThirdParty/FluidHTN/obj/**;../../ThirdParty/FluidHTN/bin/**" />
+    <Compile Include="*.cs" />
+    <PackageReference Include="GodotSharp" Version="4.6.0" />
+  </ItemGroup>
+
+</Project>
