@@ -1,0 +1,133 @@
+# LE1, docs/LEVEL_EDITOR.md §11. At 744b906: .NET SDK 8.0.134, 4 cores of a cloud VM.
+# dotnet test Tests/Gdpyr.Tests.csproj --filter <the five classes> --logger "console;verbosity=normal": its line for each test, sorted, and its total.
+# Then dotnet test Tests/Gdpyr.Tests.csproj: its total. Then dotnet build Gdpyr.csproj: its last lines.
+
+Passed Gdpyr.Tests.HeightFieldTests.ACell_IsSplitAlongTheDiagonalFromXPlusOneToZPlusOne
+Passed Gdpyr.Tests.HeightFieldTests.ACreaseAcrossAFace_IsTheWholeRootTwo(g: -3)
+Passed Gdpyr.Tests.HeightFieldTests.ACreaseAcrossAFace_IsTheWholeRootTwo(g: 0.25)
+Passed Gdpyr.Tests.HeightFieldTests.ACreaseAcrossAFace_IsTheWholeRootTwo(g: 1)
+Passed Gdpyr.Tests.HeightFieldTests.AFace_IsAtMostRootTwoTimesItsSteepestEdge
+Passed Gdpyr.Tests.HeightFieldTests.AFieldSmallerThanACell_IsRefused
+Passed Gdpyr.Tests.HeightFieldTests.AGradeOfK_IsAtanKOfSlope(degrees: 0, grade: 0)
+Passed Gdpyr.Tests.HeightFieldTests.AGradeOfK_IsAtanKOfSlope(degrees: 30, grade: 0.57735002)
+Passed Gdpyr.Tests.HeightFieldTests.AGradeOfK_IsAtanKOfSlope(degrees: 45, grade: 1)
+Passed Gdpyr.Tests.HeightFieldTests.AGradeOfK_IsAtanKOfSlope(degrees: 60, grade: 1.73204994)
+Passed Gdpyr.Tests.HeightFieldTests.AHeight_IsStoredAsTheNearestStep_InsideTheLimits
+Passed Gdpyr.Tests.HeightFieldTests.AMapsGround_Is241SamplesASide_AMetreApart_CentredOnTheOrigin
+Passed Gdpyr.Tests.HeightFieldTests.ANormal_IsByCentralDifferences
+Passed Gdpyr.Tests.HeightFieldTests.APointOffTheField_TakesTheFieldsEdge
+Passed Gdpyr.Tests.HeightFieldTests.ARayAlongALane_ThroughCorners_OrAFloatShortOfOne_IsStoppedAsAnyOtherIs
+Passed Gdpyr.Tests.HeightFieldTests.ARayDown_MeetsTheGroundWhereSampleSaysItIs
+Passed Gdpyr.Tests.HeightFieldTests.ARayFromOverTheGroundToUnderIt_NeverPassesThrough(hills: False)
+Passed Gdpyr.Tests.HeightFieldTests.ARayFromOverTheGroundToUnderIt_NeverPassesThrough(hills: True)
+Passed Gdpyr.Tests.HeightFieldTests.ARayThatStaysOverTheGround_OrOffTheField_OrStopsShort_MeetsNothing
+Passed Gdpyr.Tests.HeightFieldTests.ARay_IsStoppedFromEitherSide
+Passed Gdpyr.Tests.HeightFieldTests.ARay_MeetsTheGroundWhereItFirstMeetsATriangle
+Passed Gdpyr.Tests.HeightFieldTests.ARaysDirection_NeedNotBeOfLengthOne
+Passed Gdpyr.Tests.HeightFieldTests.EveryStoredSample_IsExactAsAFloat_AndAStepIs3Point90625Millimetres
+Passed Gdpyr.Tests.HeightFieldTests.OnAPlane_EveryEdgeFaceAndNormalIsThePlanes
+Passed Gdpyr.Tests.HeightFieldTests.Round_MakesTheRectangleWholeSteps_AndTouchesNothingElse
+Passed Gdpyr.Tests.HeightFieldTests.SampleXZ_IsAtIndexZTimesWidthPlusX_AndAtXLess120ZLess120
+Passed Gdpyr.Tests.HeightFieldTests.Sample_AtASample_IsItsHeight
+Passed Gdpyr.Tests.HeightFieldTests.Sample_IsThePlaneOfTheTriangleThePointIsIn_TheFirstWhereTheFractionsSumToAtMostOne
+Passed Gdpyr.Tests.HeightFieldTests.Samples_ReadBackAsTheGroundTheyWereWrittenFrom
+Passed Gdpyr.Tests.HeightFieldTests.TheGround_HasNoStepInIt_AcrossALaneOrADiagonal
+Passed Gdpyr.Tests.HeightFieldTests.TheSteepestOfARectangle_IsOfTheEdgesAndFacesInsideIt
+Passed Gdpyr.Tests.MapLimitsTests.AHeight_IsAnInt16In256thsOfAMetre
+Passed Gdpyr.Tests.MapLimitsTests.TheGrid_Is241SamplesAMetreApart_OverTheFieldTheGameAssumes
+Passed Gdpyr.Tests.MapLimitsTests.TheGround_IsHeldInsideEveryAbsoluteHeightTheGameHas
+Passed Gdpyr.Tests.MapLimitsTests.Walkable_IsUnderWhatABodyWasMeasuredToWalk_AndOverWhatASkirtCanLeave
+Passed Gdpyr.Tests.TerrainBandsTests.ASamplesBand_IsFromItsHeight_AndItsSlopeByCentralDifferences
+Passed Gdpyr.Tests.TerrainBandsTests.AllFiveBands_AreReached_InTheirOrder_GoingUpLevelGround
+Passed Gdpyr.Tests.TerrainBandsTests.Classify_GivesTheTwoNeighbouringBands_AndAWeightForEach_AcrossAMetreOfU
+Passed Gdpyr.Tests.TerrainBandsTests.HigherOrSteeper_NeverGivesAnEarlierBand
+Passed Gdpyr.Tests.TerrainBandsTests.HigherOrSteeper_NeverGivesAnEarlierBand_WhateverAMapsNumbersAre
+Passed Gdpyr.Tests.TerrainBandsTests.NumbersAFileCannotHold_OrEdgesOutOfOrder_AreNotValid
+Passed Gdpyr.Tests.TerrainBandsTests.TheBands_AreSection10sTable(aboveTheWater: -2, row: "water water water water water water water water wa"···)
+Passed Gdpyr.Tests.TerrainBandsTests.TheBands_AreSection10sTable(aboveTheWater: 0.5, row: "sand sand sand mud grass grass grass grass grass g"···)
+Passed Gdpyr.Tests.TerrainBandsTests.TheBands_AreSection10sTable(aboveTheWater: 1, row: "sand sand sand grass grass grass grass grass grass"···)
+Passed Gdpyr.Tests.TerrainBandsTests.TheBands_AreSection10sTable(aboveTheWater: 12, row: "grass grass grass grass grass grass stone stone st"···)
+Passed Gdpyr.Tests.TerrainBandsTests.TheBands_AreSection10sTable(aboveTheWater: 16, row: "grass grass grass grass stone stone stone stone st"···)
+Passed Gdpyr.Tests.TerrainBandsTests.TheBands_AreSection10sTable(aboveTheWater: 2, row: "mud mud mud grass grass grass grass grass grass st"···)
+Passed Gdpyr.Tests.TerrainBandsTests.TheBands_AreSection10sTable(aboveTheWater: 20, row: "grass grass grass stone stone stone stone stone st"···)
+Passed Gdpyr.Tests.TerrainBandsTests.TheBands_AreSection10sTable(aboveTheWater: 25, row: "stone stone stone stone stone stone stone stone st"···)
+Passed Gdpyr.Tests.TerrainBandsTests.TheBands_AreSection10sTable(aboveTheWater: 5, row: "grass grass grass grass grass grass grass grass st"···)
+Passed Gdpyr.Tests.TerrainBandsTests.TheBands_AreSection10sTable(aboveTheWater: 8, row: "grass grass grass grass grass grass grass stone st"···)
+Passed Gdpyr.Tests.TerrainBandsTests.TheFormula_IsHeightAboveTheWater_AndSixTenthsOfAMetreForEachDegreePastFifteen
+Passed Gdpyr.Tests.TerrainBandsTests.TheWaterLevelAndTheSixNumbers_AreAMapsOwn
+Passed Gdpyr.Tests.TerrainBandsTests.TheWeights_SumToOne_AreOfNeighbours_FavourTheBand_AndHaveNoStepInThem
+Passed Gdpyr.Tests.TerrainBrushTests.ABrushesSettings_ArePulledIntoTheirRanges
+Passed Gdpyr.Tests.TerrainBrushTests.ADab_OfNoTimeOrNoSize_OrNowhere_MovesNothing
+Passed Gdpyr.Tests.TerrainBrushTests.ADab_ReturnsTheRectangleOfTheSamplesItMoved_WhateverTheBrush
+Passed Gdpyr.Tests.TerrainBrushTests.AGradeLockedBrushHeldStill_StopsWhenItsFootReachesTheRim_AndItsFacesAreSection10s(degrees: 10, radius: 8, height: 0.88, sharp: 14, overOne: 10.48, overTwo: 10.02, overThree: 9.4600000000000009)
+Passed Gdpyr.Tests.TerrainBrushTests.AGradeLockedBrushHeldStill_StopsWhenItsFootReachesTheRim_AndItsFacesAreSection10s(degrees: 20, radius: 8, height: 1.8200000000000001, sharp: 27.239999999999998, overOne: 20.890000000000001, overTwo: 20.030000000000001, overThree: 18.969999999999999)
+Passed Gdpyr.Tests.TerrainBrushTests.AGradeLockedBrushHeldStill_StopsWhenItsFootReachesTheRim_AndItsFacesAreSection10s(degrees: 30, radius: 16, height: 7.3300000000000001, sharp: 39.229999999999997, overOne: 31.199999999999999, overTwo: 30.359999999999999, overThree: 30.039999999999999)
+Passed Gdpyr.Tests.TerrainBrushTests.AGradeLockedBrushHeldStill_StopsWhenItsFootReachesTheRim_AndItsFacesAreSection10s(degrees: 45, radius: 16, height: 12.699999999999999, sharp: 54.740000000000002, overOne: 46.369999999999997, overTwo: 45.420000000000002, overThree: 45.039999999999999)
+Passed Gdpyr.Tests.TerrainBrushTests.AGradeLockedBrushHeldStill_StopsWhenItsFootReachesTheRim_AndItsFacesAreSection10s(degrees: 60, radius: 8, height: 8.6600000000000001, sharp: 67.790000000000006, overOne: 61.170000000000002, overTwo: 60.039999999999999, overThree: 58.57)
+Passed Gdpyr.Tests.TerrainBrushTests.AGradeLockedBrush_RisesAtItsRate_WhereverBetweenSamplesItIsHeld(x: -0.449999988, z: 0.100000001)
+Passed Gdpyr.Tests.TerrainBrushTests.AGradeLockedBrush_RisesAtItsRate_WhereverBetweenSamplesItIsHeld(x: 0, z: 0)
+Passed Gdpyr.Tests.TerrainBrushTests.AGradeLockedBrush_RisesAtItsRate_WhereverBetweenSamplesItIsHeld(x: 0.300000012, z: 0.800000012)
+Passed Gdpyr.Tests.TerrainBrushTests.AGradeLockedBrush_RisesAtItsRate_WhereverBetweenSamplesItIsHeld(x: 0.5, z: 0.5)
+Passed Gdpyr.Tests.TerrainBrushTests.AGradeLockedStroke_MovesNothingOnOrOutsideItsRim_AndLeavesNoEdgeSteeperThanItsGradeOrWhatTheEdgeWas
+Passed Gdpyr.Tests.TerrainBrushTests.ALevelStroke_MovesTheGroundTowardsTheHeightUnderTheCursorWhenItBegan_AndNeverPastIt
+Passed Gdpyr.Tests.TerrainBrushTests.AMound_OnGroundNoSteeperThanItsGrade_LeavesEveryFaceWalkable(degrees: 10)
+Passed Gdpyr.Tests.TerrainBrushTests.AMound_OnGroundNoSteeperThanItsGrade_LeavesEveryFaceWalkable(degrees: 20)
+Passed Gdpyr.Tests.TerrainBrushTests.AMound_OnGroundNoSteeperThanItsGrade_LeavesEveryFaceWalkable(degrees: 30)
+Passed Gdpyr.Tests.TerrainBrushTests.ARampSteeperThanItsSkirt_OrBetweenNoSamples_IsRefused_AndChangesNothing
+Passed Gdpyr.Tests.TerrainBrushTests.ARamp_IsTheStraightLineBetweenTheGroundAtItsTwoClicks_AndItsSidesAreSkirted
+Passed Gdpyr.Tests.TerrainBrushTests.ARampsStrip_StopsAtItsClicks_AndItsEndsAreSkirtedAsItsSidesAre
+Passed Gdpyr.Tests.TerrainBrushTests.ASculptBrushesGrade_IsNeverOverOnePointFiveHOverItsFalloff_WhereverItIsHeld
+Passed Gdpyr.Tests.TerrainBrushTests.ASculptBrushesSteepestGrade_IsSection10s(radius: 16, core: 0, rise: 2, onTheGrid: 10.58, byTheFormula: 10.619999999999999)
+Passed Gdpyr.Tests.TerrainBrushTests.ASculptBrushesSteepestGrade_IsSection10s(radius: 16, core: 0.5, rise: 2, onTheGrid: 20.359999999999999, byTheFormula: 20.559999999999999)
+Passed Gdpyr.Tests.TerrainBrushTests.ASculptBrushesSteepestGrade_IsSection10s(radius: 16, core: 0.5, rise: 6, onTheGrid: 48.07, byTheFormula: 48.369999999999997)
+Passed Gdpyr.Tests.TerrainBrushTests.ASculptBrushesSteepestGrade_IsSection10s(radius: 16, core: 0.800000012, rise: 2, onTheGrid: 42.090000000000003, byTheFormula: 43.149999999999999)
+Passed Gdpyr.Tests.TerrainBrushTests.ASculptBrushesSteepestGrade_IsSection10s(radius: 32, core: 0, rise: 2, onTheGrid: 5.3499999999999996, byTheFormula: 5.3600000000000003)
+Passed Gdpyr.Tests.TerrainBrushTests.ASculptBrushesSteepestGrade_IsSection10s(radius: 4, core: 0, rise: 2, onTheGrid: 35.600000000000001, byTheFormula: 36.869999999999997)
+Passed Gdpyr.Tests.TerrainBrushTests.ASculptBrushesSteepestGrade_IsSection10s(radius: 8, core: 0, rise: 2, onTheGrid: 20.16, byTheFormula: 20.559999999999999)
+Passed Gdpyr.Tests.TerrainBrushTests.ASculptDab_AddsItsAmountUnderTheFalloff_AndNothingPastTheRadius
+Passed Gdpyr.Tests.TerrainBrushTests.ASculptPreset_MakesTheGradeItsRowSays_OnceTwoMetresIsRaised(name: "Bank", degrees: 20.399999999999999)
+Passed Gdpyr.Tests.TerrainBrushTests.ASculptPreset_MakesTheGradeItsRowSays_OnceTwoMetresIsRaised(name: "Bluff", degrees: 42.100000000000001)
+Passed Gdpyr.Tests.TerrainBrushTests.ASculptPreset_MakesTheGradeItsRowSays_OnceTwoMetresIsRaised(name: "Hill", degrees: 10.6)
+Passed Gdpyr.Tests.TerrainBrushTests.ASculptPreset_MakesTheGradeItsRowSays_OnceTwoMetresIsRaised(name: "Plain", degrees: 5.4000000000000004)
+Passed Gdpyr.Tests.TerrainBrushTests.ASlowBrush_Accumulates_WhileTheStrokeIsDown_AndIsWholeStepsWhenItEnds
+Passed Gdpyr.Tests.TerrainBrushTests.ASmoothDab_MovesEachSampleTowardsTheMeanOfItsFourNeighbours_ByItsWeightTimesTheStrength
+Passed Gdpyr.Tests.TerrainBrushTests.ASmoothDab_ReadsTheGroundAsItWasBeforeTheDab
+Passed Gdpyr.Tests.TerrainBrushTests.AWiderOrSofterBrush_IsAShallowerGrade_ANarrowerOrHarderOneSteeper
+Passed Gdpyr.Tests.TerrainBrushTests.EveryBrush_HoldsTheGroundToTheLimits
+Passed Gdpyr.Tests.TerrainBrushTests.LoweringIsRaising_TurnedOver
+Passed Gdpyr.Tests.TerrainBrushTests.Smoothing_LeavesAnEvenSlopeAlone_AtTheFieldsEdgeAsAnywhere
+Passed Gdpyr.Tests.TerrainBrushTests.Smoothing_NeverRaisesTheHighestOrLowersTheLowestSampleItTouches
+Passed Gdpyr.Tests.TerrainBrushTests.TheFalloff_IsOneInsideTheCore_ASmoothstepDownToNothingAtTheRadius(core: 0)
+Passed Gdpyr.Tests.TerrainBrushTests.TheFalloff_IsOneInsideTheCore_ASmoothstepDownToNothingAtTheRadius(core: 0.5)
+Passed Gdpyr.Tests.TerrainBrushTests.TheFalloff_IsOneInsideTheCore_ASmoothstepDownToNothingAtTheRadius(core: 0.800000012)
+Passed Gdpyr.Tests.TerrainBrushTests.TheFalloff_IsOneInsideTheCore_ASmoothstepDownToNothingAtTheRadius(core: 0.899999976)
+Passed Gdpyr.Tests.TerrainBrushTests.ThePresets_AreSection6Point2sTable
+Passed Gdpyr.Tests.TerrainBrushTests.TheRightButton_LowersWhereTheLeftRaises_AtTheBrushesRate(name: "Hill")
+Passed Gdpyr.Tests.TerrainBrushTests.TheRightButton_LowersWhereTheLeftRaises_AtTheBrushesRate(name: "Mound 20°")
+Passed Gdpyr.Tests.TerrainBrushTests.TheSmallestGradeLockedBrush_MovesOnlyASampleItIsWithinHalfAMetreOf
+Passed Gdpyr.Tests.TerrainBrushTests.UpToThirtyDegrees_TheRootTwoStaysUnderWalkable_AndAtThirtyFiveItDoesNot
+Passed Gdpyr.Tests.TerrainConformTests.APadUnderADisc_IsLevelToItsMarginPastTheRadius
+Passed Gdpyr.Tests.TerrainConformTests.APad_IsLevelToItsMargin_AndSkirtedFromItsRectangle(least: 0.200000003, most: 1.5, ground: "gentle", bound: 1.1599999999999999)
+Passed Gdpyr.Tests.TerrainConformTests.APad_IsLevelToItsMargin_AndSkirtedFromItsRectangle(least: 1, most: 8, ground: "rough", bound: 1.1899999999999999)
+Passed Gdpyr.Tests.TerrainConformTests.ATargetOrALevelOutsideTheLimits_IsHeldToThem
+Passed Gdpyr.Tests.TerrainConformTests.AThirtyDegreeSkirt_LeavesNoFaceThatIsNotWalkable_AndAThirtyFiveDegreeOneCould
+Passed Gdpyr.Tests.TerrainConformTests.ItReachesNoFurtherThanTheMostTheGroundIsOffATarget_OverTheSkirt
+Passed Gdpyr.Tests.TerrainConformTests.LevelledToAnchors_TheGroundIsClampedBetweenTheirCones_AndSection6Point3sFivePropertiesHold
+Passed Gdpyr.Tests.TerrainConformTests.NoAnchors_OrOnesOffTheField_LevelNothing_AndASkirtOfNoGradeIsNotOne
+Passed Gdpyr.Tests.TerrainConformTests.OnLevelGround_APadsSkirtIsAPlaneAlongASide_AndAConeRoundACorner_NoFaceOverOnePointOneSixTimesIt
+Passed Gdpyr.Tests.TerrainConformTests.RoundedLevelledAndRoundedAgain_TheGroundIsWhatItWasAfterTheFirstRounding
+Passed Gdpyr.Tests.TerrainConformTests.SkirtedFromItsLevelledSamplesInstead_APadsFacesAreTheWholeRootTwo
+Passed Gdpyr.Tests.TerrainConformTests.TargetsSteeperThanTheSkirt_AreRefused_AndNothingIsChanged
+Passed Gdpyr.Tests.TerrainConformTests.TheSkirtAndTheMargin_ArePlansNumbers_AndThePadWithoutOneUsesThem
+Passed Gdpyr.Tests.TerrainConformTests.TheSteepestFaceASkirtCanLeave_IsRootTwoTimesIt_AndACornerOfAnchorsLeavesIt(skirt: 25, face: 33.399999999999999)
+Passed Gdpyr.Tests.TerrainConformTests.TheSteepestFaceASkirtCanLeave_IsRootTwoTimesIt_AndACornerOfAnchorsLeavesIt(skirt: 30, face: 39.229999999999997)
+Passed Gdpyr.Tests.TerrainConformTests.TheSteepestFaceASkirtCanLeave_IsRootTwoTimesIt_AndACornerOfAnchorsLeavesIt(skirt: 35, face: 44.719999999999999)
+Passed Gdpyr.Tests.TerrainConformTests.TheSteepestFaceASkirtCanLeave_IsRootTwoTimesIt_AndACornerOfAnchorsLeavesIt(skirt: 40, face: 49.880000000000003)
+Passed Gdpyr.Tests.TerrainConformTests.TheSteepestFaceASkirtCanLeave_IsRootTwoTimesIt_AndACornerOfAnchorsLeavesIt(skirt: 45, face: 54.740000000000002)
+
+Passed!  - Failed:     0, Passed:   122, Skipped:     0, Total:   122
+Passed!  - Failed:     0, Passed:  3369, Skipped:     0, Total:  3369
+
+Build succeeded.
+0 Warning(s)
+0 Error(s)

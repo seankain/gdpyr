@@ -674,7 +674,7 @@ with clients behind a relay standing in for `tc netem`, and the suite at 50 of 5
 fail being GV0's own. Nothing drawn — the vehicles, the chase camera, the kiosk's panel, a wreck —
 has been looked at by a person, and none of it has run on a dedicated server over a real link.
 
-### M13 — A level editor, and maps as data (~28 days) *planned; LE0, its baseline and spike, measured; nothing built*
+### M13 — A level editor, and maps as data (~28 days) *planned; LE0, its baseline and spike, measured; LE1, the ground's rules, built and tested; no editor yet*
 
 An editor in the game. Terrain is a 241 × 241 heightfield over the 240 m field, raised and lowered
 with brushes whose grade and radius are set, and textured by height and slope: water, sand, mud,
@@ -689,8 +689,11 @@ fetched with no editor yet. LE0 measured the plan's ground in the engine
 (`scripts/level-editor-checks.sh`, `docs/baselines/le0-67fec82-*.txt`) and changed it in four
 places: the collider is triangle meshes and not a heightmap, which let rays through; walkable is
 40° and not 45°; the 4x4 is a road vehicle on such a map until its hull pitches with its chassis;
-and a correction is applied from 2 cm. It lifts §5's "Multiple maps" cut, which [`MAPS.md`](MAPS.md)'s
-template and the host panel's picker began to.
+and a correction is applied from 2 cm. LE1 wrote the terrain's rules — the heightfield, the
+brushes, levelling ground to a shape and the texture bands — engine-free, as `Scripts/Sim/Level/`,
+with 122 tests and a script that breaks each rule in turn to show that a test fails
+(`tools/level_editor_checks/le1_mutations.py`); nothing calls them yet. It lifts §5's "Multiple
+maps" cut, which [`MAPS.md`](MAPS.md)'s template and the host panel's picker began to.
 
 **Total: ~29–37 engineering days to end of M8.**
 
