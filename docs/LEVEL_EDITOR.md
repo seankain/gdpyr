@@ -175,6 +175,7 @@ found, by group and by script, on the first tick (MAPS.md §3).
 
 ```
 Scripts/Sim/Level/   engine-free; compiled into Tests/ by the existing ../Scripts/Sim/** glob
+  MapLimits.cs         the bounds: the grid, a step, the heights' limits, what is walkable
   HeightField.cs       the grid: samples, sampling on the collider's triangles, grades, a ray
   TerrainBrush.cs      sculpt, grade-locked, smooth, level, ramp: a dab is a pure function
   TerrainConform.cs    clamp(h, L, U): pads, road ribbons, bridgeheads
@@ -231,10 +232,21 @@ steep as its steepest edge**, and is exactly that where a crease crosses it: hei
   down the editor works in `float`, so a slow brush accumulates; when the stroke ends the rectangle
   it touched is rounded to steps and that is the document.
 - `Sample(x, z)` interpolates on the collider's triangle under the point: the first of §3's pair
-  where the fractions sum to at most 1, else the second. `Raycast` walks the cells a ray crosses;
-  it is the editor's cursor, which must not depend on when the physics server last saw the ground.
-- `EdgeGrade`, `FaceGrade`, and a normal by central differences for the mesh and the bands.
+  where the fractions sum to at most 1, else the second. A point off the field takes its edge.
+- `Raycast` is the editor's cursor, which must not depend on when the physics server last saw the
+  ground. Along a ray the ground is a broken line, bent where the ray crosses a lane of samples or
+  a cell's diagonal. It walks those crossings in order and asks `Sample`'s arithmetic for the ray's
+  height over the ground at each: where that changes sign the ray has met the ground, from either
+  side, and between two crossings the ground is one triangle's plane, so the point is exact. No
+  cell is picked by flooring a point that lies on a lane, which is how a heightmap's walk lets a
+  ray through (§3): a crossing found a float early or late moves nothing. There is no ground past
+  the field's edge.
+- `EdgeGrade`, `FaceGrade`, and a normal by central differences for the mesh and the bands: half
+  the difference of the samples either side, or the one difference there is at the field's edge.
 - `MapLimits.MinHeightMeters` −16, `MaxHeightMeters` +64 (LE-D4). Every operation clamps to them.
+  `MapLimits` also holds the grid's size, the step, and the 40° that is walkable (LE-D23).
+- The class takes a size other than 241 × 241, which is what lets a rule about a grid be tested on
+  a smaller one. A file of another size is the reader's to refuse (§6.8).
 
 ### 6.2 Brushes — `TerrainBrush.cs`
 
@@ -253,12 +265,19 @@ grid against the formula in §10.
 **Grade-locked.** With k the set grade, r the distance from the dab's centre, and
 φ(r) = √(r² + ρ²) − ρ a cone rounded over ρ = 2 m at its tip:
 
-    raise:  apex = min(centre + rate · dt,  min over rim samples q of  h(q) + k · φ(r_q))
-            h' = max(h, apex − k · φ(r))    for r ≤ R
+    raise:  apex = min(held + rate · dt,  min over rim samples q of  h(q) + k · φ(r_q))
+            h' = max(h, apex − k · φ(r))    inside the rim
     lower:  the mirror image, with max and min exchanged
 
 The rim is the disc's outer 1.5 m. Holding the apex by every rim sample puts the cone at or under
 the ground on the whole rim, so only samples inside it move.
+
+*held* is the apex the ground about the centre already holds a cone of this grade up to: the least
+of h(q) + k · φ(r_q) over the four corners of the cell the centre is in. Over a sample of level
+ground that is the ground's height. **Changed by LE1**, from the height under the centre. A cursor
+is seldom over a sample, and between four of them the ground under it is their triangles, which lie
+under the cone's tip by up to k · φ(0.71) — 7 cm at 30°. A dab raises less than that at any rate
+under 4.2 m/s, so a brush that rose from the height under the cursor stood still there.
 
 *No edge ends steeper than max(k, what it was).* For any two samples a and b,
 |max(f, g)(a) − max(f, g)(b)| ≤ max(|f(a) − f(b)|, |g(a) − g(b)|). The cone is no steeper than k
@@ -269,13 +288,20 @@ cone is not above the ground there — or has no end that moved.
 Held still on level ground the cone stops when its foot reaches the rim, k · φ(R − 1.5) high —
 7.3 m at 30° and 16 m (§10): a set grade and a radius give a height, and a bigger hill at the same
 grade is a bigger brush or a moving one. The rounded tip is what keeps its faces at the setting:
-sharp, a 45° cone leaves 54.7° faces at its tip, the √2 (§10).
+sharp, a 45° cone leaves 54.7° faces at its tip, the √2 (§10). The rim leaves a brush R − 1.5 m to
+move: at the smallest radius, 2 m, that holds a sample only where the cursor is within 0.5 m of
+one, and from 2.21 m — the rim and half a cell's diagonal — it always does.
 
 **Smooth** moves each sample towards the mean of its four neighbours by `w · strength` ≤ 1: a
-convex combination, so it never raises the highest or lowers the lowest sample it touches.
-**Level** moves each towards the height under the cursor when the stroke began. **Ramp** is two
-clicks and a width: the strip between them is anchored to the straight line between their heights
-and applied with §6.3, so its sides are skirted.
+convex combination, so it never raises the highest or lowers the lowest sample it touches. Every
+sample reads the ground as it was before the dab. At the field's edge a sample has its neighbours
+along the edge only, and a corner none, so an even slope is left alone there as it is anywhere.
+**Level** moves each towards the height under the cursor when the stroke began, by the same share,
+and never past it. Neither reads the time step: a dab is `w · strength` however long it stood for,
+and how often a stroke dabs is the editor's to set (LE4). **Ramp** is two clicks and a width —
+twice the brush's radius, the ring drawn: the strip between them is anchored to the straight line
+between the ground's heights at the clicks and applied with §6.3, so its sides and its ends are
+skirted. A line steeper than the skirt is refused.
 
 | Preset | Family | Radius | Core | Rate or grade | Makes |
 |---|---|---|---|---|---|
@@ -287,9 +313,11 @@ and applied with §6.3, so its sides are skirted.
 | Cliff 60° | grade-locked | 8 m | — | the grade | a wall to bodies and to the bake; not to a 4x4 at speed (LE-D24) |
 | Smooth, Level, Ramp | | 8 m | 0 | 0.5 | |
 
-Radius runs 2–64 m, rate 0.25–8 m/s, core 0–0.9, grade 5–70°. Up to 30° a grade-locked brush
-leaves every face under 40° whatever it is drawn over, by the √2: atan(√2 · tan 30°) = 39.2°. 40° is
-what is walkable (LE-D23); at 35° the same bound is 44.7°, which LE0 found a body does not walk.
+Radius runs 2–64 m, rate 0.25–8 m/s, core 0–0.9, grade 5–70°; a grade-locked preset rises at
+2 m/s. Up to 30° a grade-locked brush leaves every face under 40° on ground that was no steeper
+than its setting, by the √2: atan(√2 · tan 30°) = 39.2°. 40° is what is walkable (LE-D23); at 35°
+the same bound is 44.7°, which LE0 found a body does not walk. Over ground that was steeper an edge
+keeps what it had, as the claim above says, and so may a face.
 
 ### 6.3 Levelling ground to a shape — `TerrainConform.cs`
 
@@ -301,7 +329,8 @@ anchors — points q of a shape, each with a target height S(q) — and a skirt 
     h'(p) = clamp(h(p), L(p), U(p))
 
 d is flat distance. It applies when L ≤ U at every anchor, which is to say when S is itself no
-steeper than k between any two of them; a caller whose targets are steeper is refused. Then:
+steeper than k between any two of them; a caller whose targets are steeper is refused, as is one
+that gives a sample two targets, and nothing is changed. Then:
 
 1. **h′ = S on the anchors.** There L = U = S: no other anchor's cone can pass S(q) when S is no
    steeper than k.
@@ -313,12 +342,19 @@ steeper than k between any two of them; a caller whose targets are steeper is re
 5. **It reaches no further than max|h − S| / k from the anchors**: a sample moves only if it is
    further from some S(q) in height than k times its distance from q.
 
+Heights are `float` through it and are rounded with the edit it is part of (§6.1). Rounded,
+levelled again and rounded, the ground is what it was after the first rounding: a height that
+rounding carried past L or U is put back on that bound, which rounds to the step it came from. In
+a document, then, the fourth property holds to the step, which is what §6.5's kept pad stands on.
+
 For a pad S is one number and d is the distance to the footprint less the margin, so L and U are
 `level ∓ k · max(0, distance − 1.5 m)`. The distance is measured to the footprint's rectangle
 itself, not to the nearest levelled sample: measured from samples, every stair of a rotated edge
 is a crease, and 58 of 120 pads left a face over the limit, at worst by the whole √2; measured
 from the rectangle the worst face seen was 1.15 times the limit, on 0.4 % of the cells changed
-(§10).
+(§10). On level ground it is 1.156 at the most: the skirt is a plane along a side and a cone round
+a corner, and the cone's steepest face is the one with a corner where it starts, 1.5 m out (§10).
+A node's pad is the same operator with d the distance to its disc.
 
 **The skirt is 30°, and is not a setting.** By the √2 it can leave no face steeper than 39.2°,
 under the 40° the bake keeps and the 42° a body and a unit were measured to walk (LE-D23): a unit
@@ -334,15 +370,18 @@ With e the height above the map's water level in metres and s the slope in degre
                sand below u = 1.5,  mud below 4,  grass below 22,  stone above
 
 u does not fall when e or s rises, and a band is how many edges u has passed, so **higher or
-steeper never gives an earlier band**: the order asked for holds everywhere. The six numbers and
-the water level are per map. The table of what they give is in §10: sand and mud are low and
-gentle, grass is the middle, and stone is anything high or steep — level ground at 22 m, ground
-4 m up at 45°.
+steeper never gives an earlier band**: the order asked for holds everywhere. The six numbers —
+0.6, 15, the three edges and the blend's 1 m below — and the water level are per map; they are a
+map's when each is from 0 to 65.535, which is what the file holds (§6.8), and the edges are in
+their order. The table of what they give is in §10: sand and mud are low and gentle, grass is the
+middle, and stone is anything high or steep — level ground at 22 m, ground 4 m up at 45°.
 
 `Classify` returns the band and, for drawing, a weight for each of two neighbouring bands across a
-blend of 1 m of u. The shader computes the same u from the fragment's height and its normal; the
-C# function is what the editor's overlay, a map's preview and the tests use. They need not agree
-to the bit: nothing but the picture reads the shader.
+blend of 1 m of u: centred on their edge, so each has half on it, and the band is always the
+heavier of the two. The water's edge is not blended; the water's own surface is drawn there. The
+shader computes the same u from the fragment's height and its normal; the C# function is what the
+editor's overlay, a map's preview and the tests use. They need not agree to the bit: nothing but
+the picture reads the shader.
 
 ### 6.5 Prefabs — `PrefabSpecs.cs`, `PrefabPlacement.cs`
 
