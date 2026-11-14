@@ -410,5 +410,36 @@ public sealed class BridgePierKeepingTests
 		Assert.True(outcome.ObjectsChanged);
 		MapObject section = document.Objects[0];
 		Assert.Equal(BridgeRules.PierCentimeters(document.Terrain, section, 1), section.Parameter(PrefabSpecs.PierFrontKey, 0));
+}
+
+	[Fact]
+	public void ASectionTurnedWhereItIs_HasItsPiersWorkedOutAgain()
+	{
+		// A span on piers over a slope, turned a quarter where it is: its piers stand on other ground now.
+		MapDocument document = LevelMaps.Empty();
+		HeightField field = document.Terrain;
+		for (int z = 0; z < field.Depth; z++)
+		{
+			for (int x = 0; x < field.Width; x++)
+			{
+				field[x, z] = 0.2f * field.WorldX(x);
+			}
+		}
+
+		field.Round(field.Bounds);
+		var session = new MapEditSession(document);
+		Assert.True(session.PlaceSection(BridgeRules.Float(PrefabSpecs.BridgeSpan, 0f, 0f, 0f, 6f, true), -1, out _).IsOk);
+		MapObject before = document.Objects[0];
+		PlacementRequest turned = MapEditSession.RequestFor(before);
+		turned.Yaw = MathF.PI / 2f;
+		Assert.True(session.Replace(0, turned, out _).IsOk);
+		MapObject after = document.Objects[0];
+		for (int end = 0; end < 2; end++)
+		{
+			byte key = end == 0 ? PrefabSpecs.PierBackKey : PrefabSpecs.PierFrontKey;
+			Assert.Equal(BridgeRules.PierCentimeters(field, after, end), after.Parameter(key, 0));
+		}
+
+		Assert.NotEqual(before.Parameter(PrefabSpecs.PierBackKey, 0), after.Parameter(PrefabSpecs.PierBackKey, 0));
 	}
 }

@@ -652,6 +652,9 @@ public partial class MapEditorRoot
 	}
 
 	/// <summary>Validate (§8.7): what §6.9 finds, listed.</summary>
+	/// <summary>Closes the validator's list, as its Close button does.</summary>
+	public void HideIssues() => _issuesPanel.Visible = false;
+
 	public void ShowIssues()
 	{
 		if (Editing == null)

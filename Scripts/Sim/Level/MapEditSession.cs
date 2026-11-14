@@ -326,7 +326,10 @@ public sealed class MapEditSession
 			return new PlacementCheck { Result = PrefabPlacementResult.UnknownPrefab };
 		}
 
-		return Commit(PrefabPlacement.Check(Document, request, index), out outcome);
+		// A bridge section is placed again by §6.7's rules: its piers worked out again and its free ends landed (LE6).
+		return Commit(PrefabSpecs.TryGet(request.PrefabId, out PrefabSpec spec) && spec.Kind == PrefabKind.Bridge
+			? BridgeRules.Check(Document, request, index).Placement
+			: PrefabPlacement.Check(Document, request, index), out outcome);
 	}
 
 	/// <summary>Takes the object at <paramref name="index"/> up, as one step; its pad's ground stays.</summary>

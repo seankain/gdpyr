@@ -1417,19 +1417,31 @@ public partial class LevelEditorChecks : Node
 			yield return step;
 		}
 
-		// LE6: a road drawn with the road tool, its preview, then graded; and a span floating on piers, its ghost on its end.
+		// LE6: a road drawn with the road tool, its preview, then graded; and a span floating on piers, the
+		// ghost of the next joined to its free end under the cursor, its ring lit. The first of a few lines
+		// near the cursor that §6.6 takes is the one drawn: the clone has pads it would cut.
+		editor.HideIssues();
 		if (editor.Cursor is { } road)
 		{
 			editor.SelectTool(EditorTool.Roads);
-			editor.AddRoadPoint(road.X - 40f, road.Z + 10f);
-			editor.AddRoadPoint(road.X - 10f, road.Z - 5f);
-			editor.AddRoadPoint(road.X + 20f, road.Z + 15f);
+			foreach (float dz in new[] { 0f, -25f, 25f, -50f, 50f, -75f })
+			{
+				editor.DropRoad();
+				editor.AddRoadPoint(road.X - 40f, road.Z + dz + 10f);
+				editor.AddRoadPoint(road.X - 10f, road.Z + dz - 5f);
+				editor.AddRoadPoint(road.X + 20f, road.Z + dz + 15f);
+				if (editor.RoadPreview?.IsOk == true)
+				{
+					break;
+				}
+			}
+
 			for (int i = 0; i < 10; i++)
 			{
 				yield return true;
 			}
 
-			Fact(editor.RoadPreview != null, $"the road tool's preview: {MapEditorControls.RoadPreview(editor.RoadPreview, editor.RoadDraft.Count)}");
+			Fact(editor.RoadPreview?.IsOk == true, $"the road tool's preview: {MapEditorControls.RoadPreview(editor.RoadPreview, editor.RoadDraft.Count)}");
 			foreach (bool step in Picture("le6-road-preview"))
 			{
 				yield return step;
@@ -1437,15 +1449,20 @@ public partial class LevelEditorChecks : Node
 
 			RoadCheck graded = editor.ApplyRoad();
 			editor.SelectTool(EditorTool.Bridges);
-			editor.SetFloatHeight(editor.Editing.Document.Terrain.Sample(road.X + 5f, road.Z - 25f) + 5f);
-			editor.SetGhostYaw(0.3f);
-			SectionCheck span = editor.PlaceSectionAt(road.X + 5f, road.Z - 25f);
-			Fact(graded?.IsOk == true && span?.IsOk == true, $"a road graded and a span placed on piers: {graded?.Result}, {span?.Result}");
+			const float Turned = 0.3f;
+			var along = new Vector3(MathF.Sin(Turned), 0f, MathF.Cos(Turned));
+			Vector3 centre = road - (along * 6.5f);
+			editor.SetFloatHeight(editor.Editing.Document.Terrain.Sample(centre.X, centre.Z) + 5f);
+			editor.SetGhostYaw(Turned);
+			SectionCheck span = editor.PlaceSectionAt(centre.X, centre.Z);
 			for (int i = 0; i < 10; i++)
 			{
 				yield return true;
 			}
 
+			Fact(graded?.IsOk == true && span?.IsOk == true && editor.SectionCheck?.Target != null,
+				$"a road graded, a span placed on piers, and the ghost of the next on its end: {graded?.Result}, {span?.Result},"
+				+ $" {MapEditorControls.SectionGhost(PrefabSpecs.Get(editor.Section), editor.SectionCheck, 0f)}");
 			foreach (bool step in Picture("le6-road-bridge"))
 			{
 				yield return step;

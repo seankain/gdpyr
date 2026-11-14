@@ -507,6 +507,21 @@ public sealed class RoadPathTests
 	}
 
 	[Fact]
+	public void ARoadCrossedByALaterOne_IsNotKept_AndIsWarnedOf()
+	{
+		// Two roads over the ridge, the second crossing the first where both climb: the first is graded
+		// again under the second's ribbon, and only the first is off its grade.
+		MapDocument document = Ridge();
+		var session = new MapEditSession(document);
+		Assert.True(session.ApplyRoad(RoadPath.Record(new[] { new Vector2(-60f, 0f), new Vector2(60f, 0f) }, 6f, 0.10f), -1, out _).IsOk);
+		Assert.True(session.ApplyRoad(RoadPath.Record(new[] { new Vector2(-60f, -40f), new Vector2(60f, 40f) }, 6f, 0.15f), -1, out _).IsOk);
+		MapReport report = MapValidator.Validate(document);
+		Assert.Single(report.Issues, i => i.Code == MapIssueCode.RoadOffItsGrade);
+		Assert.True(report.TryGet(MapIssueCode.RoadOffItsGrade, out MapIssue issue));
+		Assert.StartsWith("road 0 ", issue.Message);
+	}
+
+	[Fact]
 	public void ARoadThatCannotBeDrawn_IsWarnedOf()
 	{
 		MapDocument document = LevelMaps.Empty();

@@ -133,6 +133,8 @@ RULES = [
      "\t\t\tedit.Replace(pier.Index, pier.Before, pier.After);\n", ""),
     ("stroke-keeps-piers", SESSION, "a pier not given its length again after a stroke moved the ground under it",
      "\t\t\t\tDocument.Objects[pier.Index] = pier.After;\n", ""),
+    ("replace-section", SESSION, "a section turned where it is keeping the piers it had",
+     "? BridgeRules.Check(Document, request, index).Placement", "? PrefabPlacement.Check(Document, request, index)"),
     ("apply-road-outcome", SESSION, "a road graded not saying the roads changed",
      "outcome = new EditOutcome(check.Area, check.Changed, true, check.PiersKept > 0, true);",
      "outcome = new EditOutcome(check.Area, check.Changed, true, check.PiersKept > 0, false);"),
