@@ -178,6 +178,12 @@ public sealed class EditHistory
 
 	public bool CanRedo => _undone.Count > 0;
 
+	/// <summary>The step <see cref="Undo"/> would revert, or null: what the editor re-draws after it (LE4).</summary>
+	public MapEdit NextUndo => _done.Last?.Value;
+
+	/// <summary>The step <see cref="Redo"/> would make again, or null.</summary>
+	public MapEdit NextRedo => _undone.Count > 0 ? _undone.Peek() : null;
+
 	/// <summary>Applies an edit and keeps it as the newest step.</summary>
 	public void Do(MapDocument document, MapEdit edit)
 	{

@@ -1,0 +1,17 @@
+# LE5, docs/LEVEL_EDITOR.md §11. At bd8361e: .NET SDK 8.0.134, Godot 4.6.stable.mono.official.89cea1439, four cores of a cloud VM.
+# ./scripts/level-editor-checks.sh editor-shot: --edit with no name, drawn with the Compatibility renderer under xvfb-run at 1280 x 720.
+# Its LE5 pictures are le5-bd8361e-prefabs-buildable.png and -prefabs.png; LE4's three are as le4-98c6125-*.png were.
+
+[checks] level editor check: shot
+[checks] PASS shot: --edit with no name opens the editor's list of maps
+[checks] PASS shot: le4-list.png: 1280 x 720
+[checks] PASS shot: clone the bundled map: cloned hills.map as le4-shot.map: no issues
+[checks] PASS shot: the cursor is on the ground: (-9.943255, 1.7890625, 5.47934)
+[checks] PASS shot: le4-editor.png: 1280 x 720
+[checks] PASS shot: le4-editor-slope.png: 1280 x 720
+[checks] PASS shot: the ghost stands under the cursor: TooSteep
+[checks] PASS shot: le5-prefabs-buildable.png: 1280 x 720
+[checks] PASS shot: le5-prefabs.png: 1280 x 720
+[checks] shot: 9 of 9 facts hold
+OpenGL API 4.5 (Core Profile) Mesa 25.2.8-0ubuntu0.24.04.4 - Compatibility - Using Device: Mesa - llvmpipe (LLVM 20.1.2, 256 bits)
+editor-shot: exit 0 (pictures: $SHOT_OUT/editor-shot)

@@ -59,6 +59,9 @@ public enum MapIssueCode : byte
 
 	/// <summary>A bridge end neither joined nor within 0.5 m of the ground.</summary>
 	OpenBridgeEnd,
+
+	/// <summary>No path from a barracks door or the spawn line to a node: the editor's deep check, which bakes (LE5).</summary>
+	Unreachable,
 }
 
 /// <summary>One thing the validator found, and where: the editor's list flies to it (§8.7).</summary>
@@ -595,4 +598,59 @@ public static class MapValidator
 	}
 
 	private static string Name(int index, PrefabSpec spec) => $"{spec.Name} {index}";
+
+	// ---- reach (the deep check) ---------------------------------------------------------------
+
+	/// <summary>
+	/// §6.9's reach, the editor's deep check (§8.7, LE5): from every barracks door and every
+	/// spawn line to every node, <paramref name="reaches"/> asked whether a unit gets from one
+	/// to the other — which takes a navigation mesh, so the editor bakes and asks it, and a file
+	/// being listed is never asked. Each pair it says no to is a warning, naming both and
+	/// placed where the walk starts. Adds them to <paramref name="report"/>, and returns how
+	/// many pairs were asked.
+	/// </summary>
+	public static int Reach(MapDocument document, Func<Vector3, Vector3, bool> reaches, MapReport report)
+	{
+		var starts = new List<(int Index, Vector3 At, string What)>();
+		var nodes = new List<(int Index, Vector3 At)>();
+		for (int i = 0; i < document.Objects.Count; i++)
+		{
+			MapObject placed = document.Objects[i];
+			if (!PrefabSpecs.TryGet(placed.PrefabId, out PrefabSpec spec))
+			{
+				continue;
+			}
+
+			Vector3 at = placed.Position;
+			at.Y = PrefabPlacement.StandingHeight(placed);
+			if (spec.Group == PrefabGroup.ResourceNode)
+			{
+				nodes.Add((i, at));
+			}
+			else if (spec.Group == PrefabGroup.SpawnLine)
+			{
+				starts.Add((i, at, $"the spawn line {i}"));
+			}
+			else if (PrefabSpecs.TryGetDoor(placed, out Vector3 door))
+			{
+				door.Y = at.Y;
+				starts.Add((i, door, $"the door of barracks {i}"));
+			}
+		}
+
+		int asked = 0;
+		foreach ((int from, Vector3 start, string what) in starts)
+		{
+			foreach ((int to, Vector3 node) in nodes)
+			{
+				asked++;
+				if (!reaches(start, node))
+				{
+					report.Warn(MapIssueCode.Unreachable, $"no path from {what} to resource_node {to}", from, to, start);
+				}
+			}
+		}
+
+		return asked;
+	}
 }

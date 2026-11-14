@@ -447,6 +447,23 @@ public static class PrefabSpecs
 		return false;
 	}
 
+	/// <summary>
+	/// The strategist's structure a structure prefab is (<see cref="StructureKinds"/>): what the
+	/// round puts up for it through <c>ServerPlaceStructure</c> on its first tick and after every
+	/// clear of the field (§6.5, LE5). False for any other prefab.
+	/// </summary>
+	public static bool TryGetStructureKind(ushort prefabId, out byte kind)
+	{
+		kind = prefabId switch
+		{
+			StructurePillbox => StructureKinds.Pillbox,
+			StructureSandbagWall => StructureKinds.SandbagWall,
+			StructureSniperTower => StructureKinds.SniperTower,
+			_ => byte.MaxValue,
+		};
+		return kind != byte.MaxValue;
+	}
+
 	/// <summary>A barracks' door in the world, or false for anything else.</summary>
 	public static bool TryGetDoor(MapObject placed, out Vector3 door)
 	{

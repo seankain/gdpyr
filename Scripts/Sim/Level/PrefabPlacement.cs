@@ -242,8 +242,13 @@ public static class PrefabPlacement
 	/// <see cref="PrefabPlacementResult.Ok"/> the check carries the edit — the object
 	/// appended, and the samples its pad moved, rounded — which nothing has applied:
 	/// <see cref="EditHistory.Do"/> applies it as one step to undo.
+	///
+	/// With <paramref name="replacing"/>, the object at that index is taken up and placed
+	/// again as asked — turned, or given other parameters (§8.4, LE5): it is not counted,
+	/// in the way, a neighbour or a door to itself, and the edit replaces it where it is in
+	/// the file, so the world names it as before. The ground its old pad levelled stays.
 	/// </summary>
-	public static PlacementCheck Check(MapDocument document, in PlacementRequest request)
+	public static PlacementCheck Check(MapDocument document, in PlacementRequest request, int replacing = -1)
 	{
 		var check = new PlacementCheck();
 		if (!PrefabSpecs.TryGet(request.PrefabId, out PrefabSpec spec))
@@ -274,7 +279,15 @@ public static class PrefabPlacement
 		check.Object = placed;
 		check.Level = StandingHeight(placed);
 
-		if (document.Objects.Count >= MapLimits.MaxObjects || document.CountOf(spec.Group) >= PrefabSpecs.MaxOf(spec.Group))
+		bool moving = replacing >= 0 && replacing < document.Objects.Count;
+		replacing = moving ? replacing : -1;
+		int alreadyOfGroup = document.CountOf(spec.Group);
+		if (moving && PrefabSpecs.TryGet(document.Objects[replacing].PrefabId, out PrefabSpec was) && was.Group == spec.Group)
+		{
+			alreadyOfGroup--;
+		}
+
+		if ((!moving && document.Objects.Count >= MapLimits.MaxObjects) || alreadyOfGroup >= PrefabSpecs.MaxOf(spec.Group))
 		{
 			check.Result = PrefabPlacementResult.LimitReached;
 			return check;
@@ -290,6 +303,11 @@ public static class PrefabPlacement
 		var others = new List<PlacedBox>(16);
 		for (int i = 0; i < document.Objects.Count; i++)
 		{
+			if (i == replacing)
+			{
+				continue;
+			}
+
 			others.Clear();
 			PrefabSpecs.AddBoxes(document.Objects[i], others);
 			if (PrefabSpecs.InTheWay(boxes, others))
@@ -319,7 +337,7 @@ public static class PrefabPlacement
 			after = field.Clone();
 			touched = area.Apply(after, check.Level);
 			after.Round(touched);
-			int disturbed = Disturbed(document, field, after, touched, -1);
+			int disturbed = Disturbed(document, field, after, touched, replacing);
 			if (disturbed >= 0)
 			{
 				check.Result = PrefabPlacementResult.DisturbsNeighbour;
@@ -328,6 +346,7 @@ public static class PrefabPlacement
 			}
 		}
 
+		// No object blocks its own door: a barracks is not a structure, so there is nothing to skip.
 		int door = BlockedDoor(document, placed, -1);
 		if (door >= 0)
 		{
@@ -337,7 +356,9 @@ public static class PrefabPlacement
 		}
 
 		MapEdit edit = after == null ? new MapEdit() : MapEdit.Terrain(field, after, touched);
-		check.Edit = edit.Insert(document.Objects.Count, placed);
+		check.Edit = moving
+			? edit.Replace(replacing, document.Objects[replacing], placed)
+			: edit.Insert(document.Objects.Count, placed);
 		check.Result = PrefabPlacementResult.Ok;
 		return check;
 	}

@@ -1,0 +1,43 @@
+# LE5, docs/LEVEL_EDITOR.md §11. At bd8361e: .NET SDK 8.0.134, four cores of a cloud VM.
+# python3 tools/level_editor_checks/le5_mutations.py, as it printed: three at a time, with nothing else running.
+
+PASS the tree as it stands: 152 of 152 tests of MapEditPrefabTests, MapReachTests, BuildableGroundTests, MapEditorControlsTests, PrefabSpecsTests, PrefabPlacementTests, MapEditSessionTests
+PASS replace-count: an object turned counted against its own group's limit -- 2 fail: MapEditPrefabTests.AnObjectPlacedAgainAsItStands_IsWhereItWas_OrRefusedByALaterNeighbour, MapEditPrefabTests.AnObjectReplaced_IsNotCounted_InTheWay_OrANeighbourToItself
+PASS replace-objects: an object turned on a full map counted as one more -- 1 fail: MapEditPrefabTests.AMapAtItsLimitOfObjects_TakesNoMore_AndStillTurnsOne
+PASS replace-in-the-way: an object turned in its own way -- 5 fail: MapEditPrefabTests.AMapAtItsLimitOfObjects_TakesNoMore_AndStillTurnsOne, MapEditPrefabTests.AnObjectPlacedAgainAsItStands_IsWhereItWas_OrRefusedByALaterNeighbour, MapEditPrefabTests.AnObjectReplaced_IsNotCounted_InTheWay_OrANeighbourToItself, MapEditPrefabTests.RequestFor_CarriesAnObjectsParameters, and 1 more
+PASS replace-neighbour: an object turned a neighbour to its own old pad -- 1 fail: MapEditPrefabTests.MovingAnObjectUpTheSlope_IsNotRefusedByItsOwnOldPad
+PASS replace-edit: an object turned moved to the end of the file -- 5 fail: MapEditPrefabTests.AMapAtItsLimitOfObjects_TakesNoMore_AndStillTurnsOne, MapEditPrefabTests.AnObjectReplaced_IsNotCounted_InTheWay_OrANeighbourToItself, MapEditPrefabTests.MovingAnObjectUpTheSlope_IsNotRefusedByItsOwnOldPad, MapEditPrefabTests.RequestFor_CarriesAnObjectsParameters, and 1 more
+PASS commit-refused: a refused placement applied -- 4 fail: MapEditPrefabTests.AMapAtItsLimitOfObjects_TakesNoMore_AndStillTurnsOne, MapEditPrefabTests.ARefusedPlacement_ChangesNothing_AndSaysWhy, MapEditPrefabTests.AnObjectReplaced_IsNotCounted_InTheWay_OrANeighbourToItself, MapEditPrefabTests.MovingAnObjectUpTheSlope_IsNotRefusedByItsOwnOldPad
+PASS commit-objects: a placement not saying it changed the objects -- 2 fail: MapEditPrefabTests.APlacement_IsOneStep_AndUndoTakesItAndItsPadAway, MapEditPrefabTests.TurningAnObject_KeepsItsPlaceInTheFile_AsOneStep
+PASS take-up-objects: a take-up not saying it changed the objects -- 1 fail: MapEditPrefabTests.TakingUp_LeavesTheGround_AndUndoPutsItBackWhereItWas
+PASS request-parameters: an object's parameters left behind when it is placed again -- 1 fail: MapEditPrefabTests.RequestFor_CarriesAnObjectsParameters
+PASS pick-disc: a node's disc not picked by a click on it -- 1 fail: MapEditPrefabTests.AClick_PicksTheSmallestThingUnderIt
+PASS pick-smallest: the first thing under a click picked, not the smallest -- 1 fail: MapEditPrefabTests.AClick_PicksTheSmallestThingUnderIt
+PASS pick-marker: a marker picked only a hand's breadth from it -- 1 fail: MapEditPrefabTests.AClick_PicksTheSmallestThingUnderIt
+PASS reach-spawn: the spawn line not asked about -- 1 fail: MapReachTests.EveryStart_IsAskedAboutEveryNode
+PASS reach-door: a barracks' middle asked about, not its door -- 1 fail: MapReachTests.EveryStart_IsAskedAboutEveryNode
+PASS reach-height: a node asked about at its stored height, not where it stands -- 1 fail: MapReachTests.EveryStart_IsAskedAboutEveryNode
+PASS reach-answer: a walk found warned of -- 2 fail: MapReachTests.APairWithNoPath_IsAWarningNamingBoth, MapReachTests.EveryStart_IsAskedAboutEveryNode
+PASS reach-error: a walk not found an error, not a warning -- 1 fail: MapReachTests.APairWithNoPath_IsAWarningNamingBoth
+PASS buildable-turn: a site asked square to the field only -- 1 fail: BuildableGroundTests.APlane_IsBuildableUpToWhatAPillboxTurned45DegreesTakes
+PASS buildable-corners: the ground under the centre taken for the corners' -- 2 fail: BuildableGroundTests.ABump_UnderACorner_IsNotBuildable, BuildableGroundTests.APlane_IsBuildableUpToWhatAPillboxTurned45DegreesTakes
+PASS structure-kind: a pillbox prefab put up as a sniper tower -- 1 fail: PrefabSpecsTests.TheStructurePrefabs_AreTheStrategistsStructures
+PASS tool-built: the prefab tool left off the rail -- 1 fail: MapEditorControlsTests.TheToolKeys_SelectTheirTools_AndTheTerrainAndPrefabsAreBuilt
+PASS palette-bridges: bridge sections on the prefab palette -- 1 fail: MapEditorControlsTests.ThePalette_HoldsEveryPrefabButTheBridgeSections_Once_ByKind
+PASS count-limit: a group with no limit counted against int.MaxValue -- 1 fail: MapEditorControlsTests.APaletteEntry_CountsAgainstItsLimit
+PASS count-needs: a group a map must hold not said to be missing -- 1 fail: MapEditorControlsTests.APaletteEntry_CountsAgainstItsLimit
+PASS turn-direction: Shift+R turning the way R does -- 1 fail: MapEditorControlsTests.R_TurnsAPrefabToTheNext15DegreeStep
+PASS turn-wrap: a turn below 0 left negative -- 1 fail: MapEditorControlsTests.R_TurnsAPrefabToTheNext15DegreeStep
+PASS snap-round: the grid floored, not rounded -- 1 fail: MapEditorControlsTests.R_TurnsAPrefabToTheNext15DegreeStep
+PASS ghost-grade: a grade under a prefab with no footprint -- 1 fail: MapEditorControlsTests.TheGhost_SaysWhatPlacingWouldDo
+PASS parameter-step: a capture radius stepped a centimetre at a time -- 1 fail: MapEditorControlsTests.AParameter_HasItsOwnRange
+PASS overlay-buildable: O skipping the buildable overlay -- 1 fail: MapEditorControlsTests.TheOverlays_GoRound_InSection8_3sOrder
+
+30 of 30 broken rules were caught by a test
+
+# Then python3 tools/level_editor_checks/le4_mutations.py overlay-cycle: LE4's one rule whose piece LE5 moved, brought along.
+
+PASS the tree as it stands: 294 of 294 tests of MapEditSessionTests, MapStoreTests, MapEditorControlsTests, EditLaunchTests, EditHistoryTests, LaunchOptionsTests, MapLaunchTests
+PASS overlay-cycle: O never reaching the contours -- 1 fail: MapEditorControlsTests.TheOverlays_GoRound_InSection8_3sOrder
+
+1 of 1 broken rules were caught by a test

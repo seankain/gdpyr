@@ -11,6 +11,11 @@ namespace Gdpyr.Ui.Spectator;
 ///
 /// It can sit behind something — a bot, a unit, a squad's middle — and the movement
 /// keys let go of it, as the demo camera's do.
+///
+/// The map editor flies it too (docs/LEVEL_EDITOR.md §8.2): there the right button lowers
+/// the ground, so it looks on the middle one (<see cref="LookButton"/>), and Ctrl is the
+/// editor's modifier — undo, redo, save — so with <see cref="CtrlIsCommand"/> a held Ctrl
+/// moves nothing and <c>Q</c> lowers the camera where crouch would.
 /// </summary>
 public partial class SpectatorCamera : Camera3D
 {
@@ -34,8 +39,14 @@ public partial class SpectatorCamera : Camera3D
 	private bool _hasFollow;
 	private Vector3 _followPoint;
 
-	/// <summary>True while the right button is held: the mouse looks rather than points.</summary>
+	/// <summary>True while the look button is held: the mouse looks rather than points.</summary>
 	public bool Looking { get; private set; }
+
+	/// <summary>The button that is held to look. The right one, but in the map editor.</summary>
+	public MouseButton LookButton { get; set; } = MouseButton.Right;
+
+	/// <summary>The map editor's keys: a held Ctrl moves nothing, and <c>Q</c> lowers the camera, <c>E</c> raises it.</summary>
+	public bool CtrlIsCommand { get; set; }
 
 	/// <summary>True while something is being followed.</summary>
 	public bool Following => _hasFollow;
@@ -82,6 +93,24 @@ public partial class SpectatorCamera : Camera3D
 		Position = point + (Basis * new Vector3(0f, 0f, 30f));
 	}
 
+	/// <summary>Turns the camera to look straight down from where it is (the editor's <c>T</c>), keeping its heading.</summary>
+	public void LookStraightDown()
+	{
+		_hasFollow = false;
+		_pitch = -Quantize.HalfPi;
+		ApplyLook();
+	}
+
+	/// <summary>Puts the camera at <paramref name="position"/>, looking down at <paramref name="pitch"/> radians, not following anything.</summary>
+	public void Place(Vector3 position, float pitch, float yaw = 0f)
+	{
+		_hasFollow = false;
+		_pitch = pitch;
+		_yaw = yaw;
+		ApplyLook();
+		Position = position;
+	}
+
 	public override void _Process(double delta)
 	{
 		// Something else may have taken the view — a character spawned on this frame and
@@ -97,10 +126,18 @@ public partial class SpectatorCamera : Camera3D
 			return;
 		}
 
-		Looking = Input.IsMouseButtonPressed(MouseButton.Right) && !GetTree().Paused;
+		Looking = Input.IsMouseButtonPressed(LookButton) && !GetTree().Paused;
 
 		Vector2 axes = Input.GetVector("move_left", "move_right", "move_forward", "move_backward");
 		float lift = (Input.IsActionPressed("jump") ? 1f : 0f) - (Input.IsActionPressed("crouch") ? 1f : 0f);
+		if (CtrlIsCommand)
+		{
+			// Ctrl+Z is an undo, not a step back and down.
+			bool command = Input.IsKeyPressed(Key.Ctrl) || Input.IsKeyPressed(Key.Meta);
+			axes = command ? Vector2.Zero : axes;
+			lift = command ? 0f : (Input.IsActionPressed("jump") || Input.IsKeyPressed(Key.E) ? 1f : 0f)
+				- (Input.IsKeyPressed(Key.Q) ? 1f : 0f);
+		}
 
 		if (axes != Vector2.Zero || !Mathf.IsZeroApprox(lift))
 		{

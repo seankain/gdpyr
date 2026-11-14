@@ -1,0 +1,67 @@
+# LE4, docs/LEVEL_EDITOR.md §11. At 98c6125: .NET SDK 8.0.134, four cores of a cloud VM.
+# python3 tools/level_editor_checks/le4_mutations.py, as it printed: three at a time, after the editor parts, with nothing else running.
+
+PASS the tree as it stands: 289 of 289 tests of MapEditSessionTests, MapStoreTests, MapEditorControlsTests, EditLaunchTests, EditHistoryTests, LaunchOptionsTests, MapLaunchTests
+PASS stroke-rate: a held brush dabbing 20 times a second, not 30 -- 2 fail: MapEditSessionTests.AHeldBrush_DabsThirtyTimesASecond_WhateverTheFrames, MapEditSessionTests.ASculptDab_IsGivenItsShareOfASecond
+PASS stroke-cap: a stalled frame's backlog laid down whole -- 1 fail: MapEditSessionTests.AHeldBrush_DabsThirtyTimesASecond_WhateverTheFrames
+PASS stroke-click: a click that does not dab -- 3 fail: MapEditSessionTests.AHeldBrush_DabsThirtyTimesASecond_WhateverTheFrames, MapEditSessionTests.ASculptDab_IsGivenItsShareOfASecond, MapEditSessionTests.AStrokeWhoseDabsRoundBack_IsNotAStep_AndIsDrawnAgain
+PASS stroke-dt: a dab given a sixtieth of a second, not its thirtieth -- 1 fail: MapEditSessionTests.ASculptDab_IsGivenItsShareOfASecond
+PASS stroke-round: a stroke's end not rounded to stored steps -- 3 fail: MapEditSessionTests.AStrokeWhoseDabsRoundBack_IsNotAStep_AndIsDrawnAgain, MapEditSessionTests.AStroke_ChangesTheSamplesUnderIt_AndNoOthers_AndKeepsEveryPad, MapEditSessionTests.EndingAStroke_LeavesWholeSteps_AndCancellingOnePutsTheGroundBack
+PASS stroke-pads: the pads not kept at a stroke's end -- 2 fail: MapEditSessionTests.AStrokeOnAPad_LeavesThePadAsItWas, MapEditSessionTests.AStroke_ChangesTheSamplesUnderIt_AndNoOthers_AndKeepsEveryPad
+PASS stroke-step: a stroke whose dabs rounded back kept as a step -- 2 fail: MapEditSessionTests.AStrokeWhoseDabsRoundBack_IsNotAStep_AndIsDrawnAgain, MapEditSessionTests.AStroke_ChangesTheSamplesUnderIt_AndNoOthers_AndKeepsEveryPad
+PASS stroke-edit-rect: the step to undo holding one column less than what changed -- 3 fail: MapEditSessionTests.ARamp_IsAsWideAsItsRing_AndOneStep_AndARefusedOneChangesNothing, MapEditSessionTests.UndoAndRedo_SayWhichSamplesToDrawAgain, MapEditSessionTests.UndoingStrokes_RestoresEverySample_AndRedoingThemRestoresEachAfter
+PASS stroke-cancel: a stroke dropped and its ground left -- 1 fail: MapEditSessionTests.EndingAStroke_LeavesWholeSteps_AndCancellingOnePutsTheGroundBack
+PASS stroke-twice: a second stroke begun while one is under way -- 1 fail: MapEditSessionTests.AStroke_IsRefusedForARamp_OrWhileOneIsUnderWay_AndUndoWaitsForIt
+PASS stroke-ramp: a ramp brush dabbed as a stroke -- 1 fail: MapEditSessionTests.AStroke_IsRefusedForARamp_OrWhileOneIsUnderWay_AndUndoWaitsForIt
+PASS stroke-undo-during: an undo in the middle of a stroke -- 1 fail: MapEditSessionTests.AStroke_IsRefusedForARamp_OrWhileOneIsUnderWay_AndUndoWaitsForIt
+PASS stroke-dirty: a save forgotten by the next change -- 1 fail: MapEditSessionTests.Saving_MarksTheDocumentClean_UntilTheNextChange
+PASS stroke-report: the validator's report kept after a change -- 1 fail: MapEditSessionTests.TheReport_IsAskedAgainOnlyAfterAChange
+PASS ramp-width: a ramp as wide as the ring's radius, not its diameter -- 1 fail: MapEditSessionTests.ARamp_IsAsWideAsItsRing_AndOneStep_AndARefusedOneChangesNothing
+PASS ramp-round: a ramp not rounded to stored steps -- 1 fail: MapEditSessionTests.ARamp_IsAsWideAsItsRing_AndOneStep_AndARefusedOneChangesNothing
+PASS bands-meaning: band numbers out of their order taken -- 1 fail: MapEditSessionTests.TheBands_AreSetOnlyToNumbersAMapCanMean_AndAreNotAStep
+PASS bands-unsaved: a slider moved and the map still saved -- 1 fail: MapEditSessionTests.TheBands_AreSetOnlyToNumbersAMapCanMean_AndAreNotAStep
+PASS text-control: a control character taken into a map's text -- 1 fail: MapEditSessionTests.TheText_IsWhatAFileHolds
+PASS text-bytes: a text's length counted in characters, not the bytes a file holds -- 1 fail: MapEditSessionTests.TheText_IsWhatAFileHolds
+PASS history-next-undo: the oldest step said to be the one an undo reverts -- 1 fail: MapEditSessionTests.UndoAndRedo_SayWhichSamplesToDrawAgain
+PASS history-next-redo: no step to redo, ever -- 2 fail: MapEditSessionTests.UndoAndRedo_SayWhichSamplesToDrawAgain, MapEditSessionTests.UndoingStrokes_RestoresEverySample_AndRedoingThemRestoresEachAfter
+PASS save-revision: a save that is not the next revision -- 2 fail: MapStoreTests.SaveAs_MakesTheDocumentAForkOfTheFileItWasSavedAs, MapStoreTests.SaveThenOpen_IsTheSameDocument_AtTheNextRevision
+PASS save-modified: a save that does not say when -- 2 fail: MapStoreTests.ASaveThatCannotBeWritten_LeavesTheDocumentAndTheFileAsTheyWere, MapStoreTests.SaveThenOpen_IsTheSameDocument_AtTheNextRevision
+PASS save-failed: a save that failed leaving the next revision in the document -- 1 fail: MapStoreTests.ASaveThatCannotBeWritten_LeavesTheDocumentAndTheFileAsTheyWere
+PASS save-backup: the last file not kept as .bak -- 1 fail: MapStoreTests.Saving_KeepsTheLastFileAsBak_AndLeavesNoTmp
+PASS save-rename: the new file copied over the map and left beside it as .tmp -- 1 fail: MapStoreTests.Saving_KeepsTheLastFileAsBak_AndLeavesNoTmp
+PASS save-autosave: a save that leaves the autosave to be offered -- 1 fail: MapStoreTests.AnAutosave_IsOfferedBack_UntilItIsSaved
+PASS autosave-same: an autosave that is the map as saved offered all the same -- 1 fail: MapStoreTests.AnAutosaveThatIsTheMapAsSaved_IsDroppedRatherThanOffered
+PASS list-names: a file that is not a library name listed -- 1 fail: MapStoreTests.TheList_HoldsEveryMapThatReads_AndOnlyLibraryNames
+PASS list-unread: a file that does not read left out of the list -- 1 fail: MapStoreTests.TheList_HoldsEveryMapThatReads_AndOnlyLibraryNames
+PASS exists-name: a name taken as a path -- 1 fail: MapStoreTests.Exists_AsksTheNameAsAName
+PASS fork-parent: a fork that is its own parent -- 2 fail: MapStoreTests.AFork_IsANewLineage_WithItsParentNamed, MapStoreTests.SaveAs_MakesTheDocumentAForkOfTheFileItWasSavedAs
+PASS fork-revision: a fork that keeps its source's revision -- 2 fail: MapStoreTests.AFork_IsANewLineage_WithItsParentNamed, MapStoreTests.SaveAs_MakesTheDocumentAForkOfTheFileItWasSavedAs
+PASS fork-hash: a fork that forgets its parent's hash -- 2 fail: MapStoreTests.AFork_IsANewLineage_WithItsParentNamed, MapStoreTests.SaveAs_MakesTheDocumentAForkOfTheFileItWasSavedAs
+PASS key-undo: undo on Z, without Ctrl -- 4 fail: MapEditorControlsTests.AKeyNotInTheTable_DoesNothing, MapEditorControlsTests.EveryKey_IsBoundOnce_AndEveryActionButNone_HasOne, MapEditorControlsTests.Shift_IsTheCamerasSprint_AndLeavesAKeyWithoutAShiftOfItsOwnAsItIs, MapEditorControlsTests.TheKeys_AreSection8_2s
+PASS key-shift: a key that does nothing with Shift held -- 1 fail: MapEditorControlsTests.Shift_IsTheCamerasSprint_AndLeavesAKeyWithoutAShiftOfItsOwnAsItIs
+PASS fields-locked: a grade-locked brush showing a core it does not read, and not its grade -- 2 fail: MapEditorControlsTests.ABrush_ShowsWhatItReads, MapEditorControlsTests.EveryPreset_IsFoundAgain_AndAMovedSettingIsNone
+PASS amount-soft: - and = stepping the rate of a brush that reads its strength -- 3 fail: MapEditorControlsTests.ABrush_ShowsWhatItReads, MapEditorControlsTests.ASharesSteps_StayOnTwentieths, MapEditorControlsTests.TheKeys_StepTheBrush_AndHoldItToItsRanges
+PASS shape-locked: , and . stepping the core of a brush that reads its grade -- 2 fail: MapEditorControlsTests.ABrush_ShowsWhatItReads, MapEditorControlsTests.TheKeys_StepTheBrush_AndHoldItToItsRanges
+PASS step-down: [ widening the brush as ] does -- 1 fail: MapEditorControlsTests.TheKeys_StepTheBrush_AndHoldItToItsRanges
+PASS step-share: a share stepped off its twentieths -- 1 fail: MapEditorControlsTests.ASharesSteps_StayOnTwentieths
+PASS band-sand: sand's top slid past mud's -- 1 fail: MapEditorControlsTests.TheBandSliders_KeepNumbersAMapCanMean
+PASS band-mud: mud's top slid out from between its neighbours -- 1 fail: MapEditorControlsTests.TheBandSliders_KeepNumbersAMapCanMean
+PASS slope-35: a face of 35° coloured as walkable ground under it -- 1 fail: MapEditorControlsTests.ASlope_IsColouredAsTheOverlayColoursIt
+PASS slope-40: a face of 40° coloured as past what is walkable -- 1 fail: MapEditorControlsTests.ASlope_IsColouredAsTheOverlayColoursIt
+PASS overlay-cycle: O never reaching the contours -- 1 fail: MapEditorControlsTests.TheOverlays_GoRound
+PASS readout-disc: the readout reading a square, not the brush's disc -- 1 fail: MapEditorControlsTests.TheReadout_IsTheSteepestFaceUnderTheBrush
+PASS readout-crease: the readout reading a cell's first triangle only -- 1 fail: MapEditorControlsTests.TheReadout_IsTheSteepestFaceUnderTheBrush
+PASS test-path: a test process that is not told the project's path -- 1 fail: MapEditorControlsTests.TheTestProcess_PlaysTheSavedFile_OnItsOwn
+PASS test-headless: a headless editor's test process opening a window -- 1 fail: MapEditorControlsTests.TheTestProcess_PlaysTheSavedFile_OnItsOwn
+PASS test-order: the game's flags put before the bare -- -- 1 fail: MapEditorControlsTests.TheTestProcess_PlaysTheSavedFile_OnItsOwn
+PASS autosave-minute: an autosave due only after a minute has gone by, not at it -- 1 fail: MapEditorControlsTests.AnAutosave_IsDueAMinuteAfterTheFirstChangeNotWritten
+PASS autosave-negative: a step back in time counted -- 1 fail: MapEditorControlsTests.AnAutosave_IsDueAMinuteAfterTheFirstChangeNotWritten
+PASS edit-flag: --edit parsed and forgotten -- 2 fail: EditLaunchTests.Edit_AloneIsTheEditorsList_Offline, EditLaunchTests.Edit_TakesALibraryName
+PASS edit-name: --edit's name forgotten -- 1 fail: EditLaunchTests.Edit_TakesALibraryName
+PASS edit-name-parse: --edit taking a name with upper-case letters -- 1 fail: EditLaunchTests.Edit_RefusesWhatIsNotAName
+PASS edit-mode: --edit taken beside a mode flag -- 1 fail: EditLaunchTests.Edit_RefusesAMode
+PASS edit-dedicated: --edit taken by a dedicated server -- 1 fail: EditLaunchTests.Edit_RefusesAMap_AServer_AndBeingGivenTwice
+PASS edit-beside: --edit taken beside --practice, --map and the rest -- 2 fail: EditLaunchTests.Edit_RefusesAMap_AServer_AndBeingGivenTwice, EditLaunchTests.Edit_RefusesPlayingAlongside
+PASS edit-twice: --edit given twice and taken -- 1 fail: EditLaunchTests.Edit_RefusesAMap_AServer_AndBeingGivenTwice
+
+61 of 61 broken rules were caught by a test

@@ -30,6 +30,11 @@
          are worth answering without standing a match up. The HUD that draws it —
          Scripts/Ui/StrategistHud.cs — is left out. -->
     <Compile Include="../Scripts/Ui/StrategistCards.cs" />
+    <!-- The map editor's screen, the half without a window (docs/LEVEL_EDITOR.md §8.2):
+         which key does what, which settings a brush shows and what a key steps them by,
+         what the status line says and what the test process is started with. The
+         editor that draws it - Scripts/MapEditor/MapEditorRoot*.cs - is left out. -->
+    <Compile Include="../Scripts/MapEditor/MapEditorControls.cs" />
     <!-- The colour of the health bar over every unit, the half of SelectionOverlay
          without a window: "half health is between yellow and orange" is a question
          with an answer. -->

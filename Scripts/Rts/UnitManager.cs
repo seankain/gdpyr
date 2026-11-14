@@ -400,6 +400,7 @@ public partial class UnitManager : Node
 		{
 			BakeNavigation();
 			CollectCover();
+			PlaceMapStructures();
 		}
 	}
 
@@ -2768,6 +2769,31 @@ public partial class UnitManager : Node
 		// re-baked around it (ServerNavigation).
 		_navigationRegion = region;
 
+		bool dataMap = Gdpyr.Level.LevelRoot.Current is { Document: not null };
+		Gdpyr.Level.LevelRoot level = Gdpyr.Level.LevelRoot.Current;
+		ConfigureBake(mesh, dataMap, dataMap && level.HasWater ? level.BakeFloorMeters : float.NegativeInfinity);
+		if (dataMap)
+		{
+			GD.Print($"[rts] baking a data map: slope {mesh.AgentMaxSlope:0}°, "
+				+ (level.HasWater ? $"floor {level.BakeFloorMeters:0.00} m, 1 m under the water" : "no water over the ground"));
+		}
+
+		region.BakeNavigationMesh(onThread: false);
+
+		NavigationReady = mesh.GetVertices().Length > 0;
+		GD.Print(NavigationReady
+			? $"[rts] navigation baked: {mesh.GetVertices().Length} vertices"
+			: "[rts] navigation bake produced no geometry; units will steer straight at their destination");
+	}
+
+	/// <summary>
+	/// The bake's settings (docs/LEVEL_EDITOR.md §7.3): the rifleman's, from colliders in group
+	/// <c>navmesh</c>; on a data map walkable to 40° (LE-D23), and with water a floor at
+	/// <paramref name="floor"/> (LE-D8; negative infinity for none). What a round bakes with,
+	/// and the map editor's deep check (LE5), which must bake the same mesh.
+	/// </summary>
+	public static void ConfigureBake(NavigationMesh mesh, bool dataMap, float floor)
+	{
 		UnitDefinition infantry = UnitCatalog.Definition(UnitCatalog.Infantry);
 
 		// Baked for the rifleman, and used by all three of M5's tiers. Godot bakes one
@@ -2797,20 +2823,16 @@ public partial class UnitManager : Node
 		// walk with 2° to spare, where the engine's 45° kept faces they stall on (LE-D23);
 		// and with water, the bake's box has its floor 1 m under it, so units do not path
 		// where the bed is deeper than that (LE-D8). A scene map is baked as it always was.
-		if (Gdpyr.Level.LevelRoot.Current is { Document: not null } level)
+		if (dataMap)
 		{
 			mesh.AgentMaxSlope = Gdpyr.Sim.Level.MapLimits.WalkableSlopeDegrees;
-			if (level.HasWater)
+			if (float.IsFinite(floor))
 			{
-				float floor = level.BakeFloorMeters;
 				float half = Gdpyr.Sim.Level.MapLimits.FieldHalfMeters + 1f;
 				float ceiling = Gdpyr.Sim.Level.MapLimits.MaxHeightMeters + BakeHeadroomMeters;
 				mesh.FilterBakingAabb = new Aabb(new Vector3(-half, floor, -half),
 					new Vector3(2f * half, ceiling - floor, 2f * half));
 			}
-
-			GD.Print($"[rts] baking a data map: slope {mesh.AgentMaxSlope:0}°, "
-				+ (level.HasWater ? $"floor {level.BakeFloorMeters:0.00} m, 1 m under the water" : "no water over the ground"));
 		}
 
 		// Colliders only, not meshes. A mesh source would make the bake read geometry
@@ -2821,13 +2843,6 @@ public partial class UnitManager : Node
 		mesh.GeometryCollisionMask = CollisionLayers.World;
 		mesh.GeometrySourceGeometryMode = NavigationMesh.SourceGeometryMode.GroupsWithChildren;
 		mesh.GeometrySourceGroupName = "navmesh";
-
-		region.BakeNavigationMesh(onThread: false);
-
-		NavigationReady = mesh.GetVertices().Length > 0;
-		GD.Print(NavigationReady
-			? $"[rts] navigation baked: {mesh.GetVertices().Length} vertices"
-			: "[rts] navigation bake produced no geometry; units will steer straight at their destination");
 	}
 
 	private bool HasLineOfSight(Vector3 from, Vector3 to)

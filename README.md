@@ -69,9 +69,11 @@ dedicated-server authoritative.
   the host panel's map picker
 - [`docs/LEVEL_EDITOR.md`](docs/LEVEL_EDITOR.md) — a plan, its ground measured in the engine (LE0,
   `scripts/level-editor-checks.sh`), the ground's rules, the map file and its validator written and
-  tested engine-free (LE1, LE2, `Scripts/Sim/Level/`, `tools/Gdpyr.MapTool`), and a map played from
-  its file (LE3: `--map`, `Scenes/Maps/MapHost.tscn`, `Scripts/Level/`, one bundled map), with no
-  editor and no fetch built yet: a level editor in the game —
+  tested engine-free (LE1, LE2, `Scripts/Sim/Level/`, `tools/Gdpyr.MapTool`), a map played from
+  its file (LE3: `--map`, `Scenes/Maps/MapHost.tscn`, `Scripts/Level/`, one bundled map), the
+  editor's shell and terrain tool (LE4: **Map editor** on the menu, `--edit`, `Scenes/MapEditor/`),
+  and its prefab tool (LE5: a round's pieces, cover, structures that stand when a round starts, the
+  deep check), with roads, bridges and the fetch not built yet: a level editor in the game —
   terrain raised and lowered with brushes that set its grade and textured by height and slope,
   prefabs placed on ground levelled for them, roads and bridges — and maps as data files that are
   saved, cloned and exported, given to a dedicated server, and fetched by clients from the server
@@ -102,6 +104,8 @@ Scripts/Agent/  The agent control channel: listener, sessions, seats, observatio
 Scripts/Ui/     Main menu and server browser, role select, pause menu, reticle, combat HUD, RTS HUD,
                 net debug HUD, the `~` console and the demo camera
 Scripts/Ui/Spectator/ The spectator's camera, and the AI debugger's panel, graph and world overlay
+Scripts/MapEditor/ The map editor (docs/LEVEL_EDITOR.md §8): its scene's root, panels and keys; what
+                it does to a map is Scripts/Sim/Level/MapEditSession.cs and MapStore.cs
 Scripts/Effects/ Explosions as drawn: the pooled manager, the placeholder, and the contract art
                 replaces it under (docs/EFFECTS.md); what they decide is Scripts/Sim/Explosions.cs.
                 Weapon sounds as played (docs/AUDIO.md); what they are made of and when a round
@@ -110,6 +114,7 @@ Scripts/Effects/ Explosions as drawn: the pooled manager, the placeholder, and t
                 kind draws, how far off, and how a case falls is Scripts/Sim/Muzzles.cs
 Scenes/         Main menu, greybox map, player, humanoid body, weapon, pause menu
 Scenes/Maps/    The template new maps inherit from (docs/MAPS.md)
+Scenes/MapEditor/ The map editor's scene (docs/LEVEL_EDITOR.md §8)
 Scenes/Environment/ Map pieces: the barracks, the pillbox, the vehicle test strip
 Units/          UnitDefinition resources: three fighting tiers, the builder, the supply truck, and the
                 sniper and heavy gunner a sniper tower and a pillbox train
@@ -211,12 +216,27 @@ Two more watch rather than play ([`docs/AI_DEBUG.md`](docs/AI_DEBUG.md)):
 | `--spectate` | join as a spectator: no character, a free camera, and the AI debugger. Alone, an offline round of bots to watch |
 | `--ai-debug`, `--no-ai-debug` | whether this authority sends its bots' plans to spectators; on except in a dedicated-server export |
 
-Two more choose the map and play it on your own ([`docs/LEVEL_EDITOR.md`](docs/LEVEL_EDITOR.md) §9.5):
+Three more choose the map and play it on your own, or make one ([`docs/LEVEL_EDITOR.md`](docs/LEVEL_EDITOR.md) §8, §9.5):
 
 | Flag | Effect |
 |---|---|
 | `--map <map>` | with `--server`, `--listen` or `--practice`: a catalog id (`greybox`, `hills`), a map's name in `user://maps`, 8 or more hex digits of a map file's SHA-256, or a path ending `.map`. A map file that does not read or does not pass the validator is a launch error |
 | `--practice` | the main menu's "Practice offline", with no menu |
+| `--edit [name]` | the main menu's **Map editor**, with no menu: one's own map `user://maps/<name>.map`, or a new one by that name; with no name, the editor's list of maps to open and to clone. Leaving it comes back to the menu |
+
+**The map editor** (LE4) raises and lowers the ground with the brushes of LEVEL_EDITOR.md §6.2 — eleven presets, raise on
+the left button and lower on the right, `[` `]` the radius, `-` `=` the rate or strength, `,` `.`
+the core or grade — and draws its bands, slope or contours (`O`). `Ctrl+Z` and `Ctrl+Y` undo and
+redo, `Ctrl+S` saves, and an unsaved map is autosaved every minute and offered back. **Validate**
+lists what stops a map being hosted; **Test** (`F5`) plays the saved map in a second process. The
+camera flies on `WASD`, `Space`/`E` and `Q`, and looks on the middle button; `T` looks straight
+down. The prefab tool (`2`, LE5) places a round's pieces, cover, scenery and structures from a
+palette that counts each against its limit: a ghost of the prefab's boxes stands on its pad under the
+cursor, green or red with why; a click places it and levels its pad, a click on a placed one selects
+it, `R` and `Shift+R` turn it 15°, `G` snaps to the metre grid, `Del` takes it up. A structure stands
+when each round starts, the strategist's and as destructible as one a builder made. **Deep**, on the
+validator's list, bakes the navigation mesh and asks for a path from every barracks door and the
+spawn line to every node. Roads and bridges are LE6's.
 
 Two more record a round or watch one back ([`docs/DEMOS.md`](docs/DEMOS.md)):
 

@@ -58,6 +58,7 @@ public partial class MainMenu : Control
 	private Button _host;
 	private Button _offline;
 	private Button _watch;
+	private Button _editor;
 	private Button _refresh;
 
 	private VBoxContainer _browserColumn;
@@ -80,6 +81,12 @@ public partial class MainMenu : Control
 	/// </summary>
 	private bool _launchClient;
 
+	/// <summary>
+	/// Whether `--edit` has been acted on. The editor comes back to this menu when it is left,
+	/// and the command line that sent this process to it once must not send it again.
+	/// </summary>
+	private static bool _editTaken;
+
 	private float _refreshAge = float.MaxValue;
 	private float _redrawAge = float.MaxValue;
 
@@ -98,6 +105,16 @@ public partial class MainMenu : Control
 		// the menu's "Watch the bots" said on the command line (docs/AI_DEBUG.md §1).
 		// `--practice` is the menu's "Practice offline" said on the command line
 		// (docs/LEVEL_EDITOR.md §8.7): the round on one's own, on `--map`'s map.
+		// `--edit` is the menu's "Map editor" said on the command line (docs/LEVEL_EDITOR.md §8.1),
+		// once: leaving the editor comes back here, to the menu.
+		if (Bootstrap.Options.Edit && !_editTaken && !Bootstrap.IsDedicatedServer)
+		{
+			_editTaken = true;
+			Gdpyr.MapEditor.MapEditorRoot.OpenOnEnter = Bootstrap.Options.EditName;
+			Callable.From(EnterEditor).CallDeferred();
+			return;
+		}
+
 		bool watchBots = Bootstrap.Options.Spectate && Bootstrap.Options.Mode == LaunchMode.Offline;
 		bool practice = Bootstrap.Options.Practice;
 		if (Bootstrap.IsDedicatedServer || Bootstrap.Options.Mode != LaunchMode.Offline
@@ -465,6 +482,25 @@ public partial class MainMenu : Control
 	}
 
 	/// <summary>
+	/// The map editor (docs/LEVEL_EDITOR.md §8.1): its list of maps, or the one `--edit` named.
+	/// Nothing is played there; leaving it comes back to this menu.
+	/// </summary>
+	private void EnterEditor()
+	{
+		if (_leaving)
+		{
+			return;
+		}
+
+		_leaving = true;
+		Error error = GetTree().ChangeSceneToFile(Gdpyr.MapEditor.MapEditorRoot.ScenePath);
+		if (error != Error.Ok)
+		{
+			GD.PrintErr($"[menu] could not load {Gdpyr.MapEditor.MapEditorRoot.ScenePath}: {error}");
+		}
+	}
+
+	/// <summary>
 	/// Hands over to the map. <see cref="Core.WorldRoot"/> is what actually opens the
 	/// session, on the far side of the scene change, so that a map reached from a
 	/// command line opens it the same way.
@@ -580,6 +616,7 @@ public partial class MainMenu : Control
 		_host.Disabled = busy;
 		_offline.Disabled = busy;
 		_watch.Disabled = busy;
+		_editor.Disabled = busy;
 		_refresh.Disabled = busy;
 	}
 
@@ -683,6 +720,13 @@ public partial class MainMenu : Control
 
 		_watch = NewButton(buttons, "Watch the bots");
 		_watch.Pressed += WatchBots;
+
+		_editor = NewButton(buttons, "Map editor");
+		_editor.Pressed += () =>
+		{
+			Gdpyr.MapEditor.MapEditorRoot.OpenOnEnter = null;
+			EnterEditor();
+		};
 
 		Button quit = NewButton(buttons, "Quit");
 		quit.Pressed += () => GetTree().Quit();

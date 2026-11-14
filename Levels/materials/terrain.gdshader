@@ -28,7 +28,9 @@ uniform float grass_top = 22.0;
 uniform float blend = 1.0;
 
 // The editor's overlays (§8.3, LE4): 0 none, 1 the bands flat-coloured, 2 the slope of each
-// face — green under 35°, yellow to 40°, red past it (LE-D23) — and 3 contours every 2 m.
+// face — green under 35°, yellow to 40°, red past it (LE-D23) — 3 contours every 2 m, and
+// 4 buildable (LE5): green where LE-D21 takes a structure, by the vertex colour's green, which
+// the editor computes, and red where it does not.
 uniform int overlay = 0;
 
 varying vec3 world_position;
@@ -91,6 +93,9 @@ void fragment() {
 		float face_slope = degrees(acos(clamp(abs(face.y), 0.0, 1.0)));
 		vec3 tint = face_slope < 35.0 ? vec3(0.2, 0.75, 0.2) : face_slope <= 40.0 ? vec3(0.9, 0.85, 0.15) : vec3(0.9, 0.15, 0.1);
 		colour = mix(colour, tint, 0.65);
+	} else if (overlay == 4) {
+		vec3 tint = COLOR.g > 0.5 ? vec3(0.2, 0.75, 0.2) : vec3(0.85, 0.2, 0.15);
+		colour = mix(colour, tint, 0.55);
 	} else if (overlay == 3) {
 		float line = abs(fract(world_position.y / 2.0 + 0.5) - 0.5) / max(fwidth(world_position.y / 2.0), 0.0001);
 		colour = mix(vec3(0.05), colour, clamp(line - 0.5, 0.0, 1.0));
