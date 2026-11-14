@@ -19,6 +19,13 @@ namespace Gdpyr.Level;
 /// It lets go of its shapes when it leaves the tree: LE0's stripped server ended in a
 /// segmentation fault when that was left to .NET's finalizer as the physics server went
 /// down (§7.1).
+///
+/// In the map editor the ground changes under it (§8.3, LE4): a dab draws again the mesh
+/// chunks its rectangle reaches, and one sample further for their normals
+/// (<see cref="RefreshMeshes"/>); a stroke's end gives the collider's chunks it touched their
+/// triangles again (<see cref="RefreshColliders"/>); the water and the band numbers follow
+/// the sliders (<see cref="SetBands"/>). It keeps each chunk's vertices as it last drew
+/// them, which is what an engine check holds the drawing to (<see cref="ChunkVertices"/>).
 /// </summary>
 public partial class TerrainNode : StaticBody3D
 {
@@ -30,7 +37,13 @@ public partial class TerrainNode : StaticBody3D
 
 	private ConcavePolygonShape3D[] _shapes = Array.Empty<ConcavePolygonShape3D>();
 	private ArrayMesh[] _meshes = Array.Empty<ArrayMesh>();
+	private Vector3[][] _vertices = Array.Empty<Vector3[]>();
+	private int[] _indices;
+	private ShaderMaterial _material;
+	private MeshInstance3D _water;
 	private HeightField _field;
+	private float _waterLevel;
+	private bool _draws;
 
 	public int Width => _field?.Width ?? 0;
 	public int Depth => _field?.Depth ?? 0;
@@ -47,6 +60,32 @@ public partial class TerrainNode : StaticBody3D
 	public int SubmergedSamples { get; private set; }
 
 	public bool HasWater => SubmergedSamples > 0;
+
+	/// <summary>Chunks along X, and along Z.</summary>
+	public int ChunksAcross => (Width - 1) / ChunkCells;
+
+	public int ChunksDown => (Depth - 1) / ChunkCells;
+
+	/// <summary>How many times a mesh chunk has been drawn again since it was built: the editor's (LE4).</summary>
+	public int MeshesRedrawn { get; private set; }
+
+	/// <summary>How many times a collider chunk has been given its triangles again since it was built.</summary>
+	public int CollidersReset { get; private set; }
+
+	/// <summary>How long the last <see cref="RefreshColliders"/> took [ms].</summary>
+	public double LastColliderMilliseconds { get; private set; }
+
+	/// <summary>The water's quad is drawn: there is a quad, and ground under it.</summary>
+	public bool WaterDrawn => _water != null && _water.Visible;
+
+	/// <summary>A drawn chunk's vertices as it last drew them, 17 × 17 row by row; null where nothing is drawn.</summary>
+	public Vector3[] ChunkVertices(int chunkX, int chunkZ) =>
+		_draws && chunkX >= 0 && chunkX < ChunksAcross && chunkZ >= 0 && chunkZ < ChunksDown
+			? _vertices[(chunkZ * ChunksAcross) + chunkX]
+			: null;
+
+	/// <summary>A collider chunk's triangles as the physics server has them.</summary>
+	public Vector3[] ColliderFaces(int chunkX, int chunkZ) => _shapes[(chunkZ * ChunksAcross) + chunkX].GetFaces();
 
 	/// <summary>The ground under (x, z) as the collider has it (§6.1's <c>Sample</c>).</summary>
 	public float HeightAt(float x, float z) => _field.Sample(x, z);
@@ -75,19 +114,13 @@ public partial class TerrainNode : StaticBody3D
 	public void Build(MapDocument document, bool draws)
 	{
 		_field = document.Terrain;
+		_draws = draws;
 		CollisionLayer = CollisionLayers.World;
 		CollisionMask = 0;
 
 		float water = document.Bands.WaterLevelMeters;
-		MinHeight = float.PositiveInfinity;
-		MaxHeight = float.NegativeInfinity;
-		SubmergedSamples = 0;
-		foreach (float h in _field.Heights)
-		{
-			MinHeight = MathF.Min(MinHeight, h);
-			MaxHeight = MathF.Max(MaxHeight, h);
-			SubmergedSamples += h < water ? 1 : 0;
-		}
+		_waterLevel = water;
+		Measure();
 
 		int across = (Width - 1) / ChunkCells;
 		int down = (Depth - 1) / ChunkCells;
@@ -116,6 +149,143 @@ public partial class TerrainNode : StaticBody3D
 			}
 		}
 	}
+
+	/// <summary>The lowest and highest sample, and how many are under the water.</summary>
+	private void Measure()
+	{
+		MinHeight = float.PositiveInfinity;
+		MaxHeight = float.NegativeInfinity;
+		int submerged = 0;
+		foreach (float h in _field.Heights)
+		{
+			MinHeight = MathF.Min(MinHeight, h);
+			MaxHeight = MathF.Max(MaxHeight, h);
+			submerged += h < _waterLevel ? 1 : 0;
+		}
+
+		SubmergedSamples = submerged;
+	}
+
+	/// <summary>The chunks whose cells hold a sample of <paramref name="samples"/>: inclusive ranges, empty when none.</summary>
+	public void ChunksOf(in SampleRect samples, out int minX, out int minZ, out int maxX, out int maxZ)
+	{
+		SampleRect inside = samples.Intersect(_field.Bounds);
+		if (inside.IsEmpty)
+		{
+			minX = minZ = 0;
+			maxX = maxZ = -1;
+			return;
+		}
+
+		// A sample is a corner of the cells either side of it: the chunk before it too when it is on a chunk's edge.
+		minX = Math.Clamp((inside.MinX - 1) / ChunkCells, 0, ChunksAcross - 1);
+		minZ = Math.Clamp((inside.MinZ - 1) / ChunkCells, 0, ChunksDown - 1);
+		maxX = Math.Clamp(inside.MaxX / ChunkCells, 0, ChunksAcross - 1);
+		maxZ = Math.Clamp(inside.MaxZ / ChunkCells, 0, ChunksDown - 1);
+		if (inside.MinX == 0)
+		{
+			minX = 0;
+		}
+
+		if (inside.MinZ == 0)
+		{
+			minZ = 0;
+		}
+	}
+
+	/// <summary>
+	/// Draws again the chunks that a change to <paramref name="samples"/> reaches: those with a
+	/// vertex in it or next to it, since a vertex's normal reads the samples either side
+	/// (§8.3). Returns how many it drew. Nothing where nothing is drawn.
+	/// </summary>
+	public int RefreshMeshes(in SampleRect samples)
+	{
+		if (!_draws || samples.IsEmpty)
+		{
+			return 0;
+		}
+
+		ChunksOf(samples.Grown(1), out int minX, out int minZ, out int maxX, out int maxZ);
+		int drawn = 0;
+		for (int cz = minZ; cz <= maxZ; cz++)
+		{
+			for (int cx = minX; cx <= maxX; cx++)
+			{
+				DrawChunk(cx, cz);
+				drawn++;
+			}
+		}
+
+		MeshesRedrawn += drawn;
+		return drawn;
+	}
+
+	/// <summary>
+	/// Gives the collider's chunks with a cell on a sample of <paramref name="samples"/> their
+	/// triangles again: what ends a stroke (§8.3), 0.2–0.3 ms a chunk by LE0. Returns how many.
+	/// </summary>
+	public int RefreshColliders(in SampleRect samples)
+	{
+		if (samples.IsEmpty)
+		{
+			return 0;
+		}
+
+		long before = Stopwatch.GetTimestamp();
+		ChunksOf(samples, out int minX, out int minZ, out int maxX, out int maxZ);
+		int reset = 0;
+		for (int cz = minZ; cz <= maxZ; cz++)
+		{
+			for (int cx = minX; cx <= maxX; cx++)
+			{
+				_shapes[(cz * ChunksAcross) + cx].SetFaces(ChunkFaces(_field, cx, cz));
+				reset++;
+			}
+		}
+
+		LastColliderMilliseconds = (Stopwatch.GetTimestamp() - before) * 1000.0 / Stopwatch.Frequency;
+		CollidersReset += reset;
+		return reset;
+	}
+
+	/// <summary>
+	/// The map's water and band numbers, as the editor's sliders set them (§8.3): the shader's
+	/// uniforms, and the water's quad at its level, drawn when any ground is under it.
+	/// </summary>
+	public void SetBands(in BandSettings bands)
+	{
+		_waterLevel = bands.WaterLevelMeters;
+		if (_material != null)
+		{
+			ApplyBands(_material, bands);
+		}
+
+		RefreshWater();
+	}
+
+	/// <summary>Counts the ground under the water again, and shows the water's quad where it has any: after an edit.</summary>
+	public void RefreshWater()
+	{
+		Measure();
+		if (!_draws)
+		{
+			return;
+		}
+
+		if (HasWater && _water == null)
+		{
+			BuildWater(_waterLevel);
+		}
+
+		if (_water != null)
+		{
+			_water.Visible = HasWater;
+			_water.Position = new Vector3(0f, _waterLevel, 0f);
+		}
+	}
+
+	/// <summary>The editor's overlay (§8.3): the terrain shader's <c>overlay</c>.</summary>
+	public void SetOverlay(int overlay) => _material?.SetShaderParameter("overlay", overlay);
 
 	/// <summary>
 	/// A chunk's triangles, two a cell in the heightmap's order and winding (§3): (x,z)
@@ -152,60 +322,71 @@ public partial class TerrainNode : StaticBody3D
 	/// </summary>
 	private void BuildMeshes(MapDocument document, int across, int down)
 	{
-		ShaderMaterial material = TerrainMaterial(document.Bands.Settings);
+		_material = TerrainMaterial(document.Bands.Settings);
 		const int Side = ChunkCells + 1;
-		var indices = new int[ChunkCells * ChunkCells * 6];
+		_indices = new int[ChunkCells * ChunkCells * 6];
 		int n = 0;
 		for (int z = 0; z < ChunkCells; z++)
 		{
 			for (int x = 0; x < ChunkCells; x++)
 			{
 				int a = (z * Side) + x;
-				indices[n++] = a;
-				indices[n++] = a + 1;
-				indices[n++] = a + Side;
-				indices[n++] = a + 1;
-				indices[n++] = a + Side + 1;
-				indices[n++] = a + Side;
+				_indices[n++] = a;
+				_indices[n++] = a + 1;
+				_indices[n++] = a + Side;
+				_indices[n++] = a + 1;
+				_indices[n++] = a + Side + 1;
+				_indices[n++] = a + Side;
 			}
 		}
 
 		_meshes = new ArrayMesh[across * down];
+		_vertices = new Vector3[across * down][];
 		for (int cz = 0; cz < down; cz++)
 		{
 			for (int cx = 0; cx < across; cx++)
 			{
-				var vertices = new Vector3[Side * Side];
-				var normals = new Vector3[Side * Side];
-				var colors = new Color[Side * Side];
-				for (int z = 0; z < Side; z++)
-				{
-					for (int x = 0; x < Side; x++)
-					{
-						int sx = (cx * ChunkCells) + x;
-						int sz = (cz * ChunkCells) + z;
-						vertices[(z * Side) + x] = _field.Position(sx, sz);
-						normals[(z * Side) + x] = _field.Normal(sx, sz);
-
-						// A road's coverage is LE6's; until then none.
-						colors[(z * Side) + x] = new Color(0f, 0f, 0f, 1f);
-					}
-				}
-
-				var arrays = new Godot.Collections.Array();
-				arrays.Resize((int)Mesh.ArrayType.Max);
-				arrays[(int)Mesh.ArrayType.Vertex] = vertices;
-				arrays[(int)Mesh.ArrayType.Normal] = normals;
-				arrays[(int)Mesh.ArrayType.Color] = colors;
-				arrays[(int)Mesh.ArrayType.Index] = indices;
-
-				var mesh = new ArrayMesh();
-				mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
-				mesh.SurfaceSetMaterial(0, material);
-				_meshes[(cz * across) + cx] = mesh;
-				AddChild(new MeshInstance3D { Name = $"Chunk_{cx:00}_{cz:00}", Mesh = mesh });
+				_meshes[(cz * across) + cx] = new ArrayMesh();
+				DrawChunk(cx, cz);
+				AddChild(new MeshInstance3D { Name = $"Chunk_{cx:00}_{cz:00}", Mesh = _meshes[(cz * across) + cx] });
 			}
 		}
+	}
+
+	/// <summary>One chunk's mesh, from the samples as they are now.</summary>
+	private void DrawChunk(int cx, int cz)
+	{
+		const int Side = ChunkCells + 1;
+		var vertices = new Vector3[Side * Side];
+		var normals = new Vector3[Side * Side];
+		var colors = new Color[Side * Side];
+		for (int z = 0; z < Side; z++)
+		{
+			for (int x = 0; x < Side; x++)
+			{
+				int sx = (cx * ChunkCells) + x;
+				int sz = (cz * ChunkCells) + z;
+				vertices[(z * Side) + x] = _field.Position(sx, sz);
+				normals[(z * Side) + x] = _field.Normal(sx, sz);
+
+				// A road's coverage is LE6's; until then none.
+				colors[(z * Side) + x] = new Color(0f, 0f, 0f, 1f);
+			}
+		}
+
+		var arrays = new Godot.Collections.Array();
+		arrays.Resize((int)Mesh.ArrayType.Max);
+		arrays[(int)Mesh.ArrayType.Vertex] = vertices;
+		arrays[(int)Mesh.ArrayType.Normal] = normals;
+		arrays[(int)Mesh.ArrayType.Color] = colors;
+		arrays[(int)Mesh.ArrayType.Index] = _indices;
+
+		int index = (cz * ChunksAcross) + cx;
+		ArrayMesh mesh = _meshes[index];
+		mesh.ClearSurfaces();
+		mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+		mesh.SurfaceSetMaterial(0, _material);
+		_vertices[index] = vertices;
 	}
 
 	/// <summary>The terrain shader with the palette's textures and the map's band numbers.</summary>
@@ -221,6 +402,13 @@ public partial class TerrainNode : StaticBody3D
 			GD.PushWarning($"[level] no terrain palette at {PalettePath}: the ground is drawn untextured");
 		}
 
+		ApplyBands(material, bands);
+		return material;
+	}
+
+	/// <summary>The map's seven numbers, as the shader's uniforms.</summary>
+	private static void ApplyBands(ShaderMaterial material, in BandSettings bands)
+	{
 		material.SetShaderParameter("water_level", bands.WaterLevelMeters);
 		material.SetShaderParameter("slope_free", bands.SlopeFreeDegrees);
 		material.SetShaderParameter("slope_gain", bands.SlopeGainMetersPerDegree);
@@ -228,7 +416,6 @@ public partial class TerrainNode : StaticBody3D
 		material.SetShaderParameter("mud_top", bands.MudTopMeters);
 		material.SetShaderParameter("grass_top", bands.GrassTopMeters);
 		material.SetShaderParameter("blend", bands.BlendMeters);
-		return material;
 	}
 
 	/// <summary>The water: one quad over the field at its level, drawn only (LE-D8).</summary>
@@ -253,13 +440,14 @@ public partial class TerrainNode : StaticBody3D
 
 		float width = Width - 1;
 		float depth = Depth - 1;
-		AddChild(new MeshInstance3D
+		_water = new MeshInstance3D
 		{
 			Name = "Water",
 			Position = new Vector3(0f, level, 0f),
 			Mesh = new PlaneMesh { Size = new Vector2(width, depth), Material = water },
 			CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-		});
+		};
+		AddChild(_water);
 	}
 
 	public override void _ExitTree()
@@ -289,5 +477,7 @@ public partial class TerrainNode : StaticBody3D
 
 		_shapes = Array.Empty<ConcavePolygonShape3D>();
 		_meshes = Array.Empty<ArrayMesh>();
+		_vertices = Array.Empty<Vector3[]>();
+		_water = null;
 	}
 }

@@ -47,7 +47,7 @@ public sealed class LaunchOptions
 		"             [--agent-unbounded] [--agent-omniscient]\n" +
 		"             [--record <name>] | [--playdemo <name>]\n" +
 		"             [--spectate] [--ai-debug | --no-ai-debug]\n" +
-		"             [--practice] [--map <map>]\n" +
+		"             [--practice] [--map <map>] | [--edit [name]]\n" +
 		"  --server [port]         headless authority, no local player (default port 7777)\n" +
 		"  --client <host[:port]>  connect to a server\n" +
 		"  --listen [port]         authority plus a local player\n" +
@@ -70,6 +70,8 @@ public sealed class LaunchOptions
 		"  --practice              a round on your own, as the menu's Practice offline, with no menu\n" +
 		"  --map <map>             play this map, with --server, --listen or --practice: a catalog id, a map's\n" +
 		"                          name in user://maps, 8 or more hex digits of its hash, or a path ending .map\n" +
+		"  --edit [name]           the map editor, on one's own map of that name in user://maps, or a new one\n" +
+		"                          by that name; with no name, the editor's list of maps\n" +
 		"  (no flags)              the main menu: the servers on this network, or a round on your own\n" +
 		"Godot consumes its own arguments first, so these go after a bare `--`:\n" +
 		"  gdpyr --headless -- --server 7777 --bots 6:1 --agent-api 7900";
@@ -200,6 +202,18 @@ public sealed class LaunchOptions
 	/// </summary>
 	public string MapReference { get; private init; }
 
+	/// <summary>
+	/// The map editor, from the command line (docs/LEVEL_EDITOR.md §8.1): <c>--edit</c>, with
+	/// no menu. The mode is <see cref="LaunchMode.Offline"/>; nothing is played.
+	/// </summary>
+	public bool Edit { get; private init; }
+
+	/// <summary>
+	/// The map <c>--edit</c> opens, a library name (<see cref="Gdpyr.Sim.Level.MapNames.TryParseName"/>):
+	/// one's own map of that name, or a new one by it. Null for the editor's list of maps.
+	/// </summary>
+	public string EditName { get; private init; }
+
 	/// <summary>Null when parsing succeeded; a one-line diagnostic otherwise.</summary>
 	public string Error { get; private init; }
 
@@ -276,6 +290,11 @@ public sealed class LaunchOptions
 			mode += $" | map {MapReference}";
 		}
 
+		if (Edit)
+		{
+			mode += EditName != null ? $" | editing {EditName}" : " | editing";
+		}
+
 		if (AgentPort is { } agentPort)
 		{
 			mode += $" | agent api {AgentHost}:{agentPort}"
@@ -325,6 +344,8 @@ public sealed class LaunchOptions
 		bool? aiDebug = null;
 		bool practice = false;
 		string mapReference = null;
+		bool edit = false;
+		string editName = null;
 
 		args ??= System.Array.Empty<string>();
 
@@ -592,6 +613,24 @@ public sealed class LaunchOptions
 					break;
 				}
 
+				case "--edit":
+				{
+					if (edit)
+					{
+						return Failure("--edit given twice");
+					}
+
+					edit = true;
+
+					// The name is optional: `--edit` alone is the editor's list of maps.
+					if (TryTakeValue(args, ref i, out string value)
+						&& !Gdpyr.Sim.Level.MapNames.TryParseName(value, out editName, out string error))
+					{
+						return Failure($"--edit: {error}");
+					}
+					break;
+				}
+
 				case "--ai-debug":
 				case "--no-ai-debug":
 				{
@@ -660,6 +699,29 @@ public sealed class LaunchOptions
 			if (dedicatedServer)
 			{
 				return Failure("--practice needs somebody to play: a dedicated server has no window; use --server");
+			}
+		}
+
+		if (edit)
+		{
+			// The editor is somebody at a screen making a map: it plays nothing, joins
+			// nothing and serves nothing (docs/LEVEL_EDITOR.md §8.1). Its Test plays the map
+			// in a second process, which has a command line of its own (LE-D19).
+			if (mode is { } other)
+			{
+				return Failure($"conflicting mode flags: --edit and {other}");
+			}
+
+			if (dedicatedServer)
+			{
+				return Failure("--edit needs somebody at a screen: a dedicated server has no window");
+			}
+
+			string beside = practice ? "--practice" : playDemo != null ? "--playdemo" : recordDemo != null ? "--record"
+				: mapReference != null ? "--map" : spectate ? "--spectate" : null;
+			if (beside != null)
+			{
+				return Failure($"--edit and {beside}: the editor plays nothing; its Test plays the map it saved");
 			}
 		}
 
@@ -742,6 +804,8 @@ public sealed class LaunchOptions
 			AiDebug = aiDebug ?? !dedicatedServer,
 			Practice = practice,
 			MapReference = mapReference,
+			Edit = edit,
+			EditName = editName,
 		};
 	}
 

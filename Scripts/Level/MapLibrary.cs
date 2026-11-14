@@ -240,9 +240,12 @@ public static class MapLibrary
 			}
 		}
 
+		// One's own maps by their library names: an autosave, `name.autosave.map`, is not one (LE4).
 		foreach (string file in FilesIn(UserRoot))
 		{
-			if (TryReadBytes(file, out byte[] bytes, out _))
+			string stem = Path.GetFileNameWithoutExtension(file);
+			if (MapNames.TryParseName(stem, out string name, out _) && name == stem
+				&& TryReadBytes(file, out byte[] bytes, out _))
 			{
 				where.TryAdd(MapFile.HashHex(bytes), file);
 			}

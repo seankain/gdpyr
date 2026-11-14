@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# The level editor's engine checks (docs/LEVEL_EDITOR.md §11). LE0: the baseline and the spike; LE3: the world from a file.
+# The level editor's engine checks (docs/LEVEL_EDITOR.md §11). LE0: the baseline and the spike; LE3: the world from a file;
+# LE4: the editor.
 #
 # What the plan could not know without the engine, measured on a copy of the tree whose
 # greybox has its slab replaced by terrain (tools/EngineChecks/LevelTerrain.cs): 241 x 241
@@ -30,6 +31,16 @@
 #   ./scripts/level-editor-checks.sh map-basin     # map-practice for LE3_SECONDS (60), a basin dug under the water: the bake's floor
 #   ./scripts/level-editor-checks.sh map-shot      # the map drawn under a virtual display (xvfb-run): pictures in SHOT_OUT
 #
+# LE4, the editor (Scenes/MapEditor), driven with no window through its own commands by
+# tools/EngineChecks/LevelEditorChecks.cs (LE4_CHECK), under a HOME of its own so that
+# nobody's user://maps is touched: --edit LE4_NEW (le4-new) makes a new map; strokes of every
+# brush, undo and redo, the keys, the water, save, open, autosave, save as; a clone of the
+# bundled map, a stroke across a pad; and Test, whose second process plays the saved file
+# and reports the round live.
+#
+#   ./scripts/level-editor-checks.sh editor        # the editor, then its test process
+#   ./scripts/level-editor-checks.sh editor-shot   # the editor drawn under a virtual display (xvfb-run): pictures in SHOT_OUT
+#
 # Each part runs on the plan's collider and, where the two could differ, on the heightmap
 # beside it. `frame` and the bake's times in `ground` are wall time: run them on a machine
 # doing nothing else. `net` runs in real time behind tools/EngineChecks/delay_relay.py
@@ -53,6 +64,8 @@ NET_DELAY_MS="${NET_DELAY_MS:-40}"
 NET_JITTER_MS="${NET_JITTER_MS:-10}"
 AGENT_PORT="${AGENT_PORT:-7901}"
 MAP="${MAP:-hills}"
+LE4_NEW="${LE4_NEW:-le4-new}"
+LE4_HILLS="${LE4_HILLS:-le4-hills}"
 LE3_SECONDS="${LE3_SECONDS:-600}"
 FRAME_SECONDS="${FRAME_SECONDS:-300}"
 if [ $# -eq 0 ]; then
@@ -78,8 +91,9 @@ fi
 
 mkdir -p "$COPY/EngineChecks"
 cp "$PROJECT_DIR/tools/EngineChecks/LevelChecks.cs" "$PROJECT_DIR/tools/EngineChecks/LevelTerrain.cs" \
-	"$PROJECT_DIR/tools/EngineChecks/LevelMapChecks.cs" "$COPY/EngineChecks/"
-sed -i 's#^GameConsole="\*res://Scripts/Ui/GameConsole.cs"#&\nLevelChecks="*res://EngineChecks/LevelChecks.cs"\nLevelMapChecks="*res://EngineChecks/LevelMapChecks.cs"#' \
+	"$PROJECT_DIR/tools/EngineChecks/LevelMapChecks.cs" "$PROJECT_DIR/tools/EngineChecks/LevelEditorChecks.cs" \
+	"$COPY/EngineChecks/"
+sed -i 's#^GameConsole="\*res://Scripts/Ui/GameConsole.cs"#&\nLevelChecks="*res://EngineChecks/LevelChecks.cs"\nLevelMapChecks="*res://EngineChecks/LevelMapChecks.cs"\nLevelEditorChecks="*res://EngineChecks/LevelEditorChecks.cs"#' \
 	"$COPY/project.godot"
 
 # §10's hills as a map file's samples would be, and the greybox with and without its slab.
@@ -331,6 +345,43 @@ for mode in "${MODES[@]}"; do
 		# A scenario failing is the suite's answer, not this script's: the slab fails some too.
 		[ "$status" -ge 2 ] && failed=1
 		unset LE0_RIM
+		;;
+
+	editor)
+		# The editor and its test process, in a HOME of their own: user://maps starts empty.
+		ground slab
+		dir="$COPY/editor"
+		home="$COPY/editor-home"
+		rm -rf "$dir" "$home"
+		mkdir -p "$dir" "$home"
+		env -u XDG_DATA_HOME HOME="$home" LE4_CHECK=editor LE4_DIR="$dir" LE4_NEW="$LE4_NEW" LE4_HILLS="$LE4_HILLS" \
+			timeout 1800 "$GODOT" --headless --path "$COPY" -- --edit "$LE4_NEW" > "$COPY/editor.log" 2>&1
+		status=$?
+		report "$COPY/editor.log"
+		grep -E '^\[editor\]|^\[map\]|^\[level\] built|^\[match\] round live' "$COPY/editor.log"
+		forbidden "$COPY/editor.log" "editor, the editor's and its test process's log"
+		find "$home" -path '*app_userdata/gdpyr/maps/*' -type f -printf '[maps] %P %s bytes\n' | sort
+		grep -q 'finished-editor' <(ls "$dir") || { echo "[checks] FAIL editor: the editor's part did not finish"; failed=1; }
+		echo "editor: exit $status"
+		[ "$status" -ne 0 ] && failed=1
+		;;
+
+	editor-shot)
+		# Drawn, with the Compatibility renderer, in a virtual display and a HOME of its own. For a
+		# person to look at; the facts are only that it drew.
+		ground slab
+		out="${SHOT_OUT:-$COPY/shots}/editor-shot"
+		home="$COPY/editor-shot-home"
+		rm -rf "$home"
+		mkdir -p "$out" "$home"
+		env -u XDG_DATA_HOME HOME="$home" LE4_CHECK=shot LE4_DIR="$out" timeout 900 \
+			xvfb-run -a -s "-screen 0 1280x720x24" "$GODOT" --path "$COPY" --rendering-driver opengl3 \
+			--resolution 1280x720 -- --edit > "$COPY/editor-shot.log" 2>&1
+		status=$?
+		report "$COPY/editor-shot.log"
+		grep -m 1 '^OpenGL API' "$COPY/editor-shot.log"
+		echo "editor-shot: exit $status (pictures: $out)"
+		[ "$status" -ne 0 ] && failed=1
 		;;
 
 	map-practice)
