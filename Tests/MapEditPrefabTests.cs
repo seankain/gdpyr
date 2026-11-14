@@ -113,6 +113,29 @@ public class MapEditPrefabTests
 	}
 
 	[Fact]
+	public void MovingAnObjectUpTheSlope_IsNotRefusedByItsOwnOldPad()
+	{
+		// Four metres up a 3° slope its footprint is on its old skirt: its new pad is higher, and
+		// cuts its old level ground.
+		var session = new MapEditSession(Tilted());
+		Assert.True(session.Place(At(PrefabSpecs.WeaponLocker, 10f, 10f), out _).IsOk);
+		float was = PrefabPlacement.PadLevel(session.Document.Objects[0]);
+		PlacementRequest moved = MapEditSession.RequestFor(session.Document.Objects[0]);
+		moved.X += 4f;
+		PlacementCheck check = session.Replace(0, moved, out _);
+		Assert.True(check.IsOk, check.ToString());
+		Assert.True(PrefabPlacement.PadLevel(session.Document.Objects[0]) > was,
+			$"{PrefabPlacement.PadLevel(session.Document.Objects[0])} after {was}");
+
+		// Placed afresh beside the first, the same pad is refused for the first's sake.
+		var fresh = new MapEditSession(Tilted());
+		Assert.True(fresh.Place(At(PrefabSpecs.WeaponLocker, 10f, 10f), out _).IsOk);
+		PlacementCheck beside = fresh.Place(At(PrefabSpecs.WeaponLocker, 14f, 10f), out _);
+		Assert.Equal(PrefabPlacementResult.DisturbsNeighbour, beside.Result);
+		Assert.Equal(0, beside.Other);
+	}
+
+	[Fact]
 	public void AnObjectReplaced_IsNotCounted_InTheWay_OrANeighbourToItself()
 	{
 		var session = new MapEditSession(Tilted());
@@ -315,6 +338,14 @@ public class MapReachTests
 			else if (PrefabSpecs.TryGetDoor(placed, out Vector3 door))
 			{
 				Assert.Equal(nodes, asked.FindAll(p => MathF.Abs(p.Item1.X - door.X) < 1e-4f && MathF.Abs(p.Item1.Z - door.Z) < 1e-4f).Count);
+			}
+			else if (placed.PrefabId == PrefabSpecs.SpawnLine)
+			{
+				Assert.Equal(nodes, asked.FindAll(p => p.Item1.X == placed.Position.X && p.Item1.Z == placed.Position.Z).Count);
+			}
+			else
+			{
+				Assert.Empty(asked.FindAll(p => p.Item1.X == placed.Position.X && p.Item1.Z == placed.Position.Z));
 			}
 		}
 	}

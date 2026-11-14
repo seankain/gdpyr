@@ -251,7 +251,9 @@ public partial class MapEditorRoot
 		foreach (PrefabKind kind in MapEditorControls.PaletteKinds)
 		{
 			column.AddChild(new Label { Text = MapEditorControls.Name(kind) });
-			var grid = new GridContainer { Columns = 2 };
+
+			// One a row: an entry's count against its limit is too long to share one (LE5's pictures).
+			var grid = new GridContainer { Columns = 1 };
 			column.AddChild(grid);
 			foreach (PrefabSpec spec in MapEditorControls.Palette(kind))
 			{
