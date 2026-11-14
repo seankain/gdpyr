@@ -1,9 +1,11 @@
 # gdpyr — Level editor: terrain, prefabs, roads and bridges, and maps that travel
 
-**Status: a plan, with LE0–LE3 done: its ground is measured; the ground's rules, the map in
+**Status: a plan, with LE0–LE4 done: its ground is measured; the ground's rules, the map in
 memory, its file and its validator are written and tested, engine-free; a tool makes, reads and
-checks map files; and a map is played from its file — `--map`, one bundled map, a server and its
-clients, the stripped export. Nothing of the editor or of fetching a map is built.**
+checks map files; a map is played from its file — `--map`, one bundled map, a server and its
+clients, the stripped export; and the game has an editor's shell and its terrain tool — the menu's
+**Map editor** and `--edit`, the brushes and overlays, undo, save and autosave, validate and test.
+Nothing of placing prefabs, roads or bridges in it, or of fetching a map, is built.**
 Written against `cd0c558`. The
 facts in §2 were read in this repository's source at that commit, and those in §3 in Godot's source
 at tag `4.6-stable`. The arithmetic in §10 was run: `python3
@@ -17,6 +19,9 @@ that a test fails when it is broken. LE2 (§11) wrote §6.5, §6.8, §6.9 and §
 with `tools/Gdpyr.MapTool`, at `ceaaec9`, and `tools/level_editor_checks/le2_mutations.py` does the
 same for its rules. LE3 (§11) built §7, §9.1's reading of a map, `--map` and `--practice` at
 `fa37670`, and `scripts/level-editor-checks.sh`'s `map-*` parts play the bundled map through them.
+LE4 (§11) built §8's shell and terrain tool at `98c6125`: the script's `editor` part drives the editor
+with no window through its own commands, and `tools/level_editor_checks/le4_mutations.py` breaks its
+engine-free rules in turn.
 
 **What LE0 changed.** The collider is not a `HeightMapShape3D`: 65 of 20,000 long rays passed
 through one, and it costs a tick more than the same triangles as meshes, which let none through
@@ -58,6 +63,16 @@ two lines sort apart (§7.1). A structure in a file is left for LE5 to put up (�
 shader's fifth sampler is the road's, and the placeholders are imported with mipmaps (§7.2). The
 host's picker and `HostSettings` keep the catalog's ids until a client can fetch a map (§9.1).
 Where a section says "LE3", it is one of these.
+
+**What LE4 changed.** A held brush dabs 30 times a second, each dab a thirtieth of a second, and at
+most eight in a frame: what §6.2 left to the editor (§8.3). The editor lists every map of one's own
+that reads, finished or not, where LE-D16 lists only maps that validate — that rule is for what is
+played, and an unfinished map is a file to open (§8.1). **Save as** makes a map that has a file a
+fork of it, a new GUID with that file its parent, so no two files share a lineage; **Test** saves
+only what is not saved, and from a headless editor starts a headless process (§8.6, §8.7). The
+camera looks on the middle button, since the right one lowers the ground, a held Ctrl moves it
+nowhere, and `Q` and `E` lower and raise it (§8.2). A band slider is not a step to undo, and an edge
+is held between its neighbours (§8.3). Where a section says "LE4", it is one of these.
 
 The decisions (LE-D1–LE-D25, §4) are the defaults the plan is written against. Each is one line to
 change; LE-D3, LE-D8, LE-D10 and LE-D18 were the ones to flag before LE1, which was built on them
@@ -182,7 +197,7 @@ was written; a class reference quoted here is the XML that site is generated fro
 | LE-D13 | **A bridge is prefab sections with connectors at their ends**: a 12 m span and a 12 m ramp, 6 m wide. A section snaps end to end and to a road's end; its height is free. Piers are a switch per section, and their lengths are written in the file. | Asked 3. 6 m passes a tank (2.6 m) and two 4x4s. |
 | LE-D14 | **The file is the bake.** Heights, poses and pier lengths are stored final; a loader runs none of the editor's arithmetic. There is no float in the file. What a road was drawn from travels too, so a received map can be cloned and edited. | Peers that derive nothing cannot derive it differently. |
 | LE-D15 | **A map has a GUID for its lineage and the SHA-256 of its file for its bytes.** The wire names a map by hash. A file is never re-encoded on its way: what is hashed is what is kept and sent on. | A compressor may differ between machines; bytes do not. |
-| LE-D16 | **Three places**: `user://maps/` (one's own), `user://maps/cache/<hash>.map` (received, read-only), `res://Maps/` (bundled, in the catalog). A file is listed only if it validates. | "A scene that is merely in the folder is not a map" (`MapCatalog`) holds: what makes a file a map is `MapValidator`, not its place. |
+| LE-D16 | **Three places**: `user://maps/` (one's own), `user://maps/cache/<hash>.map` (received, read-only), `res://Maps/` (bundled, in the catalog). A file is listed only if it validates. *The editor's own list takes every map of one's own that reads (§8.1, LE4).* | "A scene that is merely in the folder is not a map" (`MapCatalog`) holds: what makes a file a map is `MapValidator`, not its place. |
 | LE-D17 | **A client without its server's map fetches it from that server**: 1,024 B chunks, reliable, on their own channel, 61 KB/s a peer; verified against the hash, validated, cached. | Asked 4. Under 2 s for a 1 m map's terrain and 2.5 s for the largest file one can be (§10). A channel of its own keeps a fetch from holding up the round's reliable messages (§3). |
 | LE-D18 | **A dedicated server takes a map as a file**: `--map`, and `scripts/deploy-map.sh`. Upload over the game's connection is optional, off unless the server was given a token, and proven by HMAC. **Changing a server's map restarts its process.** | Asked 4. The box has a public address (DEPLOYMENT.md). A round cannot be torn down in place (§2); the unit already restarts the process. |
 | LE-D19 | **Testing a map from the editor starts a second process** on the saved file. | No way back from a round (§2). It also exercises the real load path on every test. |
@@ -232,6 +247,8 @@ Scripts/Sim/Level/   engine-free; compiled into Tests/ by the existing ../Script
   MapNames.cs          a map's name, and what a --map reference names (LE3)
   MapTransfer.cs       sender and receiver as state machines over chunks; the upload's proof
   EditHistory.cs       undo and redo
+  MapEditSession.cs    the editor's commands: a stroke, a ramp, undo, the bands, the text (LE4)
+  MapStore.cs          one's own maps on disk: save, autosave, the list, a fork (LE4)
 Scripts/Level/       the engine half
   LevelRoot.cs         MapHost.tscn's root: builds the world, then opens the session
   TerrainNode.cs       collider, chunk meshes, water, overlays
@@ -239,7 +256,8 @@ Scripts/Level/       the engine half
   LevelBuilder.cs      prefabs, a round's pieces, bridges and piers, the walls
   MapLibrary.cs        user://maps, the cache, the bundled maps
 Scripts/Net/MapTransferService.cs    the messages, their channel, their budget
-Scripts/MapEditor/   the editor scene's root, its camera, four tools, the panels
+Scripts/MapEditor/   the editor scene's root and its commands (MapEditorRoot), the panels (.Ui),
+                     and the keys, a brush's settings and the status line, engine-free (MapEditorControls)
 Scenes/Maps/MapHost.tscn · Scenes/MapEditor/MapEditor.tscn · Levels/materials/terrain.gdshader
 ```
 
@@ -342,7 +360,8 @@ sample reads the ground as it was before the dab. At the field's edge a sample h
 along the edge only, and a corner none, so an even slope is left alone there as it is anywhere.
 **Level** moves each towards the height under the cursor when the stroke began, by the same share,
 and never past it. Neither reads the time step: a dab is `w · strength` however long it stood for,
-and how often a stroke dabs is the editor's to set (LE4). **Ramp** is two clicks and a width —
+and how often a stroke dabs is the editor's to set (LE4): 30 times a second, each dab a thirtieth of
+a second (§8.3). **Ramp** is two clicks and a width —
 twice the brush's radius, the ring drawn: the strip between them is anchored to the straight line
 between the ground's heights at the clicks and applied with §6.3, so its sides and its ends are
 skirted. A line steeper than the skirt is refused.
@@ -863,6 +882,19 @@ menu phase, and the one node that ticks the simulation is gated on that
 (`Scripts/Net/PlayerManager.cs:313`). It holds a `MapDocument`, a `TerrainNode` and a
 `LevelBuilder` — the ones a round uses — so what is edited is what will be played.
 
+*Built by LE4* (`Scenes/MapEditor/MapEditor.tscn`, `Scripts/MapEditor/MapEditorRoot.cs`). **Map
+editor** is a button on the menu's row; `--edit` alone is the editor's list, and `--edit <name>`
+opens one's own map of that name or, when there is none, makes a new one by it (`LaunchOptions`,
+which refuses it beside a mode, `--practice`, `--map`, `--playdemo`, `--record` or `--spectate`, and
+on a dedicated server). The menu acts on it once; leaving the editor comes back to the menu. The
+list holds every map of one's own that reads, with what the validator finds in it and whether an
+autosave is beside it — a map with errors in it is listed, to be finished, and one that does not
+read is listed with why — then the bundled maps and the received ones, to clone (`MapStore.List`).
+A clone is saved at once under its new name, revision 1, with the source's GUID and hash for its
+parent and the source's name and author kept until somebody types others. The round's objects are
+built under a node that is not processed, as `LevelBuilder` builds them for a round, and built again
+when an edit changes them or the ground along the field's edge, which the walls span.
+
 ### 8.2 The screen
 
 Built in code, as the menu and the HUDs are. A bar across the top: the map's name and whether it
@@ -884,6 +916,19 @@ the count of validator issues. The camera is the spectator's fly camera
 Which settings a tool shows, which key does what, and what a result reads as are engine-free and
 tested, as `StrategistCards` is; the widgets are not.
 
+*Built by LE4* (`MapEditorRoot.Ui.cs`, `MapEditorControls.cs`). The bar has **Maps**, back to the
+list, beside the others, and the title opens the map's name, author and description. Prefabs, roads
+and bridges are on the rail and off, each saying whose phase it is; their keys say the same. `Esc`
+drops a stroke under way or a ramp's first click. The camera is `SpectatorCamera` with two settings
+the editor turns on: it looks on the middle button, since the right one lowers the ground, and a held
+Ctrl moves it nowhere, so that `Ctrl+Z` is not a step back and down — `Q` lowers it, and `E` or
+`Space` raises it. `T` looks straight down from where it is. `MapEditorControls` holds the keys of
+the table and what each does, Shift being the camera's and leaving a key without a Shift of its own
+as it is; which settings a brush shows — sculpt its radius, core and rate, grade-locked its radius,
+grade and rate, smooth and level their radius, core and strength, a ramp its radius as half its
+width — and that `[` `]` scale the radius by 1.25, `-` `=` the rate by 1.25 or the strength by 0.05,
+and `,` `.` the core by 0.05 or the grade by 5°, each held to its range; and the status line.
+
 ### 8.3 Terrain
 
 The presets of §6.2 as buttons, their numbers as sliders, raise on the left button and lower on
@@ -898,6 +943,20 @@ each (§10): nothing in the editor asks it during one.
 
 Overlays: none; bands, flat-coloured; slope — green under 35°, yellow to 40°, red past it
 (LE-D23), on faces; buildable (§7.5); contours every 2 m.
+
+*Built by LE4*, but for *buildable*, LE5's. The cursor is §6.1's ray, not the physics server's,
+which a stroke has not told yet. A stroke dabs 30 times a second, each dab a thirtieth of a second,
+and at most eight in a frame, so that a held brush makes the same ground at any frame rate and a
+stalled frame does not lay its backlog down at one point (`MapEditSession`); a click is one dab. At
+its end the rectangle it touched is rounded, every pad kept (§6.5), and what changed is one step to
+undo; a stroke that changed no stored sample is not one, and leaves the map saved. A dab draws again
+the chunks with a vertex on or next to a sample it moved — next to, for the normals — and the end
+gives the collider's chunks the samples that changed. The ring is a line on the ground, coloured as
+the readout is; the readout is the steepest face of the cells whose middle is under the brush. The
+water's quad comes and goes as ground goes under the water or the slider moves. The sliders are not
+steps to undo; sand's top is held under mud's, and mud's between sand's and grass's. On this VM,
+headless, with nothing else running, a frame of a stroke took 0.23 ms on average and 1.16 ms at the
+most; a stroke's end 12.1 ms at the most, its collider chunks 3.6 ms of it (§11, LE4).
 
 ### 8.4 Prefabs
 
@@ -933,6 +992,15 @@ Save writes `name.map.tmp` and renames it over `name.map`, keeping the last as `
 bumps the revision. An unsaved map is autosaved to `name.autosave.map` every minute, and offered
 back when the editor next opens it.
 
+*Built by LE4* (`MapStore`). The last `name.map` is copied to `.bak` before the rename, so a whole
+map is under the name at every moment; a save that cannot be written leaves the document's revision
+and time as they were. Errors in a map do not stop it being saved. An autosave is due a minute after
+the first change not yet written, saved or autosaved, and every minute while changes come; it is
+written the same way, at the revision it has. Opening a map with an autosave beside it offers it —
+taken back, the map is as autosaved and not saved; turned down, it is dropped — and an autosave that
+is the map as saved is dropped and not offered. A save drops it, and so does leaving without saving.
+Leaving with changes not saved asks first: save, leave, or stay.
+
 ### 8.7 Validate and test
 
 **Validate** runs §6.9 and lists what it finds; a click on an issue flies to it. **Deep** also
@@ -942,6 +1010,13 @@ unfinished map is a file. They block listing, hosting and sending.
 **Test** saves and starts a second process (LE-D19): `OS.CreateInstance` with `-- --practice
 --map <path>`, and `--path <project>` before that when this is not an export. It is the practice
 round the menu offers, on this map, and closing it returns to an editor that never left.
+
+*Built by LE4*, but for **Deep**, LE5's. The validator's count is under the view at all times, asked
+again only after a change; **Validate** lists every issue, and a click on one flies the camera to it.
+**Test** saves only what is not saved — a save is a new revision, and a map saved and unchanged is
+the file already — and a map the validator finds an error in is saved and not played, with the list
+shown, since the second process would refuse it. From a headless editor the second process is
+started `--headless` as well.
 
 ---
 
@@ -995,6 +1070,12 @@ name: the file is going to strangers.
 
 Console (`Scripts/Core/ConsoleCommands.cs`): `maps`, `mapinfo <name>`, `clonemap <name> <new>`,
 `exportmap <name> <path>`, `importmap <path>`. They are how a headless process does all of this.
+
+*Built by LE4*: save; clone, from the editor's list; **Save as**, which makes a map that has a file a
+fork of it — a new GUID, with the GUID and hash of the file it was saved as for its parent, saved as
+revision 1 — so that two files never share a lineage, and saves one that has none under the new name; export, which saves
+first what is not saved; and **Show folder**. Import and the console's commands are not built: no
+phase of §11 names them, and they wait for the library's picker, LE7's.
 
 ### 9.3 Hosting and joining
 
@@ -1603,7 +1684,9 @@ no check drives; the tick on the box in DEPLOYMENT.md, since every time here is 
 the bundled map costs 1.7–2.1 times the greybox's tick and its worst 1 in 100 stays under 12 ms of
 the 16.7; and LE-D24, whose 4x4 still climbs 70° at speed on its hull.
 
-### LE4 — The editor: shell and terrain (4 days)
+### LE4 — The editor: shell and terrain (4 days) — done
+
+What was asked of it:
 
 `Scenes/MapEditor`, the camera, the panels, the terrain tool with its presets and overlays, undo,
 save and autosave, validate, test (LE-D19), the menu's button, `--edit`. Engine checks drive the
@@ -1611,6 +1694,66 @@ editor headless through its commands: a stroke changes the samples under it and 
 restores them; save then load is the same document; the test process starts on the saved file and
 reports `round live`. **Left for a person:** whether sculpting feels right — rates, radii, the
 ring, the readout — which no check answers.
+
+**Built at `98c6125`**, on .NET SDK 8.0.134 (Ubuntu 24.04's `dotnet-sdk-8.0`), Godot
+`4.6.stable.mono.official.89cea1439`, four cores of a cloud VM: `Scenes/MapEditor/MapEditor.tscn`;
+in `Scripts/MapEditor/`, `MapEditorRoot.cs` — the scene's root and every command its panels and keys
+give — `MapEditorRoot.Ui.cs`, its widgets, and `MapEditorControls.cs`, the keys, a brush's settings,
+the sliders, the readout, the status line, the autosave's clock and the test process's arguments,
+engine-free; in `Scripts/Sim/Level/`, `MapEditSession.cs`, the document with its undo, the brush
+and the stroke under way, and `MapStore.cs`, one's own maps on disk; and the changes to
+`TerrainNode` — a chunk's mesh drawn again, a collider chunk given its triangles again, the water and
+the band numbers set, the overlay — `SpectatorCamera`, `MainMenu`, `LaunchOptions` (`--edit`),
+`EditHistory` (the steps undo and redo would take) and `MapLibrary`, whose hashes leave an autosave
+out. In `Tests/`, `MapEditSessionTests`, `MapStoreTests`, `MapEditorControlsTests` and
+`EditLaunchTests`. The checks are `scripts/level-editor-checks.sh`'s `editor` and `editor-shot`
+parts over `tools/EngineChecks/LevelEditorChecks.cs`, and `le4_mutations.py`.
+
+| Asked | It came to | Where |
+|---|---|---|
+| `Scenes/MapEditor`, the camera, the panels, the terrain tool with its presets and overlays, undo, save and autosave, validate, test, the menu's button, `--edit` | built, as §8.1–8.3 and §8.6–8.7 say. `--edit le4-new` opens the editor on a new map, the session in its menu phase; `--edit` alone, the list. Drawn under a virtual display: the list, the editor with the ring under the cursor, and a stroke under the slope overlay with the validator's list | `editor`, `editor-shot` |
+| A stroke changes the samples under it and no others | nine strokes of every family of brush — on a new map a sculpt dragged along a line, a 30° mound held still, a 60° cliff lowered, smooth and level over the first, a bluff at the field's edge, one after a save and one to be autosaved; on a clone of the bundled map, one across a node's pad. Every sample that changed, 19 to 3,299 of them, is within the brush's radius of a point it dabbed at, and none beyond; each stroke is one step to undo; no mesh chunk out of its reach was drawn again, of the 2 to 30 that were. While the button was down and after, every vertex drawn and every triangle of the collider is the document's, and rays straight down meet the ground within 0.015 mm of `Sample`. The node's 421 pad samples stay at its level and the map still plays; the stroke at the edge builds the walls again; a ramp up the mound is one step | `editor` |
+| Undo restores them | the seven steps undone one at a time, every sample as it was before each and the new map's at the end; redone, as each was after; the drawn ground, the collider and 300 rays the document's at both ends. Through the viewport's input, `Ctrl+Z` and `Ctrl+Y` undo and redo a step, `]` widens the brush by 1.25 and `O` sets the shader's overlay | `editor` |
+| Save then load is the same document | saved, the file reads as the document being edited, at revision 1, the editor's hash the file's and no `.tmp` left; saved again after a stroke, the first file is the `.bak`; opened, the same document at revision 2 with nothing to undo, and its world the document's. Autosaved, the autosave is the map as it is and the saved file untouched; opened again, it is offered; taken back, the map is as autosaved and not saved; saved, the autosave goes. Save as is a fork. A clone of the bundled map has the bundled file's hash for its parent's, plays, and the round's builder puts its pieces up in the editor | `editor` |
+| The test process starts on the saved file and reports `round live` | a map saved and unchanged is not saved again; the process is started `--path <copy> --headless -- --practice --map <file>`. It plays the file by its path and hash, stands on the edited ground — (−12, −4), raised 0.66 m by the stroke across the pad — and its round is live; it ended with 0 after 3.3 s, the editor holding the same map and simulating nothing throughout. The two processes' log has none of MAPS.md §4's five lines | `editor` |
+| `dotnet test` | 3,693 of 3,693: the 3,592 there were and 101 | `tests` |
+| Every LE4 rule's test fails when it is broken | 61 rules broken one at a time — a stroke's rate, its cap, its click, its time step, its rounding, its pads, its step and its undo; a ramp's width and rounding; the bands' order and the text's bytes; what a save, an autosave, the list and a fork leave on the disk; the keys, a brush's settings, the key steps, the slope classes, the overlays, the readout's disc and crease; the test process's arguments; the autosave's clock; `--edit` — each one edit to one file: **61 of 61** left a test failing | `mutations` |
+
+The files are `docs/baselines/le4-98c6125-<name>.txt`, each saying in its first lines what was run,
+and `le4-98c6125-list.png`, `-editor.png` and `-editor-slope.png`, the `editor-shot` part's pictures.
+`editor` and then `editor-shot` ran at `98c6125` with nothing beside them, and the mutations after
+them. The mutations' first run, of 62 rules, is `le4-98c6125-mutations-first.txt`: it ran on the tree
+`98c6125` was committed from but for the two changes it led to, and caught 60. The water slider's
+clamp to LE-D4 broken, every test passed, because the step the water is stored as holds it there
+already: the clamp is gone, and its rule with it. The readout reading a cell's first triangle only,
+every test passed, because the test's crease was in a neighbouring cell's first triangle too: the test
+has a cell now whose crease is in its second alone.
+
+**Decided here**, each in the section it changes:
+
+- **§8.3, a held brush dabs 30 times a second**, each dab a thirtieth of a second and at most eight
+  in a frame; a click is one dab. A stroke that changes no stored sample is not a step. A band slider
+  is not a step either, and holds an edge between its neighbours.
+- **§8.1, the editor lists every map of one's own that reads**, with what the validator finds in it;
+  LE-D16's rule is for what is played. `--edit <name>` makes a new map by a name that is not one's
+  own. A clone is saved at once and keeps its source's name and author. The round's objects are
+  built in the editor under a node that is not processed, and built again when an edit changes the
+  ground along the field's edge, which the walls span.
+- **§8.2, the camera looks on the middle button**, a held Ctrl moves it nowhere, and `Q` and `E` lower
+  and raise it. `Esc` drops a stroke or a ramp's first click.
+- **§8.6**: the last file is copied to `.bak` before the rename; an autosave that is the map as saved
+  is dropped, not offered; leaving without saving drops the autosave.
+- **§8.7**: Test saves only what is not saved, plays no map the validator finds an error in, and is
+  headless from a headless editor.
+- **§9.2, Save as makes a map that has a file a fork of it.** Import and the console's commands are
+  not built.
+
+**Left for a person:** whether sculpting feels right — rates, radii, the ring, the readout — which no
+check answers, and the editor on a screen with a mouse: every check here gave its commands, and its
+keys through the viewport's input, and the pictures are llvmpipe's under a virtual display; a mouse
+over the panels, a drag across the view and a button let go outside the window are not driven by
+anything here. Export's and the map settings' dialogs, and the autosave's offer as a dialog, were
+not opened by any check.
 
 ### LE5 — Prefabs and a round's pieces (3 days)
 
@@ -1657,7 +1800,7 @@ directory, the token and the restart; the README the editor and the flags;
 IMPLEMENTATION_PLAN.md §5's "Multiple maps" cut, struck. This file's status becomes what was built
 and what each phase ran.
 
-**Total: 28½ days**, LE0's 1½, LE1's 3, LE2's 3 and LE3's 4 spent.
+**Total: 28½ days**, LE0's 1½, LE1's 3, LE2's 3, LE3's 4 and LE4's 4 spent.
 
 ---
 
@@ -1681,6 +1824,9 @@ and what each phase ran.
 | A map is played from its file, and the world is the file's | `map-practice`, `map-server`, `map-export`: counts, rays, a bot round | LE3, done |
 | A structure is refused as too steep where LE-D21 says, and stands on its plinth | `StructureGroundTests`; `slopes` | LE3, done |
 | Each of LE3's tests fails when its rule is broken | `le3_mutations.py` | LE3, done |
+| A stroke changes the samples under it and no others, and the drawn ground and the collider follow; undo restores them; save then open is the same map | `MapEditSessionTests`, `MapStoreTests`; `editor` | LE4, done |
+| The editor's Test plays the saved file in a second process | `MapEditorControlsTests`; `editor` | LE4, done |
+| Each of LE4's tests fails when its rule is broken | `le4_mutations.py` | LE4, done |
 | Nothing is in the way of a placed prefab | `PrefabPlacementTests`; LE5's checks | LE2, done; LE5 |
 | A road keeps its grade; a bridge carries units and a 4x4 | `RoadPathTests`; LE6's checks | LE6 |
 | A client gets the map it lacks, and only a whole and valid one | `MapTransferTests`; LE7's checks | LE7 |
@@ -1697,7 +1843,7 @@ and what each phase ran.
 | **The upload socket is write access to a public box** | — | Off unless a token was given; the deploy unit gives none; HMAC with a nonce; one upload at a time; the cache directory only; validated before written |
 | **Two builds disagree about a prefab** | a wall drawn where the server has a box of another size | The catalog is append-only and a test holds it; the file names the count it was made against; a client refuses ids it lacks. Sizes changing under an id is LAN.md §5's problem, unchanged |
 | **The editor grows** | LE4–LE6 overrun | Destructive edits, one field size, no painting, no layers (§14). LE0–LE3 with LE7 ships without it |
-| **Hand-built UI is slow to make** | LE4's four days gone on panels | The decisions are engine-free and tested; the widgets are the menu's kind, and the console's commands do everything a panel does |
+| **Hand-built UI is slow to make** | LE4's four days gone on panels | The decisions are engine-free and tested; the widgets are the menu's kind, and the console's commands do everything a panel does. LE4 built the shell and the terrain tool's widgets in code over `MapEditorControls`, which `dotnet test` holds, and every command a panel gives is a method an engine check calls; the console's map commands are not built (§9.2) |
 | **Water that only stops units** reads as a bug | a player found under it | LE-D8 is flagged; §14 names the rules that would follow |
 | **The √2 on faces** leaves a speck the bake will not walk | a hole in the mesh at a pad's corner or a cone's foot | The skirt is 30°, which the √2 keeps under the 40° that is walkable (LE-D23); the slope overlay draws faces; the deep check catches a cut-off pad |
 | **A tick on hills runs out of time**: with a round of bots, 1 in 20 over 14–17 ms and 1 in 100 over 20–23 ms of a 16.7 ms tick, where the slab's worst 1 in 100 is under 10 ms | `level-editor-checks.sh frame`; a server that falls behind its ticks | Measured by LE0 on four cores of a cloud VM. The collider is the cheaper of the two and its chunks cost nothing; what terrain and hills add is not taken apart. LE3 bundled a gentler map, steepest face 33.3°, and on the same VM its tick is 4.6–5.5 ms on average and under 8.9–11.5 ms for 99 in 100, 1.7–2.1 times the greybox's (§10). The box is DEPLOYMENT.md's, and nothing here reached it: measuring it there is a person's |

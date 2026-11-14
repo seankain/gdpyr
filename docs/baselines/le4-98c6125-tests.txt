@@ -1,0 +1,119 @@
+# LE4, docs/LEVEL_EDITOR.md §11. At 98c6125: .NET SDK 8.0.134, four cores of a cloud VM.
+# dotnet test Tests/Gdpyr.Tests.csproj --filter <LE4's four classes and EditHistoryTests> --logger "console;verbosity=normal": its line for each test, sorted, and its total.
+# Then dotnet test Tests/Gdpyr.Tests.csproj: its total. Then dotnet build Gdpyr.csproj: its last lines.
+
+Passed Gdpyr.Tests.EditHistoryTests.ANewStep_DropsWhatCouldHaveBeenRedone
+Passed Gdpyr.Tests.EditHistoryTests.AStrokeOverA64mSquare_Is17KB
+Passed Gdpyr.Tests.EditHistoryTests.AnEdit_ThatPlacesAndLevels_IsOneStep
+Passed Gdpyr.Tests.EditHistoryTests.AnObjectTakenOutOrReplaced_ComesBackAtItsIndex
+Passed Gdpyr.Tests.EditHistoryTests.TwoFieldsOfDifferentSizes_AreNotOneEdit
+Passed Gdpyr.Tests.EditHistoryTests.TwoHundredSteps_AreKept_AndTheOldestGoes
+Passed Gdpyr.Tests.EditHistoryTests.UndoingStrokes_RestoresEverySample_AndRedoingThemRestoresEachAfter
+Passed Gdpyr.Tests.EditLaunchTests.Edit_AloneIsTheEditorsList_Offline
+Passed Gdpyr.Tests.EditLaunchTests.Edit_RefusesAMap_AServer_AndBeingGivenTwice
+Passed Gdpyr.Tests.EditLaunchTests.Edit_RefusesAMode(mode: ["--client", "10.0.0.2"])
+Passed Gdpyr.Tests.EditLaunchTests.Edit_RefusesAMode(mode: ["--listen"])
+Passed Gdpyr.Tests.EditLaunchTests.Edit_RefusesAMode(mode: ["--server"])
+Passed Gdpyr.Tests.EditLaunchTests.Edit_RefusesPlayingAlongside(other: ["--playdemo", "a.demo"])
+Passed Gdpyr.Tests.EditLaunchTests.Edit_RefusesPlayingAlongside(other: ["--practice"])
+Passed Gdpyr.Tests.EditLaunchTests.Edit_RefusesPlayingAlongside(other: ["--record", "a.demo"])
+Passed Gdpyr.Tests.EditLaunchTests.Edit_RefusesPlayingAlongside(other: ["--spectate"])
+Passed Gdpyr.Tests.EditLaunchTests.Edit_RefusesWhatIsNotAName(name: "../ridge")
+Passed Gdpyr.Tests.EditLaunchTests.Edit_RefusesWhatIsNotAName(name: "Ridge")
+Passed Gdpyr.Tests.EditLaunchTests.Edit_RefusesWhatIsNotAName(name: "a b")
+Passed Gdpyr.Tests.EditLaunchTests.Edit_RefusesWhatIsNotAName(name: "ridge.map")
+Passed Gdpyr.Tests.EditLaunchTests.Edit_TakesALibraryName
+Passed Gdpyr.Tests.EditLaunchTests.NoEdit_IsNotTheEditor
+Passed Gdpyr.Tests.MapEditSessionTests.AHeldBrush_DabsThirtyTimesASecond_WhateverTheFrames
+Passed Gdpyr.Tests.MapEditSessionTests.ARamp_IsAsWideAsItsRing_AndOneStep_AndARefusedOneChangesNothing
+Passed Gdpyr.Tests.MapEditSessionTests.ASculptDab_IsGivenItsShareOfASecond
+Passed Gdpyr.Tests.MapEditSessionTests.AStrokeOnAPad_LeavesThePadAsItWas
+Passed Gdpyr.Tests.MapEditSessionTests.AStrokeThatChangesNothing_IsNotAStep
+Passed Gdpyr.Tests.MapEditSessionTests.AStrokeWhoseDabsRoundBack_IsNotAStep_AndIsDrawnAgain
+Passed Gdpyr.Tests.MapEditSessionTests.AStroke_ChangesTheSamplesUnderIt_AndNoOthers_AndKeepsEveryPad(seed: 1)
+Passed Gdpyr.Tests.MapEditSessionTests.AStroke_ChangesTheSamplesUnderIt_AndNoOthers_AndKeepsEveryPad(seed: 2)
+Passed Gdpyr.Tests.MapEditSessionTests.AStroke_ChangesTheSamplesUnderIt_AndNoOthers_AndKeepsEveryPad(seed: 3)
+Passed Gdpyr.Tests.MapEditSessionTests.AStroke_ChangesTheSamplesUnderIt_AndNoOthers_AndKeepsEveryPad(seed: 4)
+Passed Gdpyr.Tests.MapEditSessionTests.AStroke_IsRefusedForARamp_OrWhileOneIsUnderWay_AndUndoWaitsForIt
+Passed Gdpyr.Tests.MapEditSessionTests.AStroke_KeepsTheBrushItBeganWith
+Passed Gdpyr.Tests.MapEditSessionTests.EndingAStroke_LeavesWholeSteps_AndCancellingOnePutsTheGroundBack
+Passed Gdpyr.Tests.MapEditSessionTests.Saving_MarksTheDocumentClean_UntilTheNextChange
+Passed Gdpyr.Tests.MapEditSessionTests.TheBands_AreSetOnlyToNumbersAMapCanMean_AndAreNotAStep
+Passed Gdpyr.Tests.MapEditSessionTests.TheBrush_IsHeldToItsRanges
+Passed Gdpyr.Tests.MapEditSessionTests.TheReport_IsAskedAgainOnlyAfterAChange
+Passed Gdpyr.Tests.MapEditSessionTests.TheText_IsWhatAFileHolds
+Passed Gdpyr.Tests.MapEditSessionTests.UndoAndRedo_SayWhichSamplesToDrawAgain
+Passed Gdpyr.Tests.MapEditSessionTests.UndoingStrokes_RestoresEverySample_AndRedoingThemRestoresEachAfter
+Passed Gdpyr.Tests.MapEditorControlsTests.ABrush_ShowsWhatItReads(kind: GradeLocked, fields: [Radius, Grade, Rate])
+Passed Gdpyr.Tests.MapEditorControlsTests.ABrush_ShowsWhatItReads(kind: Level, fields: [Radius, Core, Strength])
+Passed Gdpyr.Tests.MapEditorControlsTests.ABrush_ShowsWhatItReads(kind: Ramp, fields: [Radius])
+Passed Gdpyr.Tests.MapEditorControlsTests.ABrush_ShowsWhatItReads(kind: Sculpt, fields: [Radius, Core, Rate])
+Passed Gdpyr.Tests.MapEditorControlsTests.ABrush_ShowsWhatItReads(kind: Smooth, fields: [Radius, Core, Strength])
+Passed Gdpyr.Tests.MapEditorControlsTests.AKeyNotInTheTable_DoesNothing(key: Key1, ctrl: True, shift: False)
+Passed Gdpyr.Tests.MapEditorControlsTests.AKeyNotInTheTable_DoesNothing(key: R, ctrl: True, shift: False)
+Passed Gdpyr.Tests.MapEditorControlsTests.AKeyNotInTheTable_DoesNothing(key: S, ctrl: False, shift: False)
+Passed Gdpyr.Tests.MapEditorControlsTests.AKeyNotInTheTable_DoesNothing(key: W, ctrl: False, shift: False)
+Passed Gdpyr.Tests.MapEditorControlsTests.AKeyNotInTheTable_DoesNothing(key: Y, ctrl: False, shift: False)
+Passed Gdpyr.Tests.MapEditorControlsTests.AKeyNotInTheTable_DoesNothing(key: Z, ctrl: False, shift: False)
+Passed Gdpyr.Tests.MapEditorControlsTests.ASharesSteps_StayOnTwentieths
+Passed Gdpyr.Tests.MapEditorControlsTests.ASlope_IsColouredAsTheOverlayColoursIt(degrees: 0, expected: Walkable)
+Passed Gdpyr.Tests.MapEditorControlsTests.ASlope_IsColouredAsTheOverlayColoursIt(degrees: 34.9900017, expected: Walkable)
+Passed Gdpyr.Tests.MapEditorControlsTests.ASlope_IsColouredAsTheOverlayColoursIt(degrees: 35, expected: Steep)
+Passed Gdpyr.Tests.MapEditorControlsTests.ASlope_IsColouredAsTheOverlayColoursIt(degrees: 40, expected: Steep)
+Passed Gdpyr.Tests.MapEditorControlsTests.ASlope_IsColouredAsTheOverlayColoursIt(degrees: 40.0099983, expected: TooSteep)
+Passed Gdpyr.Tests.MapEditorControlsTests.ASlope_IsColouredAsTheOverlayColoursIt(degrees: 70, expected: TooSteep)
+Passed Gdpyr.Tests.MapEditorControlsTests.AnAutosave_IsDueAMinuteAfterTheFirstChangeNotWritten
+Passed Gdpyr.Tests.MapEditorControlsTests.EveryKey_IsBoundOnce_AndEveryActionButNone_HasOne
+Passed Gdpyr.Tests.MapEditorControlsTests.EveryPreset_IsFoundAgain_AndAMovedSettingIsNone
+Passed Gdpyr.Tests.MapEditorControlsTests.Shift_IsTheCamerasSprint_AndLeavesAKeyWithoutAShiftOfItsOwnAsItIs
+Passed Gdpyr.Tests.MapEditorControlsTests.TheBandSliders_KeepNumbersAMapCanMean
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Bracketleft, ctrl: False, shift: False, action: RadiusDown)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Bracketright, ctrl: False, shift: False, action: RadiusUp)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Comma, ctrl: False, shift: False, action: ShapeDown)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Delete, ctrl: False, shift: False, action: TakeUp)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Equal, ctrl: False, shift: False, action: AmountUp)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Escape, ctrl: False, shift: False, action: Cancel)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: F5, ctrl: False, shift: False, action: Test)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: G, ctrl: False, shift: False, action: SnapToGrid)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Key1, ctrl: False, shift: False, action: TerrainTool)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Key2, ctrl: False, shift: False, action: PrefabsTool)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Key3, ctrl: False, shift: False, action: RoadsTool)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Key4, ctrl: False, shift: False, action: BridgesTool)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Minus, ctrl: False, shift: False, action: AmountDown)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: O, ctrl: False, shift: False, action: NextOverlay)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Pagedown, ctrl: False, shift: False, action: LowerSection)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Pageup, ctrl: False, shift: False, action: RaiseSection)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Period, ctrl: False, shift: False, action: ShapeUp)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: R, ctrl: False, shift: False, action: TurnLeft)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: R, ctrl: False, shift: True, action: TurnRight)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: S, ctrl: True, shift: False, action: Save)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: T, ctrl: False, shift: False, action: StraightDown)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Tab, ctrl: False, shift: False, action: TurnEndForEnd)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Y, ctrl: True, shift: False, action: Redo)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Z, ctrl: True, shift: False, action: Undo)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_StepTheBrush_AndHoldItToItsRanges
+Passed Gdpyr.Tests.MapEditorControlsTests.TheOverlays_GoRound
+Passed Gdpyr.Tests.MapEditorControlsTests.TheReadout_IsTheSteepestFaceUnderTheBrush
+Passed Gdpyr.Tests.MapEditorControlsTests.TheSliders_AreTheBrushsOwnRanges
+Passed Gdpyr.Tests.MapEditorControlsTests.TheStatusLine_SaysWhereTheCursorIs
+Passed Gdpyr.Tests.MapEditorControlsTests.TheTestProcess_PlaysTheSavedFile_OnItsOwn
+Passed Gdpyr.Tests.MapEditorControlsTests.TheToolKeys_SelectTheirTools_AndOnlyTheTerrainIsBuilt
+Passed Gdpyr.Tests.MapStoreTests.AFork_IsANewLineage_WithItsParentNamed
+Passed Gdpyr.Tests.MapStoreTests.ASaveThatCannotBeWritten_LeavesTheDocumentAndTheFileAsTheyWere
+Passed Gdpyr.Tests.MapStoreTests.AnAutosaveOfAMapNeverSaved_IsOffered
+Passed Gdpyr.Tests.MapStoreTests.AnAutosaveThatIsTheMapAsSaved_IsDroppedRatherThanOffered
+Passed Gdpyr.Tests.MapStoreTests.AnAutosave_IsOfferedBack_UntilItIsSaved
+Passed Gdpyr.Tests.MapStoreTests.AnUnfinishedMap_IsSaved_AndOpened
+Passed Gdpyr.Tests.MapStoreTests.Describe_CountsErrorsAndWarnings
+Passed Gdpyr.Tests.MapStoreTests.Exists_AsksTheNameAsAName
+Passed Gdpyr.Tests.MapStoreTests.SaveAs_MakesTheDocumentAForkOfTheFileItWasSavedAs
+Passed Gdpyr.Tests.MapStoreTests.SaveThenOpen_IsTheSameDocument_AtTheNextRevision
+Passed Gdpyr.Tests.MapStoreTests.Saving_KeepsTheLastFileAsBak_AndLeavesNoTmp
+Passed Gdpyr.Tests.MapStoreTests.TheList_HoldsEveryMapThatReads_AndOnlyLibraryNames
+Passed!  - Failed:     0, Passed:   108, Skipped:     0, Total:   108, Duration: 2 s - Gdpyr.Tests.dll (net8.0)
+Passed!  - Failed:     0, Passed:  3693, Skipped:     0, Total:  3693, Duration: 15 s - Gdpyr.Tests.dll (net8.0)
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:08.92

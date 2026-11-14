@@ -1,0 +1,223 @@
+# LE4, docs/LEVEL_EDITOR.md §11. At 98c6125: .NET SDK 8.0.134, Godot 4.6.stable.mono.official.89cea1439, four cores of a cloud VM.
+# ./scripts/level-editor-checks.sh editor: --edit le4-new, headless, under a HOME of its own; its test process's lines are in it, as the two wrote to one log. Nothing else ran beside it.
+# The copy of the tree the script made is written $COPY.
+
+[checks] level editor check: editor
+[checks] PASS editor: --edit le4-new opens the editor on a map
+[checks] PASS editor: the session stays in its menu phase: nothing is simulated
+[checks] PASS editor: a map that is not there is a new one by that name, not saved yet (le4-new, 'le4-new')
+[checks] PASS editor: a new map does not play, and is still a map to edit: 4 errors
+[checks] PASS editor: the ground is the round's: 225 collider chunks, 225 drawn
+[checks] PASS editor: opened: the drawn ground is the document's (every vertex of 225 chunks)
+[checks] PASS editor: opened: the collider is the document's (every triangle of 225 chunks)
+[checks] PASS editor: opened: 200 rays straight down meet the ground where the document says, the worst 0.000 mm off
+[checks] PASS editor: sculpt (Hill), raised along a line: the stroke begins
+[checks] PASS editor: sculpt (Hill), raised along a line: while the button is down, the drawn ground follows the document
+[checks] PASS editor: sculpt (Hill), raised along a line: 1367 samples changed, every one within the brush's 16 m of one of its 31 dab points; 0 beyond
+[checks] PASS editor: sculpt (Hill), raised along a line: one step to undo (a step over (46, 46)-(94, 84), 1911 samples)
+[checks] PASS editor: sculpt (Hill), raised along a line: no mesh chunk out of its reach was drawn again; 20 of 225 were
+[checks] PASS editor: sculpt (Hill), raised along a line: the drawn ground is the document's (every vertex of 225 chunks)
+[checks] PASS editor: sculpt (Hill), raised along a line: the collider is the document's (every triangle of 225 chunks)
+[checks] PASS editor: sculpt (Hill), raised along a line: 200 rays straight down meet the ground where the document says, the worst 0.012 mm off
+[checks] PASS editor: grade-locked (Mound 30°), held still: the stroke begins
+[checks] PASS editor: grade-locked (Mound 30°), held still: while the button is down, the drawn ground follows the document
+[checks] PASS editor: grade-locked (Mound 30°), held still: 241 samples changed, every one within the brush's 16 m of one of its 61 dab points; 0 beyond
+[checks] PASS editor: grade-locked (Mound 30°), held still: one step to undo (a step over (152, 152)-(168, 168), 289 samples)
+[checks] PASS editor: grade-locked (Mound 30°), held still: no mesh chunk out of its reach was drawn again; 4 of 225 were
+[checks] PASS editor: grade-locked (Mound 30°), held still: the drawn ground is the document's (every vertex of 225 chunks)
+[checks] PASS editor: grade-locked (Mound 30°), held still: the collider is the document's (every triangle of 225 chunks)
+[checks] PASS editor: grade-locked (Mound 30°), held still: 200 rays straight down meet the ground where the document says, the worst 0.012 mm off
+[checks] PASS editor: grade-locked (Cliff 60°), lowered: the stroke begins
+[checks] PASS editor: grade-locked (Cliff 60°), lowered: while the button is down, the drawn ground follows the document
+[checks] PASS editor: grade-locked (Cliff 60°), lowered: 19 samples changed, every one within the brush's 8 m of one of its 46 dab points; 0 beyond
+[checks] PASS editor: grade-locked (Cliff 60°), lowered: one step to undo (a step over (160, 68)-(166, 72), 35 samples)
+[checks] PASS editor: grade-locked (Cliff 60°), lowered: no mesh chunk out of its reach was drawn again; 2 of 225 were
+[checks] PASS editor: grade-locked (Cliff 60°), lowered: the drawn ground is the document's (every vertex of 225 chunks)
+[checks] PASS editor: grade-locked (Cliff 60°), lowered: the collider is the document's (every triangle of 225 chunks)
+[checks] PASS editor: grade-locked (Cliff 60°), lowered: 200 rays straight down meet the ground where the document says, the worst 0.011 mm off
+[checks] PASS editor: smooth, over the first: the stroke begins
+[checks] PASS editor: smooth, over the first: while the button is down, the drawn ground follows the document
+[checks] PASS editor: smooth, over the first: 217 samples changed, every one within the brush's 8 m of one of its 21 dab points; 0 beyond
+[checks] PASS editor: smooth, over the first: one step to undo (a step over (61, 57)-(79, 73), 323 samples)
+[checks] PASS editor: smooth, over the first: no mesh chunk out of its reach was drawn again; 6 of 225 were
+[checks] PASS editor: smooth, over the first: the drawn ground is the document's (every vertex of 225 chunks)
+[checks] PASS editor: smooth, over the first: the collider is the document's (every triangle of 225 chunks)
+[checks] PASS editor: smooth, over the first: 200 rays straight down meet the ground where the document says, the worst 0.015 mm off
+[checks] PASS editor: level, over the first: the stroke begins
+[checks] PASS editor: level, over the first: while the button is down, the drawn ground follows the document
+[checks] PASS editor: level, over the first: 187 samples changed, every one within the brush's 8 m of one of its 16 dab points; 0 beyond
+[checks] PASS editor: level, over the first: one step to undo (a step over (65, 63)-(79, 77), 225 samples)
+[checks] PASS editor: level, over the first: no mesh chunk out of its reach was drawn again; 6 of 225 were
+[checks] PASS editor: level, over the first: the drawn ground is the document's (every vertex of 225 chunks)
+[checks] PASS editor: level, over the first: the collider is the document's (every triangle of 225 chunks)
+[checks] PASS editor: level, over the first: 200 rays straight down meet the ground where the document says, the worst 0.014 mm off
+[checks] PASS editor: sculpt (Bluff), at the field's edge: the stroke begins
+[checks] PASS editor: sculpt (Bluff), at the field's edge: while the button is down, the drawn ground follows the document
+[checks] PASS editor: sculpt (Bluff), at the field's edge: 721 samples changed, every one within the brush's 16 m of one of its 23 dab points; 0 beyond
+[checks] PASS editor: sculpt (Bluff), at the field's edge: one step to undo (a step over (0, 115)-(19, 155), 820 samples)
+[checks] PASS editor: sculpt (Bluff), at the field's edge: no mesh chunk out of its reach was drawn again; 6 of 225 were
+[checks] PASS editor: sculpt (Bluff), at the field's edge: the drawn ground is the document's (every vertex of 225 chunks)
+[checks] PASS editor: sculpt (Bluff), at the field's edge: the collider is the document's (every triangle of 225 chunks)
+[checks] PASS editor: sculpt (Bluff), at the field's edge: 200 rays straight down meet the ground where the document says, the worst 0.014 mm off
+[checks] PASS editor: a stroke at the field's edge builds the walls again, which span its ground
+[checks] PASS editor: a ramp up the mound is made and is one step: Ok, 7 steps
+[checks] PASS editor: the ramp: the drawn ground is the document's (every vertex of 225 chunks)
+[checks] PASS editor: the ramp: the collider is the document's (every triangle of 225 chunks)
+[checks] PASS editor: the ramp: 100 rays straight down meet the ground where the document says, the worst 0.013 mm off
+[checks] measured editor: a frame of a stroke, its dabs and the meshes drawn again: n 385, mean 0.234 ms, p95 0.704, max 1.160
+[checks] measured editor: a stroke's end, rounded, pads kept, collider given its triangles: n 6, mean 4.801 ms, p95 12.090, max 12.090
+[checks] measured editor: the collider chunks at a stroke's end: n 6, mean 1.541 ms, p95 3.581, max 3.581
+[checks] measured editor: mesh chunks drawn again, all told: 985; collider chunks reset: 40
+[checks] PASS editor: undoing 7 steps restores every sample, step by step, to the new map's
+[checks] PASS editor: all undone: the drawn ground is the document's (every vertex of 225 chunks)
+[checks] PASS editor: all undone: the collider is the document's (every triangle of 225 chunks)
+[checks] PASS editor: all undone: 300 rays straight down meet the ground where the document says, the worst 0.000 mm off
+[checks] PASS editor: redoing them makes each again, sample for sample
+[checks] PASS editor: all redone: the drawn ground is the document's (every vertex of 225 chunks)
+[checks] PASS editor: all redone: the collider is the document's (every triangle of 225 chunks)
+[checks] PASS editor: all redone: 300 rays straight down meet the ground where the document says, the worst 0.009 mm off
+[checks] PASS editor: ] widens the brush: 16 m to 20 m
+[checks] PASS editor: O is the next overlay, in the shader: Bands, the chunk's is 1
+[checks] PASS editor: Ctrl+Z undoes the last step
+[checks] PASS editor: Ctrl+Y redoes it
+[checks] PASS editor: the water's slider: at 2 m, 57948 samples under it and its quad drawn
+[checks] PASS editor: and back at -5 m, 0 under it, the quad drawn: False
+[checks] PASS editor: save: saved le4-new.map, revision 1, 2,439 bytes, sha-256 0106ddb7…; it does not play yet: 4 errors
+[checks] PASS editor: the saved file reads as the document being edited (the same)
+[checks] PASS editor: it is revision 1, the editor's hash is the file's, no .tmp is left
+[checks] PASS editor: sculpt (Hill), after a save: the stroke begins
+[checks] PASS editor: sculpt (Hill), after a save: while the button is down, the drawn ground follows the document
+[checks] PASS editor: sculpt (Hill), after a save: 997 samples changed, every one within the brush's 16 m of one of its 16 dab points; 0 beyond
+[checks] PASS editor: sculpt (Hill), after a save: one step to undo (a step over (176, 175)-(214, 205), 1209 samples)
+[checks] PASS editor: sculpt (Hill), after a save: no mesh chunk out of its reach was drawn again; 12 of 225 were
+[checks] PASS editor: sculpt (Hill), after a save: the drawn ground is the document's (every vertex of 225 chunks)
+[checks] PASS editor: sculpt (Hill), after a save: the collider is the document's (every triangle of 225 chunks)
+[checks] PASS editor: sculpt (Hill), after a save: 200 rays straight down meet the ground where the document says, the worst 0.015 mm off
+[checks] PASS editor: a stroke after a save leaves the map unsaved
+[checks] PASS editor: saved again: saved le4-new.map, revision 2, 3,001 bytes, sha-256 59115b7e…; it does not play yet: 4 errors
+[checks] PASS editor: the second save keeps the first file as .bak
+[checks] PASS editor: open le4-new: opened le4-new.map, revision 2: 4 errors
+[checks] PASS editor: save then open is the same document, at revision 2, with nothing to undo (the same)
+[checks] PASS editor: opened again: the drawn ground is the document's (every vertex of 225 chunks)
+[checks] PASS editor: opened again: the collider is the document's (every triangle of 225 chunks)
+[checks] PASS editor: opened again: 300 rays straight down meet the ground where the document says, the worst 0.011 mm off
+[checks] PASS editor: sculpt (Plain), to autosave: the stroke begins
+[checks] PASS editor: sculpt (Plain), to autosave: while the button is down, the drawn ground follows the document
+[checks] PASS editor: sculpt (Plain), to autosave: 3299 samples changed, every one within the brush's 32 m of one of its 16 dab points; 0 beyond
+[checks] PASS editor: sculpt (Plain), to autosave: one step to undo (a step over (92, 170)-(158, 230), 4087 samples)
+[checks] PASS editor: sculpt (Plain), to autosave: no mesh chunk out of its reach was drawn again; 30 of 225 were
+[checks] PASS editor: sculpt (Plain), to autosave: the drawn ground is the document's (every vertex of 225 chunks)
+[checks] PASS editor: sculpt (Plain), to autosave: the collider is the document's (every triangle of 225 chunks)
+[checks] PASS editor: sculpt (Plain), to autosave: 200 rays straight down meet the ground where the document says, the worst 0.012 mm off
+[checks] PASS editor: autosave: autosaved le4-new.autosave.map
+[checks] PASS editor: the autosave is the map as it is, beside the saved file, which is untouched (the same)
+[checks] PASS editor: opening it again offers the autosave back
+[checks] PASS editor: taken back, it is the map as autosaved, not saved (the same)
+[checks] PASS editor: the autosave taken back: the drawn ground is the document's (every vertex of 225 chunks)
+[checks] PASS editor: the autosave taken back: the collider is the document's (every triangle of 225 chunks)
+[checks] PASS editor: the autosave taken back: 300 rays straight down meet the ground where the document says, the worst 0.012 mm off
+[checks] PASS editor: saving drops the autosave
+[checks] PASS editor: and opening it again offers none
+[checks] PASS editor: save as le4-new-fork: saved le4-new-fork.map, revision 1, 4,065 bytes, sha-256 3378854c…; it does not play yet: 4 errors
+[checks] PASS editor: save as is a fork: a new GUID, the file it was saved as for its parent, revision 1, and the first file kept
+[checks] PASS editor: clone the bundled map as le4-hills: cloned hills.map as le4-hills.map: no issues
+[checks] PASS editor: the clone is saved as le4-hills.map, the bundled file's hash its parent's
+[checks] PASS editor: it plays: no issues
+[checks] PASS editor: what is edited is what will be played: the round's builder put up its pieces (built 1 spawn lines of 4 markers, 1 lockers, 1 kiosks, 1 barracks, 3 nodes, 1 anchors, 2 emplacements, 2 ammo cans, 18 cover boxes, 1 scenery, 0 bridge sections on 0 piers, the perimeter; 2 structures left for the round's start (LE5))
+[checks] PASS editor: sculpt across a node's pad: the stroke begins
+[checks] PASS editor: sculpt across a node's pad: while the button is down, the drawn ground follows the document
+[checks] PASS editor: sculpt across a node's pad: 919 samples changed, every one within the brush's 20 m of one of its 31 dab points; 0 beyond
+[checks] PASS editor: sculpt across a node's pad: one step to undo (a step over (96, 101)-(144, 139), 1911 samples)
+[checks] PASS editor: sculpt across a node's pad: no mesh chunk out of its reach was drawn again; 15 of 225 were
+[checks] PASS editor: sculpt across a node's pad: the drawn ground is the document's (every vertex of 225 chunks)
+[checks] PASS editor: sculpt across a node's pad: the collider is the document's (every triangle of 225 chunks)
+[checks] PASS editor: sculpt across a node's pad: 200 rays straight down meet the ground where the document says, the worst 0.014 mm off
+[checks] PASS editor: the node's 421 pad samples are at its level still, and the map plays: no issues
+[checks] measured editor: the stroke raised (-12, -4) by 0.66 m
+[checks] PASS editor: saved: saved le4-hills.map, revision 2, 27,533 bytes, sha-256 ce3da315…
+[checks] PASS editor: Test: testing le4-hills.map in process 9533: close it to come back here
+[checks] PASS editor: a map saved and unchanged is not saved again to be tested
+[checks] PASS editor: the test process is started on the saved file: --path $COPY/ --headless -- --practice --map $COPY/editor-home/.local/share/godot/app_userdata/gdpyr/maps/le4-hills.map
+[checks] measured editor: the test process: 9533
+[checks] level editor check: test-child
+[rts] navigation baked: 2384 vertices
+[checks] PASS test-child: the test process plays the practice round on the saved file: Hills ($COPY/editor-home/.local/share/godot/app_userdata/gdpyr/maps/le4-hills.map, ce3da315), $COPY/editor-home/.local/share/godot/app_userdata/gdpyr/maps/le4-hills.map
+[checks] PASS test-child: its ground is the edited ground: (-12, -4) at 2.45 m, as the editor left it
+[checks] PASS test-child: the round is live
+[checks] test-child: 3 of 3 facts hold
+[checks] PASS editor: the test process played the saved file, its round went live, and it ended with 0 after 3.3 s
+[checks] PASS editor: and the editor never left: the same map open in it, and nothing simulated, while the test ran
+[checks] editor: 132 of 132 facts hold
+[editor] editing 'le4-new' (le4-new.map), revision 0, 0 objects, 4 errors
+[editor] a new map, le4-new: not saved yet
+[editor] map editor: $COPY/editor-home/.local/share/godot/app_userdata/gdpyr/maps/, editing le4-new.map
+[editor] stroke: 31 dabs, a step over (46, 46)-(94, 84), 1911 samples
+[editor] stroke: 61 dabs, a step over (152, 152)-(168, 168), 289 samples
+[editor] stroke: 46 dabs, a step over (160, 68)-(166, 72), 35 samples
+[editor] stroke: 21 dabs, a step over (61, 57)-(79, 73), 323 samples
+[editor] stroke: 16 dabs, a step over (65, 63)-(79, 77), 225 samples
+[editor] stroke: 23 dabs, a step over (0, 115)-(19, 155), 820 samples
+[editor] ramp made: a step over (143, 151)-(160, 169), 342 samples
+[editor] undone: a step over (143, 151)-(160, 169), 342 samples; 6 steps left to undo
+[editor] undone: a step over (0, 115)-(19, 155), 820 samples; 5 steps left to undo
+[editor] undone: a step over (65, 63)-(79, 77), 225 samples; 4 steps left to undo
+[editor] undone: a step over (61, 57)-(79, 73), 323 samples; 3 steps left to undo
+[editor] undone: a step over (160, 68)-(166, 72), 35 samples; 2 steps left to undo
+[editor] undone: a step over (152, 152)-(168, 168), 289 samples; 1 steps left to undo
+[editor] undone: a step over (46, 46)-(94, 84), 1911 samples; 0 steps left to undo
+[editor] nothing to undo
+[editor] redone: a step over (46, 46)-(94, 84), 1911 samples
+[editor] redone: a step over (152, 152)-(168, 168), 289 samples
+[editor] redone: a step over (160, 68)-(166, 72), 35 samples
+[editor] redone: a step over (61, 57)-(79, 73), 323 samples
+[editor] redone: a step over (65, 63)-(79, 77), 225 samples
+[editor] redone: a step over (0, 115)-(19, 155), 820 samples
+[editor] redone: a step over (143, 151)-(160, 169), 342 samples
+[editor] nothing to redo
+[editor] Hill: sculpt, 16 m, core 0.00, 2.00 m/s
+[editor] sculpt, 20 m, core 0.00, 2.00 m/s
+[editor] overlay: bands
+[editor] undone: a step over (143, 151)-(160, 169), 342 samples; 6 steps left to undo
+[editor] redone: a step over (143, 151)-(160, 169), 342 samples
+[editor] saved le4-new.map, revision 1, 2,439 bytes, sha-256 0106ddb7…; it does not play yet: 4 errors
+[editor] saved $COPY/editor-home/.local/share/godot/app_userdata/gdpyr/maps/le4-new.map: revision 1, 2439 bytes, sha-256 0106ddb7f6e92c49e9c1010fd46b88a3c257ed7a7bb302467dba2159485c9125, 4 errors
+[editor] stroke: 16 dabs, a step over (176, 175)-(214, 205), 1209 samples
+[editor] saved le4-new.map, revision 2, 3,001 bytes, sha-256 59115b7e…; it does not play yet: 4 errors
+[editor] saved $COPY/editor-home/.local/share/godot/app_userdata/gdpyr/maps/le4-new.map: revision 2, 3001 bytes, sha-256 59115b7e176cc38c701794667d4780f4619eac7740f96a38a1ddf06ee078f52f, 4 errors
+[editor] editing 'le4-new' (le4-new.map), revision 2, 0 objects, 4 errors
+[editor] opened le4-new.map, revision 2: 4 errors
+[editor] stroke: 16 dabs, a step over (92, 170)-(158, 230), 4087 samples
+[editor] autosaved $COPY/editor-home/.local/share/godot/app_userdata/gdpyr/maps/le4-new.autosave.map
+[editor] editing 'le4-new' (le4-new.map), revision 2, 0 objects, 4 errors
+[editor] opened le4-new.map, revision 2: 4 errors
+[editor] editing 'le4-new' (le4-new.map), revision 2, 0 objects, 4 errors
+[editor] the autosave is taken back: save to keep it
+[editor] saved le4-new.map, revision 3, 4,065 bytes, sha-256 b1cc2647…; it does not play yet: 4 errors
+[editor] saved $COPY/editor-home/.local/share/godot/app_userdata/gdpyr/maps/le4-new.map: revision 3, 4065 bytes, sha-256 b1cc26470d3edf1984133231a035384e5687b4ef636f971199fd429109080aee, 4 errors
+[editor] editing 'le4-new' (le4-new.map), revision 3, 0 objects, 4 errors
+[editor] opened le4-new.map, revision 3: 4 errors
+[editor] saved le4-new-fork.map, revision 1, 4,065 bytes, sha-256 3378854c…; it does not play yet: 4 errors
+[editor] saved $COPY/editor-home/.local/share/godot/app_userdata/gdpyr/maps/le4-new-fork.map: revision 1, 4065 bytes, sha-256 3378854c2a853a8ddfd0d4bd3b07ef517f4b000ee07bd1e8b974d65d15216844, 4 errors
+[editor] editing 'Hills' (le4-hills.map), revision 1, 33 objects, no issues
+[editor] cloned hills.map as le4-hills.map: no issues
+[editor] cloned res://Maps/hills.map (sha-256 6d0aa3ff…) as $COPY/editor-home/.local/share/godot/app_userdata/gdpyr/maps/le4-hills.map
+[editor] stroke: 31 dabs, a step over (96, 101)-(144, 139), 1911 samples
+[editor] saved le4-hills.map, revision 2, 27,533 bytes, sha-256 ce3da315…
+[editor] saved $COPY/editor-home/.local/share/godot/app_userdata/gdpyr/maps/le4-hills.map: revision 2, 27533 bytes, sha-256 ce3da3151e1f3bb8d8fe3d6eadc209a8d944cee7eb088a9bbf94307134f26c02, no issues
+[editor] testing le4-hills.map in process 9533: close it to come back here
+[editor] testing $COPY/editor-home/.local/share/godot/app_userdata/gdpyr/maps/le4-hills.map (sha-256 ce3da3151e1f3bb8d8fe3d6eadc209a8d944cee7eb088a9bbf94307134f26c02) in process 9533: --path $COPY/ --headless -- --practice --map $COPY/editor-home/.local/share/godot/app_userdata/gdpyr/maps/le4-hills.map
+[map] playing Hills ($COPY/editor-home/.local/share/godot/app_userdata/gdpyr/maps/le4-hills.map, ce3da315) from $COPY/editor-home/.local/share/godot/app_userdata/gdpyr/maps/le4-hills.map, sha-256 ce3da3151e1f3bb8d8fe3d6eadc209a8d944cee7eb088a9bbf94307134f26c02
+[level] built 'Hills' (Hills ($COPY/editor-home/.local/share/godot/app_userdata/gdpyr/maps/le4-hills.map, ce3da315)) in 138 ms: terrain 241 x 241 samples, 225 shapes set in 66.9 ms, -1.53 … 10.57 m, water -5.00 m, over none, not drawn
+[level] built 1 spawn lines of 4 markers, 1 lockers, 1 kiosks, 1 barracks, 3 nodes, 1 anchors, 2 emplacements, 2 ammo cans, 18 cover boxes, 1 scenery, 0 bridge sections on 0 piers, the perimeter; 2 structures left for the round's start (LE5)
+[match] round live | tickets 50 | points 1000 | baseline 120/min | 20 minutes
+[checks] PASS editor, the editor's and its test process's log: the log has no 'no nodes in group'
+[checks] PASS editor, the editor's and its test process's log: the log has no 'no NavigationRegion3D in group'
+[checks] PASS editor, the editor's and its test process's log: the log has no 'navigation bake produced no geometry'
+[checks] PASS editor, the editor's and its test process's log: the log has no 'is scaled or tilted'
+[checks] PASS editor, the editor's and its test process's log: the log has no 'are addressable on the wire'
+[maps] .local/share/godot/app_userdata/gdpyr/maps/le4-hills.map 27533 bytes
+[maps] .local/share/godot/app_userdata/gdpyr/maps/le4-hills.map.bak 27299 bytes
+[maps] .local/share/godot/app_userdata/gdpyr/maps/le4-new-fork.map 4065 bytes
+[maps] .local/share/godot/app_userdata/gdpyr/maps/le4-new.map 4065 bytes
+[maps] .local/share/godot/app_userdata/gdpyr/maps/le4-new.map.bak 3001 bytes
+editor: exit 0
