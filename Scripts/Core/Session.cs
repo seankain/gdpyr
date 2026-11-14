@@ -36,8 +36,14 @@ public static class Session
 	/// </summary>
 	public static MapInfo Map { get; private set; } = MapCatalog.Default;
 
-	/// <summary>The scene <see cref="Map"/> is.</summary>
+	/// <summary>The scene <see cref="Map"/> is: for a data map, the one that builds any file.</summary>
 	public static string WorldScenePath => Map.ScenePath;
+
+	/// <summary>
+	/// A data map as it was read and validated, for <c>LevelRoot</c> to build the world
+	/// from (docs/LEVEL_EDITOR.md §7.1); null for a scene map.
+	/// </summary>
+	public static Gdpyr.Sim.Level.MapDocument Document { get; private set; }
 
 	/// <summary>
 	/// What the host picked in the main menu's host panel, or null: a round launched
@@ -47,23 +53,52 @@ public static class Session
 	/// </summary>
 	public static Gdpyr.Match.HostSettings Host { get; private set; }
 
-	/// <summary>Plays the next world on this map. The menu calls it before it changes scene.</summary>
-	public static void SelectMap(MapInfo map)
+	/// <summary>
+	/// Plays the next world on this map, reading and validating its file first when it is
+	/// a data map (Gdpyr.Level.MapLibrary). The menu calls it before it changes scene.
+	/// False, with why, when it cannot be played; the map selected before is kept.
+	/// </summary>
+	public static bool TrySelectMap(MapInfo map, out string error)
 	{
-		if (map.IsValid)
+		error = null;
+		if (!map.IsValid)
+		{
+			error = $"'{map.Id}' is not a map";
+			return false;
+		}
+
+		Gdpyr.Sim.Level.MapDocument document = null;
+		if (map.IsData && !Gdpyr.Level.MapLibrary.TryLoad(map, out document, out error))
+		{
+			return false;
+		}
+
+		Map = map;
+		Document = document;
+		return true;
+	}
+
+	/// <summary>A map already read and validated, as <c>--map</c> resolves one (Gdpyr.Level.MapLibrary.TryResolve).</summary>
+	public static void SelectResolved(MapInfo map, Gdpyr.Sim.Level.MapDocument document)
+	{
+		if (map.IsValid && map.IsData == (document != null))
 		{
 			Map = map;
+			Document = document;
 		}
 	}
 
-	/// <summary>Records what the host panel was set to, and plays its map.</summary>
-	public static void HostWith(Gdpyr.Match.HostSettings settings)
+	/// <summary>Records what the host panel was set to, and plays its map. False, with why, when its map cannot be played.</summary>
+	public static bool HostWith(Gdpyr.Match.HostSettings settings, out string error)
 	{
-		Host = settings;
-		if (settings != null)
+		error = null;
+		if (settings != null && !TrySelectMap(settings.Map, out error))
 		{
-			SelectMap(settings.Map);
+			return false;
 		}
+
+		Host = settings;
+		return true;
 	}
 
 	/// <summary>

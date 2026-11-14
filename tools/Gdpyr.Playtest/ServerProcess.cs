@@ -35,7 +35,7 @@ public sealed class ServerProcess : IDisposable
 
 	public static async Task<ServerProcess> StartAsync(string godot, string projectDirectory, int agentPort,
 		int gamePort, int groundBots, int strategistBots, string logPath, string botAi = null,
-		string unitAutonomy = null, string botKits = null, CancellationToken cancel = default)
+		string unitAutonomy = null, string botKits = null, string map = null, CancellationToken cancel = default)
 	{
 		var start = new ProcessStartInfo(godot)
 		{
@@ -78,6 +78,14 @@ public sealed class ServerProcess : IDisposable
 		{
 			start.ArgumentList.Add("--unit-autonomy");
 			start.ArgumentList.Add(unitAutonomy);
+		}
+
+		// The catalog's default — the greybox — unless the scenario names a map
+		// (docs/LEVEL_EDITOR.md §9.6). A server whose build lacks it refuses to start.
+		if (!string.IsNullOrEmpty(map))
+		{
+			start.ArgumentList.Add("--map");
+			start.ArgumentList.Add(map);
 		}
 
 		Process process;

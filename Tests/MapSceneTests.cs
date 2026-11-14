@@ -31,7 +31,12 @@ public class MapSceneTests
 		yield return new object[] { TemplatePath };
 		foreach (MapInfo map in MapCatalog.All)
 		{
-			yield return new object[] { map.ScenePath };
+			// A data map's scene is the one that builds any file (docs/LEVEL_EDITOR.md §9.1):
+			// what its map holds is BundledMapTests', asked of the file by the validator.
+			if (map.Kind == MapKind.Scene)
+			{
+				yield return new object[] { map.ScenePath };
+			}
 		}
 	}
 

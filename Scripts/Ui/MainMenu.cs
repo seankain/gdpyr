@@ -96,13 +96,16 @@ public partial class MainMenu : Control
 		// `--playdemo` names no mode and still skips it: a demo is watched in the map
 		// and there is no server to pick (docs/DEMOS.md §5.1). A bare `--spectate` is
 		// the menu's "Watch the bots" said on the command line (docs/AI_DEBUG.md §1).
+		// `--practice` is the menu's "Practice offline" said on the command line
+		// (docs/LEVEL_EDITOR.md §8.7): the round on one's own, on `--map`'s map.
 		bool watchBots = Bootstrap.Options.Spectate && Bootstrap.Options.Mode == LaunchMode.Offline;
+		bool practice = Bootstrap.Options.Practice;
 		if (Bootstrap.IsDedicatedServer || Bootstrap.Options.Mode != LaunchMode.Offline
-			|| Bootstrap.Options.PlayDemo != null || watchBots)
+			|| Bootstrap.Options.PlayDemo != null || watchBots || practice)
 		{
 			// No peer, no packets: a replay is a file being read, and the transport
 			// would otherwise sit waiting for a menu that is not going to be built.
-			if (Bootstrap.Options.PlayDemo != null || watchBots)
+			if (Bootstrap.Options.PlayDemo != null || watchBots || practice)
 			{
 				NetworkManager.Instance?.PlayOffline();
 			}
@@ -263,6 +266,13 @@ public partial class MainMenu : Control
 			return MapAnswer.Refused;
 		}
 
+		if (net.ServerMapId.Length == 0)
+		{
+			// A map from the host's own library: fetching one is docs/LEVEL_EDITOR.md LE7's.
+			error = "the host is playing a map from its own library, which this build cannot fetch yet.";
+			return MapAnswer.Refused;
+		}
+
 		if (!MapCatalog.TryFind(net.ServerMapId, out MapInfo map))
 		{
 			error = $"the host is playing map '{net.ServerMapId}', which this build does not have."
@@ -270,7 +280,12 @@ public partial class MainMenu : Control
 			return MapAnswer.Refused;
 		}
 
-		Session.SelectMap(map);
+		if (!Session.TrySelectMap(map, out string unreadable))
+		{
+			error = $"the host is playing {map.Name}, and this build's copy of it does not play: {unreadable}";
+			return MapAnswer.Refused;
+		}
+
 		return MapAnswer.Taken;
 	}
 
@@ -372,6 +387,14 @@ public partial class MainMenu : Control
 
 		HostSettings settings = ReadHostPanel();
 
+		// Before the port: a data map is read and validated here, and one that does not
+		// play is said so with the port still free (docs/LEVEL_EDITOR.md §9.1).
+		if (!Session.HostWith(settings, out string mapError))
+		{
+			_hostStatus.Text = $"cannot host {settings.Map.Name}: {mapError}";
+			return;
+		}
+
 		if (!net.HostListen(port))
 		{
 			_hostStatus.Text = $"could not listen on UDP {port}: something else is already on it."
@@ -379,7 +402,6 @@ public partial class MainMenu : Control
 			return;
 		}
 
-		Session.HostWith(settings);
 		CombatManager.Instance?.ApplyHostSettings(settings);
 		GD.Print($"[menu] hosting on UDP {port}: {settings}");
 		EnterWorld();

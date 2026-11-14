@@ -1,0 +1,40 @@
+# LE3, docs/LEVEL_EDITOR.md §11. The game at fa37670; the part as the next commit adds it to scripts/level-editor-checks.sh. .NET SDK 8.0.134,
+# Godot 4.6.stable.mono.official.89cea1439, four cores of a cloud VM. Nothing else ran beside it.
+# SHOT_OUT=<dir> ./scripts/level-editor-checks.sh map-shot: drawn under xvfb-run with the Compatibility renderer on Mesa's llvmpipe,
+# once as the file is and once with the basin. Three of the pictures are le3-fa37670-overview.png, -spawn.png and -basin.png.
+
+[checks] level map check: shot
+[rts] navigation baked: 2348 vertices
+[checks] PASS shot: hills (data): in the game, the world built
+[checks] PASS shot: hills (data): the ground is drawn: 225 chunks with 1 terrain material
+[checks] PASS shot: hills (data): le3-overview.png: 1280 x 720
+[checks] PASS shot: hills (data): le3-overview-bands.png: 1280 x 720
+[checks] PASS shot: hills (data): le3-overview-slope.png: 1280 x 720
+[checks] PASS shot: hills (data): le3-overview-contours.png: 1280 x 720
+[checks] PASS shot: hills (data): le3-spawn.png: 1280 x 720
+[checks] PASS shot: hills (data): le3-middle.png: 1280 x 720
+[checks] PASS shot: hills (data): le3-barracks.png: 1280 x 720
+[checks] PASS shot: hills (data): le3-seams.png: 1280 x 720
+[checks] shot: 10 of 10 facts hold
+OpenGL API 4.5 (Core Profile) Mesa 25.2.8-0ubuntu0.24.04.4 - Compatibility - Using Device: Mesa - llvmpipe (LLVM 20.1.2, 256 bits)
+map-shot, hills: exit 0 (pictures: <dir>/map-shot)
+[checks] LE3_BASIN: a disc of 12 m at (-20, -75), its bed at -8.00 m, 3.0 m under the water; 4891 samples touched; the validator: 0 errors, 0 warnings
+[checks] level map check: shot
+[rts] navigation baked: 2638 vertices
+[checks] PASS shot: hills (data): in the game, the world built
+[checks] PASS shot: hills (data): the ground is drawn: 225 chunks with 1 terrain material
+[checks] PASS shot: hills (data): le3-overview.png: 1280 x 720
+[checks] PASS shot: hills (data): le3-overview-bands.png: 1280 x 720
+[checks] PASS shot: hills (data): le3-overview-slope.png: 1280 x 720
+[checks] PASS shot: hills (data): le3-overview-contours.png: 1280 x 720
+[checks] PASS shot: hills (data): le3-spawn.png: 1280 x 720
+[checks] PASS shot: hills (data): le3-middle.png: 1280 x 720
+[checks] PASS shot: hills (data): le3-barracks.png: 1280 x 720
+[checks] PASS shot: hills (data): le3-seams.png: 1280 x 720
+[checks] PASS shot: hills (data): le3-basin.png: 1280 x 720
+[checks] PASS shot: hills (data): le3-basin-bands.png: 1280 x 720
+[checks] PASS shot: hills (data): le3-basin-slope.png: 1280 x 720
+[checks] PASS shot: hills (data): le3-basin-contours.png: 1280 x 720
+[checks] shot: 14 of 14 facts hold
+OpenGL API 4.5 (Core Profile) Mesa 25.2.8-0ubuntu0.24.04.4 - Compatibility - Using Device: Mesa - llvmpipe (LLVM 20.1.2, 256 bits)
+map-shot-basin, hills: exit 0 (pictures: <dir>/map-shot-basin)

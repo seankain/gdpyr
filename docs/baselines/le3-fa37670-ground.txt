@@ -1,0 +1,166 @@
+# LE3, docs/LEVEL_EDITOR.md §11. At fa37670: .NET SDK 8.0.134, Godot 4.6.stable.mono.official.89cea1439, four cores of a cloud VM.
+# ./scripts/level-editor-checks.sh ground: LE0's part as LE0 left it, on LE0's copy of the greybox. Nothing else ran beside it.
+
+[checks] level check: ground, ground slab
+[rts] navigation baked: 565 vertices
+[checks] PASS ground: in the game, the first tick's bake done
+[checks] measured ground: slab: the longest frame up to the first tick's bake: 1050.3 ms
+[checks] measured ground: slab: the first tick's mesh: 565 vertices, 569 polygons
+[checks] measured ground: slab: the first tick's bake, BakeNavigationMesh(onThread: false): 692, 690, 689 ms; 565 vertices, 569 polygons
+[checks] measured ground: slab: in halves: parse 6.7 ms (1884 source vertices, 636 triangles), bake from it 689 ms (565 vertices)
+[checks] measured ground: slab: one 48 m tile from the kept geometry: 15.4 ms (30 vertices)
+[checks] PASS ground: slab: a finished pillbox on the open site (Ok)
+[rts] navigation re-baked around the structures in 640 ms, 0.2 ms of it on the tick (1 this round)
+[checks] measured ground: slab: a re-bake around a structure: 661 ms from the placement to the new mesh, 0.2 ms of it on the tick; the longest frame meanwhile 21.7 ms over 1371 frames
+[rts] navigation re-baked around the structures in 619 ms, 0.2 ms of it on the tick (2 this round)
+[checks] measured ground: slab: clearing the structures asked for 1 re-bake(s)
+[rts] navigation re-baked around the structures in 610 ms, 0.2 ms of it on the tick (3 this round)
+[checks] measured ground: slab: a re-bake around a structure: 613 ms from the placement to the new mesh, 0.2 ms of it on the tick; the longest frame meanwhile 3.4 ms over 1503 frames
+[rts] navigation re-baked around the structures in 623 ms, 0.2 ms of it on the tick (4 this round)
+[rts] navigation re-baked around the structures in 687 ms, 0.1 ms of it on the tick (5 this round)
+[checks] measured ground: slab: a re-bake around a structure: 689 ms from the placement to the new mesh, 0.1 ms of it on the tick; the longest frame meanwhile 2.2 ms over 1873 frames
+[rts] navigation re-baked around the structures in 672 ms, 0.2 ms of it on the tick (6 this round)
+[checks] ground: 2 of 2 facts hold
+ground, slab: exit 0
+[checks] level check: ground, ground flat, trimesh
+[checks] terrain: flat, trimesh of 225 shapes, 241 x 241 samples, 67 pads, set in 37.27 ms, decoded in 0.00 ms
+[rts] navigation baked: 533 vertices
+[checks] PASS ground: in the game, the first tick's bake done
+[checks] measured ground: flat, trimesh: the longest frame up to the first tick's bake: 771.2 ms
+[checks] measured ground: flat, trimesh: the first tick's mesh: 533 vertices, 544 polygons
+[checks] measured ground: flat, trimesh: heights 0.50 to 0.50 m, steepest face 0.0°, 0.00 % of faces over 45°
+[checks] PASS ground: flat, trimesh: 1,000 rays down at random points all meet the terrain (1000)
+[checks] PASS ground: flat, trimesh: each agrees with §6.1's Sample to 1 mm (worst 0.0000 mm, mean 0.0000 mm)
+[checks] measured ground: flat, trimesh: split along the cell's other diagonal, 0 of 1000 would be off by over 1 mm
+[checks] flat, trimesh: a ray from (-33.964325, 5.2222204, 84.69458) to (-37.948956, -8.84306, 84.669106) met the terrain at (-35.30211, 0.5000005, 84.68603)
+[checks] PASS ground: flat, trimesh: of 1,000 slanted rays under 16 m long in plan, from over the ground to under it, 0 met no terrain and 0 met ground beyond ground they had passed under (deepest 0.00 m); of the rest 0 are off Sample's surface by over 1 mm (worst 0.0019 mm)
+[checks] flat, trimesh: a ray from (76.9828, 15.567844, 106.99202) to (54.506935, -6.3909655, 91.77502) met the terrain at (61.560158, 0.5, 96.550316)
+[checks] PASS ground: flat, trimesh: of 10,000 slanted rays 16 m to 200 m long in plan, from over the ground to under it, 0 met no terrain and 0 met ground beyond ground they had passed under (deepest 0.00 m); of the rest 0 are off Sample's surface by over 1 mm (worst 0.0019 mm)
+[checks] measured ground: flat, trimesh: setting all 225 chunks' triangles, 115,200 of them: n 10, mean 28.158 ms, p50 27.469, p95 31.373, p99 31.373, max 31.373
+[checks] measured ground: flat, trimesh: setting one chunk's 512 triangles: n 60, mean 0.144 ms, p50 0.136, p95 0.191, p99 0.194, max 0.194
+[checks] measured ground: flat, trimesh: int16 bytes to floats, 58,081 samples: n 20, mean 0.194 ms, p50 0.187, p95 0.294, p99 0.294, max 0.294
+[checks] PASS ground: flat, trimesh: every height is a whole number of 1/256 m steps, and reads back from int16 bit for bit
+[checks] measured ground: flat, trimesh: the first tick's bake, BakeNavigationMesh(onThread: false): 384, 358, 359 ms; 533 vertices, 544 polygons
+[checks] measured ground: flat, trimesh: in halves: parse 13.0 ms (347412 source vertices, 115808 triangles), bake from it 358 ms (533 vertices)
+[checks] measured ground: flat, trimesh: one 48 m tile from the kept geometry: 14.7 ms (30 vertices)
+[checks] PASS ground: flat, trimesh: a finished pillbox on the open site (Ok)
+[rts] navigation re-baked around the structures in 433 ms, 4.3 ms of it on the tick (1 this round)
+[checks] measured ground: flat, trimesh: a re-bake around a structure: 450 ms from the placement to the new mesh, 4.3 ms of it on the tick; the longest frame meanwhile 22.6 ms over 1051 frames
+[rts] navigation re-baked around the structures in 368 ms, 4.7 ms of it on the tick (2 this round)
+[checks] measured ground: flat, trimesh: clearing the structures asked for 1 re-bake(s)
+[rts] navigation re-baked around the structures in 365 ms, 4.5 ms of it on the tick (3 this round)
+[checks] measured ground: flat, trimesh: a re-bake around a structure: 368 ms from the placement to the new mesh, 4.5 ms of it on the tick; the longest frame meanwhile 7.0 ms over 885 frames
+[rts] navigation re-baked around the structures in 358 ms, 4.4 ms of it on the tick (4 this round)
+[rts] navigation re-baked around the structures in 384 ms, 4.5 ms of it on the tick (5 this round)
+[checks] measured ground: flat, trimesh: a re-bake around a structure: 387 ms from the placement to the new mesh, 4.5 ms of it on the tick; the longest frame meanwhile 6.9 ms over 981 frames
+[rts] navigation re-baked around the structures in 450 ms, 4.3 ms of it on the tick (6 this round)
+[checks] ground: 7 of 7 facts hold
+ground, flat trimesh: exit 0
+[checks] level check: ground, ground hills, trimesh
+[checks] terrain: hills, trimesh of 225 shapes, 241 x 241 samples, 67 pads, set in 40.67 ms, decoded in 2.12 ms
+[rts] navigation baked: 14716 vertices
+[checks] PASS ground: in the game, the first tick's bake done
+[checks] measured ground: hills, trimesh: the longest frame up to the first tick's bake: 2081.7 ms
+[checks] measured ground: hills, trimesh: the first tick's mesh: 14716 vertices, 26907 polygons
+[checks] measured ground: hills, trimesh: heights -6.68 to 17.10 m, steepest face 59.6°, 1.63 % of faces over 45°
+[checks] PASS ground: hills, trimesh: 1,000 rays down at random points all meet the terrain (1000)
+[checks] PASS ground: hills, trimesh: each agrees with §6.1's Sample to 1 mm (worst 0.0157 mm, mean 0.0045 mm)
+[checks] measured ground: hills, trimesh: split along the cell's other diagonal, 659 of 1000 would be off by over 1 mm
+[checks] hills, trimesh: a ray from (-33.964325, 8.179179, 84.69458) to (-37.948956, -5.5052385, 84.669106) met the terrain at (-35.366684, 3.3630605, 84.685616)
+[checks] PASS ground: hills, trimesh: of 1,000 slanted rays under 16 m long in plan, from over the ground to under it, 0 met no terrain and 0 met ground beyond ground they had passed under (deepest 0.00 m); of the rest 0 are off Sample's surface by over 1 mm (worst 0.0105 mm)
+[checks] hills, trimesh: a ray from (76.9828, 11.7726145, 106.99202) to (54.506935, -9.873495, 91.77502) met the terrain at (66.07287, 1.2654505, 99.60559)
+[checks] PASS ground: hills, trimesh: of 10,000 slanted rays 16 m to 200 m long in plan, from over the ground to under it, 0 met no terrain and 0 met ground beyond ground they had passed under (deepest 0.00 m); of the rest 0 are off Sample's surface by over 1 mm (worst 0.0329 mm)
+[checks] measured ground: hills, trimesh: setting all 225 chunks' triangles, 115,200 of them: n 10, mean 33.593 ms, p50 33.927, p95 34.786, p99 34.786, max 34.786
+[checks] measured ground: hills, trimesh: setting one chunk's 512 triangles: n 60, mean 0.240 ms, p50 0.234, p95 0.305, p99 0.325, max 0.325
+[checks] measured ground: hills, trimesh: int16 bytes to floats, 58,081 samples: n 20, mean 0.189 ms, p50 0.179, p95 0.262, p99 0.262, max 0.262
+[checks] PASS ground: hills, trimesh: every height is a whole number of 1/256 m steps, and reads back from int16 bit for bit
+[checks] measured ground: hills, trimesh: the first tick's bake, BakeNavigationMesh(onThread: false): 1513, 1486, 1533 ms; 14716 vertices, 26907 polygons
+[checks] measured ground: hills, trimesh: in halves: parse 10.5 ms (347412 source vertices, 115808 triangles), bake from it 1516 ms (14716 vertices)
+[checks] measured ground: hills, trimesh: one 48 m tile from the kept geometry: 96.3 ms (571 vertices)
+[checks] PASS ground: hills, trimesh: a finished pillbox on the open site (Ok)
+[rts] navigation re-baked around the structures in 1504 ms, 4.9 ms of it on the tick (1 this round)
+[checks] measured ground: hills, trimesh: a re-bake around a structure: 1522 ms from the placement to the new mesh, 4.9 ms of it on the tick; the longest frame meanwhile 24.0 ms over 3946 frames
+[rts] navigation re-baked around the structures in 1513 ms, 5.0 ms of it on the tick (2 this round)
+[checks] measured ground: hills, trimesh: clearing the structures asked for 1 re-bake(s)
+[rts] navigation re-baked around the structures in 1583 ms, 5.2 ms of it on the tick (3 this round)
+[checks] measured ground: hills, trimesh: a re-bake around a structure: 1586 ms from the placement to the new mesh, 5.2 ms of it on the tick; the longest frame meanwhile 8.1 ms over 4093 frames
+[rts] navigation re-baked around the structures in 1599 ms, 5.4 ms of it on the tick (4 this round)
+[rts] navigation re-baked around the structures in 1555 ms, 5.3 ms of it on the tick (5 this round)
+[checks] measured ground: hills, trimesh: a re-bake around a structure: 1557 ms from the placement to the new mesh, 5.3 ms of it on the tick; the longest frame meanwhile 58.8 ms over 3515 frames
+[rts] navigation re-baked around the structures in 1555 ms, 5.3 ms of it on the tick (6 this round)
+[checks] ground: 7 of 7 facts hold
+ground, hills trimesh: exit 0
+[checks] level check: ground, ground flat, heightmap
+[checks] terrain: flat, heightmap, 241 x 241 samples, 67 pads, set in 0.59 ms, decoded in 0.00 ms
+[rts] navigation baked: 533 vertices
+[checks] PASS ground: in the game, the first tick's bake done
+[checks] measured ground: flat, heightmap: the longest frame up to the first tick's bake: 695.0 ms
+[checks] measured ground: flat, heightmap: the first tick's mesh: 533 vertices, 544 polygons
+[checks] measured ground: flat, heightmap: heights 0.50 to 0.50 m, steepest face 0.0°, 0.00 % of faces over 45°
+[checks] PASS ground: flat, heightmap: 1,000 rays down at random points all meet the terrain (1000)
+[checks] PASS ground: flat, heightmap: each agrees with §6.1's Sample to 1 mm (worst 0.0000 mm, mean 0.0000 mm)
+[checks] measured ground: flat, heightmap: split along the cell's other diagonal, 0 of 1000 would be off by over 1 mm
+[checks] flat, heightmap: a ray from (-33.964325, 5.2222204, 84.69458) to (-37.948956, -8.84306, 84.669106) met the terrain at (-35.30211, 0.5000005, 84.68603)
+[checks] PASS ground: flat, heightmap: of 1,000 slanted rays under 16 m long in plan, from over the ground to under it, 0 met no terrain and 0 met ground beyond ground they had passed under (deepest 0.00 m); of the rest 0 are off Sample's surface by over 1 mm (worst 0.0019 mm)
+[checks] flat, heightmap: a ray from (76.9828, 15.567844, 106.99202) to (54.506935, -6.3909655, 91.77502) met the terrain at (61.56016, 0.5, 96.55031)
+[checks] flat, heightmap: a ray from (-86.47273, 21.354223, -26.022736) to (93.173416, -13.398487, -11.060335) met no terrain, 0 other colliders on it, 13.88 m under the surface on the way
+[checks] flat, heightmap: a ray from (85.62552, 6.954612, -103.73263) to (-55.3127, -7.9156103, 37.215874) met no terrain, 0 other colliders on it, 8.41 m under the surface on the way
+[checks] flat, heightmap: a ray from (-99.63232, 20.00727, -58.283825) to (-40.19373, -5.1430736, 56.678555) met no terrain, 0 other colliders on it, 5.62 m under the surface on the way
+[checks] measured ground: flat, heightmap: of 10,000 slanted rays 16 m to 200 m long in plan, from over the ground to under it, 36 met no terrain and 0 met ground beyond ground they had passed under (deepest 15.96 m); of the rest 0 are off Sample's surface by over 1 mm (worst 0.0019 mm)
+[checks] measured ground: flat, heightmap: those 36 cast again as pieces of at most 12 m in plan: 0 still do not meet the first ground on them; 0 of the 36 were heading down both x and z, where a quarter of all the rays were
+[checks] measured ground: flat, heightmap: setting the collider's data, 58,081 samples: n 40, mean 0.150 ms, p50 0.135, p95 0.232, p99 0.294, max 0.294
+[checks] measured ground: flat, heightmap: int16 bytes to floats, 58,081 samples: n 20, mean 0.174 ms, p50 0.166, p95 0.256, p99 0.256, max 0.256
+[checks] PASS ground: flat, heightmap: every height is a whole number of 1/256 m steps, and reads back from int16 bit for bit
+[checks] measured ground: flat, heightmap: the first tick's bake, BakeNavigationMesh(onThread: false): 395, 364, 363 ms; 533 vertices, 544 polygons
+[checks] measured ground: flat, heightmap: in halves: parse 9.9 ms (347412 source vertices, 115808 triangles), bake from it 348 ms (533 vertices)
+[checks] measured ground: flat, heightmap: one 48 m tile from the kept geometry: 34.9 ms (30 vertices)
+[checks] PASS ground: flat, heightmap: a finished pillbox on the open site (Ok)
+[rts] navigation re-baked around the structures in 410 ms, 4.2 ms of it on the tick (1 this round)
+[checks] measured ground: flat, heightmap: a re-bake around a structure: 427 ms from the placement to the new mesh, 4.2 ms of it on the tick; the longest frame meanwhile 21.6 ms over 759 frames
+[rts] navigation re-baked around the structures in 404 ms, 6.5 ms of it on the tick (2 this round)
+[checks] measured ground: flat, heightmap: clearing the structures asked for 1 re-bake(s)
+[rts] navigation re-baked around the structures in 361 ms, 4.6 ms of it on the tick (3 this round)
+[checks] measured ground: flat, heightmap: a re-bake around a structure: 364 ms from the placement to the new mesh, 4.6 ms of it on the tick; the longest frame meanwhile 7.4 ms over 724 frames
+[rts] navigation re-baked around the structures in 367 ms, 5.3 ms of it on the tick (4 this round)
+[rts] navigation re-baked around the structures in 370 ms, 5.5 ms of it on the tick (5 this round)
+[checks] measured ground: flat, heightmap: a re-bake around a structure: 374 ms from the placement to the new mesh, 5.5 ms of it on the tick; the longest frame meanwhile 8.4 ms over 640 frames
+[rts] navigation re-baked around the structures in 444 ms, 4.7 ms of it on the tick (6 this round)
+[checks] ground: 6 of 6 facts hold
+ground, flat heightmap: exit 0
+[checks] level check: ground, ground hills, heightmap
+[checks] terrain: hills, heightmap, 241 x 241 samples, 67 pads, set in 0.85 ms, decoded in 2.40 ms
+[rts] navigation baked: 14716 vertices
+[checks] PASS ground: in the game, the first tick's bake done
+[checks] measured ground: hills, heightmap: the longest frame up to the first tick's bake: 1997.5 ms
+[checks] measured ground: hills, heightmap: the first tick's mesh: 14716 vertices, 26907 polygons
+[checks] measured ground: hills, heightmap: heights -6.68 to 17.10 m, steepest face 59.6°, 1.63 % of faces over 45°
+[checks] PASS ground: hills, heightmap: 1,000 rays down at random points all meet the terrain (1000)
+[checks] PASS ground: hills, heightmap: each agrees with §6.1's Sample to 1 mm (worst 0.0157 mm, mean 0.0045 mm)
+[checks] measured ground: hills, heightmap: split along the cell's other diagonal, 659 of 1000 would be off by over 1 mm
+[checks] hills, heightmap: a ray from (-33.964325, 8.179179, 84.69458) to (-37.948956, -5.5052385, 84.669106) met the terrain at (-35.366684, 3.3630605, 84.685616)
+[checks] PASS ground: hills, heightmap: of 1,000 slanted rays under 16 m long in plan, from over the ground to under it, 0 met no terrain and 0 met ground beyond ground they had passed under (deepest 0.00 m); of the rest 0 are off Sample's surface by over 1 mm (worst 0.0105 mm)
+[checks] hills, heightmap: a ray from (76.9828, 11.7726145, 106.99202) to (54.506935, -9.873495, 91.77502) met the terrain at (66.07287, 1.2654514, 99.60559)
+[checks] hills, heightmap: a ray from (-98.214935, 36.170036, -19.624641) to (46.685013, -11.972022, 15.670574) met no terrain, 0 other colliders on it, 12.17 m under the surface on the way
+[checks] hills, heightmap: a ray from (-7.460556, 18.575098, -111.30574) to (-54.04485, -5.648447, 3.5508652) met no terrain, 0 other colliders on it, 13.97 m under the surface on the way
+[checks] hills, heightmap: a ray from (-95.540764, 37.984543, -7.4877014) to (-30.246414, -6.402973, -94.3838) met no terrain, 0 other colliders on it, 6.86 m under the surface on the way
+[checks] measured ground: hills, heightmap: of 10,000 slanted rays 16 m to 200 m long in plan, from over the ground to under it, 23 met no terrain and 6 met ground beyond ground they had passed under (deepest 16.48 m); of the rest 0 are off Sample's surface by over 1 mm (worst 0.0143 mm)
+[checks] measured ground: hills, heightmap: those 29 cast again as pieces of at most 12 m in plan: 0 still do not meet the first ground on them; 0 of the 29 were heading down both x and z, where a quarter of all the rays were
+[checks] measured ground: hills, heightmap: setting the collider's data, 58,081 samples: n 40, mean 0.155 ms, p50 0.154, p95 0.193, p99 0.200, max 0.200
+[checks] measured ground: hills, heightmap: int16 bytes to floats, 58,081 samples: n 20, mean 0.179 ms, p50 0.171, p95 0.238, p99 0.238, max 0.238
+[checks] PASS ground: hills, heightmap: every height is a whole number of 1/256 m steps, and reads back from int16 bit for bit
+[checks] measured ground: hills, heightmap: the first tick's bake, BakeNavigationMesh(onThread: false): 1517, 1478, 1506 ms; 14716 vertices, 26907 polygons
+[checks] measured ground: hills, heightmap: in halves: parse 10.9 ms (347412 source vertices, 115808 triangles), bake from it 1491 ms (14716 vertices)
+[checks] measured ground: hills, heightmap: one 48 m tile from the kept geometry: 99.4 ms (571 vertices)
+[checks] PASS ground: hills, heightmap: a finished pillbox on the open site (Ok)
+[rts] navigation re-baked around the structures in 1605 ms, 5.4 ms of it on the tick (1 this round)
+[checks] measured ground: hills, heightmap: a re-bake around a structure: 1624 ms from the placement to the new mesh, 5.4 ms of it on the tick; the longest frame meanwhile 25.5 ms over 2685 frames
+[rts] navigation re-baked around the structures in 1503 ms, 9.0 ms of it on the tick (2 this round)
+[checks] measured ground: hills, heightmap: clearing the structures asked for 1 re-bake(s)
+[rts] navigation re-baked around the structures in 1503 ms, 5.1 ms of it on the tick (3 this round)
+[checks] measured ground: hills, heightmap: a re-bake around a structure: 1506 ms from the placement to the new mesh, 5.1 ms of it on the tick; the longest frame meanwhile 25.1 ms over 2523 frames
+[rts] navigation re-baked around the structures in 1610 ms, 5.7 ms of it on the tick (4 this round)
+[rts] navigation re-baked around the structures in 1562 ms, 5.2 ms of it on the tick (5 this round)
+[checks] measured ground: hills, heightmap: a re-bake around a structure: 1565 ms from the placement to the new mesh, 5.2 ms of it on the tick; the longest frame meanwhile 7.6 ms over 2917 frames
+[rts] navigation re-baked around the structures in 1580 ms, 5.3 ms of it on the tick (6 this round)
+[checks] ground: 6 of 6 facts hold
+ground, hills heightmap: exit 0

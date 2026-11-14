@@ -1,0 +1,64 @@
+# LE3, docs/LEVEL_EDITOR.md §11. At fa37670: .NET SDK 8.0.134, Godot 4.6.stable.mono.official.89cea1439, four cores of a cloud VM.
+# ./scripts/level-editor-checks.sh map-frame, run 2 of three. Nothing else ran beside it.
+
+[checks] level map check: play
+[rts] navigation baked: 565 vertices
+[checks] PASS play: greybox (scene): navigation baked: 565 vertices
+[checks] measured play: greybox (scene): the longest frame up to the first tick's bake: 897.3 ms
+[checks] PASS play: greybox (scene): this process plays 'greybox', which it was asked to ('greybox')
+[checks] PASS play: greybox (scene): the round is live (1 on their sides)
+[rts] navigation re-baked around the structures in 683 ms, 0.2 ms of it on the tick (1 this round)
+[rts] navigation re-baked around the structures in 687 ms, 0.2 ms of it on the tick (2 this round)
+[rts] navigation re-baked around the structures in 755 ms, 0.2 ms of it on the tick (3 this round)
+[rts] navigation re-baked around the structures in 657 ms, 0.2 ms of it on the tick (4 this round)
+[rts] navigation re-baked around the structures in 672 ms, 0.2 ms of it on the tick (5 this round)
+[rts] navigation re-baked around the structures in 614 ms, 0.2 ms of it on the tick (6 this round)
+[rts] navigation re-baked around the structures in 586 ms, 0.2 ms of it on the tick (7 this round)
+[checks] measured play: greybox (scene): a tick, frame to frame, over 300 s of ticks (48 s of wall time): n 18000, mean 2.687 ms, p50 2.710, p95 4.399, p99 5.338, max 90.838
+[checks] measured play: greybox (scene): the play: 1 round(s), phase Live at the end; units produced 57, lost 18, on the field 18.8 on average and 39 at the most; structures built 7, lost 1; re-bakes 7; rejected orders 4; ground deaths 46; nodes taken 7 times
+[checks] PASS play: greybox (scene): the strategist trained units: 57
+[checks] PASS play: greybox (scene): a node was taken: 7 times
+[checks] PASS play: greybox (scene): there was a fight: 46 ground deaths
+[checks] play: 6 of 6 facts hold
+[bots] backfilling to 6 ground force and 1 strategist(s) while anyone is connected, bot ai htn, bot kits role
+      4 [rts] pillbox refused: on top of another structure
+map-frame, greybox: exit 0
+[checks] level map check: play
+[rts] navigation baked: 2348 vertices
+[checks] PASS play: hills (data): navigation baked: 2348 vertices
+[checks] measured play: hills (data): the longest frame up to the first tick's bake: 2175.2 ms
+[checks] PASS play: hills (data): baked at 40°, LE-D23's walkable
+[checks] PASS play: hills (data): this process plays 'hills', which it was asked to ('hills')
+[checks] PASS play: hills (data): MapHost.tscn's LevelRoot built the world from the session's document
+[checks] PASS play: hills (data): res://Maps/hills.map is in this build: 27299 bytes
+[checks] PASS play: hills (data): its SHA-256 is the catalog's, 6d0aa3ff6ebe3487…
+[checks] PASS play: hills (data): the document the world was built from is the file read again, field by field and sample by sample
+[checks] PASS play: hills (data): player_spawn markers: 4 in the world, 4 in the file
+[checks] PASS play: hills (data): barracks: 1 in the world, 1 in the file
+[checks] PASS play: hills (data): resource nodes: 3 in the world, 3 in the file
+[checks] PASS play: hills (data): weapon lockers: 1 in the world, 1 in the file
+[checks] PASS play: hills (data): vehicle kiosks: 1 in the world, 1 in the file
+[checks] PASS play: hills (data): emplacements: 2 in the world, 2 in the file
+[checks] PASS play: hills (data): ammo cans: 2 in the world, 2 in the file
+[checks] PASS play: hills (data): cover boxes: 18 in the world, 18 in the file
+[checks] PASS play: hills (data): strategist anchors: 1 in the world, 1 in the file
+[checks] PASS play: hills (data): the managers found them: 1 barracks, 3 nodes
+[checks] PASS play: hills (data): every padded object stands on its pad to the bit: the worst is 0.000 mm off
+[checks] PASS play: hills (data): 1000 of 1000 rays straight down met the ground, the worst 0.017 mm from the file's
+[checks] PASS play: hills (data): 2000 rays at a slant, 16-200 m in plan, from over the ground to under it: 0 passed through, 0 met it off the file's
+[checks] PASS play: hills (data): the round is live (1 on their sides)
+[rts] navigation re-baked around the structures in 1957 ms, 7.5 ms of it on the tick (1 this round)
+[rts] navigation re-baked around the structures in 2072 ms, 5.4 ms of it on the tick (2 this round)
+[rts] navigation re-baked around the structures in 1898 ms, 5.6 ms of it on the tick (3 this round)
+[rts] navigation re-baked around the structures in 2001 ms, 4.2 ms of it on the tick (4 this round)
+[rts] navigation re-baked around the structures in 2018 ms, 7.7 ms of it on the tick (5 this round)
+[rts] navigation re-baked around the structures in 1927 ms, 8.5 ms of it on the tick (6 this round)
+[rts] navigation re-baked around the structures in 1983 ms, 6.3 ms of it on the tick (7 this round)
+[checks] measured play: hills (data): a tick, frame to frame, over 300 s of ticks (100 s of wall time): n 18000, mean 5.548 ms, p50 5.291, p95 9.801, p99 11.508, max 93.028
+[checks] measured play: hills (data): the play: 1 round(s), phase Live at the end; units produced 54, lost 18, on the field 17.9 on average and 36 at the most; structures built 7, lost 0; re-bakes 7; rejected orders 0; ground deaths 41; nodes taken 7 times
+[checks] PASS play: hills (data): the strategist trained units: 54
+[checks] PASS play: hills (data): a node was taken: 7 times
+[checks] PASS play: hills (data): there was a fight: 41 ground deaths
+[checks] play: 24 of 24 facts hold
+[bots] backfilling to 6 ground force and 1 strategist(s) while anyone is connected, bot ai htn, bot kits role
+map-frame, hills: exit 0

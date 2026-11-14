@@ -1,8 +1,9 @@
 # gdpyr — Level editor: terrain, prefabs, roads and bridges, and maps that travel
 
-**Status: a plan, with LE0, LE1 and LE2 done: its ground is measured; the ground's rules, the map
-in memory, its file and its validator are written and tested, engine-free; and a tool makes, reads
-and checks map files. Nothing of the editor or of the world from a file is built.**
+**Status: a plan, with LE0–LE3 done: its ground is measured; the ground's rules, the map in
+memory, its file and its validator are written and tested, engine-free; a tool makes, reads and
+checks map files; and a map is played from its file — `--map`, one bundled map, a server and its
+clients, the stripped export. Nothing of the editor or of fetching a map is built.**
 Written against `cd0c558`. The
 facts in §2 were read in this repository's source at that commit, and those in §3 in Godot's source
 at tag `4.6-stable`. The arithmetic in §10 was run: `python3
@@ -14,7 +15,8 @@ in §10.1. LE1 (§11) wrote §6.1–6.4 as `Scripts/Sim/Level/`, at `744b906`: `
 claim made there, and `tools/level_editor_checks/le1_mutations.py` breaks each rule in turn to show
 that a test fails when it is broken. LE2 (§11) wrote §6.5, §6.8, §6.9 and §8.6's undo the same way,
 with `tools/Gdpyr.MapTool`, at `ceaaec9`, and `tools/level_editor_checks/le2_mutations.py` does the
-same for its rules.
+same for its rules. LE3 (§11) built §7, §9.1's reading of a map, `--map` and `--practice` at
+`fa37670`, and `scripts/level-editor-checks.sh`'s `map-*` parts play the bundled map through them.
 
 **What LE0 changed.** The collider is not a `HeightMapShape3D`: 65 of 20,000 long rays passed
 through one, and it costs a tick more than the same triangles as meshes, which let none through
@@ -48,11 +50,21 @@ parameters and their ranges, and a bridge section's frame are set (§6.5). One o
 one of §6.5's checks need a road's profile and are LE6's; reach is LE5's (§6.9). Where a section says
 "LE2", it is one of these.
 
+**What LE3 changed.** A structure's plinth is 0.5 m deep for every site, not down to the lowest
+ground under it: the rule takes no site with ground lower than that, and every peer builds the same
+body with nothing new on the wire; a corner's ground is looked for within 0.55 m of the centre's
+(§7.5). The kiosk's pads are placed inside its footprint, and a spawn line's markers named so that
+two lines sort apart (§7.1). A structure in a file is left for LE5 to put up (§7.1). The terrain
+shader's fifth sampler is the road's, and the placeholders are imported with mipmaps (§7.2). The
+host's picker and `HostSettings` keep the catalog's ids until a client can fetch a map (§9.1).
+Where a section says "LE3", it is one of these.
+
 The decisions (LE-D1–LE-D25, §4) are the defaults the plan is written against. Each is one line to
 change; LE-D3, LE-D8, LE-D10 and LE-D18 were the ones to flag before LE1, which was built on them
 as they stand — LE-D3's grid and LE-D10's pad are code now, and changing either is changing that
-code and its tests — and LE-D24 and LE-D25 are the ones before LE3. The phases (LE0–LE9, §11) say
-what each builds, what checks it, and what is left for a person.
+code and its tests — and LE-D24 and LE-D25 were the ones before LE3, which built LE-D25 and keeps
+LE-D24 flagged. The phases (LE0–LE9, §11) say what each builds, what checks it, and what is left for
+a person.
 
 This is not [`MAPS.md`](MAPS.md)'s way of making a map. That one is the Godot editor, a scene that
 inherits `Scenes/Maps/MapBase.tscn` and a catalog entry, and it stays. This plan adds a second kind
@@ -175,11 +187,11 @@ was written; a class reference quoted here is the XML that site is generated fro
 | LE-D18 | **A dedicated server takes a map as a file**: `--map`, and `scripts/deploy-map.sh`. Upload over the game's connection is optional, off unless the server was given a token, and proven by HMAC. **Changing a server's map restarts its process.** | Asked 4. The box has a public address (DEPLOYMENT.md). A round cannot be torn down in place (§2); the unit already restarts the process. |
 | LE-D19 | **Testing a map from the editor starts a second process** on the saved file. | No way back from a round (§2). It also exercises the real load path on every test. |
 | LE-D20 | **Wire and formats: additive.** `ServerMap` gains fields; eight new messages, none in a round's tick; `DemoFormat.Version` 5 → 6; the agent's `welcome` names the map; the observation schema is unchanged. | Every trained checkpoint keeps loading; an old demo is refused, not misread. |
-| LE-D21 | **A structure built during a round needs near-level ground**: the ground under its footprint may vary by 0.5 m, else `TooSteep`. It stands on the highest of it, on a plinth down to the lowest. *Confirmed by LE0.* | Today's probe refuses a pillbox on a slope past 4.6–6.5°, by direction, and calls it `Blocked` (§7.5); LE0 measured it at 4.5–6.2°, as `Blocked`, with the downhill edge 0.2 m in the air where it is taken. The rule keeps about that limit, names it, and closes the gap under the downhill edge. |
+| LE-D21 | **A structure built during a round needs near-level ground**: the ground under its footprint may vary by 0.5 m, else `TooSteep`. It stands on the highest of it, on a plinth down to the lowest. *Confirmed by LE0; built by LE3, the plinth 0.5 m deep for every site (§7.5).* | Today's probe refuses a pillbox on a slope past 4.6–6.5°, by direction, and calls it `Blocked` (§7.5); LE0 measured it at 4.5–6.2°, as `Blocked`, with the downhill edge 0.2 m in the air where it is taken. The rule keeps about that limit, names it, and closes the gap under the downhill edge. |
 | LE-D22 | **Placeholders**: the greybox textures by band; boxes for decks, piers and cover. A palette resource is where art goes. | IMPLEMENTATION_PLAN.md §5: greybox. |
 | LE-D23 | **Walkable is 40°.** The navigation bake's slope goes from 45° to 40° on a data map; the skirt of §6.3 is 30° and not a setting; the slope overlay turns red at 40°. *Added by LE0.* | On triangles a body and a unit walk a 42.1° face and stall on a 43.0° one, both colliders alike; a box they walk to 45° (§7.4). The bake keeps faces to 45°, so it would route units over ground they stall on. 40° is under what they walk with 2° to spare, and over the 39.2° a 30° skirt can leave. |
 | LE-D24 | **The 4x4 is a road vehicle on a data map, for a first cut.** It keeps the level hull it has. A road's grade limit stops at 15 % and a bridge's ramp stays 1 in 8. *Added by LE0.* | Its collider does not pitch with its chassis and has 0.25 m under it (§2). From rest at the foot it climbs 9.1° and beaches on 10.0°; at 18 m/s it rides up any face to 70° on its hull, off its wheels, and only 75° stops it (§7.4). 15 % is 8.5° and 1 in 8 is 7.1°. **Flag if a 4x4 that cannot leave the road, and that a cliff does not stop, is not acceptable for a first cut**: the fix is the hull taking the chassis's pitch and roll, which is GROUND_VEHICLES.md's to plan (§14). |
-| LE-D25 | **A correction is applied from 2 cm, not 1 cm**: `SimConfig.MispredictionThreshold`. *Added by LE0.* | A position crosses the wire at 1 cm an axis (§2). On level ground two axes of it are rounded and the third is exact; on a slope all three are, which is up to 8.7 mm before anything has gone wrong. Behind an 80 ms link a body crossing a 20° slope was corrected up to 2.5 times a second, by 10–16 mm, in sessions whose clock was being resynchronised, and up to 0.75 times in sessions where it was not; with the threshold at 2 cm, 0.03 at the most in either (§10). **Flag if 1 cm is to be kept**: then that rate is the cost, and it is under GV3's bar of one a second in four sessions of six. |
+| LE-D25 | **A correction is applied from 2 cm, not 1 cm**: `SimConfig.MispredictionThreshold`. *Added by LE0; built by LE3.* | A position crosses the wire at 1 cm an axis (§2). On level ground two axes of it are rounded and the third is exact; on a slope all three are, which is up to 8.7 mm before anything has gone wrong. Behind an 80 ms link a body crossing a 20° slope was corrected up to 2.5 times a second, by 10–16 mm, in sessions whose clock was being resynchronised, and up to 0.75 times in sessions where it was not; with the threshold at 2 cm, 0.03 at the most in either (§10). **Flag if 1 cm is to be kept**: then that rate is the cost, and it is under GV3's bar of one a second in four sessions of six. |
 
 ---
 
@@ -217,11 +229,13 @@ Scripts/Sim/Level/   engine-free; compiled into Tests/ by the existing ../Script
   MapDocument.cs       what a map is, in memory
   MapFile.cs           the container: a writer, and a reader that is total
   MapValidator.cs      what MAPS.md §3 asks, asked of a document
+  MapNames.cs          a map's name, and what a --map reference names (LE3)
   MapTransfer.cs       sender and receiver as state machines over chunks; the upload's proof
   EditHistory.cs       undo and redo
 Scripts/Level/       the engine half
   LevelRoot.cs         MapHost.tscn's root: builds the world, then opens the session
   TerrainNode.cs       collider, chunk meshes, water, overlays
+  TerrainPalette.cs    the five textures and their scales (LE3)
   LevelBuilder.cs      prefabs, a round's pieces, bridges and piers, the walls
   MapLibrary.cs        user://maps, the cache, the bundled maps
 Scripts/Net/MapTransferService.cs    the messages, their channel, their budget
@@ -698,6 +712,21 @@ A server builds no mesh, no water and no material: `Bootstrap.IsDedicatedServer`
 skip them. Every prefab scene carries its own collision shapes, because a stripped server has no
 mesh to make one from (§2, §3).
 
+*Built by LE3*, as the table has it, with these settled. An object stands where the file says,
+upright, turned by its yaw; a padded one at its pad's level — the step its stored height rounds to
+(§6.5), which is the ground under it to the bit — and anything else at its stored height. A node is
+named by its order among its kind in `OBJS`, from 1: `SpawnLine1`, whose markers are `Spawn011` to
+`Spawn014`, 4 m apart along its X and 1 m over its pad, as `MapBase.tscn` has them; `WeaponLocker1`;
+`VehicleKiosk1`, its cabinet at its middle, `Pad4x4` at (−7.5, 0, −1) and `PadHelicopter` at
+(7.5, 0, −1.5) in its frame, each turned so a vehicle faces the way the cabinet does; `Barracks1`, an
+instance of `Barracks.tscn`; `ResourceNode1`, its capture radius and perk its parameters;
+`StrategistAnchor`; `Emplacement1` and `MortarLauncher1`; `AmmoCan01`; `CoverLow01` and
+`CoverBlock01`; `Bunker1`, an instance of `Pillbox.tscn`; `Bridge01`, its deck and rails static boxes,
+a ramp's tilted, and a box for each pier of its stored length. A structure the file holds is counted
+and left: putting it up on the round's first tick is LE5's, with the catalog's engine half, which
+is `LevelBuilder`'s switch until then. A map's water is drawn where any sample is under it, and only
+there is the bake given a floor (§7.3).
+
 ### 7.2 Drawing it
 
 The shader computes §6.4's u from the fragment's world height and normal, blends the two
@@ -709,6 +738,15 @@ overlays in the same shader.
 Placeholders are `ThirdParty/GreyboxTextures`' grids: yellow sand, orange mud, green grass, grey
 stone, and solid blue for the water's quad. `Levels/materials/terrain_palette.tres` names the five
 textures and their scales; replacing art is replacing that resource (LE-D22).
+
+*Built by LE3* (`Levels/materials/terrain.gdshader`, `Scripts/Level/TerrainPalette.cs`). The five
+`sampler2D` are sand, mud, grass, stone and the road; the palette's five textures are the four bands'
+and the water's, and the road's is LE6's to add with its coverage, which is zero in every vertex's
+red until then. The overlay uniform takes none, the bands flat-coloured, the slope of each face —
+green under 35°, yellow to 40°, red past it — and contours every 2 m; *buildable* is LE5's. The five
+placeholder textures are imported with mipmaps, which they were not: at a distance their 1,024-pixel
+grids, 4 m a repeat, drew as white speckle without them. Pictures of the bundled map drawn under a
+virtual display are in `docs/baselines/` (§11, LE3); nothing in them is a check of how it looks.
 
 ### 7.3 Navigation
 
@@ -738,6 +776,12 @@ they "walk into a new wall and slide along it", the fallback the re-bake was wri
 (`UnitManager.Structures.cs:1021`). **Neither is too much to build LE3 on, and nothing here is
 built ahead of need.**
 
+*Built by LE3*: `UnitManager.BakeNavigation` asks `LevelRoot.Current`. On a data map the slope is
+`MapLimits.WalkableSlopeDegrees`; where any sample is under the water, `filter_baking_aabb` is the
+field and 1 m past it, from 1 m under the water to 40 m over LE-D4's highest ground. On a scene map
+nothing changes. The bundled map bakes to 2,348 vertices; dug 3 m under its water in a disc of 12 m,
+no vertex is under the floor and the mesh's closest point to the bed is on the bank (§11).
+
 If the 2 s shows — units held up at a fresh structure in a playtest — the order is the reverse of
 the one this section had before LE0: **tiles first**. A tile is baked from geometry read once and
 kept, with `filter_baking_aabb` and `border_size` (§3), and the tile a structure stands in takes
@@ -756,14 +800,14 @@ and tiles need it kept anyway.
 | The dropship: cruise height by ray, landing sites | follows the ground. It will not land on a deck, which has ground under it (`IsLandingSite`) | none |
 | The drone's floor (−20 m) and ceiling (120 m); the kill plane (−50 m); the agent's rays from 80 m | all outside LE-D4's limits | none |
 | A builder's structure site | a pillbox is refused as `Blocked` past 4.5–6.2°, a sandbag wall across a slope past 5.8°, a sniper tower past 8.4–11.5° (§7.5) | LE-D21, §7.5 |
-| The strategist camera | height limits from the anchor's y; a cursor that falls back to the plane y = 0 | held 4 m over the ground under it; the fallback plane goes through the anchor |
+| The strategist camera | height limits from the anchor's y; a cursor that falls back to the plane y = 0 | held 4 m over the ground under it, by a ray each frame; the fallback plane goes through the anchor, on every map. *Built by LE3* |
 | Cover, spawn slots, lockers, kiosk pads, node discs | stand on pads | none |
 | A capture pad's 4 m vertical tolerance | holds on a pad | none; the validator warns past 4 m |
 | The mortar launcher's level plane | the shell still meets the real ground; the ring drawn is off by the ground's difference in height | none (§14) |
 | A barracks' defended ring | a hill between shortens it | none; the validator's warning stays flat distance |
-| `FlightTraits`' "ground … under 30 m" | ground to 64 m and cruise to 100 m: 164 m, inside ±327.67 m | the comment |
+| `FlightTraits`' "ground … under 30 m" | ground to 64 m and cruise to 100 m: 164 m, inside ±327.67 m | the comment. *Changed by LE3* |
 | HTN planners, bot steering | flat distances and the navigation mesh. LE0 played ten rounds of 6 + 1 bots on hills: units trained, nodes taken and structures built as on the slab (§10) | none |
-| The server's tick | 3.5 ms on the slab with a round of bots, 5.4–5.9 on level terrain, 7.8–9.1 on hills, where 1 tick in 20 takes over 14–17 ms of its 16.7 and 1 in 100 over 20 (§10) | none decided: a risk (§13), and LE3's to measure on the box |
+| The server's tick | 3.5 ms on the slab with a round of bots, 5.4–5.9 on level terrain, 7.8–9.1 on hills, where 1 tick in 20 takes over 14–17 ms of its 16.7 and 1 in 100 over 20 (§10) | none decided: a risk (§13). LE3 measured the bundled map against the greybox on the same VM: 4.6–5.5 ms against 2.4–2.9, and under 8.9–11.5 ms for 99 in 100 (§10); the box is a person's |
 
 ### 7.5 A structure on a slope
 
@@ -787,6 +831,25 @@ LE-D21: sample the ground under the footprint's centre and corners. If the highe
 the base is the highest, and the body's box runs down to the lowest. 0.5 m is 5.6–7.9° under a
 pillbox, by direction, and 7.1° along a sandbag wall. On level ground nothing changes. The editor's
 *buildable* overlay shows where the rule holds.
+
+*Built by LE3* (`StructurePlacement.CheckGround`, `UnitManager.SiteGround`). The centre's ground is
+the probe's ray as before; each corner's is a ray down from 0.55 m over it to 0.55 m under it, so a
+corner not found is one too far from the centre to be taken, and a ray that starts inside something
+standing on a corner — a cover box, a building — does not meet it and finds the ground under it.
+The plinth is the body's plan from 0.5 m under the base to the base, for every site: a site the
+rule takes has no ground under it lower than that, so the gap is closed whatever the slope, and every
+peer builds the same body from the kind, the point and the yaw with nothing new on the wire. On level
+ground the plinth is under the ground. It is world geometry and not part of the structure's hit
+shape, so a round that meets it stops there as one that meets the ground does, and does the
+structure no harm. `StructureGroundTests` holds the rule's limits; LE0's `slopes` part, run again,
+holds the engine to them (§11). Through `ServerPlaceStructure`, a pillbox is taken to 7.57° across
+a side and 5.36° across its diagonal and refused from 8.00° and 5.80°, as `TooSteep`, where 0.5 m is
+7.91° and 5.61° and the steps are 0.45°; a sandbag wall to 7.13° with the slope rising along its
+length and to 17.35°, the most tried, with its length along the contour; a sniper tower to 8.88° and
+6.24°. Each stands at most 0.50 m over the lowest
+ground under it. Through `ServerConstruct` with a builder and the mesh baked, every structure at
+every turn is taken on 4.9°, and on 10.0° every one is refused as `TooSteep` but the sandbag wall
+laid along the contour.
 
 ---
 
@@ -905,6 +968,19 @@ bundled data maps, greybox first, as its tests require. `MapSceneTests` runs ove
 `BundledMapTests` runs `MapValidator` over the bundled ones. The host panel's picker lists the
 catalog, then the library.
 
+*Built by LE3*, but for the library in the picker and `HostSettings`' `MapInfo`, which are LE7's:
+until a client can fetch a map, a host offers what its clients have, the catalog, and the catalog's
+id is still what `HostSettings` holds. `MapLibrary` reads a file — the pack's with `FileAccess`,
+anything else with `System.IO`, at most 1 MiB — hashes it, reads it (§6.8) and validates it (§6.9),
+and refuses it with every error's reason; a bundled map whose bytes do not hash to its catalog entry
+is refused as not the file the build was made with. `Session.TrySelectMap` does that for a data map
+when it is selected — from the host panel, as a client told its server's map, or by `--map` — so a
+map that does not play is said so before the port is opened or the scene is changed. `MapNames` is
+the one parser of a name and of a reference (§9.5). The one bundled map is `hills`,
+`res://Maps/hills.map`: `gdpyr-map generate --seed 3 --name Hills`, 27,299 B, SHA-256
+`6d0aa3ff…`, which `BundledMapTests` makes again from the generator byte for byte. The preset's
+`include_filter` is `*.map`, and a `.map` is binary to git (`.gitattributes`).
+
 ### 9.2 Save, clone, export, import
 
 | | |
@@ -960,7 +1036,11 @@ at 4.6 it lands in the incoming-bandwidth position (§3). A fetching peer costs 
 - **`--map <ref>`**, for `--server`, `--listen` and `--practice`: a catalog id, a library name, a
   hash's first 8 or more hex digits, or a path ending `.map`. A reference that resolves to nothing,
   or to a file the validator refuses, is a fatal start-up error with its reasons, as every other
-  launch error is.
+  launch error is. *Built by LE3*, with `--practice`, the menu's practice round with no menu: tried
+  in that order, a path being a path and nothing else; a hash's start that two maps share names
+  neither; with `--client`, or with no mode, `--map` is refused. A map from the library is played with
+  an empty catalog id, and a client told an empty id says the host's map is one it cannot fetch yet
+  (LE7).
 - **`scripts/deploy-map.sh <file> [--activate]`** copies a map to the box's `user://maps` —
   under the unit's `HOME`, by Godot's default
   `/var/lib/gdpyr/.local/share/godot/app_userdata/gdpyr/maps/`, inside the unit's one writable
@@ -982,11 +1062,14 @@ at 4.6 it lands in the incoming-bandwidth position (§3). A fetching peer costs 
 
 - A demo's header names a data map as `map:<hash>`, and playback loads it from the library or the
   cache or says which hash it lacks. `DemoFormat.Version` 6: a version-5 reader would take the
-  string for a scene path.
+  string for a scene path. *Until LE7*, a demo recorded on a data map names `MapHost.tscn`, and is
+  played back on the catalog's default, as a demo of any map is: playback does not read the name.
 - The agent's `welcome` gains `map: { id, name, hash }`. The observation is unchanged: positions
   still scale by 256 m, and the passability plane is still rays.
 - A scenario file gains an optional `"map"`, a catalog id; the harness passes it as `--map`.
-  Scenarios without one play the greybox, as now.
+  Scenarios without one play the greybox, as now. *Built by LE3*, with two:
+  `hills_strategist_economy.json` and `hills_spawn_points_shared.json`, the scenarios of those names
+  with `"map": "hills"`.
 
 ---
 
@@ -1023,6 +1106,18 @@ under raw. A flat map's heights deflate to 135 B, §10's number. The generator's
 |---|---|---|---|---|---|---|---|
 | seeds 1–8 | 26,266–26,822 B | 26,867–27,403 B | 27 chunks, 0.44–0.45 s | −3.8 … 10.9 m | 33.2–35.6°, none over 40° | 33 | no error, no warning |
 | seed 1, `--hills 0` | 135 B | 736 B | 1 chunk | 0 m | 0° | 33 | no error, no warning |
+
+**LE3's world**, the bundled map (`hills`: −1.53 … 10.57 m, steepest face 33.3°, 33 objects) played
+from its file (§11, `docs/baselines/le3-fa37670-*`). It is built in 119–131 ms, 60–77 ms of that
+handing the 225 shapes their triangles. The first tick's bake makes 2,348 vertices, and the frame it
+is in, with the scene's loading, is 2.1–2.3 s where the greybox's is 0.8–0.9 s; a re-bake around a
+structure is 1.8–2.1 s to the new mesh and 4.4–9.5 ms on the tick. A dedicated server with 6 + 1
+bots and a client, 300 s of ticks, three runs of each:
+
+| | Mean | 95 in 100 under | 99 in 100 under | Units on the field, on average |
+|---|---|---|---|---|
+| The greybox | 2.36–2.88 ms | 3.8–5.0 ms | 5.1–6.2 ms | 13.1–20.3 |
+| The bundled map | 4.56–5.55 ms | 7.5–9.8 ms | 8.9–11.5 ms | 13.3–17.9 |
 
 **The sculpt brush**: the steepest grade once the centre has risen H.
 
@@ -1219,8 +1314,8 @@ LE0 ─► LE1 ─► LE2 ─► LE3 ─┬─► LE4 ─► LE5 ─► LE6     
 ```
 
 LE0–LE3 with LE7 is the smallest thing worth having: maps that are data, played and fetched, with
-no editor yet — 14½ days, LE0's 1½, LE1's 3 and LE2's 3 of them spent. Their first maps come from
-LE2's generator.
+no editor yet — 14½ days, LE0's 1½, LE1's 3, LE2's 3 and LE3's 4 of them spent. Their first maps
+come from LE2's generator.
 
 ### LE0 — The baseline and the spike (1½ days) — done
 
@@ -1425,7 +1520,9 @@ holds the two to one answer now.
 it plays as a map should — its layout is MAPS.md §2.3's, with two nodes the seed puts — is LE3's,
 when one is bundled.
 
-### LE3 — The world from a file (4 days)
+### LE3 — The world from a file (4 days) — done
+
+What was asked of it:
 
 `LevelRoot`, `TerrainNode`, `LevelBuilder`, `MapLibrary`, `MapHost.tscn`, the shader and palette,
 `--map` and `--practice`, `MapInfo`'s kind, one bundled map from LE2's generator, the export
@@ -1444,6 +1541,67 @@ existing ones re-run on the bundled map by `"map"`.
 
 **Done when** those pass. **Left for a person:** to look at it — the bands, the water, the seams
 between chunks — and to walk, drive and fly over it.
+
+**Built at `fa37670`**, on .NET SDK 8.0.134 (Ubuntu 24.04's `dotnet-sdk-8.0`), Godot
+`4.6.stable.mono.official.89cea1439` and its Linux export templates, four cores of a cloud VM: in
+`Scripts/Level/`, `LevelRoot.cs`, `TerrainNode.cs`, `TerrainPalette.cs`, `LevelBuilder.cs` and
+`MapLibrary.cs`; `Scripts/Sim/Level/MapNames.cs`; `Scenes/Maps/MapHost.tscn`;
+`Levels/materials/terrain.gdshader` and `terrain_palette.tres`; `Maps/hills.map` and its catalog
+entry; and the changes to `Bootstrap`, `LaunchOptions`, `MapCatalog`, `Session`, `MainMenu`,
+`UnitManager`, `Structure`, `StrategistController`, `Structures.cs`, `SimConfig`, `Flight.cs`, the
+export preset and the playtest harness that §7, §9 and §4 name. In `Tests/`, `BundledMapTests`,
+`MapLaunchTests` and `StructureGroundTests`, and LE-D25's and a scenario's map in
+`PredictionLedgerTests` and `ScenarioTests`. The checks are `scripts/level-editor-checks.sh`'s
+`map-*` parts over `tools/EngineChecks/LevelMapChecks.cs`, and `le3_mutations.py`.
+
+| Asked | It came to | Where |
+|---|---|---|
+| `--practice --map` on the bundled map logs `navigation baked` with vertices and `round live` | 2,348 vertices, baked at 40°; the round live | `map-practice` |
+| The spawn count, barracks, nodes and locker are the file's | they and the kiosk, guns, cans, cover and anchor, counted by group and by the game's managers, are the file's; every padded object stands on its pad to the bit; the document is the file read again | `map-practice`, `map-server`, `map-export` |
+| A ray meets the ground where the file says | 1,000 straight down, the worst 0.017 mm from `Sample`; of 2,000 at a slant from over the ground to under it, 16–200 m in plan, none through it and none off it | the same |
+| A bot round of ten minutes: units trained, a node taken, none of MAPS.md §4's lines | 600 s of ticks: 110 units trained, nodes taken 12 times, 107 ground deaths, 3 rounds; none of the five lines | `map-practice` |
+| The same on a `--server` with a client | 24 facts of 24 on the server — 82 units, nodes taken 16 times, 71 deaths in 600 s of real time — and 20 of 20 on the client, which was told `hills`, built the same world from its own copy and found the same ground; none of the five lines in either log | `map-server` |
+| The same from the stripped export | the deploy preset as it is, `include_filter="*.map"`: the map read from the pack, 24 of 24 and 20 of 20, 104 units, nodes taken 15 times; re-bakes 1.8–2.1 s to the new mesh, 4.4–9.5 ms of it on the tick; the process ends with 0 | `map-export` |
+| `ground slopes` as LE0 left them | every fact of both: on the triangle meshes no ray of 10,000 a ground through them, and a body and a rifleman up 42.06°; the heightmap's 36 and 23 + 6 rays as LE0 counted them. LE0's structure sites are held to LE-D21 now: 18 facts of 18 (§7.5) | `ground`, `slopes` |
+| A tick with a round of bots on the bundled map against the slab's | not on the box, which nothing here reaches: on this VM, three runs each of 300 s of ticks, a dedicated server with 6 + 1 bots and a client, the greybox 2.36–2.88 ms a tick on average, 5.1–6.2 ms for 1 in 100; the bundled map 4.56–5.55 ms and 8.9–11.5 ms | `map-frame-1` to `-3` |
+| Two scenarios re-run on the bundled map by `"map"` | `hills_spawn_points_shared` and `hills_strategist_economy` pass, and so do the two they were copied from | `map-suite` |
+| `TerrainNode` frees its shapes | the stripped server, whose finalizer LE0 saw fault, ends with 0 | `map-export` |
+| The bake's box (LE-D8) | the bundled map has no ground under its water; with a basin dug 3 m under it, the floor is 1 m under the water, no vertex of 2,638 under it, and the closest point of the mesh to the bed is on the bank, 15.6 m off | `map-basin` |
+| `dotnet test` | 3,592 of 3,592: the 3,506 there were and 86 | `tests` |
+| Every LE3 rule's test fails when it is broken | 31 rules broken one at a time: **31 of 31** | `mutations` |
+
+The files are `docs/baselines/le3-fa37670-<name>.txt`, each saying in its first lines what was run
+and what ran beside it, and `le3-fa37670-overview.png`, `-spawn.png` and `-basin.png`, three of
+`map-shot`'s pictures. `map-frame-1` was copied from the tree 20 s before `fa37670` was committed,
+from the same sources; `map-basin` and `map-shot` are parts the next commit adds, run on `fa37670`'s
+game. The first runs of `map-practice` and `map-server`, with the checks a few lines older, passed
+the same facts and are not kept. One check was mended before it counted: the basin's closest point
+first read the navigation map before it had the new mesh, which answers the origin for anything,
+and passed for that reason; it waits for the map's iteration now and holds the point to the bank.
+
+**Decided here**, each in the section it changes:
+
+- **§7.5, LE-D21's plinth is 0.5 m deep for every site**, and a corner's ground is looked for within
+  0.55 m of the centre's: a corner not found is too far, and one under a box is the ground under it.
+- **§7.1**: what each piece is named and where the kiosk's pads and a spawn line's markers are in
+  their prefab's frame; a padded object stands at its pad's level; a structure in a file is LE5's
+  to put up; bridge sections are built from their boxes, a ramp's deck tilted.
+- **§7.2**: the shader's five samplers are the four bands' and the road's; the palette's five
+  textures the four bands' and the water's; the placeholders are imported with mipmaps.
+- **§7.3**: the slope and the box on a data map only, and the box only where ground is under the water.
+- **§7.4**: the camera's hold over the ground and the cursor's plane through the anchor, on every map.
+- **§9.1**: a data map is read and validated when it is selected; a bundled map's hash is its
+  catalog entry's; the picker and `HostSettings` keep catalog ids until LE7.
+- **§9.5**: `--practice`; `--map`'s order, and what it is refused with.
+- **The check script**: `net-2cm` is `net-1cm` now, since 2 cm is the game's; `export`'s filter
+  adds the checks' samples to the preset's `*.map`; LE0's `slopes` holds each structure to LE-D21.
+
+**Left for a person:** to look at it, walk, drive and fly over it on a screen — the pictures are
+llvmpipe's under a virtual display, and the bundled map is grass from wall to wall, which §6.4's
+bands give ground 3.5–15.6 m over its water; to see the strategist camera kept over a hill, which
+no check drives; the tick on the box in DEPLOYMENT.md, since every time here is this VM's, where
+the bundled map costs 1.7–2.1 times the greybox's tick and its worst 1 in 100 stays under 12 ms of
+the 16.7; and LE-D24, whose 4x4 still climbs 70° at speed on its hull.
 
 ### LE4 — The editor: shell and terrain (4 days)
 
@@ -1499,7 +1657,7 @@ directory, the token and the restart; the README the editor and the flags;
 IMPLEMENTATION_PLAN.md §5's "Multiple maps" cut, struck. This file's status becomes what was built
 and what each phase ran.
 
-**Total: 28½ days**, LE0's 1½, LE1's 3 and LE2's 3 spent.
+**Total: 28½ days**, LE0's 1½, LE1's 3, LE2's 3 and LE3's 4 spent.
 
 ---
 
@@ -1507,19 +1665,22 @@ and what each phase ran.
 
 | Claim | Checked by | Phase |
 |---|---|---|
-| The collider is where §3 says, lets no ray through, and a flat one plays as the slab does | rays against `Sample`, 12,000 of them a ground; the scenario suite | LE0, done; `ground` again at LE3 |
-| A body and a unit walk what the plan calls walkable | faces from 20° to 46°, on the collider and on a box | LE0, done; `slopes` again at LE3 |
+| The collider is where §3 says, lets no ray through, and a flat one plays as the slab does | rays against `Sample`, 12,000 of them a ground; the scenario suite | LE0, done; `ground` again at LE3, done |
+| A body and a unit walk what the plan calls walkable | faces from 20° to 46°, on the collider and on a box | LE0, done; `slopes` again at LE3, done |
 | The ground is where the collider's triangles are, and stops a ray | `HeightFieldTests`: every triangle in turn; 20,000 long rays | LE1, done |
 | A brush's grade is its setting | `TerrainBrushTests`, over random strokes | LE1, done |
 | A pad is level, minimal and no steeper than its skirt | `TerrainConformTests` | LE1, done |
 | The bands keep their order | `TerrainBandsTests`, a sweep | LE1, done |
 | Each of those tests fails when its rule is broken | `le1_mutations.py`, 75 rules | LE1, done |
 | A file reads back as it was written, and a bad one is refused | `MapFileTests` | LE2, done |
-| A map the validator passes holds what a round needs | `MapValidatorTests`; `BundledMapTests`; a bot round | LE2, done; LE3 |
+| A map the validator passes holds what a round needs | `MapValidatorTests`; `BundledMapTests`; a bot round | LE2, done; LE3, done |
 | Placing then undoing restores every sample | `PrefabPlacementTests`, `EditHistoryTests` | LE2, done |
 | Each of LE2's tests fails when its rule is broken | `le2_mutations.py`, 99 rules | LE2, done |
-| Every peer builds the same ground | no float in the file; exact samples; the hash | LE2, done; LE7 |
-| A server without meshes builds and bakes it | the stripped export's check | LE3 |
+| Every peer builds the same ground | no float in the file; exact samples; the hash; a client's world held to its file | LE2, done; LE3, done; LE7 |
+| A server without meshes builds and bakes it | the stripped export's check | LE3, done |
+| A map is played from its file, and the world is the file's | `map-practice`, `map-server`, `map-export`: counts, rays, a bot round | LE3, done |
+| A structure is refused as too steep where LE-D21 says, and stands on its plinth | `StructureGroundTests`; `slopes` | LE3, done |
+| Each of LE3's tests fails when its rule is broken | `le3_mutations.py` | LE3, done |
 | Nothing is in the way of a placed prefab | `PrefabPlacementTests`; LE5's checks | LE2, done; LE5 |
 | A road keeps its grade; a bridge carries units and a 4x4 | `RoadPathTests`; LE6's checks | LE6 |
 | A client gets the map it lacks, and only a whole and valid one | `MapTransferTests`; LE7's checks | LE7 |
@@ -1530,8 +1691,8 @@ and what each phase ran.
 | Risk | Signal | Mitigation |
 |---|---|---|
 | **The navigation bake on terrain is slow**, at the first tick or at every structure | `[rts] navigation re-baked … ms of it on the tick` | Measured by LE0 (§7.3): 2.0–2.3 s at the first tick on hills, 6–11 ms on the tick at a re-bake and 2 s to the new mesh. Not too much to build on; if the 2 s shows, tiles first |
-| **Bodies catch on the collider's creases**, or prediction drifts on slopes | mispredictions a second above the flat baseline; visible hitching | Measured by LE0, and decided. They do not catch under 43°, and from there they stall: walkable is 40° (LE-D23). Prediction is corrected up to 2.5 times a second crossing a 20° slope, by 10–16 mm, which is the wire's rounding against a 1 cm threshold and stops at 2 cm (LE-D25). Whether any of it shows is a person's to say, at LE3 |
-| **A flat-ground assumption §7.4 missed** | a bot round on hills that does what one on the slab does not | LE0 found one, the 4x4's level hull (LE-D24), and played ten bot rounds on hills (§10). LE3 plays another; the list is where to add it |
+| **Bodies catch on the collider's creases**, or prediction drifts on slopes | mispredictions a second above the flat baseline; visible hitching | Measured by LE0, and decided. They do not catch under 43°, and from there they stall: walkable is 40° (LE-D23). Prediction is corrected up to 2.5 times a second crossing a 20° slope, by 10–16 mm, which is the wire's rounding against a 1 cm threshold and stops at 2 cm (LE-D25). Whether any of it shows is a person's to say. LE3 made 2 cm the threshold, with its tests |
+| **A flat-ground assumption §7.4 missed** | a bot round on hills that does what one on the slab does not | LE0 found one, the 4x4's level hull (LE-D24), and played ten bot rounds on hills (§10). LE3 played seven on the bundled map, three of them ten minutes long, and found none: units trained, nodes taken, structures built and lost, and the scenarios that it re-ran pass; the list is where to add one |
 | **A hostile map file** from a server | — | A reader that is total, limits before allocation, a known inflated size, no scene and no object decoded, and tests over the hostile cases (§6.8). A client decodes only after the hash matches what it was told |
 | **The upload socket is write access to a public box** | — | Off unless a token was given; the deploy unit gives none; HMAC with a nonce; one upload at a time; the cache directory only; validated before written |
 | **Two builds disagree about a prefab** | a wall drawn where the server has a box of another size | The catalog is append-only and a test holds it; the file names the count it was made against; a client refuses ids it lacks. Sizes changing under an id is LAN.md §5's problem, unchanged |
@@ -1539,7 +1700,7 @@ and what each phase ran.
 | **Hand-built UI is slow to make** | LE4's four days gone on panels | The decisions are engine-free and tested; the widgets are the menu's kind, and the console's commands do everything a panel does |
 | **Water that only stops units** reads as a bug | a player found under it | LE-D8 is flagged; §14 names the rules that would follow |
 | **The √2 on faces** leaves a speck the bake will not walk | a hole in the mesh at a pad's corner or a cone's foot | The skirt is 30°, which the √2 keeps under the 40° that is walkable (LE-D23); the slope overlay draws faces; the deep check catches a cut-off pad |
-| **A tick on hills runs out of time**: with a round of bots, 1 in 20 over 14–17 ms and 1 in 100 over 20–23 ms of a 16.7 ms tick, where the slab's worst 1 in 100 is under 10 ms | `level-editor-checks.sh frame`; a server that falls behind its ticks | Measured by LE0 on four cores of a cloud VM; the box is DEPLOYMENT.md's and is LE3's to measure. The collider is the cheaper of the two and its chunks cost nothing; what terrain and hills add is not taken apart. LE3 does that before it bundles a map with hills on it, and a first bundled map can be gentler than §10's hills, whose steepest face is 59.6° |
+| **A tick on hills runs out of time**: with a round of bots, 1 in 20 over 14–17 ms and 1 in 100 over 20–23 ms of a 16.7 ms tick, where the slab's worst 1 in 100 is under 10 ms | `level-editor-checks.sh frame`; a server that falls behind its ticks | Measured by LE0 on four cores of a cloud VM. The collider is the cheaper of the two and its chunks cost nothing; what terrain and hills add is not taken apart. LE3 bundled a gentler map, steepest face 33.3°, and on the same VM its tick is 4.6–5.5 ms on average and under 8.9–11.5 ms for 99 in 100, 1.7–2.1 times the greybox's (§10). The box is DEPLOYMENT.md's, and nothing here reached it: measuring it there is a person's |
 | **A ray through the ground** | a round or a sight line that a hill should have stopped | Found by LE0 in `HeightMapShape3D` and designed out (LE-D5); `level-editor-checks.sh ground` casts 10,000 at the collider, and holds it to none |
 | **The engine moves under the plan**: a later Godot mends the heightmap's walk, or changes what a capsule's contacts are | `level-editor-checks.sh ground` and `slopes` on the new version | The checks are kept for this: the heightmap's rays are measured beside the collider's every time, and the steepest face walked is a number in the output |
 

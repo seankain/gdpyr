@@ -451,6 +451,10 @@ public partial class Structure : Node3D, IGunPost
 		{
 			AddBox(_body, Shape.Top);
 		}
+
+		// What it stands on (docs/LEVEL_EDITOR.md LE-D21): on a slope its base is the highest
+		// of the ground under it, and this closes the gap under the downhill edge.
+		AddBox(_body, StructurePlacement.Plinth(Shape.Body));
 	}
 
 	private static void AddBox(StaticBody3D body, in StructureBox box)
@@ -481,6 +485,9 @@ public partial class Structure : Node3D, IGunPost
 
 		_model = new Node3D { Name = "Model" };
 		AddChild(_model);
+
+		// The plinth (LE-D21): under the ground on level ground, the downhill edge's footing on a slope.
+		AddMesh(_model, StructurePlacement.Plinth(Shape.Body), null);
 
 		switch (Kind)
 		{

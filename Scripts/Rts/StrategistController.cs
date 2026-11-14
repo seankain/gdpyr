@@ -186,6 +186,7 @@ public partial class StrategistController : Node3D
 		ReleasePointer();
 		Pan(dt);
 		Rotate(dt);
+		KeepOverTheGround();
 
 		_camera.GlobalTransform = new Transform3D(Look, _position);
 
@@ -412,8 +413,8 @@ public partial class StrategistController : Node3D
 
 		// Panning is relative to where the camera is pointed, not to the world: a
 		// rotated view whose WASD still walks north is unusable. It stays level
-		// whatever the pitch — the map is flat and the camera's height is Space and
-		// Ctrl's to change.
+		// whatever the pitch, and its height is Space and Ctrl's to change, over the
+		// ground under it however the ground rises (KeepOverTheGround).
 		float scale = Mathf.Max(Height, MinHeight) / ReferenceHeight * dt;
 		Vector3 forward = new Vector3(-Mathf.Sin(_yaw), 0f, -Mathf.Cos(_yaw));
 		Vector3 right = new Vector3(Mathf.Cos(_yaw), 0f, -Mathf.Sin(_yaw));
@@ -421,6 +422,28 @@ public partial class StrategistController : Node3D
 		_position += ((right * axes.X) + (forward * -axes.Y)) * PanSpeed * scale;
 		_position.Y = Mathf.Clamp(_position.Y + (lift * LiftSpeed * scale), _groundY + MinHeight,
 			_groundY + MaxHeight);
+	}
+
+	/// <summary>
+	/// Holds the camera <see cref="MinHeight"/> over the ground under it, wherever the
+	/// anchor's height leaves it (docs/LEVEL_EDITOR.md §7.4): the limits are measured from
+	/// the anchor, and on a data map a hill can be higher than the anchor by more than that.
+	/// </summary>
+	private void KeepOverTheGround()
+	{
+		PhysicsDirectSpaceState3D space = GetWorld3D()?.DirectSpaceState;
+		if (space == null)
+		{
+			return;
+		}
+
+		var down = PhysicsRayQueryParameters3D.Create(_position + (Vector3.Up * MaxHeight),
+			_position - (Vector3.Up * MaxHeight), CollisionLayers.World);
+		Godot.Collections.Dictionary hit = space.IntersectRay(down);
+		if (hit.Count > 0)
+		{
+			_position.Y = Mathf.Max(_position.Y, hit["position"].AsVector3().Y + MinHeight);
+		}
 	}
 
 	/// <summary>
@@ -1470,7 +1493,10 @@ public partial class StrategistController : Node3D
 
 		Vector3 from = _camera.ProjectRayOrigin(mouse);
 		Vector3 direction = _camera.ProjectRayNormal(mouse);
-		Vector3? plane = new Plane(Vector3.Up, 0f).IntersectsRay(from, direction);
+		// Nothing hit: the plane through the anchor, which is the ground the camera's limits
+		// are measured from (docs/LEVEL_EDITOR.md §7.4), not y = 0, which on a data map can be
+		// metres under it or over it.
+		Vector3? plane = new Plane(Vector3.Up, _groundY).IntersectsRay(from, direction);
 		if (plane is { } ground)
 		{
 			point = ground;

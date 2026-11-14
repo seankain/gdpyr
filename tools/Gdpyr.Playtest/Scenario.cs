@@ -436,6 +436,14 @@ public sealed class Scenario
 	/// </summary>
 	public string UnitAutonomy;
 
+	/// <summary>
+	/// The map the server plays, a catalog id, passed as <c>--map</c>
+	/// (docs/LEVEL_EDITOR.md §9.6); null for the catalog's default, the greybox. A name
+	/// only: whether the server's build has it is the server's to say, and it says so by
+	/// refusing to start.
+	/// </summary>
+	public string Map;
+
 	public List<ScenarioSeat> Seats = new();
 
 	public List<ScenarioSpawn> Spawns = new();
@@ -457,6 +465,25 @@ public sealed class Scenario
 
 			return false;
 		}
+	}
+
+	/// <summary>A catalog id as a map's name is spelled (docs/LEVEL_EDITOR.md §9.1): a-z, 0-9, _ and -, 1–48, not starting with -.</summary>
+	public static bool IsMapId(string text)
+	{
+		if (string.IsNullOrEmpty(text) || text.Length > 48 || text[0] == '-')
+		{
+			return false;
+		}
+
+		foreach (char c in text)
+		{
+			if (c is not ((>= 'a' and <= 'z') or (>= '0' and <= '9') or '_' or '-'))
+			{
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	public static Scenario Load(string path)
@@ -546,6 +573,18 @@ public sealed class Scenario
 				}
 
 				scenario.UnitAutonomy = named;
+			}
+
+			if (root.TryGetProperty("map", out JsonElement map))
+			{
+				string named = map.ValueKind == JsonValueKind.String ? map.GetString() : null;
+				if (!IsMapId(named))
+				{
+					throw new ScenarioException(
+						$"'{scenario.Name}': 'map' is a catalog id: a-z, 0-9, _ and -, at most 48 of them");
+				}
+
+				scenario.Map = named;
 			}
 
 			ReadSeats(scenario, root);

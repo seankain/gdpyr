@@ -151,7 +151,7 @@ public static class Program
 				Directory.CreateDirectory(traceDirectory);
 				server = await ServerProcess.StartAsync(godot, project, port, gamePort, scenario.GroundBots,
 					scenario.StrategistBots,
-					Path.Combine(traceDirectory, $"server-{port}.log"), wanted, wantedAutonomy, wantedKits)
+					Path.Combine(traceDirectory, $"server-{port}.log"), wanted, wantedAutonomy, wantedKits, scenario.Map)
 					.ConfigureAwait(false);
 			}
 
