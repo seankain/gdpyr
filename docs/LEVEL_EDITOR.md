@@ -1,11 +1,12 @@
 # gdpyr — Level editor: terrain, prefabs, roads and bridges, and maps that travel
 
-**Status: a plan, with LE0–LE4 done: its ground is measured; the ground's rules, the map in
+**Status: a plan, with LE0–LE5 done: its ground is measured; the ground's rules, the map in
 memory, its file and its validator are written and tested, engine-free; a tool makes, reads and
 checks map files; a map is played from its file — `--map`, one bundled map, a server and its
-clients, the stripped export; and the game has an editor's shell and its terrain tool — the menu's
-**Map editor** and `--edit`, the brushes and overlays, undo, save and autosave, validate and test.
-Nothing of placing prefabs, roads or bridges in it, or of fetching a map, is built.**
+clients, the stripped export; and the game has an editor — the menu's **Map editor** and `--edit`,
+the terrain tool, undo, save and autosave, validate and test, and the prefab tool: a round's pieces,
+cover, scenery and structures that stand when a round starts, the buildable overlay and the deep
+check. Nothing of roads or bridges in it, or of fetching a map, is built.**
 Written against `cd0c558`. The
 facts in §2 were read in this repository's source at that commit, and those in §3 in Godot's source
 at tag `4.6-stable`. The arithmetic in §10 was run: `python3
@@ -21,7 +22,10 @@ same for its rules. LE3 (§11) built §7, §9.1's reading of a map, `--map` and 
 `fa37670`, and `scripts/level-editor-checks.sh`'s `map-*` parts play the bundled map through them.
 LE4 (§11) built §8's shell and terrain tool at `98c6125`: the script's `editor` part drives the editor
 with no window through its own commands, and `tools/level_editor_checks/le4_mutations.py` breaks its
-engine-free rules in turn.
+engine-free rules in turn. LE5 (§11) built §8.4's prefab tool, the catalog's engine half, a map's
+structures at a round's start, the buildable overlay and the deep check at `e03c74b` and `bd8361e`:
+the script's `editor-prefabs` part makes a map in the editor alone and plays a bot round on it, and
+`le5_mutations.py` breaks its rules in turn.
 
 **What LE0 changed.** The collider is not a `HeightMapShape3D`: 65 of 20,000 long rays passed
 through one, and it costs a tick more than the same triangles as meshes, which let none through
@@ -73,6 +77,16 @@ only what is not saved, and from a headless editor starts a headless process (§
 camera looks on the middle button, since the right one lowers the ground, a held Ctrl moves it
 nowhere, and `Q` and `E` lower and raise it (§8.2). A band slider is not a step to undo, and an edge
 is held between its neighbours (§8.3). Where a section says "LE4", it is one of these.
+
+**What LE5 changed.** An object turned, moved or given a parameter is taken up and placed again where
+it is in the file, so the world names it as before, and it is not counted, in the way or a neighbour
+to itself (§6.5, §8.4). A ramp's deck and rails are sheared boxes that end square at the section's
+ends: tilted boxes overhung them by up to 12 cm, into a joined section's boxes (§6.7). *Buildable* is
+where a pillbox is taken square to the field and turned 45° (§7.5). The deep check's walk reaches its
+node when the path ends within 3 m of it flat and 2 m in height (§6.9). A practice round's process can
+crash as it exits, after a round of bots, at LE4's commit as at LE5's; LE5's check reads a test
+process's facts from what it writes, not from its exit code (§13). Where a section says "LE5", it is
+one of these.
 
 The decisions (LE-D1–LE-D25, §4) are the defaults the plan is written against. Each is one line to
 change; LE-D3, LE-D8, LE-D10 and LE-D18 were the ones to flag before LE1, which was built on them
@@ -247,8 +261,10 @@ Scripts/Sim/Level/   engine-free; compiled into Tests/ by the existing ../Script
   MapNames.cs          a map's name, and what a --map reference names (LE3)
   MapTransfer.cs       sender and receiver as state machines over chunks; the upload's proof
   EditHistory.cs       undo and redo
-  MapEditSession.cs    the editor's commands: a stroke, a ramp, undo, the bands, the text (LE4)
+  MapEditSession.cs    the editor's commands: a stroke, a ramp, undo, the bands, the text (LE4);
+                       a placement, a turn, a parameter, a take-up, a pick (LE5)
   MapStore.cs          one's own maps on disk: save, autosave, the list, a fork (LE4)
+  BuildableGround.cs   where LE-D21 takes a structure: the buildable overlay (LE5)
 Scripts/Level/       the engine half
   LevelRoot.cs         MapHost.tscn's root: builds the world, then opens the session
   TerrainNode.cs       collider, chunk meshes, water, overlays
@@ -256,8 +272,10 @@ Scripts/Level/       the engine half
   LevelBuilder.cs      prefabs, a round's pieces, bridges and piers, the walls
   MapLibrary.cs        user://maps, the cache, the bundled maps
 Scripts/Net/MapTransferService.cs    the messages, their channel, their budget
-Scripts/MapEditor/   the editor scene's root and its commands (MapEditorRoot), the panels (.Ui),
-                     and the keys, a brush's settings and the status line, engine-free (MapEditorControls)
+Scripts/MapEditor/   the editor scene's root and its commands (MapEditorRoot), the panels (.Ui), the
+                     prefab tool (.Prefabs, LE5) and the deep check (.Deep, LE5); and the keys, a
+                     brush's settings, the palette and the status line, engine-free (MapEditorControls)
+Scripts/Core/PrefabCatalog.cs        the catalog's engine half: what each id is in the world (LE5)
 Scenes/Maps/MapHost.tscn · Scenes/MapEditor/MapEditor.tscn · Levels/materials/terrain.gdshader
 ```
 
@@ -546,6 +564,21 @@ every object still stands on its pad.
 Yaw is free or in 15° steps. Moving an object is taking it up and placing it again: the old pad
 stays, as any sculpted ground does.
 
+*Built by LE5.* Turned, moved or given a parameter, an object is placed again where it is in the
+file — `PrefabPlacement.Check` with the index it replaces — so the world names it as before; it is
+not counted against its group's limit, nor the map's 512, and it is not in its own way or a neighbour
+to its own old pad. Placed again as it stands, it is where it was on its pad, or refused as it would
+be placed afresh, by a neighbour placed after it whose level ground is in its skirt: never by one
+placed before. `Scripts/Core/PrefabCatalog.cs` is the catalog's engine half: an id to a scene or a
+builder, what `LevelBuilder`'s switch was. The prefabs' boxes are held to their colliders: the
+barracks' building and the bunker's faces by `PrefabSpecsTests`, and every prefab built on a 6° slope
+by `editor-prefabs` (§11, LE5). A locker's, a kiosk's, a gun's, a can's and a node's nodes have no
+collider of their own; their boxes are the room they keep clear. A structure is put up on the round's
+first tick, after the bake, and after every clear of the field (`UnitManager.PlaceMapStructures`), at
+its pad's level and turned by its yaw, and checked as any site is: one refused is logged and left
+out. Its colliders are inside its boxes and, under them, LE-D21's plinth, 0.5 m deep under its level
+pad.
+
 ### 6.6 Roads — `RoadPath.cs`
 
 A road is 2–64 control points, a width (4, 6 or 8 m) and a grade limit g (6–15 %, 10 % unless set:
@@ -603,6 +636,12 @@ they meet any wall. A ramp's tilt is in its prefab; its pose is still a point an
   deck's top is levelled beyond it by §6.3, so the ground meets the deck flush.
 - **An open end** — neither joined nor within 0.5 m of the ground, the bake's climb — is a
   warning, not an error: a broken bridge is a thing a map may want.
+
+*Changed by LE5*: a ramp's deck and rails are built as sheared boxes — their tops rise with the
+deck, their sides are vertical, their ends square at the section's — where they were boxes tilted
+with the deck, which overhung the section's ends by the thickness times the tilt's sine: 7 cm under
+the deck, 12 cm at the rails' tops, into the boxes of a section joined there. A span is boxes still.
+The tools for bridges are LE6's.
 
 ### 6.8 The document and the file — `MapDocument.cs`, `MapFile.cs`
 
@@ -687,6 +726,13 @@ another section's connector is within 0.1 m of it, or a road's end within 0.5 m 
 landed within 0.5 m of the ground. An issue names the object it is about, and a second one where
 there is one — the object in the way, the barracks — and where it is, for the editor to fly to.
 
+*Reach built by LE5* (`MapValidator.Reach`, `MapEditorRoot.Deep`): from every barracks door — 6 m
+along its −Z — and every spawn line, at the height each stands at, to every node, a path asked of a
+mesh the editor bakes as a round bakes it (`UnitManager.ConfigureBake`), from the ground, the round's
+pieces and the structures' boxes. A walk reaches when its path begins within 3 m of its start and ends
+within 3 m of its node, flat, and 2 m in height; one that does not is the warning `Unreachable`, naming
+both.
+
 ### 6.10 Sending a map — `MapTransfer.cs`
 
 Sender and receiver are state machines over byte chunks, with no socket in them, so what a
@@ -743,7 +789,8 @@ instance of `Barracks.tscn`; `ResourceNode1`, its capture radius and perk its pa
 `CoverBlock01`; `Bunker1`, an instance of `Pillbox.tscn`; `Bridge01`, its deck and rails static boxes,
 a ramp's tilted, and a box for each pier of its stored length. A structure the file holds is counted
 and left: putting it up on the round's first tick is LE5's, with the catalog's engine half, which
-is `LevelBuilder`'s switch until then. A map's water is drawn where any sample is under it, and only
+is `LevelBuilder`'s switch until then. *Built by LE5*: the round puts each up through
+`ServerPlaceStructure` (§6.5), and `PrefabCatalog` is the switch; a ramp's deck is a sheared box (§6.7). A map's water is drawn where any sample is under it, and only
 there is the bake given a floor (§7.3).
 
 ### 7.2 Drawing it
@@ -870,6 +917,12 @@ ground under it. Through `ServerConstruct` with a builder and the mesh baked, ev
 every turn is taken on 4.9°, and on 10.0° every one is refused as `TooSteep` but the sandbag wall
 laid along the contour.
 
+*Buildable built by LE5* (`BuildableGround`, the terrain shader's overlay 4): a vertex is buildable
+where the rule takes a pillbox, the widest structure, centred on it both square to the field and
+turned 45°, on the ground the collider has — at most 5.6° of even slope, the 45° turn's limit. The
+editor computes it into each vertex's colour while the overlay is up, and draws again three samples
+past a change, the rule's reach; a round draws no overlay and computes none.
+
 ---
 
 ## 8. The editor
@@ -965,6 +1018,17 @@ on its pad: green, or red with §6.5's reason beside it and the average grade un
 places it and its pad. A click on a placed object selects it: turn it, take it up, or edit its
 parameters. Counts sit beside each palette entry against their limits (`barracks 1/4`).
 
+*Built by LE5* (`MapEditorRoot.Prefabs.cs`, `MapEditSession`, `MapEditorControls`). The palette is a
+round's pieces, cover, structures standing at the start and scenery, one entry a row; bridge sections
+are LE6's tool's. A group a map must hold says so while it holds none (`barracks 0/4, needs one`). The
+ghost is the prefab's boxes, at its pad's level, and §6.5's answer is asked again only when the
+cursor, the yaw, the prefab or the map moves. A click picks the smallest thing under it — a box, else
+a footprint, else a marker within 2 m — so cover on a node's disc is picked over the node. `R` and
+`Shift+R` turn the selected object, or else the ghost, to the next 15° step; `G` snaps to the metre
+grid; `Del` takes the selected object up; `Esc` or the right button drops the selection. A node's
+perk and capture radius are sliders. The map's structures are drawn and solid in the editor as their
+boxes, which the round puts up itself.
+
 ### 8.5 Roads and bridges
 
 A road is clicks: each adds a point, the ribbon and its profile are previewed with the deepest cut
@@ -1011,7 +1075,8 @@ unfinished map is a file. They block listing, hosting and sending.
 --map <path>`, and `--path <project>` before that when this is not an export. It is the practice
 round the menu offers, on this map, and closing it returns to an editor that never left.
 
-*Built by LE4*, but for **Deep**, LE5's. The validator's count is under the view at all times, asked
+*Built by LE4*, but for **Deep**, which LE5 built (§6.9): a button on the validator's list, whose
+answer the list and the count show while the map is as it was asked of. The validator's count is under the view at all times, asked
 again only after a change; **Validate** lists every issue, and a click on one flies the camera to it.
 **Test** saves only what is not saved — a save is a new revision, and a map saved and unchanged is
 the file already — and a map the validator finds an error in is saved and not played, with the list
@@ -1755,7 +1820,9 @@ over the panels, a drag across the view and a button let go outside the window a
 anything here. Export's and the map settings' dialogs, and the autosave's offer as a dialog, were
 not opened by any check.
 
-### LE5 — Prefabs and a round's pieces (3 days)
+### LE5 — Prefabs and a round's pieces (3 days) — done
+
+What was asked of it:
 
 The catalog's engine half, the palette, the ghost, selection, parameters, structures at round
 start, the deep check. Engine checks: each catalog prefab placed on a 6° slope stands on a level
@@ -1763,6 +1830,54 @@ pad, its colliders inside its boxes; each result of §6.5 is produced by a place
 produce it; a map with two barracks, three nodes, cover and a pre-built pillbox plays a bot round
 in which the pillbox fires and is destroyed. **Done when** a map made only in the editor passes
 the validator and that round.
+
+**Built at `e03c74b`**, with `bd8361e` after it — a palette entry a row, where two to a row clipped
+their counts, and the two tests the mutation run found weak — on .NET SDK 8.0.134, Godot
+`4.6.stable.mono.official.89cea1439`, four cores of a cloud VM: `Scripts/Core/PrefabCatalog.cs`;
+`Scripts/MapEditor/MapEditorRoot.Prefabs.cs` and `MapEditorRoot.Deep.cs`; `Scripts/Sim/Level/BuildableGround.cs`;
+and the changes to `PrefabPlacement` (an object replaced in place), `MapEditSession` (placing,
+replacing, taking up, picking), `MapValidator` (reach), `PrefabSpecs` (a structure prefab's kind),
+`MapEditorControls` (the palette, counts, turns, the grid, the ghost's words, the buildable overlay),
+`LevelBuilder`, `TerrainNode` (the buildable channel), the terrain shader, `UnitManager`
+(`PlaceMapStructures`, `ConfigureBake`), `CombatManager` and the editor's root and panels. In `Tests/`,
+`MapEditPrefabTests`, `MapReachTests` and `BuildableGroundTests`, and LE5's cases in
+`MapEditorControlsTests` and `PrefabSpecsTests`. The checks are `scripts/level-editor-checks.sh`'s
+`editor-prefabs` part, and two pictures added to `editor-shot`, over `LevelEditorChecks`' `prefabs`
+and `round` parts; and `le5_mutations.py`.
+
+| Asked | It came to | Where |
+|---|---|---|
+| The catalog's engine half, the palette, the ghost, selection, parameters, structures at round start, the deep check | built, as §6.5, §6.9, §7.5 and §8.4 say. Drawn under a virtual display: the prefab tool's ghost over the buildable overlay, and the palette with its counts | `editor-prefabs`, `editor-shot` |
+| Each catalog prefab on a 6° slope stands on a level pad, its colliders inside its boxes | all 17, turned 30°, on a map that is a 6° slope, through the editor's commands, the ghost giving each the placement's answer and grade. Every padded one is level to the bit, from 25 samples under a low wall to 1,085 under the bunker, and its node stands at its level. The barracks' building, the cover, the bunker's 252 corners and both bridge sections are inside their boxes to 0.0 cm; the ramp was 12.4 cm out until its deck and rails were sheared boxes (§6.7). The locker, kiosk, guns, can, node and anchor have no collider of their own. The structures are the round's to put up, and the round part holds them | `editor-prefabs` |
+| Each result of §6.5 from a placement built to produce it | a second kiosk, `LimitReached`; a locker at the edge, `OutOfBounds`; one on the kiosk, `InTheWay`; one on a 30° mound's side, `TooSteep`; one in the water, `InWater`; a cover block beside the kiosk, `DisturbsNeighbour`; a pillbox before the barracks' door, `BlocksDoor`; prefab 999, `UnknownPrefab` — each the ghost's answer too, with no sample, object or step changed. A click selects the kiosk, `R` turns it 15° where it is in the file onto a level pad, the node's capture radius goes to 12 m on a 577-sample disc, `Del` takes a can up and undo puts it back at its index | `editor-prefabs` |
+| The deep check | on the slope, 692 vertices baked in 1.1 s and the 2 walks found; a node on an island raised out of the water, 4 walks and the island's 2 unreached, named, warnings; all undone, every sample the slope's | `editor-prefabs` |
+| A map made only in the editor passes the validator, and plays a bot round in which its pillbox fires and is destroyed | a new map, two strokes, and 18 pieces placed with the prefab tool — spawn line, locker, kiosk, 2 barracks, 3 nodes, 6 cover, a pillbox, an anchor, a gun, a can: no error, 2 warnings, and the deep check's 9 walks found. Tested: the round put the pillbox up, finished and the strategist's, where the file put it at its pad's level, its colliders inside its box and the plinth under it; it fired, and a bot's launcher destroyed it 148 s into the round | `editor-prefabs` |
+| LE4's checks | `editor`, 132 of 132 and its test process 3 of 3, at `e03c74b` | `editor` |
+| `dotnet test` | 3,721 of 3,721 at `bd8361e`: the 3,693 there were and 28 | `tests` |
+| Every LE5 rule's test fails when it is broken | 30 rules broken one at a time — an object replaced counted, in its own way, a neighbour to its old pad, or moved to the end of the file; a refused placement applied; a pick that is not the smallest; the walks' starts and heights; the buildable rule's turns and corners; a structure's kind; the palette, counts, turns, grid, ghost and overlays — each one edit to one file: **30 of 30**. The first run, at `e03c74b`, caught 28: an object turned on an even tilt keeps its level, so nothing tested that its own old pad does not refuse it, and the generated map has one spawn line and one locker, so counting the walks' starts could not tell them apart; each has its test at `bd8361e`. LE4's one rule whose piece LE5 moved is brought along, and caught | `mutations` |
+
+The files are `docs/baselines/le5-<commit>-<name>.txt`, each saying in its first lines what was run
+and at which commit, and `le5-bd8361e-prefabs.png` and `-prefabs-buildable.png`. `editor-prefabs` and
+`editor` ran at `e03c74b`, one after the other with nothing beside them; `editor-shot`, the tests and
+the mutations at `bd8361e`, which changed nothing either part reads. The test process of
+`editor-prefabs` ended with a crash as it exited, after its seven facts were in and written down
+(§13); the editor's part reads them from there.
+
+**Decided here**, each in the section it changes:
+
+- **§6.5, an object turned, moved or given a parameter keeps its place in the file**, and is not
+  counted, in the way or a neighbour to itself. The catalog's engine half is `PrefabCatalog`, and a
+  map's structures are put up on the round's first tick and after every clear of the field.
+- **§6.7, a ramp's deck and rails are sheared boxes**, their ends square at the section's ends.
+- **§6.9, a walk reaches** within 3 m of its node flat and 2 m in height, from within 3 m of its start.
+- **§7.5, buildable is a pillbox taken square and turned 45°**, computed in the editor only.
+- **§8.4**: the palette's order and one entry a row; a click picks the smallest thing under it; the
+  map's structures are drawn and solid in the editor as their boxes.
+
+**Left for a person:** placing with a mouse — the ghost under a moving cursor, a click that selects
+where one meant to place — which no check moves; whether a map made this way plays well with people
+on it, beyond one bot round in which the pillbox fell; and the crash as a practice round's process
+exits (§13), which LE5 found and did not take further.
 
 ### LE6 — Roads and bridges (4 days)
 
@@ -1800,7 +1915,7 @@ directory, the token and the restart; the README the editor and the flags;
 IMPLEMENTATION_PLAN.md §5's "Multiple maps" cut, struck. This file's status becomes what was built
 and what each phase ran.
 
-**Total: 28½ days**, LE0's 1½, LE1's 3, LE2's 3, LE3's 4 and LE4's 4 spent.
+**Total: 28½ days**, LE0's 1½, LE1's 3, LE2's 3, LE3's 4, LE4's 4 and LE5's 3 spent.
 
 ---
 
@@ -1827,7 +1942,9 @@ and what each phase ran.
 | A stroke changes the samples under it and no others, and the drawn ground and the collider follow; undo restores them; save then open is the same map | `MapEditSessionTests`, `MapStoreTests`; `editor` | LE4, done |
 | The editor's Test plays the saved file in a second process | `MapEditorControlsTests`; `editor` | LE4, done |
 | Each of LE4's tests fails when its rule is broken | `le4_mutations.py` | LE4, done |
-| Nothing is in the way of a placed prefab | `PrefabPlacementTests`; LE5's checks | LE2, done; LE5 |
+| Nothing is in the way of a placed prefab | `PrefabPlacementTests`; LE5's checks | LE2, done; LE5, done |
+| Every prefab stands on a level pad with its colliders inside its boxes; each of §6.5's answers; a map made only in the editor plays, and its pillbox fires and falls | `MapEditPrefabTests`, `MapReachTests`, `BuildableGroundTests`; `editor-prefabs` | LE5, done |
+| Each of LE5's tests fails when its rule is broken | `le5_mutations.py` | LE5, done |
 | A road keeps its grade; a bridge carries units and a 4x4 | `RoadPathTests`; LE6's checks | LE6 |
 | A client gets the map it lacks, and only a whole and valid one | `MapTransferTests`; LE7's checks | LE7 |
 | A server takes no map from anyone without the token | `MapTransferTests`; LE8's checks | LE8 |
@@ -1848,6 +1965,7 @@ and what each phase ran.
 | **The √2 on faces** leaves a speck the bake will not walk | a hole in the mesh at a pad's corner or a cone's foot | The skirt is 30°, which the √2 keeps under the 40° that is walkable (LE-D23); the slope overlay draws faces; the deep check catches a cut-off pad |
 | **A tick on hills runs out of time**: with a round of bots, 1 in 20 over 14–17 ms and 1 in 100 over 20–23 ms of a 16.7 ms tick, where the slab's worst 1 in 100 is under 10 ms | `level-editor-checks.sh frame`; a server that falls behind its ticks | Measured by LE0 on four cores of a cloud VM. The collider is the cheaper of the two and its chunks cost nothing; what terrain and hills add is not taken apart. LE3 bundled a gentler map, steepest face 33.3°, and on the same VM its tick is 4.6–5.5 ms on average and under 8.9–11.5 ms for 99 in 100, 1.7–2.1 times the greybox's (§10). The box is DEPLOYMENT.md's, and nothing here reached it: measuring it there is a person's |
 | **A ray through the ground** | a round or a sight line that a hill should have stopped | Found by LE0 in `HeightMapShape3D` and designed out (LE-D5); `level-editor-checks.sh ground` casts 10,000 at the collider, and holds it to none |
+| **A practice round's process crashes as it exits**, after a round of bots: `FATAL: Condition "csharp_lang && !csharp_lang->script_bindings.is_empty()"`, then `handle_crash` | an exit code of 134 or 6 after every fact of a check holds | Found by LE5's checks: LE3's `map-practice` for 120 s on the bundled map ended so 2 times of 2 at `c1a9b4b`, LE4's commit, before any of LE5's code, and so did `editor-prefabs`' test process after its round. LE3's 600 s runs ended with 0. LE5 first took it for a re-bake on its worker at the quit; a check that quit with one under way ended with 0 2 times of 2, and one that quit a tick after destroying the map's structures 3 times of 3, and that guess and its code are gone. A C# object is let go of after the runtime has gone, and which is not known. LE5's check reads its test process's facts from what that process writes. A person who quits after a round is where it would be seen |
 | **The engine moves under the plan**: a later Godot mends the heightmap's walk, or changes what a capsule's contacts are | `level-editor-checks.sh ground` and `slopes` on the new version | The checks are kept for this: the heightmap's rays are measured beside the collider's every time, and the steepest face walked is a number in the output |
 
 ## 14. Not in this plan

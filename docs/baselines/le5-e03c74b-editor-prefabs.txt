@@ -1,0 +1,146 @@
+# LE5, docs/LEVEL_EDITOR.md §11. At e03c74b: .NET SDK 8.0.134, Godot 4.6.stable.mono.official.89cea1439, four cores of a cloud VM.
+# ./scripts/level-editor-checks.sh editor-prefabs editor-shot editor, LE5_SECONDS 600: this is editor-prefabs, --edit with no name, headless, under a HOME
+# of its own, and its test process's lines, as the two wrote to one log. Nothing else ran beside it. The copy of the tree is written $COPY.
+
+[checks] level editor check: prefabs
+[checks] PASS prefabs: the editor is up
+[checks] PASS prefabs: a map that is a 6° slope along X opened: opened le5-slope.map, revision 1: 4 errors
+[checks] PASS prefabs: the prefab tool is selected
+[checks] PASS prefabs: 17 prefabs of the catalog's 17 to place
+[checks] PASS prefabs: spawn_line: the ghost's answer is the placement's, Ok, 6.00°
+[checks] PASS prefabs: spawn_line: placed on the 6° slope, 6.00° under it: Ok
+[checks] PASS prefabs: spawn_line: stands on a level pad, its 205 samples at -2.102 m to the bit
+[checks] PASS prefabs: spawn_line: its node stands at the pad's level, -2.102 m
+[checks] PASS prefabs: spawn_line: built, with no collider of its own
+[checks] PASS prefabs: weapon_locker: the ghost's answer is the placement's, Ok, 6.02°
+[checks] PASS prefabs: weapon_locker: placed on the 6° slope, 6.02° under it: Ok
+[checks] PASS prefabs: weapon_locker: stands on a level pad, its 33 samples at -2.102 m to the bit
+[checks] PASS prefabs: weapon_locker: its node stands at the pad's level, -2.102 m
+[checks] PASS prefabs: weapon_locker: built, with no collider of its own
+[checks] PASS prefabs: vehicle_kiosk: the ghost's answer is the placement's, Ok, 6.00°
+[checks] PASS prefabs: vehicle_kiosk: placed on the 6° slope, 6.00° under it: Ok
+[checks] PASS prefabs: vehicle_kiosk: stands on a level pad, its 377 samples at 2.102 m to the bit
+[checks] PASS prefabs: vehicle_kiosk: its node stands at the pad's level, 2.102 m
+[checks] PASS prefabs: vehicle_kiosk: built, with no collider of its own
+[checks] PASS prefabs: barracks: the ghost's answer is the placement's, Ok, 6.00°
+[checks] PASS prefabs: barracks: placed on the 6° slope, 6.00° under it: Ok
+[checks] PASS prefabs: barracks: stands on a level pad, its 257 samples at 6.309 m to the bit
+[checks] PASS prefabs: barracks: its node stands at the pad's level, 6.309 m
+[checks] PASS prefabs: barracks: 8 collider corners, the furthest 0.0 cm outside its boxes
+[checks] PASS prefabs: resource_node: the ghost's answer is the placement's, Ok, 6.00°
+[checks] PASS prefabs: resource_node: placed on the 6° slope, 6.00° under it: Ok
+[checks] PASS prefabs: resource_node: stands on a level pad, its 421 samples at -1.578 m to the bit
+[checks] PASS prefabs: resource_node: its node stands at the pad's level, -1.578 m
+[checks] PASS prefabs: resource_node: built, with no collider of its own
+[checks] PASS prefabs: strategist_anchor: the ghost's answer is the placement's, Ok, 0.00°
+[checks] PASS prefabs: strategist_anchor: placed on the 6° slope, 0.00° under it: Ok
+[checks] PASS prefabs: strategist_anchor: built, with no collider of its own
+[checks] PASS prefabs: heavy_gun: the ghost's answer is the placement's, Ok, 6.02°
+[checks] PASS prefabs: heavy_gun: placed on the 6° slope, 6.02° under it: Ok
+[checks] PASS prefabs: heavy_gun: built, with no collider of its own
+[checks] PASS prefabs: mortar_launcher: the ghost's answer is the placement's, Ok, 6.02°
+[checks] PASS prefabs: mortar_launcher: placed on the 6° slope, 6.02° under it: Ok
+[checks] PASS prefabs: mortar_launcher: built, with no collider of its own
+[checks] PASS prefabs: ammo_can: the ghost's answer is the placement's, Ok, 6.02°
+[checks] PASS prefabs: ammo_can: placed on the 6° slope, 6.02° under it: Ok
+[checks] PASS prefabs: ammo_can: built, with no collider of its own
+[checks] PASS prefabs: cover_low_wall: the ghost's answer is the placement's, Ok, 6.02°
+[checks] PASS prefabs: cover_low_wall: placed on the 6° slope, 6.02° under it: Ok
+[checks] PASS prefabs: cover_low_wall: stands on a level pad, its 25 samples at 2.102 m to the bit
+[checks] PASS prefabs: cover_low_wall: its node stands at the pad's level, 2.102 m
+[checks] PASS prefabs: cover_low_wall: 8 collider corners, the furthest 0.0 cm outside its boxes
+[checks] PASS prefabs: cover_block: the ghost's answer is the placement's, Ok, 6.02°
+[checks] PASS prefabs: cover_block: placed on the 6° slope, 6.02° under it: Ok
+[checks] PASS prefabs: cover_block: stands on a level pad, its 33 samples at 3.680 m to the bit
+[checks] PASS prefabs: cover_block: its node stands at the pad's level, 3.680 m
+[checks] PASS prefabs: cover_block: 8 collider corners, the furthest 0.0 cm outside its boxes
+[checks] PASS prefabs: bunker: the ghost's answer is the placement's, Ok, 6.00°
+[checks] PASS prefabs: bunker: placed on the 6° slope, 6.00° under it: Ok
+[checks] PASS prefabs: bunker: stands on a level pad, its 1085 samples at 8.410 m to the bit
+[checks] PASS prefabs: bunker: its node stands at the pad's level, 8.410 m
+[checks] PASS prefabs: bunker: 252 collider corners, the furthest 0.0 cm outside its boxes
+[checks] PASS prefabs: structure_pillbox: the ghost's answer is the placement's, Ok, 6.02°
+[checks] PASS prefabs: structure_pillbox: placed on the 6° slope, 6.02° under it: Ok
+[checks] PASS prefabs: structure_pillbox: stands on a level pad, its 41 samples at 2.102 m to the bit
+[checks] PASS prefabs: structure_pillbox: left for the round to put up; its colliders are the round part's to hold
+[checks] PASS prefabs: structure_sandbag_wall: the ghost's answer is the placement's, Ok, 6.02°
+[checks] PASS prefabs: structure_sandbag_wall: placed on the 6° slope, 6.02° under it: Ok
+[checks] PASS prefabs: structure_sandbag_wall: stands on a level pad, its 25 samples at 3.148 m to the bit
+[checks] PASS prefabs: structure_sandbag_wall: left for the round to put up; its colliders are the round part's to hold
+[checks] PASS prefabs: structure_sniper_tower: the ghost's answer is the placement's, Ok, 6.02°
+[checks] PASS prefabs: structure_sniper_tower: placed on the 6° slope, 6.02° under it: Ok
+[checks] PASS prefabs: structure_sniper_tower: stands on a level pad, its 37 samples at 4.199 m to the bit
+[checks] PASS prefabs: structure_sniper_tower: left for the round to put up; its colliders are the round part's to hold
+[checks] PASS prefabs: bridge_span: placed on the 6° slope, 6.01° under it: Ok
+[checks] PASS prefabs: bridge_span: 24 collider corners, the furthest 0.0 cm outside its boxes
+[checks] PASS prefabs: bridge_ramp: placed on the 6° slope, 6.01° under it: Ok
+[checks] PASS prefabs: bridge_ramp: 24 collider corners, the furthest 0.0 cm outside its boxes
+[checks] PASS prefabs: the validator finds every padded object on its pad and nothing in the way: 5 warnings
+[checks] PASS prefabs: a second kiosk: the map holds as many as it may, the ghost the same, and nothing changed
+[checks] PASS prefabs: a locker at the field's edge: off the map, the ghost the same, and nothing changed
+[checks] PASS prefabs: a locker on the kiosk: something is in the way, the ghost the same, and nothing changed
+[checks] PASS prefabs: a locker on the mound's side: the ground is too steep, the ghost the same, and nothing changed
+[checks] PASS prefabs: a locker in the water: under the water, the ghost the same, and nothing changed
+[checks] PASS prefabs: a cover block whose pad would cut the kiosk's: it would move another object's pad, the ghost the same, and nothing changed
+[checks] PASS prefabs: a pillbox before the barracks' door: in front of a barracks door, the ghost the same, and nothing changed
+[checks] PASS prefabs: prefab 999: no such prefab
+[checks] PASS prefabs: a click on the kiosk selects it: 2
+[checks] PASS prefabs: R turns the selected kiosk 15° where it is in the file, as one step, on a level pad: 45.0°
+[checks] PASS prefabs: a click on the node's disc selects it
+[checks] PASS prefabs: its capture radius to 12 m: placed again, its disc of 577 samples level
+[checks] PASS prefabs: Del takes the selected can up
+[checks] PASS prefabs: undo puts it back where it was in the file
+[checks] PASS prefabs: deep: 692 vertices baked in 1087 ms; 2 walks, from the spawn line and the barracks' door to the node, 0 unreached (current: True): 5 warnings
+[checks] PASS prefabs: a node on an island raised out of the water: Ok, at -0.84 m
+[checks] PASS prefabs: deep again: 4 walks, the island's two unreached and named, and no error of it: 7 warnings
+[checks] PASS prefabs: every placement, turn, parameter and stroke undone: no object, and every sample the slope's (17 placed)
+[checks] PASS prefabs: a new map, le5-made: a new map, le5-made: not saved yet
+[checks] PASS prefabs: 18 pieces placed with the prefab tool; it passes the validator: 2 warnings
+[checks] PASS prefabs: and the deep check: 9 walks, none unreached: 2 warnings
+[checks] PASS prefabs: saved: saved le5-made.map, revision 1, 2,142 bytes, sha-256 8e2f06f2…
+[checks] PASS prefabs: Test: testing le5-made.map in process 26439: close it to come back here
+[checks] level editor check: round
+[rts] navigation baked: 313 vertices
+[checks] PASS round: the round is live
+[checks] PASS round: on the map made in the editor: le5-made ($COPY/editor-prefabs-home/.local/share/godot/app_userdata/gdpyr/maps/le5-made.map, 8e2f06f2)
+[checks] PASS round: the round put the map's structure up: 1 put up, 0 refused
+[checks] PASS round: a finished pillbox of the strategist's stands where the file put it, at its pad's level: (-48, 0, 6)
+[checks] PASS round: its 16 collider corners are inside the prefab's boxes and LE-D21's plinth under them, the furthest 0.0 cm out; without the plinth, 50.0 cm, its depth
+[rts] navigation re-baked around the structures in 681 ms, 6.8 ms of it on the tick (1 this round)
+[rts] navigation re-baked around the structures in 604 ms, 7.0 ms of it on the tick (2 this round)
+[rts] navigation re-baked around the structures in 611 ms, 6.6 ms of it on the tick (3 this round)
+[rts] navigation re-baked around the structures in 674 ms, 6.5 ms of it on the tick (4 this round)
+[rts] navigation re-baked around the structures in 650 ms, 6.9 ms of it on the tick (5 this round)
+[rts] navigation re-baked around the structures in 678 ms, 9.8 ms of it on the tick (6 this round)
+[checks] measured round: 148 s of the round; 1 more rounds began; units trained 10 this round; structures built 3, lost 1
+[checks] PASS round: the pillbox fired
+[checks] PASS round: the pillbox was destroyed
+[checks] round: 7 of 7 facts hold
+[checks] PASS prefabs: the test process played the map made in the editor, 151 s, and its facts held: 7 of 7
+[checks] measured prefabs: the test process's exit code: 6 — the crash on exit of §13, after its facts were in
+[checks] prefabs: 97 of 97 facts hold
+[editor] deep check: baking the navigation mesh…
+[editor] deep check: baked 692 vertices in 1087 ms, 2 walks asked: 5 warnings
+[editor] deep check: 692 vertices baked in 1087 ms, 2 walks: 5 warnings
+[editor] deep check: baking the navigation mesh…
+[editor] deep check: no walk from (-20, -2.1015625, -80) to (-100, -0.83984375, 60): the path runs from (-19.997814, -2.036156, -80.00329) to (-56.799995, -5.8, 60)
+[editor] deep check: no walk from (57.000168, 6.3085938, -85.19625) to (-100, -0.83984375, 60): the path runs from (57.000168, 6.5000005, -85.19625) to (-56.799995, -5.8, 39.40001)
+[editor] deep check: baked 846 vertices in 1143 ms, 4 walks asked: 7 warnings
+[editor] deep check: 846 vertices baked in 1143 ms, 4 walks: 7 warnings
+[editor] deep check: baking the navigation mesh…
+[editor] deep check: baked 332 vertices in 716 ms, 9 walks asked: 2 warnings
+[editor] deep check: 332 vertices baked in 716 ms, 9 walks: 2 warnings
+[editor] testing le5-made.map in process 26439: close it to come back here
+[editor] testing $COPY/editor-prefabs-home/.local/share/godot/app_userdata/gdpyr/maps/le5-made.map (sha-256 8e2f06f27628ef6d0bcc8e2ac89d710e7f0e79fc9de59654e857e2085ceeae74) in process 26439: --path $COPY/ --headless -- --practice --map $COPY/editor-prefabs-home/.local/share/godot/app_userdata/gdpyr/maps/le5-made.map
+[level] built 'le5-made' (le5-made ($COPY/editor-prefabs-home/.local/share/godot/app_userdata/gdpyr/maps/le5-made.map, 8e2f06f2)) in 162 ms: terrain 241 x 241 samples, 225 shapes set in 82.4 ms, 0.00 … 3.07 m, water -5.00 m, over none, not drawn
+[level] built 1 spawn lines of 4 markers, 1 lockers, 1 kiosks, 2 barracks, 3 nodes, 1 anchors, 1 emplacements, 1 ammo cans, 6 cover boxes, 0 scenery, 0 bridge sections on 0 piers, the perimeter; 1 structures for the round to put up
+[rts] the map's structures: 1 put up, 0 refused
+[match] round live | tickets 50 | points 1000 | baseline 120/min | 20 minutes
+[rts] the map's structures: 1 put up, 0 refused
+[match] round live | tickets 50 | points 1000 | baseline 120/min | 20 minutes
+[checks] PASS editor-prefabs, the editor's and its test process's log: the log has no 'no nodes in group'
+[checks] PASS editor-prefabs, the editor's and its test process's log: the log has no 'no NavigationRegion3D in group'
+[checks] PASS editor-prefabs, the editor's and its test process's log: the log has no 'navigation bake produced no geometry'
+[checks] PASS editor-prefabs, the editor's and its test process's log: the log has no 'is scaled or tilted'
+[checks] PASS editor-prefabs, the editor's and its test process's log: the log has no 'are addressable on the wire'
+editor-prefabs: exit 0

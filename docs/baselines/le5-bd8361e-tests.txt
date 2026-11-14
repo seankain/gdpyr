@@ -1,0 +1,120 @@
+# LE5, docs/LEVEL_EDITOR.md §11. At bd8361e: .NET SDK 8.0.134, four cores of a cloud VM.
+# dotnet test Tests/Gdpyr.Tests.csproj --filter <LE5's three classes, MapEditorControlsTests and PrefabSpecsTests> --logger "console;verbosity=normal": its line for each test, sorted, and its total.
+# Then dotnet test Tests/Gdpyr.Tests.csproj: its total. Then dotnet build Gdpyr.csproj: its last lines.
+
+Passed Gdpyr.Tests.BuildableGroundTests.ABump_UnderACorner_IsNotBuildable
+Passed Gdpyr.Tests.BuildableGroundTests.APlane_IsBuildableUpToWhatAPillboxTurned45DegreesTakes(degrees: 0, buildable: True)
+Passed Gdpyr.Tests.BuildableGroundTests.APlane_IsBuildableUpToWhatAPillboxTurned45DegreesTakes(degrees: 5.5, buildable: True)
+Passed Gdpyr.Tests.BuildableGroundTests.APlane_IsBuildableUpToWhatAPillboxTurned45DegreesTakes(degrees: 5.75, buildable: False)
+Passed Gdpyr.Tests.BuildableGroundTests.APlane_IsBuildableUpToWhatAPillboxTurned45DegreesTakes(degrees: 7, buildable: False)
+Passed Gdpyr.Tests.MapEditPrefabTests.AClick_PicksTheSmallestThingUnderIt
+Passed Gdpyr.Tests.MapEditPrefabTests.AMapAtItsLimitOfObjects_TakesNoMore_AndStillTurnsOne
+Passed Gdpyr.Tests.MapEditPrefabTests.AMapMadeByPlacingAlone_Plays
+Passed Gdpyr.Tests.MapEditPrefabTests.APlacement_IsOneStep_AndUndoTakesItAndItsPadAway
+Passed Gdpyr.Tests.MapEditPrefabTests.ARefusedPlacement_ChangesNothing_AndSaysWhy
+Passed Gdpyr.Tests.MapEditPrefabTests.AnObjectPlacedAgainAsItStands_IsWhereItWas_OrRefusedByALaterNeighbour(seed: 1)
+Passed Gdpyr.Tests.MapEditPrefabTests.AnObjectPlacedAgainAsItStands_IsWhereItWas_OrRefusedByALaterNeighbour(seed: 2)
+Passed Gdpyr.Tests.MapEditPrefabTests.AnObjectPlacedAgainAsItStands_IsWhereItWas_OrRefusedByALaterNeighbour(seed: 3)
+Passed Gdpyr.Tests.MapEditPrefabTests.AnObjectPlacedAgainAsItStands_IsWhereItWas_OrRefusedByALaterNeighbour(seed: 4)
+Passed Gdpyr.Tests.MapEditPrefabTests.AnObjectReplaced_IsNotCounted_InTheWay_OrANeighbourToItself
+Passed Gdpyr.Tests.MapEditPrefabTests.MovingAnObjectUpTheSlope_IsNotRefusedByItsOwnOldPad
+Passed Gdpyr.Tests.MapEditPrefabTests.RequestFor_CarriesAnObjectsParameters
+Passed Gdpyr.Tests.MapEditPrefabTests.TakingUp_LeavesTheGround_AndUndoPutsItBackWhereItWas
+Passed Gdpyr.Tests.MapEditPrefabTests.TurningAnObject_KeepsItsPlaceInTheFile_AsOneStep
+Passed Gdpyr.Tests.MapEditorControlsTests.ABrush_ShowsWhatItReads(kind: GradeLocked, fields: [Radius, Grade, Rate])
+Passed Gdpyr.Tests.MapEditorControlsTests.ABrush_ShowsWhatItReads(kind: Level, fields: [Radius, Core, Strength])
+Passed Gdpyr.Tests.MapEditorControlsTests.ABrush_ShowsWhatItReads(kind: Ramp, fields: [Radius])
+Passed Gdpyr.Tests.MapEditorControlsTests.ABrush_ShowsWhatItReads(kind: Sculpt, fields: [Radius, Core, Rate])
+Passed Gdpyr.Tests.MapEditorControlsTests.ABrush_ShowsWhatItReads(kind: Smooth, fields: [Radius, Core, Strength])
+Passed Gdpyr.Tests.MapEditorControlsTests.AKeyNotInTheTable_DoesNothing(key: Key1, ctrl: True, shift: False)
+Passed Gdpyr.Tests.MapEditorControlsTests.AKeyNotInTheTable_DoesNothing(key: R, ctrl: True, shift: False)
+Passed Gdpyr.Tests.MapEditorControlsTests.AKeyNotInTheTable_DoesNothing(key: S, ctrl: False, shift: False)
+Passed Gdpyr.Tests.MapEditorControlsTests.AKeyNotInTheTable_DoesNothing(key: W, ctrl: False, shift: False)
+Passed Gdpyr.Tests.MapEditorControlsTests.AKeyNotInTheTable_DoesNothing(key: Y, ctrl: False, shift: False)
+Passed Gdpyr.Tests.MapEditorControlsTests.AKeyNotInTheTable_DoesNothing(key: Z, ctrl: False, shift: False)
+Passed Gdpyr.Tests.MapEditorControlsTests.APaletteEntry_CountsAgainstItsLimit
+Passed Gdpyr.Tests.MapEditorControlsTests.AParameter_HasItsOwnRange
+Passed Gdpyr.Tests.MapEditorControlsTests.ASharesSteps_StayOnTwentieths
+Passed Gdpyr.Tests.MapEditorControlsTests.ASlope_IsColouredAsTheOverlayColoursIt(degrees: 0, expected: Walkable)
+Passed Gdpyr.Tests.MapEditorControlsTests.ASlope_IsColouredAsTheOverlayColoursIt(degrees: 34.9900017, expected: Walkable)
+Passed Gdpyr.Tests.MapEditorControlsTests.ASlope_IsColouredAsTheOverlayColoursIt(degrees: 35, expected: Steep)
+Passed Gdpyr.Tests.MapEditorControlsTests.ASlope_IsColouredAsTheOverlayColoursIt(degrees: 40, expected: Steep)
+Passed Gdpyr.Tests.MapEditorControlsTests.ASlope_IsColouredAsTheOverlayColoursIt(degrees: 40.0099983, expected: TooSteep)
+Passed Gdpyr.Tests.MapEditorControlsTests.ASlope_IsColouredAsTheOverlayColoursIt(degrees: 70, expected: TooSteep)
+Passed Gdpyr.Tests.MapEditorControlsTests.AnAutosave_IsDueAMinuteAfterTheFirstChangeNotWritten
+Passed Gdpyr.Tests.MapEditorControlsTests.EveryKey_IsBoundOnce_AndEveryActionButNone_HasOne
+Passed Gdpyr.Tests.MapEditorControlsTests.EveryPreset_IsFoundAgain_AndAMovedSettingIsNone
+Passed Gdpyr.Tests.MapEditorControlsTests.R_TurnsAPrefabToTheNext15DegreeStep
+Passed Gdpyr.Tests.MapEditorControlsTests.Shift_IsTheCamerasSprint_AndLeavesAKeyWithoutAShiftOfItsOwnAsItIs
+Passed Gdpyr.Tests.MapEditorControlsTests.TheBandSliders_KeepNumbersAMapCanMean
+Passed Gdpyr.Tests.MapEditorControlsTests.TheGhost_SaysWhatPlacingWouldDo
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Bracketleft, ctrl: False, shift: False, action: RadiusDown)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Bracketright, ctrl: False, shift: False, action: RadiusUp)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Comma, ctrl: False, shift: False, action: ShapeDown)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Delete, ctrl: False, shift: False, action: TakeUp)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Equal, ctrl: False, shift: False, action: AmountUp)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Escape, ctrl: False, shift: False, action: Cancel)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: F5, ctrl: False, shift: False, action: Test)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: G, ctrl: False, shift: False, action: SnapToGrid)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Key1, ctrl: False, shift: False, action: TerrainTool)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Key2, ctrl: False, shift: False, action: PrefabsTool)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Key3, ctrl: False, shift: False, action: RoadsTool)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Key4, ctrl: False, shift: False, action: BridgesTool)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Minus, ctrl: False, shift: False, action: AmountDown)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: O, ctrl: False, shift: False, action: NextOverlay)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Pagedown, ctrl: False, shift: False, action: LowerSection)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Pageup, ctrl: False, shift: False, action: RaiseSection)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Period, ctrl: False, shift: False, action: ShapeUp)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: R, ctrl: False, shift: False, action: TurnLeft)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: R, ctrl: False, shift: True, action: TurnRight)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: S, ctrl: True, shift: False, action: Save)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: T, ctrl: False, shift: False, action: StraightDown)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Tab, ctrl: False, shift: False, action: TurnEndForEnd)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Y, ctrl: True, shift: False, action: Redo)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Z, ctrl: True, shift: False, action: Undo)
+Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_StepTheBrush_AndHoldItToItsRanges
+Passed Gdpyr.Tests.MapEditorControlsTests.TheOverlays_GoRound_InSection8_3sOrder
+Passed Gdpyr.Tests.MapEditorControlsTests.ThePalette_HoldsEveryPrefabButTheBridgeSections_Once_ByKind
+Passed Gdpyr.Tests.MapEditorControlsTests.TheReadout_IsTheSteepestFaceUnderTheBrush
+Passed Gdpyr.Tests.MapEditorControlsTests.TheSliders_AreTheBrushsOwnRanges
+Passed Gdpyr.Tests.MapEditorControlsTests.TheStatusLine_SaysWhereTheCursorIs
+Passed Gdpyr.Tests.MapEditorControlsTests.TheTestProcess_PlaysTheSavedFile_OnItsOwn
+Passed Gdpyr.Tests.MapEditorControlsTests.TheToolKeys_SelectTheirTools_AndTheTerrainAndPrefabsAreBuilt
+Passed Gdpyr.Tests.MapReachTests.APairWithNoPath_IsAWarningNamingBoth
+Passed Gdpyr.Tests.MapReachTests.EveryStart_IsAskedAboutEveryNode
+Passed Gdpyr.Tests.PrefabSpecsTests.ABridgeSection_HasAConnectorAtEachEnd_AtTheDecksTop
+Passed Gdpyr.Tests.PrefabSpecsTests.APadArea_IsTheFootprint_OrANodesDisc_OfItsCaptureRadius
+Passed Gdpyr.Tests.PrefabSpecsTests.APier_IsUnderItsEnd_FromTheDecksUnderside_ItsStoredLength_AndOnlyWithSupports
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 0, kind: Round, across: 20, along: 6, pad: True, steepest: 10, most: 0)
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 1, kind: Round, across: 3, along: 3, pad: True, steepest: 10, most: 0)
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 10, kind: Cover, across: 3, along: 3, pad: True, steepest: 25, most: 96)
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 11, kind: Scenery, across: 30, along: 30, pad: True, steepest: 12, most: 0)
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 12, kind: Structure, across: 3.6000000000000001, along: 3.6000000000000001, pad: True, steepest: 8, most: 16)
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 13, kind: Structure, across: 4, along: 0.80000000000000004, pad: True, steepest: 8, most: 16)
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 14, kind: Structure, across: 3.2000000000000002, along: 3.2000000000000002, pad: True, steepest: 8, most: 16)
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 15, kind: Bridge, across: 6, along: 12, pad: False, steepest: NaN, most: 0)
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 16, kind: Bridge, across: 6, along: 12, pad: False, steepest: NaN, most: 0)
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 2, kind: Round, across: 26, along: 10, pad: True, steepest: 8, most: 1)
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 3, kind: Round, across: 13, along: 13, pad: True, steepest: 12, most: 4)
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 4, kind: Round, across: 0, along: 0, pad: True, steepest: 15, most: 8)
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 5, kind: Round, across: 0, along: 0, pad: False, steepest: NaN, most: 1)
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 6, kind: Round, across: 1.5, along: 1.5, pad: False, steepest: 20, most: 8)
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 7, kind: Round, across: 1.5, along: 1.5, pad: False, steepest: 20, most: 8)
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 8, kind: Round, across: 0.59999999999999998, along: 0.59999999999999998, pad: False, steepest: 20, most: 12)
+Passed Gdpyr.Tests.PrefabSpecsTests.EachPrefab_IsSection6Point5sRow(id: 9, kind: Cover, across: 4, along: 0.80000000000000004, pad: True, steepest: 25, most: 96)
+Passed Gdpyr.Tests.PrefabSpecsTests.InTheWay_IsOverlapInPlanBeyondTheAllowance_AndInHeight
+Passed Gdpyr.Tests.PrefabSpecsTests.TheBarracks_DoorAndRing_AreItsScenes
+Passed Gdpyr.Tests.PrefabSpecsTests.TheBunker_IsInsideItsBox
+Passed Gdpyr.Tests.PrefabSpecsTests.TheFieldOfPlay_IsCargos
+Passed Gdpyr.Tests.PrefabSpecsTests.TheGroupsCountedTogether_AndTheFewestAMapHolds_AreSection6Point9s
+Passed Gdpyr.Tests.PrefabSpecsTests.TheIds_AreAppendOnly_EachNamedAsSection6Point5Has
+Passed Gdpyr.Tests.PrefabSpecsTests.TheStructurePrefabs_AreTheStrategistsStructures
+Passed Gdpyr.Tests.PrefabSpecsTests.TheStructures_AreTheirTresFiles
+Passed Gdpyr.Tests.PrefabSpecsTests.TwoSpans_PutEndToEnd_ShareAPointWithOppositeHeadings_AndAreNotInEachOthersWay
+Passed!  - Failed:     0, Passed:   109, Skipped:     0, Total:   109, Duration: 304 ms - Gdpyr.Tests.dll (net8.0)
+Passed!  - Failed:     0, Passed:  3721, Skipped:     0, Total:  3721, Duration: 13 s - Gdpyr.Tests.dll (net8.0)
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:07.13
