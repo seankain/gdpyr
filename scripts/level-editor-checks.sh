@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# The level editor's engine checks (docs/LEVEL_EDITOR.md §11). LE0: the baseline and the spike.
+# The level editor's engine checks (docs/LEVEL_EDITOR.md §11). LE0: the baseline and the spike; LE3: the world from a file.
 #
 # What the plan could not know without the engine, measured on a copy of the tree whose
 # greybox has its slab replaced by terrain (tools/EngineChecks/LevelTerrain.cs): 241 x 241
@@ -13,9 +13,20 @@
 #   ./scripts/level-editor-checks.sh slopes     # a body, a unit, the 4x4, the helicopter, structure sites
 #   ./scripts/level-editor-checks.sh frame      # a dedicated server's tick with its bots: slab, flat, hills
 #   ./scripts/level-editor-checks.sh net        # prediction on a 20° slope, behind an 80 ms link: slab, then the slope
-#   ./scripts/level-editor-checks.sh net-2cm    # the slope again with corrections from 2 cm, not 1 cm (LE-D25)
+#   ./scripts/level-editor-checks.sh net-1cm    # the slope again with corrections from 1 cm, as before LE-D25 made it 2 cm
 #   ./scripts/level-editor-checks.sh export     # the stripped server export: the collider from bytes, the bake
 #   ./scripts/level-editor-checks.sh suite      # the scenario suite on the flat terrain
+#
+# LE3, the world from a file, on the game's own path: the bundled data map (MAP, `hills`
+# unless given) by --map, through MapLibrary, MapHost.tscn and LevelRoot, held to its file
+# by tools/EngineChecks/LevelMapChecks.cs (LE3_CHECK). These parts run the tree as it is:
+# the greybox is not edited for them.
+#
+#   ./scripts/level-editor-checks.sh map-practice  # --practice --map: the file's world, its rays, a bot round (LE3_SECONDS, 600)
+#   ./scripts/level-editor-checks.sh map-server    # the same on a --server in real time, with a client that checks its own world
+#   ./scripts/level-editor-checks.sh map-frame     # a dedicated server's tick with its bots and a client: the greybox, then MAP
+#   ./scripts/level-editor-checks.sh map-export    # map-server from the stripped server export, the map read from its pack
+#   ./scripts/level-editor-checks.sh map-suite     # the scenarios that name a data map, and the ones they were copied from
 #
 # Each part runs on the plan's collider and, where the two could differ, on the heightmap
 # beside it. `frame` and the bake's times in `ground` are wall time: run them on a machine
@@ -39,6 +50,9 @@ NET_RELAY_PORT="${NET_RELAY_PORT:-7797}"
 NET_DELAY_MS="${NET_DELAY_MS:-40}"
 NET_JITTER_MS="${NET_JITTER_MS:-10}"
 AGENT_PORT="${AGENT_PORT:-7901}"
+MAP="${MAP:-hills}"
+LE3_SECONDS="${LE3_SECONDS:-600}"
+FRAME_SECONDS="${FRAME_SECONDS:-300}"
 if [ $# -eq 0 ]; then
 	MODES=(ground slopes)
 else
@@ -61,8 +75,9 @@ fi
 	--exclude='./tools/*/bin' --exclude='./tools/*/obj' -cf - .) | (cd "$COPY" && tar -xf -)
 
 mkdir -p "$COPY/EngineChecks"
-cp "$PROJECT_DIR/tools/EngineChecks/LevelChecks.cs" "$PROJECT_DIR/tools/EngineChecks/LevelTerrain.cs" "$COPY/EngineChecks/"
-sed -i 's#^GameConsole="\*res://Scripts/Ui/GameConsole.cs"#&\nLevelChecks="*res://EngineChecks/LevelChecks.cs"#' \
+cp "$PROJECT_DIR/tools/EngineChecks/LevelChecks.cs" "$PROJECT_DIR/tools/EngineChecks/LevelTerrain.cs" \
+	"$PROJECT_DIR/tools/EngineChecks/LevelMapChecks.cs" "$COPY/EngineChecks/"
+sed -i 's#^GameConsole="\*res://Scripts/Ui/GameConsole.cs"#&\nLevelChecks="*res://EngineChecks/LevelChecks.cs"\nLevelMapChecks="*res://EngineChecks/LevelMapChecks.cs"#' \
 	"$COPY/project.godot"
 
 # §10's hills as a map file's samples would be, and the greybox with and without its slab.
@@ -137,6 +152,47 @@ run_net() {
 	return "$status"
 }
 
+# LE3: what MAPS.md §4 says must not appear in a map's log, counted. Each is a fact.
+forbidden() {
+	local log="$1" name="$2" line count
+	for line in "no nodes in group" "no NavigationRegion3D in group" "navigation bake produced no geometry" \
+		"is scaled or tilted" "are addressable on the wire"; do
+		count=$(grep -c -- "$line" "$log")
+		if [ "$count" -eq 0 ]; then
+			echo "[checks] PASS $name: the log has no '$line'"
+		else
+			echo "[checks] FAIL $name: the log has '$line' $count times"
+			failed=1
+		fi
+	done
+}
+
+# LE3: a dedicated server on the map, real time, and one client that checks its own world.
+# $1 names the part; $2 is the server's command (the editor binary on the copy, or the export).
+run_map_server() {
+	local name="$1"
+	shift
+	local dir="$COPY/$name"
+	mkdir -p "$dir"
+	rm -f "$dir"/*
+	LE3_CHECK=play LE3_DIR="$dir" LE3_MAP="$MAP" LE3_SECONDS="$LE3_SECONDS" timeout 3600 "$@" \
+		-- --server "$GAME_PORT" --map "$MAP" --no-advertise > "$COPY/$name-server.log" 2>&1 &
+	local server=$!
+	sleep 8
+	LE3_CHECK=client LE3_DIR="$dir" LE3_MAP="$MAP" timeout 3600 "$GODOT" --headless --path "$COPY" --max-fps 60 \
+		-- --client "127.0.0.1:$GAME_PORT" > "$COPY/$name-client.log" 2>&1 &
+	local client=$!
+	local status=0
+	wait "$server" || status=$?
+	wait "$client" || status=$(( status > 0 ? status : $? ))
+	report "$COPY/$name-server.log"
+	grep -E '^\[level\]|^\[map\]' "$COPY/$name-server.log"
+	report "$COPY/$name-client.log"
+	forbidden "$COPY/$name-server.log" "$name, the server's log"
+	forbidden "$COPY/$name-client.log" "$name, the client's log"
+	return "$status"
+}
+
 failed=0
 for mode in "${MODES[@]}"; do
 	case "$mode" in
@@ -208,22 +264,22 @@ for mode in "${MODES[@]}"; do
 		done
 		;;
 
-	net-2cm)
-		# LE-D25's evidence: the slope again, in a copy whose correction threshold is 2 cm
-		# and not 1 cm. The copy is built with it, run, and put back.
+	net-1cm)
+		# LE-D25's evidence, kept: the slope again, in a copy whose correction threshold is
+		# 1 cm, as it was before LE3 made it 2 cm. The copy is built with it, run, and put back.
 		ground "ramp:20:12" trimesh
 		cp "$COPY/Scripts/Sim/SimConfig.cs" "$COPY/SimConfig.cs.kept"
-		sed -i 's/public const float MispredictionThreshold = 0.01f;/public const float MispredictionThreshold = 0.02f;/' \
+		sed -i 's/public const float MispredictionThreshold = 0.02f;/public const float MispredictionThreshold = 0.01f;/' \
 			"$COPY/Scripts/Sim/SimConfig.cs"
 		if cmp -s "$COPY/Scripts/Sim/SimConfig.cs" "$COPY/SimConfig.cs.kept" \
-			|| ! (cd "$COPY" && dotnet build Gdpyr.csproj -nologo -v quiet > "$COPY/build-2cm.log" 2>&1); then
-			echo "net-2cm: SimConfig.MispredictionThreshold is not 0.01f, or the copy did not build with 0.02f"
+			|| ! (cd "$COPY" && dotnet build Gdpyr.csproj -nologo -v quiet > "$COPY/build-1cm.log" 2>&1); then
+			echo "net-1cm: SimConfig.MispredictionThreshold is not 0.02f, or the copy did not build with 0.01f"
 			failed=1
 		else
-			echo "net-2cm: SimConfig.MispredictionThreshold is 0.02f in this copy"
-			run_net ramp-20-12-trimesh-2cm
+			echo "net-1cm: SimConfig.MispredictionThreshold is 0.01f in this copy"
+			run_net ramp-20-12-trimesh-1cm
 			status=$?
-			echo "net-2cm, ramp:20:12 trimesh: exit $status"
+			echo "net-1cm, ramp:20:12 trimesh: exit $status"
 			[ "$status" -ne 0 ] && failed=1
 		fi
 		cp "$COPY/SimConfig.cs.kept" "$COPY/Scripts/Sim/SimConfig.cs"
@@ -234,7 +290,7 @@ for mode in "${MODES[@]}"; do
 		# The deploy path's own preset, with the one change §9.1 plans: a file that is not a
 		# resource is exported only through the include filter.
 		ground hills trimesh
-		sed -i 's#^include_filter=""#include_filter="EngineChecks/*.i16"#' "$COPY/export_presets.cfg"
+		sed -i 's#^include_filter="\*.map"#include_filter="*.map, EngineChecks/*.i16"#' "$COPY/export_presets.cfg"
 		mkdir -p "$COPY/build/server"
 		if ! "$GODOT" --headless --path "$COPY" --export-release "Linux Server" "$COPY/build/server/gdpyr-server" \
 			> "$COPY/export.log" 2>&1 || [ ! -x "$COPY/build/server/gdpyr-server" ]; then
@@ -273,6 +329,94 @@ for mode in "${MODES[@]}"; do
 		# A scenario failing is the suite's answer, not this script's: the slab fails some too.
 		[ "$status" -ge 2 ] && failed=1
 		unset LE0_RIM
+		;;
+
+	map-practice)
+		ground slab
+		dir="$COPY/map-practice"
+		mkdir -p "$dir"
+		LE3_CHECK=play LE3_DIR="$dir" LE3_MAP="$MAP" LE3_SECONDS="$LE3_SECONDS" timeout 3600 "$GODOT" --headless \
+			--path "$COPY" --fixed-fps 60 -- --practice --map "$MAP" > "$COPY/map-practice.log" 2>&1
+		status=$?
+		report "$COPY/map-practice.log"
+		grep -E '^\[level\]|^\[map\]|^\[match\] round live' "$COPY/map-practice.log"
+		forbidden "$COPY/map-practice.log" "map-practice"
+		echo "map-practice, $MAP: exit $status"
+		[ "$status" -ne 0 ] && failed=1
+		;;
+
+	map-server)
+		ground slab
+		run_map_server map-server "$GODOT" --headless --path "$COPY"
+		status=$?
+		echo "map-server, $MAP: exit $status"
+		[ "$status" -ne 0 ] && failed=1
+		;;
+
+	map-frame)
+		# LE0's frame part on the game's own path: a dedicated server at --fixed-fps 60 with
+		# its 6 + 1 bots, and a client that joins and picks no side; the greybox, then the map.
+		ground slab
+		for map in greybox "$MAP"; do
+			dir="$COPY/map-frame-$map"
+			mkdir -p "$dir"
+			LE3_CHECK=play LE3_DIR="$dir" LE3_MAP="$map" LE3_SECONDS="$FRAME_SECONDS" timeout 3600 "$GODOT" --headless \
+				--path "$COPY" --fixed-fps 60 -- --server "$GAME_PORT" --map "$map" --no-advertise \
+				> "$COPY/map-frame-$map.log" 2>&1 &
+			server=$!
+			sleep 6
+			timeout 3600 "$GODOT" --headless --path "$COPY" --max-fps 30 \
+				-- --client "127.0.0.1:$GAME_PORT" > "$COPY/map-frame-$map-client.log" 2>&1 &
+			client=$!
+			wait "$server"
+			status=$?
+			kill "$client" 2>/dev/null
+			wait "$client" 2>/dev/null
+			report "$COPY/map-frame-$map.log"
+			grep -m 1 '^\[bots\]' "$COPY/map-frame-$map.log"
+			grep '^\[rts\] .* refused for peer' "$COPY/map-frame-$map.log" | sed 's/ for peer [0-9]*//' | sort | uniq -c
+			echo "map-frame, $map: exit $status"
+			[ "$status" -ne 0 ] && failed=1
+		done
+		;;
+
+	map-export)
+		# The deploy path's own preset, as it is: its include filter takes *.map (§9.1).
+		ground slab
+		mkdir -p "$COPY/build/server"
+		if ! "$GODOT" --headless --path "$COPY" --export-release "Linux Server" "$COPY/build/server/gdpyr-server" \
+			> "$COPY/map-export.log" 2>&1 || [ ! -x "$COPY/build/server/gdpyr-server" ]; then
+			tail -n 20 "$COPY/map-export.log" >&2
+			echo "map-export: the stripped server did not export (are the export templates installed?)"
+			failed=1
+			continue
+		fi
+
+		grep -n '^include_filter' "$COPY/export_presets.cfg" | sed 's/^/[export] the preset: /'
+		ls -l "$COPY/build/server/gdpyr-server" | awk '{print "[export] gdpyr-server, pack embedded: " $5 " bytes"}'
+		run_map_server map-export "$COPY/build/server/gdpyr-server" --headless
+		status=$?
+		echo "map-export, $MAP: exit $status"
+		[ "$status" -ne 0 ] && failed=1
+		;;
+
+	map-suite)
+		# The scenarios that name a data map, and the ones each was copied from.
+		ground slab
+		out="${SUITE_OUT:-$COPY/map-suite.txt}"
+		list=()
+		for file in "$PROJECT_DIR"/Tests/Scenarios/*.json; do
+			if grep -q '"map": "'"$MAP"'"' "$file"; then
+				list+=("$file" "$PROJECT_DIR/Tests/Scenarios/$(basename "$file" | sed "s/^${MAP}_//")")
+			fi
+		done
+		(cd "$PROJECT_DIR" && dotnet run --project tools/Gdpyr.Playtest -c Release -- \
+			--godot "$GODOT" --project "$COPY" --port "$AGENT_PORT" --game-port "$GAME_PORT" \
+			--trace-dir "$COPY/traces" "${list[@]}") > "$out" 2>&1
+		status=$?
+		grep -E '\.\. (PASS|FAIL)' "$out"
+		echo "map-suite: exit $status (output: $out)"
+		[ "$status" -ne 0 ] && failed=1
 		;;
 
 	*)

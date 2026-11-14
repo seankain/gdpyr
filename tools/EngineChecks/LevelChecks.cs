@@ -1378,7 +1378,9 @@ public partial class LevelChecks : Node
 			foreach (bool _ in Until(() => !region.IsBaking(), 120 * Second)) yield return true;
 		}
 
-		// Grade by grade, a step of 1/256 m a metre at a time is 0.22°: every other step.
+		// Grade by grade, a step of 1/256 m a metre at a time is 0.22°: every other step. Since
+		// LE3 a site is held to LE-D21: refused as TooSteep where the ground under its
+		// footprint's centre and corners varies by more than 0.5 m, and stood on the highest.
 		foreach (byte kind in kinds)
 		{
 			StructureShape shape = StructureCatalog.ShapeOf(kind);
@@ -1388,6 +1390,10 @@ public partial class LevelChecks : Node
 				float firstRefused = -1f;
 				PlacementResult refusal = PlacementResult.Ok;
 				float gap = 0f;
+				float lift = 0f;
+				float across = 2f * ((MathF.Abs(MathF.Cos(Mathf.DegToRad(facing))) * shape.HalfWidth)
+					+ (MathF.Abs(MathF.Sin(Mathf.DegToRad(facing))) * shape.HalfDepth));
+				float predicted = Mathf.RadToDeg(MathF.Atan(StructurePlacement.MaxGroundReliefMeters / across));
 				for (int steps = 0; steps <= 80; steps += 2)
 				{
 					float grade = steps * LevelTerrain.Step;
@@ -1409,10 +1415,10 @@ public partial class LevelChecks : Node
 					{
 						lastOk = actual;
 
-						// How far the base's downhill edge stands over the ground.
-						float reach = (MathF.Abs(MathF.Cos(Mathf.DegToRad(facing))) * shape.HalfWidth)
-							+ (MathF.Abs(MathF.Sin(Mathf.DegToRad(facing))) * shape.HalfDepth);
-						gap = grade * reach;
+						// Where its base stands over the ground under its centre, and how far
+						// over the lowest ground under it: what its plinth has to reach.
+						lift = units.StructureAt(slot).GlobalPosition.Y - at.Y;
+						gap = lift + (grade * across * 0.5f);
 						Call(units, "ClearStructures");
 						foreach (bool _ in Wait(2)) yield return true;
 					}
@@ -1425,8 +1431,14 @@ public partial class LevelChecks : Node
 				}
 
 				Measured($"ServerPlaceStructure, {StructureCatalog.NameOf(kind)} ({F(shape.HalfWidth * 2f, "0.0")} x {F(shape.HalfDepth * 2f, "0.0")} m) at {F(facing, "0")}°:"
-					+ $" taken up to {F(lastOk)}°, its downhill edge then {F(gap)} m over the ground;"
+					+ $" taken up to {F(lastOk)}°, its base then {F(lift)} m over the ground under its centre and {F(gap)} m over the lowest under it;"
 					+ (firstRefused < 0f ? " never refused up to 17.4°" : $" refused from {F(firstRefused)}° as {refusal} (\"{StructurePlacement.Describe(refusal)}\")"));
+				Fact(gap <= StructurePlacement.MaxGroundReliefMeters + 0.01f,
+					$"LE-D21: the {StructureCatalog.NameOf(kind)} at {F(facing, "0")}° stands at most 0.5 m over the lowest ground under it, which its plinth reaches ({F(gap)} m)");
+				Fact(predicted >= 17.4f
+						? firstRefused < 0f
+						: refusal == PlacementResult.TooSteep && lastOk <= predicted + 0.01f && firstRefused > predicted - 0.01f,
+					$"LE-D21: the {StructureCatalog.NameOf(kind)} at {F(facing, "0")}° is refused as TooSteep past {F(predicted)}°, 0.5 m across its {F(across)} m");
 			}
 		}
 

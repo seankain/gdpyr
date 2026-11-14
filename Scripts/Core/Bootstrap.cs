@@ -37,6 +37,22 @@ public partial class Bootstrap : Node
 			return;
 		}
 
+		// The map, before anything reads the options: a reference that names nothing, or a
+		// file that is not a map, is a launch error like any other (docs/LEVEL_EDITOR.md §9.5).
+		if (options.MapReference != null)
+		{
+			if (!Gdpyr.Level.MapLibrary.TryResolve(options.MapReference, out MapInfo map,
+				out Gdpyr.Sim.Level.MapDocument document, out string mapError))
+			{
+				GD.PrintErr($"gdpyr: --map {options.MapReference}: {mapError}");
+				GetTree().Quit(1);
+				return;
+			}
+
+			Session.SelectResolved(map, document);
+			GD.Print($"[map] playing {map}" + (map.IsData ? $" from {map.Path}, sha-256 {map.Hash}" : string.Empty));
+		}
+
 		Options = options;
 
 		// The simulation is a fixed-tick simulation; nothing may depend on the render

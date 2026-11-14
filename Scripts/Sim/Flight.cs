@@ -14,8 +14,9 @@ public readonly struct FlightTraits
 {
 	/// <summary>
 	/// The highest an aircraft may cruise above the ground. With the ground anywhere on
-	/// the map, which is under 30 m, it keeps an aircraft well inside the ±327.67 m a
-	/// position can be on the wire (<see cref="SimConfig.MaxPositionMeters"/>).
+	/// the map, which is under 64 m on a data map (docs/LEVEL_EDITOR.md LE-D4), it keeps an
+	/// aircraft under 164 m, well inside the ±327.67 m a position can be on the wire
+	/// (<see cref="SimConfig.MaxPositionMeters"/>).
 	/// </summary>
 	public const float MaxCruiseAltitudeMeters = 100f;
 

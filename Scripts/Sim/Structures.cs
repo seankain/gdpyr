@@ -468,6 +468,13 @@ public enum PlacementResult : byte
 	CannotAfford = 8,
 	PoolFull = 9,
 	NotStrategist = 10,
+
+	/// <summary>
+	/// The ground under the footprint varies by more than
+	/// <see cref="StructurePlacement.MaxGroundReliefMeters"/> (docs/LEVEL_EDITOR.md LE-D21).
+	/// Appended: the numbers are what the agent socket reports.
+	/// </summary>
+	TooSteep = 11,
 }
 
 /// <summary>
@@ -492,6 +499,92 @@ public static class StructurePlacement
 
 	/// <summary>How far inside the representable position range a site has to be.</summary>
 	public const float BoundsMarginMeters = 5f;
+
+	/// <summary>
+	/// The most the ground under a footprint may vary [m] (docs/LEVEL_EDITOR.md LE-D21):
+	/// the highest of <see cref="GroundPointCount"/> samples less the lowest. 5.6° across
+	/// a pillbox's diagonal and 7.9° across a side; 7.1° along a sandbag wall. Past it the
+	/// site is <see cref="PlacementResult.TooSteep"/>.
+	/// </summary>
+	public const float MaxGroundReliefMeters = 0.5f;
+
+	/// <summary>
+	/// How far from the ground under a footprint's centre its corners are looked for [m]:
+	/// just past <see cref="MaxGroundReliefMeters"/>, so that a corner not found is a corner
+	/// too far from the centre, and so that a probe starting that far up starts inside
+	/// anything taller standing on the corner and finds the ground under it.
+	/// </summary>
+	public const float GroundWindowMeters = MaxGroundReliefMeters + 0.05f;
+
+	/// <summary>Where the ground under a footprint is sampled: its centre, then its four corners.</summary>
+	public const int GroundPointCount = 5;
+
+	/// <summary>
+	/// The points LE-D21 samples the ground at, flat: the footprint's centre, then its
+	/// corners in turn. Their heights are the centre's, which the caller replaces.
+	/// </summary>
+	public static void GroundPoints(in Footprint footprint, Span<Vector3> points)
+	{
+		Vector3 across = footprint.AxisX * footprint.HalfWidth;
+		Vector3 along = footprint.AxisZ * footprint.HalfDepth;
+		points[0] = footprint.Center;
+		points[1] = footprint.Center - across - along;
+		points[2] = footprint.Center + across - along;
+		points[3] = footprint.Center + across + along;
+		points[4] = footprint.Center - across + along;
+	}
+
+	/// <summary>
+	/// LE-D21's rule on the ground's heights at <see cref="GroundPoints"/>: refused when the
+	/// highest is more than <see cref="MaxGroundReliefMeters"/> over the lowest, or when a
+	/// height is not a number — a corner whose ground was not found within
+	/// <see cref="GroundWindowMeters"/> of the centre's. Otherwise the structure stands on
+	/// the highest (<paramref name="baseHeight"/>), and its plinth (<see cref="Plinth"/>)
+	/// reaches down past the lowest. On level ground the base is the ground.
+	/// </summary>
+	public static PlacementResult CheckGround(ReadOnlySpan<float> heights, out float baseHeight)
+	{
+		baseHeight = float.NaN;
+		if (heights.Length == 0)
+		{
+			return PlacementResult.TooSteep;
+		}
+
+		float highest = float.NegativeInfinity;
+		float lowest = float.PositiveInfinity;
+		foreach (float height in heights)
+		{
+			if (!float.IsFinite(height))
+			{
+				return PlacementResult.TooSteep;
+			}
+
+			highest = MathF.Max(highest, height);
+			lowest = MathF.Min(lowest, height);
+		}
+
+		if (highest - lowest > MaxGroundReliefMeters)
+		{
+			return PlacementResult.TooSteep;
+		}
+
+		baseHeight = highest;
+		return PlacementResult.Ok;
+	}
+
+	/// <summary>
+	/// What a structure's body stands on (LE-D21): the body's plan, from
+	/// <see cref="MaxGroundReliefMeters"/> under its base up to it. A site the rule takes
+	/// has no ground under its footprint lower than that, so the gap under its downhill
+	/// edge is closed whatever the slope; on level ground it is all under the ground. The
+	/// same depth for every site, so every peer builds the same body from the kind, the
+	/// point and the yaw, and nothing about it crosses the wire.
+	/// </summary>
+	public static StructureBox Plinth(in StructureBox body) =>
+		body.IsEmpty
+			? default
+			: new StructureBox(new Vector3(body.Center.X, -MaxGroundReliefMeters * 0.5f, body.Center.Z),
+				new Vector3(body.HalfExtents.X, MaxGroundReliefMeters * 0.5f, body.HalfExtents.Z));
 
 	public static PlacementResult Check(in Footprint candidate, ReadOnlySpan<Footprint> existing,
 		ReadOnlySpan<Vector3> doors)
@@ -548,6 +641,7 @@ public static class StructurePlacement
 		PlacementResult.CannotAfford => "not enough points",
 		PlacementResult.PoolFull => "too many structures",
 		PlacementResult.NotStrategist => "not a strategist",
+		PlacementResult.TooSteep => "the ground is too steep",
 		_ => result.ToString(),
 	};
 }

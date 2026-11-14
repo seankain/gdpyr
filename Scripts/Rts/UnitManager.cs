@@ -44,6 +44,12 @@ public partial class UnitManager : Node
 	private const int CorpseTicks = SimConfig.TickRate * 2;
 
 	/// <summary>
+	/// How far over a data map's highest possible ground its bake's box reaches [m]: a
+	/// sniper tower's 7.9 m and a bridge's deck and rails with room over them.
+	/// </summary>
+	private const float BakeHeadroomMeters = 40f;
+
+	/// <summary>
 	/// How far above a player's feet the point a gunner suppresses is taken to be: the
 	/// chest it last aimed at. Where a unit throws a grenade at a player it can no
 	/// longer see (<see cref="ServerThrow"/>).
@@ -2786,6 +2792,26 @@ public partial class UnitManager : Node
 		mesh.AgentHeight = infantry?.HeightMeters ?? 1.8f;
 		mesh.AgentMaxClimb = 0.5f;
 		mesh.AgentMaxSlope = 45f;
+
+		// A data map (docs/LEVEL_EDITOR.md §7.3): walkable is 40°, which a body and a unit
+		// walk with 2° to spare, where the engine's 45° kept faces they stall on (LE-D23);
+		// and with water, the bake's box has its floor 1 m under it, so units do not path
+		// where the bed is deeper than that (LE-D8). A scene map is baked as it always was.
+		if (Gdpyr.Level.LevelRoot.Current is { Document: not null } level)
+		{
+			mesh.AgentMaxSlope = Gdpyr.Sim.Level.MapLimits.WalkableSlopeDegrees;
+			if (level.HasWater)
+			{
+				float floor = level.BakeFloorMeters;
+				float half = Gdpyr.Sim.Level.MapLimits.FieldHalfMeters + 1f;
+				float ceiling = Gdpyr.Sim.Level.MapLimits.MaxHeightMeters + BakeHeadroomMeters;
+				mesh.FilterBakingAabb = new Aabb(new Vector3(-half, floor, -half),
+					new Vector3(2f * half, ceiling - floor, 2f * half));
+			}
+
+			GD.Print($"[rts] baking a data map: slope {mesh.AgentMaxSlope:0}°, "
+				+ (level.HasWater ? $"floor {level.BakeFloorMeters:0.00} m, 1 m under the water" : "no water over the ground"));
+		}
 
 		// Colliders only, not meshes. A mesh source would make the bake read geometry
 		// back off the GPU, which the engine warns about and which a headless server

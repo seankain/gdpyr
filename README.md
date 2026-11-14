@@ -68,9 +68,10 @@ dedicated-server authoritative.
   (`Scenes/Maps/MapBase.tscn`), what a map scene must hold, and the catalog entry that puts it in
   the host panel's map picker
 - [`docs/LEVEL_EDITOR.md`](docs/LEVEL_EDITOR.md) — a plan, its ground measured in the engine (LE0,
-  `scripts/level-editor-checks.sh`) and the ground's rules written and tested engine-free (LE1,
-  `Scripts/Sim/Level/`), with no editor, file or world from one built yet: a level editor in the
-  game —
+  `scripts/level-editor-checks.sh`), the ground's rules, the map file and its validator written and
+  tested engine-free (LE1, LE2, `Scripts/Sim/Level/`, `tools/Gdpyr.MapTool`), and a map played from
+  its file (LE3: `--map`, `Scenes/Maps/MapHost.tscn`, `Scripts/Level/`, one bundled map), with no
+  editor and no fetch built yet: a level editor in the game —
   terrain raised and lowered with brushes that set its grade and textured by height and slope,
   prefabs placed on ground levelled for them, roads and bridges — and maps as data files that are
   saved, cloned and exported, given to a dedicated server, and fetched by clients from the server
@@ -209,6 +210,13 @@ Two more watch rather than play ([`docs/AI_DEBUG.md`](docs/AI_DEBUG.md)):
 |---|---|
 | `--spectate` | join as a spectator: no character, a free camera, and the AI debugger. Alone, an offline round of bots to watch |
 | `--ai-debug`, `--no-ai-debug` | whether this authority sends its bots' plans to spectators; on except in a dedicated-server export |
+
+Two more choose the map and play it on your own ([`docs/LEVEL_EDITOR.md`](docs/LEVEL_EDITOR.md) §9.5):
+
+| Flag | Effect |
+|---|---|
+| `--map <map>` | with `--server`, `--listen` or `--practice`: a catalog id (`greybox`, `hills`), a map's name in `user://maps`, 8 or more hex digits of a map file's SHA-256, or a path ending `.map`. A map file that does not read or does not pass the validator is a launch error |
+| `--practice` | the main menu's "Practice offline", with no menu |
 
 Two more record a round or watch one back ([`docs/DEMOS.md`](docs/DEMOS.md)):
 

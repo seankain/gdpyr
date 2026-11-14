@@ -116,6 +116,43 @@ public class ScenarioTests
 	}
 
 	[Fact]
+	public void AScenarioMayNameItsMap()
+	{
+		// docs/LEVEL_EDITOR.md §9.6: a catalog id, passed to the server as --map.
+		Scenario hills = Scenario.Parse("""
+			{ "map": "hills", "assert": [ { "metric": "events.kill.count", "op": ">=", "value": 1 } ] }
+			""");
+		Assert.Equal("hills", hills.Map);
+		Assert.Null(Scenario.Parse(Minimal).Map);
+
+		foreach (string bad in new[] { "\"Hills\"", "\"\"", "\"a b\"", "\"-x\"", "\"res://Maps/hills.map\"", "3", "null" })
+		{
+			ScenarioException error = Assert.Throws<ScenarioException>(() => Scenario.Parse(
+				"{ \"map\": " + bad + ", \"assert\": [ { \"metric\": \"events.kill.count\", \"op\": \">=\", \"value\": 1 } ] }"));
+			Assert.Contains("'map' is a catalog id", error.Message);
+		}
+	}
+
+	[Fact]
+	public void EveryCheckedInScenarioPlaysAMapThisBuildHas()
+	{
+		int onData = 0;
+		foreach (string file in System.IO.Directory.GetFiles(ScenarioDirectory(), "*.json"))
+		{
+			Scenario scenario = Scenario.Load(file);
+			if (scenario.Map != null)
+			{
+				Assert.True(Gdpyr.Core.MapCatalog.TryFind(scenario.Map, out Gdpyr.Core.MapInfo map),
+					$"{System.IO.Path.GetFileName(file)} names map '{scenario.Map}', which the catalog has not");
+				onData += map.IsData ? 1 : 0;
+			}
+		}
+
+		// LE3's two, re-run on the bundled data map.
+		Assert.True(onData >= 2, $"{onData} scenarios play a data map");
+	}
+
+	[Fact]
 	public void AUnitSpawnMayNameItsOwnMicroAutonomy()
 	{
 		Scenario scenario = Scenario.Parse(WithTruck("""{ "unit": "infantry", "id": "r1", "at": [3, 1, 0], "autonomy": "on" }"""));

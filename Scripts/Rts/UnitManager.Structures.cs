@@ -431,6 +431,14 @@ public partial class UnitManager
 			}
 
 			site = ground["position"].AsVector3();
+
+			// The ground under the footprint (docs/LEVEL_EDITOR.md LE-D21): refused past
+			// 0.5 m of relief, and otherwise stood on the highest of it.
+			PlacementResult relief = SiteGround(space, footprint, ref site);
+			if (relief != PlacementResult.Ok)
+			{
+				return relief;
+			}
 		}
 
 		if (requireNavigation && NavigationReady)
@@ -454,6 +462,39 @@ public partial class UnitManager
 		}
 
 		return PlacementResult.Ok;
+	}
+
+	/// <summary>
+	/// LE-D21 asked of the world: the ground at the footprint's corners, each looked for
+	/// within <see cref="StructurePlacement.GroundWindowMeters"/> of the ground under its
+	/// centre, from above it down. A probe that starts inside something standing on a
+	/// corner does not meet it and finds the ground under it; one that finds nothing is a
+	/// corner too far up or down. <paramref name="site"/> is on the ground under the centre,
+	/// and is raised to the highest of the five when the rule takes it.
+	/// </summary>
+	private static PlacementResult SiteGround(PhysicsDirectSpaceState3D space, in Footprint footprint, ref Vector3 site)
+	{
+		Span<Vector3> points = stackalloc Vector3[StructurePlacement.GroundPointCount];
+		Span<float> heights = stackalloc float[StructurePlacement.GroundPointCount];
+		StructurePlacement.GroundPoints(footprint, points);
+		heights[0] = site.Y;
+		float window = StructurePlacement.GroundWindowMeters;
+		for (int i = 1; i < points.Length; i++)
+		{
+			var corner = new Vector3(points[i].X, site.Y, points[i].Z);
+			var down = PhysicsRayQueryParameters3D.Create(corner + (Vector3.Up * window),
+				corner - (Vector3.Up * window), CollisionLayers.World);
+			Godot.Collections.Dictionary hit = space.IntersectRay(down);
+			heights[i] = hit.Count == 0 ? float.NaN : hit["position"].AsVector3().Y;
+		}
+
+		PlacementResult result = StructurePlacement.CheckGround(heights, out float baseHeight);
+		if (result == PlacementResult.Ok)
+		{
+			site.Y = baseHeight;
+		}
+
+		return result;
 	}
 
 	/// <summary>

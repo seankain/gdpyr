@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Gdpyr.Sim;
 using Godot;
@@ -315,5 +316,74 @@ public class PredictionLedgerTests
 		}
 
 		Assert.Equal(0, ledger.Corrections);
+	}
+
+	// ---- LE-D25: a correction is applied from 2 cm (docs/LEVEL_EDITOR.md §4) ----------------
+
+	[Fact]
+	public void TheThresholdIsTwoCentimetres()
+	{
+		Assert.Equal(0.02f, SimConfig.MispredictionThreshold);
+
+		// Over the most the wire's rounding can put between two ends that agree: half a
+		// centimetre on each of three axes.
+		float worstRounding = MathF.Sqrt(3f) * SimConfig.PositionQuantum * 0.5f;
+		Assert.InRange(worstRounding, 0.0086f, 0.0087f);
+		Assert.True(SimConfig.MispredictionThreshold > 2f * worstRounding);
+	}
+
+	[Theory]
+	[InlineData(0.012f, ReplayAction.InSync)]
+	[InlineData(0.019f, ReplayAction.InSync)]
+	[InlineData(0.021f, ReplayAction.Replay)]
+	[InlineData(0.05f, ReplayAction.Replay)]
+	public void AnErrorIsCorrectedFromTwoCentimetres(float error, ReplayAction expected)
+	{
+		PredictionLedger ledger = Recorded(1, 20, Vector3.Zero);
+
+		ReplayDecision decision = ledger.Decide(Snapshot(10, new Vector3(0f, 0f, error)));
+
+		Assert.Equal(expected, decision.Action);
+	}
+
+	[Fact]
+	public void TheWiresRoundingOnASlopeIsNeverCorrected()
+	{
+		// LE0's case: a body crossing a 20° slope, every axis of its position rounded to the
+		// centimetre on its way back. The client predicted a position up to 1 cm from the
+		// server's — a tick's worth of float and contact difference, which on the level was
+		// never corrected (§10.1) — and the server's snapshot is its own position as the wire
+		// carries it. On the level two axes are rounded and the third is exact; on a slope
+		// all three are, and at 1 cm the sum passed the threshold. Not at 2 cm, anywhere.
+		var random = new Random(25);
+		float grade = MathF.Tan(20f * MathF.PI / 180f);
+		int over1cm = 0;
+		float worst = 0f;
+		const int Trials = 20_000;
+		for (int i = 0; i < Trials; i++)
+		{
+			float x = (float)((random.NextDouble() * 200d) - 100d);
+			float z = (float)((random.NextDouble() * 200d) - 100d);
+			var server = new Vector3(x, (x * grade) + 1.37f, z);
+			var wire = new Vector3(Quantize.I16ToMeters(Quantize.MetersToI16(server.X)),
+				Quantize.I16ToMeters(Quantize.MetersToI16(server.Y)), Quantize.I16ToMeters(Quantize.MetersToI16(server.Z)));
+			var off = new Vector3((float)random.NextDouble() - 0.5f, (float)random.NextDouble() - 0.5f,
+				(float)random.NextDouble() - 0.5f);
+			Vector3 predicted = server + (off.Normalized() * (float)(random.NextDouble() * 0.01d));
+
+			PredictionLedger ledger = Recorded(1, 20, predicted);
+			ReplayDecision decision = ledger.Decide(Snapshot(10, wire));
+
+			Assert.Equal(ReplayAction.InSync, decision.Action);
+			Assert.Equal(0, ledger.Corrections);
+			worst = MathF.Max(worst, decision.PositionError);
+			over1cm += decision.PositionError > 0.01f ? 1 : 0;
+		}
+
+		// Under 1 cm of prediction and under 8.7 mm of rounding: under 1.87 cm, every one.
+		Assert.True(worst < 0.0187f, $"worst {worst} m");
+
+		// And what 1 cm would have done with the same snapshots: corrected a share of them.
+		Assert.InRange(over1cm, Trials / 20, Trials / 2);
 	}
 }

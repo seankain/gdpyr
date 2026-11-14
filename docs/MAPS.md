@@ -9,8 +9,12 @@ Scope: how a map reaches the map select, what the template holds, what the engin
 scene, and how to check a new one. Hosting and the wire are in [`LAN.md`](LAN.md) §3.4. Cover is in
 [`COVER.md`](COVER.md). Nodes and perks are in [`CONTROL_POINTS.md`](CONTROL_POINTS.md).
 
-A second kind of map is planned and not built: a data file made in an editor in the game, which a
-client can fetch from its server ([`LEVEL_EDITOR.md`](LEVEL_EDITOR.md)). Nothing here changes for it.
+A second kind of map is a data file, a `.map`, which one scene, `Scenes/Maps/MapHost.tscn`, builds
+the world from ([`LEVEL_EDITOR.md`](LEVEL_EDITOR.md) §7). Playing one is built (LE3): one is bundled,
+`res://Maps/hills.map`, with a catalog entry after the greybox; `--map` names any. The editor that
+makes one and a client fetching one from its server are planned and not built. Nothing here changes
+for scene maps: a data map's world has every node §3 names, and `Tests/BundledMapTests.cs` holds a
+bundled one to the validator in place of `MapSceneTests`.
 
 ---
 
@@ -32,7 +36,8 @@ new("dunes", "Dunes", "res://Scenes/Maps/Dunes.tscn",
 
 - **Nothing scans a folder.** A scene in `Scenes/Maps/` with no catalog entry is not a map.
 - **The first entry is the default** (`MapCatalog.Default`). `--server`, `--listen` and demo playback
-  load it. There is no `--map` flag. Keep the greybox first
+  load it; `--map <id>` names another for `--server`, `--listen` and `--practice`
+  ([`LEVEL_EDITOR.md`](LEVEL_EDITOR.md) §9.5). Keep the greybox first
   (`MapCatalogTests.TheDefaultIsTheGreybox`) and add new maps after it.
 - **The host and every client need the entry.** A client whose build lacks the host's map id refuses
   it and disconnects instead of guessing. Both machines must run the same commit

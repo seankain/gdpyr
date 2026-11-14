@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="TerrainPalette" load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://Scripts/Level/TerrainPalette.cs" id="1_palette"]
+[ext_resource type="Texture2D" uid="uid://d0b2gn0m3o55s" path="res://ThirdParty/GreyboxTextures/greybox_yellow_grid.png" id="2_sand"]
+[ext_resource type="Texture2D" uid="uid://ikqu6aqscnxr" path="res://ThirdParty/GreyboxTextures/greybox_orange_grid.png" id="3_mud"]
+[ext_resource type="Texture2D" uid="uid://ccql102rrtlao" path="res://ThirdParty/GreyboxTextures/greybox_green_grid.png" id="4_grass"]
+[ext_resource type="Texture2D" uid="uid://c4xngjwmfkj4j" path="res://ThirdParty/GreyboxTextures/greybox_grey_grid.png" id="5_stone"]
+[ext_resource type="Texture2D" uid="uid://cfto684ngmdih" path="res://ThirdParty/GreyboxTextures/greybox_blue_solid.png" id="6_water"]
+
+[resource]
+script = ExtResource("1_palette")
+Sand = ExtResource("2_sand")
+Mud = ExtResource("3_mud")
+Grass = ExtResource("4_grass")
+Stone = ExtResource("5_stone")
+Water = ExtResource("6_water")
+SandScale = 4.0
+MudScale = 4.0
+GrassScale = 4.0
+StoneScale = 4.0
+WaterScale = 60.0

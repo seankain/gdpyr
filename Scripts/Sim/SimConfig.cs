@@ -92,9 +92,13 @@ public static class SimConfig
 
 	/// <summary>
 	/// Position error above which a server correction is applied and counted as a
-	/// misprediction. 1 cm — below this the correction costs more than it fixes.
+	/// misprediction. 2 cm (docs/LEVEL_EDITOR.md LE-D25): a position crosses the wire at
+	/// 1 cm an axis (<see cref="Quantize"/>), and on a slope all three axes are rounded,
+	/// which is up to √3 · 5 mm = 8.7 mm before anything has gone wrong. At 1 cm a body
+	/// crossing a 20° slope behind an 80 ms link was corrected up to 2.5 times a second
+	/// for the wire's own rounding; at 2 cm, 0.03 at the most (LEVEL_EDITOR.md §10.1).
 	/// </summary>
-	public const float MispredictionThreshold = 0.01f;
+	public const float MispredictionThreshold = 0.02f;
 
 	/// <summary>Velocity error (m/s) that forces a correction even when the position agrees.</summary>
 	public const float VelocityCorrectionThreshold = 0.5f;

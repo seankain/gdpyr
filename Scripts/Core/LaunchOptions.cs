@@ -47,6 +47,7 @@ public sealed class LaunchOptions
 		"             [--agent-unbounded] [--agent-omniscient]\n" +
 		"             [--record <name>] | [--playdemo <name>]\n" +
 		"             [--spectate] [--ai-debug | --no-ai-debug]\n" +
+		"             [--practice] [--map <map>]\n" +
 		"  --server [port]         headless authority, no local player (default port 7777)\n" +
 		"  --client <host[:port]>  connect to a server\n" +
 		"  --listen [port]         authority plus a local player\n" +
@@ -66,6 +67,9 @@ public sealed class LaunchOptions
 		"  --spectate              join as a spectator: a free camera and the AI debugger (docs/AI_DEBUG.md)\n" +
 		"  --ai-debug              send the bots' plans to spectators; on unless this is a dedicated-server build\n" +
 		"  --no-ai-debug           never send them\n" +
+		"  --practice              a round on your own, as the menu's Practice offline, with no menu\n" +
+		"  --map <map>             play this map, with --server, --listen or --practice: a catalog id, a map's\n" +
+		"                          name in user://maps, 8 or more hex digits of its hash, or a path ending .map\n" +
 		"  (no flags)              the main menu: the servers on this network, or a round on your own\n" +
 		"Godot consumes its own arguments first, so these go after a bare `--`:\n" +
 		"  gdpyr --headless -- --server 7777 --bots 6:1 --agent-api 7900";
@@ -180,6 +184,22 @@ public sealed class LaunchOptions
 	/// </summary>
 	public bool AiDebug { get; private init; } = true;
 
+	/// <summary>
+	/// A round on one's own from the command line: what the main menu's "Practice
+	/// offline" does, with no menu (docs/LEVEL_EDITOR.md §8.7). The mode is
+	/// <see cref="LaunchMode.Offline"/>; this is what says to play rather than show the menu.
+	/// </summary>
+	public bool Practice { get; private init; }
+
+	/// <summary>
+	/// The map to play, as it was typed, or null for the catalog's default
+	/// (docs/LEVEL_EDITOR.md §9.5): a catalog id, a library name, 8 or more hex digits of
+	/// a hash, or a path ending <c>.map</c>. Its syntax is checked here
+	/// (<see cref="Gdpyr.Sim.Level.MapNames.TryParseReference"/>); what it names is
+	/// <c>MapLibrary</c>'s to find, and a reference that names nothing is fatal there.
+	/// </summary>
+	public string MapReference { get; private init; }
+
 	/// <summary>Null when parsing succeeded; a one-line diagnostic otherwise.</summary>
 	public string Error { get; private init; }
 
@@ -246,6 +266,16 @@ public sealed class LaunchOptions
 			mode += " | no ai debug";
 		}
 
+		if (Practice)
+		{
+			mode += " | practice";
+		}
+
+		if (MapReference != null)
+		{
+			mode += $" | map {MapReference}";
+		}
+
 		if (AgentPort is { } agentPort)
 		{
 			mode += $" | agent api {AgentHost}:{agentPort}"
@@ -293,6 +323,8 @@ public sealed class LaunchOptions
 		string playDemo = null;
 		bool spectate = false;
 		bool? aiDebug = null;
+		bool practice = false;
+		string mapReference = null;
 
 		args ??= System.Array.Empty<string>();
 
@@ -530,6 +562,36 @@ public sealed class LaunchOptions
 					spectate = true;
 					break;
 
+				case "--practice":
+				{
+					if (practice)
+					{
+						return Failure("--practice given twice");
+					}
+
+					practice = true;
+					break;
+				}
+
+				case "--map":
+				{
+					if (mapReference != null)
+					{
+						return Failure("--map given twice");
+					}
+
+					if (!TryTakeValue(args, ref i, out string value))
+					{
+						return Failure("--map needs a map, e.g. --map greybox");
+					}
+
+					if (!Gdpyr.Sim.Level.MapNames.TryParseReference(value, out mapReference, out _, out string error))
+					{
+						return Failure($"--map: {error}");
+					}
+					break;
+				}
+
 				case "--ai-debug":
 				case "--no-ai-debug":
 				{
@@ -582,7 +644,41 @@ public sealed class LaunchOptions
 			}
 		}
 
+		if (practice)
+		{
+			// A round on one's own: offline, with a local player, and no menu.
+			if (mode is { } other)
+			{
+				return Failure($"conflicting mode flags: --practice and {other}");
+			}
+
+			if (playDemo != null)
+			{
+				return Failure("--practice and --playdemo: a demo is watched, not played");
+			}
+
+			if (dedicatedServer)
+			{
+				return Failure("--practice needs somebody to play: a dedicated server has no window; use --server");
+			}
+		}
+
 		mode ??= dedicatedServer ? LaunchMode.Server : LaunchMode.Offline;
+
+		if (mapReference != null)
+		{
+			// The map is the authority's to choose. A client plays the one its server
+			// names (docs/LAN.md §3.4), and the menu has a picker of its own.
+			if (mode == LaunchMode.Client)
+			{
+				return Failure("--map: a client plays the map its server names; give --map to the server");
+			}
+
+			if (mode == LaunchMode.Offline && !practice)
+			{
+				return Failure("--map needs --server, --listen or --practice");
+			}
+		}
 
 		if (spectate)
 		{
@@ -644,6 +740,8 @@ public sealed class LaunchOptions
 			PlayDemo = playDemo,
 			Spectate = spectate,
 			AiDebug = aiDebug ?? !dedicatedServer,
+			Practice = practice,
+			MapReference = mapReference,
 		};
 	}
 
