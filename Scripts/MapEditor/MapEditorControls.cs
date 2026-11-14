@@ -50,6 +50,12 @@ public enum EditorAction : byte
 	RaiseSection,
 	LowerSection,
 
+	/// <summary><c>Enter</c>: the road drawn graded, as one step (LE6).</summary>
+	Apply,
+
+	/// <summary><c>U</c>: a bridge section's supports on or off (LE6).</summary>
+	ToggleSupports,
+
 	/// <summary><c>Del</c>: take up what is selected (LE5).</summary>
 	TakeUp,
 
@@ -201,6 +207,9 @@ public static class MapEditorControls
 		new(Key.Tab, false, false, EditorAction.TurnEndForEnd),
 		new(Key.Pageup, false, false, EditorAction.RaiseSection),
 		new(Key.Pagedown, false, false, EditorAction.LowerSection),
+		new(Key.Enter, false, false, EditorAction.Apply),
+		new(Key.KpEnter, false, false, EditorAction.Apply),
+		new(Key.U, false, false, EditorAction.ToggleSupports),
 		new(Key.Delete, false, false, EditorAction.TakeUp),
 		new(Key.O, false, false, EditorAction.NextOverlay),
 		new(Key.Z, true, false, EditorAction.Undo),
@@ -262,6 +271,8 @@ public static class MapEditorControls
 		Key.Period => ".",
 		Key.Pageup => "PgUp",
 		Key.Pagedown => "PgDn",
+		Key.Enter => "Enter",
+		Key.KpEnter => "Enter",
 		Key.Delete => "Del",
 		Key.Escape => "Esc",
 		_ => key.ToString(),
@@ -279,8 +290,9 @@ public static class MapEditorControls
 		_ => null,
 	};
 
-	/// <summary>Whether a tool is in this build: the terrain is LE4's, prefabs LE5's; roads and bridges are LE6's.</summary>
-	public static bool IsBuilt(EditorTool tool) => tool is EditorTool.Terrain or EditorTool.Prefabs;
+	/// <summary>Whether a tool is in this build: the terrain is LE4's, prefabs LE5's, roads and bridges LE6's.</summary>
+	public static bool IsBuilt(EditorTool tool) =>
+		tool is EditorTool.Terrain or EditorTool.Prefabs or EditorTool.Roads or EditorTool.Bridges;
 
 	/// <summary>What the rail calls a tool, with its key.</summary>
 	public static string ToolLabel(EditorTool tool)
@@ -295,14 +307,8 @@ public static class MapEditorControls
 		return $"{(int)tool + 1}  {name}";
 	}
 
-	/// <summary>Why a tool's button is off: which phase builds it.</summary>
-	public static string NotBuilt(EditorTool tool) => tool switch
-	{
-		EditorTool.Prefabs => "prefabs are LE5's",
-		EditorTool.Roads => "roads are LE6's",
-		EditorTool.Bridges => "bridges are LE6's",
-		_ => string.Empty,
-	};
+	/// <summary>Why a tool's button is off: which phase builds it. Every tool is built (LE6): nothing.</summary>
+	public static string NotBuilt(EditorTool tool) => IsBuilt(tool) ? string.Empty : $"{tool} is not in this build";
 
 	// ---- a brush's settings ------------------------------------------------------------------------
 
@@ -723,6 +729,107 @@ public static class MapEditorControls
 	/// <summary>A prefab parameter's slider: its own range, in the file's whole numbers.</summary>
 	public static SliderRange RangeOf(PrefabParameter parameter) =>
 		new(parameter.Name, string.Empty, parameter.Min, parameter.Max, parameter.Max - parameter.Min > 100 ? 50f : 1f);
+
+	// ---- the road tool (§8.5, LE6) ---------------------------------------------------------------------
+
+	/// <summary>The widths a road may be [m], in the order <c>[</c> and <c>]</c> step them.</summary>
+	public static readonly float[] RoadWidths = { 4f, 6f, 8f };
+
+	/// <summary>A new road's width [m].</summary>
+	public const float DefaultRoadWidthMeters = 6f;
+
+	/// <summary>A new road's grade limit, rise over run: 10 % (§6.6).</summary>
+	public const float DefaultRoadGrade = MapRoad.DefaultGradeLimitPermille / 1000f;
+
+	/// <summary>What <c>-</c> and <c>=</c> move a road's grade limit by: 1 %.</summary>
+	public const float RoadGradeStep = 0.01f;
+
+	/// <summary>How near a click must be to a point of the road being drawn to pick it up and move it [m].</summary>
+	public const float RoadPointPickMeters = 1.5f;
+
+	/// <summary><c>[</c> (−1) and <c>]</c> (+1): the next narrower or wider of a road's widths, held at the ends.</summary>
+	public static float StepRoadWidth(float width, int direction)
+	{
+		int at = Array.IndexOf(RoadWidths, width);
+		at = at < 0 ? Array.IndexOf(RoadWidths, DefaultRoadWidthMeters) : at + Math.Sign(direction);
+		return RoadWidths[Math.Clamp(at, 0, RoadWidths.Length - 1)];
+	}
+
+	/// <summary><c>-</c> and <c>=</c>: a road's grade limit a percent either way, held to 6–15 %, in whole tenths of a percent.</summary>
+	public static float StepRoadGrade(float grade, int direction) =>
+		ClampRoadGrade(grade + (Math.Sign(direction) * RoadGradeStep));
+
+	/// <summary>A grade limit as a road may have it: 6–15 %, to the tenth of a percent a file holds.</summary>
+	public static float ClampRoadGrade(float grade)
+	{
+		float permille = MathF.Round(Math.Clamp(float.IsFinite(grade) ? grade : DefaultRoadGrade, 0f, 1f) * 1000f);
+		return Math.Clamp(permille, MapRoad.MinGradeLimitPermille, MapRoad.MaxGradeLimitPermille) / 1000f;
+	}
+
+	/// <summary>The grade limit's slider, in percent.</summary>
+	public static SliderRange RoadGradeRange =>
+		new("Grade limit", "%", MapRoad.MinGradeLimitPermille / 10f, MapRoad.MaxGradeLimitPermille / 10f, 0.5f);
+
+	/// <summary>The road tool's settings, as its panel says them.</summary>
+	public static string RoadSettings(float width, float grade) =>
+		$"a road {F(width, "0")} m wide, at most {F(grade * 100f, "0.#")} %";
+
+	/// <summary>
+	/// What the road being drawn reads as (§8.5): with fewer than two points, what to do; else §6.6's
+	/// answer for it, and when it is taken its length, its deepest cut and fill and its joined ends.
+	/// </summary>
+	public static string RoadPreview(RoadCheck check, int points)
+	{
+		if (points < MapLimits.MinRoadPoints || check == null)
+		{
+			return points == 0
+				? "click to start a road, or on a road to move its points"
+				: "click to add its next point; Enter grades it, Esc drops it";
+		}
+
+		RoadPath path = check.Path;
+		string joins = ((check.StartJoin != null ? 1 : 0) + (check.EndJoin != null ? 1 : 0)) switch
+		{
+			0 => string.Empty,
+			1 => ", one end joined",
+			_ => ", both ends joined",
+		};
+		return check.Result switch
+		{
+			RoadResult.Ok => $"road of {points} points, {F(path.Length, "0.0")} m: deepest cut {F(path.DeepestCut)} m,"
+				+ $" fill {F(path.DeepestFill)} m{joins}; Enter grades it",
+			RoadResult.TooSteepToJoin => $"its ends are {F(path.JoinGrade * 100f, "0.0")} % apart, over its {F(path.Grade * 100f, "0.#")} %",
+			_ => RoadPath.Describe(check.Result),
+		};
+	}
+
+	// ---- the bridge tool (§8.5, LE6) ---------------------------------------------------------------------
+
+	/// <summary>The sections the bridge tool places, in its panel's order.</summary>
+	public static readonly ushort[] BridgeSections = { PrefabSpecs.BridgeSpan, PrefabSpecs.BridgeRamp };
+
+	/// <summary><c>PgUp</c> (+1) and <c>PgDn</c> (−1): a free-floating section's height a quarter metre either way, inside LE-D4's limits.</summary>
+	public static float Nudge(float height, int direction) =>
+		Math.Clamp(height + (Math.Sign(direction) * BridgeRules.NudgeMeters), MapLimits.MinHeightMeters, MapLimits.MaxHeightMeters);
+
+	/// <summary>
+	/// What the section's ghost says (§8.5): the section, §6.5's answer, where it goes — on the connector
+	/// it joins, or floating at its height — and its piers and the ends it lands.
+	/// </summary>
+	public static string SectionGhost(PrefabSpec spec, SectionCheck check, float height)
+	{
+		if (check?.Placement == null)
+		{
+			return spec.Name;
+		}
+
+		string where = check.Target is { } target
+			? $"on {(target.IsRoad ? $"road {target.Road}'s end" : $"section {target.Object}'s end")}"
+			: $"floating at {F(height)} m";
+		string piers = check.Piers switch { 0 => "no pier", 1 => "1 pier", _ => $"{check.Piers} piers" };
+		string landed = check.Landed switch { 0 => string.Empty, 1 => ", 1 end landed", _ => $", {check.Landed} ends landed" };
+		return $"{spec.Name} {where}: {PrefabPlacement.Describe(check.Result)}, {piers}{landed}";
+	}
 
 	// ---- the test process --------------------------------------------------------------------------
 

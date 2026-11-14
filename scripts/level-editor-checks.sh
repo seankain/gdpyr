@@ -48,6 +48,17 @@
 #
 #   ./scripts/level-editor-checks.sh editor-prefabs
 #
+# LE6, roads and bridges, by the same file's LE6 half (LevelEditorChecks.Roads.cs): roads drawn
+# across a ridge with the road tool, held to their limit by the collider at every centreline
+# sample; then a river with three spans over it, roads to its ends and a span floating on piers,
+# saved, and saved again with the three spans taken up (LE4_CHECK=roads). Each map is then played
+# by --listen --map with no bots: the bridge and its piers, the floating span, a rifleman ordered
+# across and a dropship ordered onto the deck (LE4_CHECK=bridge-round); the rifleman ordered
+# across with the bridge gone (LE4_CHECK=bridge-gone); and tools/level_editor_checks/
+# le6_4x4_bridge.json, a 4x4 driven across by a scenario's script, by tools/Gdpyr.Playtest.
+#
+#   ./scripts/level-editor-checks.sh editor-roads
+#
 # Each part runs on the plan's collider and, where the two could differ, on the heightmap
 # beside it. `frame` and the bake's times in `ground` are wall time: run them on a machine
 # doing nothing else. `net` runs in real time behind tools/EngineChecks/delay_relay.py
@@ -73,6 +84,8 @@ AGENT_PORT="${AGENT_PORT:-7901}"
 MAP="${MAP:-hills}"
 LE4_NEW="${LE4_NEW:-le4-new}"
 LE4_HILLS="${LE4_HILLS:-le4-hills}"
+LE6_BRIDGE="${LE6_BRIDGE:-le6-bridge}"
+LE6_GONE="${LE6_GONE:-le6-nobridge}"
 LE3_SECONDS="${LE3_SECONDS:-600}"
 FRAME_SECONDS="${FRAME_SECONDS:-300}"
 if [ $# -eq 0 ]; then
@@ -99,7 +112,7 @@ fi
 mkdir -p "$COPY/EngineChecks"
 cp "$PROJECT_DIR/tools/EngineChecks/LevelChecks.cs" "$PROJECT_DIR/tools/EngineChecks/LevelTerrain.cs" \
 	"$PROJECT_DIR/tools/EngineChecks/LevelMapChecks.cs" "$PROJECT_DIR/tools/EngineChecks/LevelEditorChecks.cs" \
-	"$COPY/EngineChecks/"
+	"$PROJECT_DIR/tools/EngineChecks/LevelEditorChecks.Roads.cs" "$COPY/EngineChecks/"
 sed -i 's#^GameConsole="\*res://Scripts/Ui/GameConsole.cs"#&\nLevelChecks="*res://EngineChecks/LevelChecks.cs"\nLevelMapChecks="*res://EngineChecks/LevelMapChecks.cs"\nLevelEditorChecks="*res://EngineChecks/LevelEditorChecks.cs"#' \
 	"$COPY/project.godot"
 
@@ -389,6 +402,62 @@ for mode in "${MODES[@]}"; do
 		grep -q 'finished-prefabs' <(ls "$dir") || { echo "[checks] FAIL editor-prefabs: the editor's part did not finish"; failed=1; }
 		echo "editor-prefabs: exit $status"
 		[ "$status" -ne 0 ] && failed=1
+		;;
+
+	editor-roads)
+		# The editor with no name makes the maps, in a HOME of its own; each is then played from that
+		# library, and the 4x4's scenario is played on the one with the bridge.
+		ground slab
+		dir="$COPY/editor-roads"
+		home="$COPY/editor-roads-home"
+		rm -rf "$dir" "$home"
+		mkdir -p "$dir" "$home"
+		env -u XDG_DATA_HOME HOME="$home" LE4_CHECK=roads LE4_DIR="$dir" LE6_BRIDGE="$LE6_BRIDGE" LE6_GONE="$LE6_GONE" \
+			timeout 1800 "$GODOT" --headless --path "$COPY" -- --edit > "$COPY/editor-roads.log" 2>&1
+		status=$?
+		report "$COPY/editor-roads.log"
+		grep -E '^\[editor\] (road [0-9]+ graded|placed bridge|deep|saved)' "$COPY/editor-roads.log"
+		forbidden "$COPY/editor-roads.log" "editor-roads, the editor's log"
+		grep -q 'finished-roads' <(ls "$dir") || { echo "[checks] FAIL editor-roads: the editor's part did not finish"; failed=1; }
+		echo "editor-roads: exit $status"
+		[ "$status" -ne 0 ] && failed=1
+
+		for part in bridge-round:"$LE6_BRIDGE" bridge-gone:"$LE6_GONE"; do
+			name="${part%%:*}"
+			env -u XDG_DATA_HOME HOME="$home" LE4_CHECK="$name" LE4_DIR="$dir" timeout 1200 "$GODOT" --headless \
+				--path "$COPY" --fixed-fps 60 -- --listen "$GAME_PORT" --map "${part#*:}" --no-bots > "$COPY/$name.log" 2>&1
+			status=$?
+			report "$COPY/$name.log"
+			grep -E '^\[level\] built|^\[rts\] the map' "$COPY/$name.log"
+			forbidden "$COPY/$name.log" "$name, its log"
+			held="$(cat "$dir/$name-done" 2>/dev/null || echo none)"
+			if [ "${held%% of *}" != "${held##* of }" ] || [ "$held" = "none" ]; then
+				echo "[checks] FAIL $name: its facts, as it wrote them: $held"
+				failed=1
+			fi
+			echo "$name: exit $status, its facts $held"
+		done
+
+		# The 4x4, by a scenario's script, on the map with the bridge, from the same library.
+		wrapper="$COPY/godot-fixed-fps"
+		printf '#!/usr/bin/env bash\nexec "%s" --fixed-fps 60 "$@"\n' "$(command -v "$GODOT" || echo "$GODOT")" > "$wrapper"
+		chmod +x "$wrapper"
+		out="$COPY/le6-4x4.txt"
+		# Godot's user:// is under the HOME the maps were saved in; dotnet's own files stay where they are.
+		(cd "$PROJECT_DIR" && env -u XDG_DATA_HOME HOME="$home" DOTNET_CLI_HOME="$HOME" \
+			NUGET_PACKAGES="${NUGET_PACKAGES:-$HOME/.nuget/packages}" dotnet run --project tools/Gdpyr.Playtest -c Release -- \
+			--godot "$wrapper" --project "$COPY" --port "$AGENT_PORT" --game-port "$GAME_PORT" \
+			--trace-dir "$COPY/traces" tools/level_editor_checks/le6_4x4_bridge.json) > "$out" 2>&1
+		status=$?
+		grep -h '^\[boot\]\|^\[level\] built' "$COPY/traces"/server-*.log
+		grep -E 'PASS|FAIL|ERROR|  [a-z.]+.*(ok|FAILED)' "$out" | head -40
+		if grep -q '\.\. FAIL' "$out" || ! grep -q '\.\. PASS' "$out"; then
+			echo "[checks] FAIL editor-roads: the 4x4's scenario on $LE6_BRIDGE did not pass (output: $out)"
+			failed=1
+		else
+			echo "[checks] PASS editor-roads: the 4x4's scenario on $LE6_BRIDGE: a 4x4 driven by its script crosses the bridge"
+		fi
+		echo "le6-4x4: exit $status"
 		;;
 
 	editor-shot)

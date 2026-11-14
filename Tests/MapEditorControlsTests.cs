@@ -41,6 +41,9 @@ public class MapEditorControlsTests
 	[InlineData(Key.F5, false, false, EditorAction.Test)]
 	[InlineData(Key.T, false, false, EditorAction.StraightDown)]
 	[InlineData(Key.Escape, false, false, EditorAction.Cancel)]
+	[InlineData(Key.Enter, false, false, EditorAction.Apply)]
+	[InlineData(Key.KpEnter, false, false, EditorAction.Apply)]
+	[InlineData(Key.U, false, false, EditorAction.ToggleSupports)]
 	public void TheKeys_AreSection8_2s(Key key, bool ctrl, bool shift, EditorAction action) =>
 		Assert.Equal(action, MapEditorControls.ActionOf(key, ctrl, shift));
 
@@ -84,17 +87,15 @@ public class MapEditorControlsTests
 	}
 
 	[Fact]
-	public void TheToolKeys_SelectTheirTools_AndTheTerrainAndPrefabsAreBuilt()
+	public void TheToolKeys_SelectTheirTools_AndEveryToolIsBuilt()
 	{
 		Assert.Equal(EditorTool.Terrain, MapEditorControls.ToolOf(EditorAction.TerrainTool));
 		Assert.Equal(EditorTool.Bridges, MapEditorControls.ToolOf(EditorAction.BridgesTool));
 		Assert.Null(MapEditorControls.ToolOf(EditorAction.Undo));
-		Assert.True(MapEditorControls.IsBuilt(EditorTool.Terrain));
-		Assert.True(MapEditorControls.IsBuilt(EditorTool.Prefabs));
-		foreach (EditorTool tool in new[] { EditorTool.Roads, EditorTool.Bridges })
+		foreach (EditorTool tool in Enum.GetValues<EditorTool>())
 		{
-			Assert.False(MapEditorControls.IsBuilt(tool));
-			Assert.Matches("LE6", MapEditorControls.NotBuilt(tool));
+			Assert.True(MapEditorControls.IsBuilt(tool));
+			Assert.Empty(MapEditorControls.NotBuilt(tool));
 		}
 
 		Assert.StartsWith("1", MapEditorControls.ToolLabel(EditorTool.Terrain));
@@ -433,5 +434,84 @@ public class MapEditorControlsTests
 		Assert.False(clock.Tick(600f, 4));
 		Assert.False(clock.Tick(-5f, 5));
 		Assert.Equal(0f, clock.Waiting);
+	}
+
+	// ---- the road tool (§8.5, LE6) -------------------------------------------------------------------
+
+	[Fact]
+	public void ARoadsWidth_StepsThroughFourSixAndEight_HeldAtTheEnds()
+	{
+		Assert.Equal(new[] { 4f, 6f, 8f }, MapEditorControls.RoadWidths);
+		Assert.Equal(8f, MapEditorControls.StepRoadWidth(6f, 1));
+		Assert.Equal(4f, MapEditorControls.StepRoadWidth(6f, -1));
+		Assert.Equal(8f, MapEditorControls.StepRoadWidth(8f, 1));
+		Assert.Equal(4f, MapEditorControls.StepRoadWidth(4f, -1));
+		Assert.Equal(6f, MapEditorControls.StepRoadWidth(5f, 1));
+		Assert.Equal(6f, MapEditorControls.DefaultRoadWidthMeters);
+	}
+
+	[Fact]
+	public void ARoadsGradeLimit_StepsAPercent_HeldToSixToFifteen_InTenthsOfAPercent()
+	{
+		Assert.Equal(0.10f, MapEditorControls.DefaultRoadGrade);
+		Assert.Equal(0.11f, MapEditorControls.StepRoadGrade(0.10f, 1));
+		Assert.Equal(0.09f, MapEditorControls.StepRoadGrade(0.10f, -1));
+		Assert.Equal(0.15f, MapEditorControls.StepRoadGrade(0.15f, 1));
+		Assert.Equal(0.06f, MapEditorControls.StepRoadGrade(0.065f, -1));
+		Assert.Equal(0.123f, MapEditorControls.ClampRoadGrade(0.1234f));
+		Assert.Equal(0.10f, MapEditorControls.ClampRoadGrade(float.NaN));
+		SliderRange range = MapEditorControls.RoadGradeRange;
+		Assert.Equal(6f, range.Min);
+		Assert.Equal(15f, range.Max);
+		Assert.Equal("a road 6 m wide, at most 10 %", MapEditorControls.RoadSettings(6f, 0.10f));
+	}
+
+	[Fact]
+	public void TheRoadBeingDrawn_SaysWhatToDo_ThenItsAnswer()
+	{
+		Assert.Contains("click to start a road", MapEditorControls.RoadPreview(null, 0));
+		Assert.Contains("Enter grades it", MapEditorControls.RoadPreview(null, 1));
+		MapDocument document = LevelMaps.Empty();
+		RoadCheck ok = RoadPath.Check(document, RoadPath.Record(new[] { new Vector2(-10f, 0f), new Vector2(10f, 0f) }, 6f, 0.10f));
+		Assert.Equal("road of 2 points, 20.0 m: deepest cut 0.00 m, fill 0.00 m; Enter grades it", MapEditorControls.RoadPreview(ok, 2));
+		RoadCheck tight = RoadPath.Check(document,
+			RoadPath.Record(new[] { new Vector2(0f, 0f), new Vector2(3f, 0f), new Vector2(3f, 20f) }, 6f, 0.10f));
+		Assert.Equal(RoadPath.Describe(RoadResult.CornerTooTight), MapEditorControls.RoadPreview(tight, 3));
+		document.Objects.Add(MapObject.At(PrefabSpecs.BridgeSpan, new Vector3(-30f, 0f, 0f), MathF.PI / 2f));
+		document.Objects.Add(MapObject.At(PrefabSpecs.BridgeSpan, new Vector3(30f, 5f, 0f), MathF.PI / 2f));
+		RoadCheck steep = RoadPath.Check(document, RoadPath.Record(new[] { new Vector2(-24f, 0f), new Vector2(24f, 0f) }, 6f, 0.10f));
+		Assert.Equal("its ends are 10.4 % apart, over its 10 %", MapEditorControls.RoadPreview(steep, 2));
+		RoadCheck joined = RoadPath.Check(document, RoadPath.Record(new[] { new Vector2(-24f, 0f), new Vector2(-10f, 0f) }, 6f, 0.10f));
+		Assert.EndsWith(", one end joined; Enter grades it", MapEditorControls.RoadPreview(joined, 2));
+		RoadCheck both = RoadPath.Check(document, RoadPath.Record(new[] { new Vector2(-24f, 0f), new Vector2(24f, 0f) }, 6f, 0.15f));
+		Assert.EndsWith(", both ends joined; Enter grades it", MapEditorControls.RoadPreview(both, 2));
+	}
+
+	// ---- the bridge tool (§8.5, LE6) ------------------------------------------------------------------
+
+	[Fact]
+	public void TheBridgeTool_PlacesSpansAndRamps_AndNudgesAQuarterMetreInsideTheLimits()
+	{
+		Assert.Equal(new[] { PrefabSpecs.BridgeSpan, PrefabSpecs.BridgeRamp }, MapEditorControls.BridgeSections);
+		Assert.All(MapEditorControls.BridgeSections, id => Assert.Equal(PrefabKind.Bridge, PrefabSpecs.Get(id).Kind));
+		Assert.Equal(3.25f, MapEditorControls.Nudge(3f, 1));
+		Assert.Equal(2.75f, MapEditorControls.Nudge(3f, -1));
+		Assert.Equal(MapLimits.MaxHeightMeters, MapEditorControls.Nudge(MapLimits.MaxHeightMeters, 1));
+		Assert.Equal(MapLimits.MinHeightMeters, MapEditorControls.Nudge(MapLimits.MinHeightMeters, -1));
+	}
+
+	[Fact]
+	public void ASectionsGhost_SaysWhereItGoes_ItsAnswer_ItsPiersAndItsLandings()
+	{
+		MapDocument document = LevelMaps.Empty();
+		PrefabSpec span = PrefabSpecs.Get(PrefabSpecs.BridgeSpan);
+		SectionCheck floating = BridgeRules.Check(document, BridgeRules.Float(span.Id, 0f, 0f, 0f, 4f, true));
+		Assert.Equal("bridge_span floating at 4.00 m: ok, 2 piers", MapEditorControls.SectionGhost(span, floating, 4f));
+		SectionCheck landed = BridgeRules.Check(document, BridgeRules.Float(span.Id, 0f, 0f, 0f, 1f, false));
+		Assert.Equal("bridge_span floating at 1.00 m: ok, no pier, 2 ends landed", MapEditorControls.SectionGhost(span, landed, 1f));
+		document.Objects.Add(floating.Placement.Object);
+		Connector end = BridgeRules.Free(document)[1];
+		SectionCheck joined = BridgeRules.Check(document, BridgeRules.Attach(span.Id, 0, end, true), -1, end);
+		Assert.Equal("bridge_span on section 0's end: ok, 1 pier", MapEditorControls.SectionGhost(span, joined, 4f));
 	}
 }

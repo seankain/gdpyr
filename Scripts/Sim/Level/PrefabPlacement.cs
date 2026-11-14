@@ -82,6 +82,9 @@ public sealed class PlacementCheck
 	/// <summary>The object in the way, disturbed, or whose door is blocked; −1 for none.</summary>
 	public int Other { get; internal set; } = -1;
 
+	/// <summary>The road whose ribbon a padded prefab would stand on (LE6); −1 for none.</summary>
+	public int OtherRoad { get; internal set; } = -1;
+
 	/// <summary>For <see cref="PrefabPlacementResult.Ok"/>: the object and its pad as one step, not yet applied.</summary>
 	public MapEdit Edit { get; internal set; }
 
@@ -318,6 +321,14 @@ public static class PrefabPlacement
 			}
 		}
 
+		// A pad's prefab on a road's ribbon is in its way (§6.5, LE6): its pad would cut the road.
+		if (spec.MakesPad && hasArea && RoadPath.RoadUnder(document, area) is int road && road >= 0)
+		{
+			check.Result = PrefabPlacementResult.InTheWay;
+			check.OtherRoad = road;
+			return check;
+		}
+
 		if (spec.HasGradeLimit && check.GradeDegrees > spec.SteepestDegrees)
 		{
 			check.Result = PrefabPlacementResult.TooSteep;
@@ -356,6 +367,13 @@ public static class PrefabPlacement
 		}
 
 		MapEdit edit = after == null ? new MapEdit() : MapEdit.Terrain(field, after, touched);
+
+		// A pier on ground the pad moved is given its length again, in the same step (§6.7, LE6).
+		foreach (ObjectChange pier in after == null ? new List<ObjectChange>() : BridgeRules.KeepPiers(document, after, touched, replacing))
+		{
+			edit.Replace(pier.Index, pier.Before, pier.After);
+		}
+
 		check.Edit = moving
 			? edit.Replace(replacing, document.Objects[replacing], placed)
 			: edit.Insert(document.Objects.Count, placed);

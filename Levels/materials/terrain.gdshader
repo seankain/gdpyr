@@ -2,8 +2,9 @@
 // (LE-D7): u from the fragment's height over the water and its slope, as TerrainBands.U
 // computes it in C#, and two neighbouring bands blended across `blend` metres of u, centred
 // on their edge. Sand, mud and grass are sampled by world x and z; stone, which is what
-// cliffs wear, on three planes. A road is mixed in by the vertex colour's red, its coverage
-// (LE6's; zero until then). Five sampler2D: nothing the Compatibility renderer lacks (§3).
+// cliffs wear, on three planes. A road is mixed in by the vertex colour's red, its coverage,
+// which a client computes from the map's roads when it builds the mesh (§6.6, LE6). Five
+// sampler2D: nothing the Compatibility renderer lacks (§3).
 //
 // The two need not agree to the bit: nothing but the picture reads this.
 shader_type spatial;

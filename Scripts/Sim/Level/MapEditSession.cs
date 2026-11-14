@@ -26,16 +26,23 @@ public readonly struct EditOutcome
 	/// <summary>Whether objects were put in, taken out or replaced: the built world is built again.</summary>
 	public readonly bool ObjectsChanged;
 
-	public EditOutcome(SampleRect area, SampleRect changed, bool step, bool objectsChanged)
+	/// <summary>Whether roads were put in, taken out or replaced: the road's coverage is drawn again (LE6).</summary>
+	public readonly bool RoadsChanged;
+
+	public EditOutcome(SampleRect area, SampleRect changed, bool step, bool objectsChanged, bool roadsChanged = false)
 	{
 		Area = area;
 		Changed = changed;
 		Step = step;
 		ObjectsChanged = objectsChanged;
+		RoadsChanged = roadsChanged;
 	}
 
 	public override string ToString() =>
-		Step ? $"a step over {Changed}, {Changed.Count} samples" + (ObjectsChanged ? ", and objects" : string.Empty) : "no change";
+		Step
+			? $"a step over {Changed}, {Changed.Count} samples" + (ObjectsChanged ? ", and objects" : string.Empty)
+				+ (RoadsChanged ? ", and roads" : string.Empty)
+			: "no change";
 }
 
 /// <summary>
@@ -269,7 +276,7 @@ public sealed class MapEditSession
 			return false;
 		}
 
-		outcome = new EditOutcome(edit.Rect, edit.Rect, true, edit.Objects.Count > 0);
+		outcome = new EditOutcome(edit.Rect, edit.Rect, true, edit.Objects.Count > 0, edit.Roads.Count > 0);
 		Touch();
 		return true;
 	}
@@ -284,7 +291,7 @@ public sealed class MapEditSession
 			return false;
 		}
 
-		outcome = new EditOutcome(edit.Rect, edit.Rect, true, edit.Objects.Count > 0);
+		outcome = new EditOutcome(edit.Rect, edit.Rect, true, edit.Objects.Count > 0, edit.Roads.Count > 0);
 		Touch();
 		return true;
 	}
@@ -319,7 +326,10 @@ public sealed class MapEditSession
 			return new PlacementCheck { Result = PrefabPlacementResult.UnknownPrefab };
 		}
 
-		return Commit(PrefabPlacement.Check(Document, request, index), out outcome);
+		// A bridge section is placed again by §6.7's rules: its piers worked out again and its free ends landed (LE6).
+		return Commit(PrefabSpecs.TryGet(request.PrefabId, out PrefabSpec spec) && spec.Kind == PrefabKind.Bridge
+			? BridgeRules.Check(Document, request, index).Placement
+			: PrefabPlacement.Check(Document, request, index), out outcome);
 	}
 
 	/// <summary>Takes the object at <paramref name="index"/> up, as one step; its pad's ground stays.</summary>
@@ -331,7 +341,8 @@ public sealed class MapEditSession
 			return false;
 		}
 
-		History.Do(Document, PrefabPlacement.TakeUp(Document, index));
+		// A bridge section's neighbours keep their piers (§6.7); anything else is its record alone.
+		History.Do(Document, BridgeRules.TakeUp(Document, index));
 		Touch();
 		outcome = new EditOutcome(SampleRect.Empty, SampleRect.Empty, true, true);
 		return true;
@@ -416,6 +427,92 @@ public sealed class MapEditSession
 	/// <summary>How near a click must be to an object with no body — the strategist's anchor — to pick it [m].</summary>
 	public const float PickMarkerMeters = 2f;
 
+	// ---- roads (§8.5, LE6) ---------------------------------------------------------------------------
+
+	/// <summary>What drawing a road would do, without doing it (§6.6): the preview's answer, its profile and its ribbon's.</summary>
+	public RoadCheck CheckRoad(MapRoad road, int replacing = -1) => RoadPath.Check(Document, road, replacing);
+
+	/// <summary>
+	/// Draws a road and grades its ground as one step, when §6.6 takes it — or, with
+	/// <paramref name="replacing"/>, puts it in place of that road, grading the new line and leaving
+	/// the old line's ground as it is (§8.5). The check comes back either way.
+	/// </summary>
+	public RoadCheck ApplyRoad(MapRoad road, int replacing, out EditOutcome outcome)
+	{
+		outcome = default;
+		RoadCheck check = RoadPath.Check(Document, road, replacing);
+		if (Stroking || !check.IsOk)
+		{
+			return check;
+		}
+
+		History.Do(Document, check.Edit);
+		Touch();
+		outcome = new EditOutcome(check.Area, check.Changed, true, check.PiersKept > 0, true);
+		return check;
+	}
+
+	/// <summary>Takes a road's record up, as one step; the ground it graded stays.</summary>
+	public bool TakeUpRoad(int index, out EditOutcome outcome)
+	{
+		outcome = default;
+		if (Stroking || index < 0 || index >= Document.Roads.Count)
+		{
+			return false;
+		}
+
+		History.Do(Document, RoadPath.TakeUp(Document, index));
+		Touch();
+		outcome = new EditOutcome(SampleRect.Empty, SampleRect.Empty, true, false, true);
+		return true;
+	}
+
+	/// <summary>The road under (x, z) in plan, its ribbon's, or −1: of several, the one whose centreline is nearest.</summary>
+	public static int PickRoad(MapDocument document, float x, float z)
+	{
+		int best = -1;
+		float nearest = float.MaxValue;
+		for (int r = 0; r < document.Roads.Count; r++)
+		{
+			RoadPath path = RoadPath.Of(document.Roads[r]);
+			float distance = path.DistanceTo(x, z);
+			if (distance <= path.HalfWidth && distance < nearest)
+			{
+				nearest = distance;
+				best = r;
+			}
+		}
+
+		return best;
+	}
+
+	// ---- bridge sections (§8.5, LE6) -----------------------------------------------------------------
+
+	/// <summary>What placing a bridge section would do, without doing it (§6.7): the ghost's answer, its piers and its landings.</summary>
+	public SectionCheck CheckSection(in PlacementRequest request, int replacing = -1, Connector? target = null) =>
+		BridgeRules.Check(Document, request, replacing, target);
+
+	/// <summary>
+	/// Places a bridge section, its piers and the ground its free ends land on, as one step, when
+	/// §6.5 and §6.7 take it — or puts it in place of <paramref name="replacing"/>. The check comes
+	/// back either way.
+	/// </summary>
+	public SectionCheck PlaceSection(in PlacementRequest request, int replacing, out EditOutcome outcome,
+		Connector? target = null)
+	{
+		outcome = default;
+		SectionCheck check = BridgeRules.Check(Document, request, replacing, target);
+		if (Stroking || !check.IsOk)
+		{
+			return check;
+		}
+
+		History.Do(Document, check.Placement.Edit);
+		Touch();
+		outcome = new EditOutcome(check.Placement.Edit.Rect, check.Placement.Edit.Rect, true, true);
+		return check;
+	}
+
 	// ---- the map's numbers and text -------------------------------------------------------------
 
 	/// <summary>
@@ -493,8 +590,9 @@ public sealed class MapEditSession
 	// ---- shared ---------------------------------------------------------------------------------
 
 	/// <summary>
-	/// Ends an edit of the ground over <paramref name="area"/>: every pad kept (§6.5), and
-	/// the stored samples that differ from before it kept as one step.
+	/// Ends an edit of the ground over <paramref name="area"/>: every pad kept (§6.5), every pier
+	/// on the ground it changed given its length again (§6.7, LE6), and the stored samples that
+	/// differ from before it, with the sections whose piers changed, kept as one step.
 	/// </summary>
 	private EditOutcome Keep(SampleRect area)
 	{
@@ -502,14 +600,23 @@ public sealed class MapEditSession
 		area = area.Union(kept);
 		SampleRect changed = Differences(_before, Document.Terrain, area);
 		bool step = !changed.IsEmpty;
+		bool piers = false;
 		if (step)
 		{
-			History.Push(MapEdit.Terrain(_before, Document.Terrain, changed));
+			MapEdit edit = MapEdit.Terrain(_before, Document.Terrain, changed);
+			foreach (ObjectChange pier in BridgeRules.KeepPiers(Document, Document.Terrain, changed))
+			{
+				Document.Objects[pier.Index] = pier.After;
+				edit.Replace(pier.Index, pier.Before, pier.After);
+				piers = true;
+			}
+
+			History.Push(edit);
 			Touch();
 		}
 
 		_before = null;
-		return new EditOutcome(area, changed, step, false);
+		return new EditOutcome(area, changed, step, piers);
 	}
 
 	/// <summary>The rectangle of the stored samples in <paramref name="area"/> that differ between two fields.</summary>

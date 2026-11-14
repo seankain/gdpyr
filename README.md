@@ -72,8 +72,9 @@ dedicated-server authoritative.
   tested engine-free (LE1, LE2, `Scripts/Sim/Level/`, `tools/Gdpyr.MapTool`), a map played from
   its file (LE3: `--map`, `Scenes/Maps/MapHost.tscn`, `Scripts/Level/`, one bundled map), the
   editor's shell and terrain tool (LE4: **Map editor** on the menu, `--edit`, `Scenes/MapEditor/`),
-  and its prefab tool (LE5: a round's pieces, cover, structures that stand when a round starts, the
-  deep check), with roads, bridges and the fetch not built yet: a level editor in the game —
+  its prefab tool (LE5: a round's pieces, cover, structures that stand when a round starts, the
+  deep check), and its road and bridge tools (LE6: roads graded to a limit, bridge sections joined end
+  to end on piers), with the fetch not built yet: a level editor in the game —
   terrain raised and lowered with brushes that set its grade and textured by height and slope,
   prefabs placed on ground levelled for them, roads and bridges — and maps as data files that are
   saved, cloned and exported, given to a dedicated server, and fetched by clients from the server
@@ -236,7 +237,13 @@ cursor, green or red with why; a click places it and levels its pad, a click on 
 it, `R` and `Shift+R` turn it 15°, `G` snaps to the metre grid, `Del` takes it up. A structure stands
 when each round starts, the strategist's and as destructible as one a builder made. **Deep**, on the
 validator's list, bakes the navigation mesh and asks for a path from every barracks door and the
-spawn line to every node. Roads and bridges are LE6's.
+spawn line to every node. The road tool (`3`, LE6) draws a road a click a point, its ribbon and
+profile previewed with its deepest cut and fill; `Enter` grades the ground to it, no steeper than its
+limit (6–15 %, `-` `=`) and 4, 6 or 8 m wide (`[` `]`), and an end clicked near a bridge's end or
+another road's joins it. A click on a road takes its points up to move. The bridge tool (`4`, LE6)
+places spans and ramps: near a free end, drawn as a ring, a section joins it (`Tab` by its other end);
+elsewhere it floats at the last section's height (`PgUp` `PgDn`). With supports on (`U`) each end
+stands on a pier to the ground, and an end near the ground is landed.
 
 Two more record a round or watch one back ([`docs/DEMOS.md`](docs/DEMOS.md)):
 

@@ -48,6 +48,18 @@ public partial class MapEditorRoot
 	private VBoxContainer _parameterFields;
 	private PanelContainer _issuesPanel;
 	private ItemList _issuesList;
+	private VBoxContainer _roadPanel;
+	private readonly Dictionary<float, Button> _roadWidthButtons = new();
+	private HSlider _roadGradeSlider;
+	private Label _roadLabel;
+	private Button _roadTakeUp;
+	private VBoxContainer _bridgePanel;
+	private readonly Dictionary<ushort, Button> _sectionButtons = new();
+	private CheckBox _supportsCheck;
+	private CheckBox _endForEndCheck;
+	private Label _floatLabel;
+	private Label _sectionLabel;
+	private Button _sectionTakeUp;
 
 	private Control _listPanel;
 	private ItemList _maps;
@@ -184,6 +196,16 @@ public partial class MapEditorRoot
 		column.AddChild(_prefabPanel);
 		BuildPrefabPanel(_prefabPanel);
 
+		_roadPanel = new VBoxContainer { Visible = false };
+		_roadPanel.AddThemeConstantOverride("separation", 6);
+		column.AddChild(_roadPanel);
+		BuildRoadPanel(_roadPanel);
+
+		_bridgePanel = new VBoxContainer { Visible = false };
+		_bridgePanel.AddThemeConstantOverride("separation", 6);
+		column.AddChild(_bridgePanel);
+		BuildBridgePanel(_bridgePanel);
+
 		column.AddChild(new HSeparator());
 		column.AddChild(Heading($"Overlay ({MapEditorControls.KeyOf(EditorAction.NextOverlay)})"));
 		_overlayPicker = new OptionButton { FocusMode = Control.FocusModeEnum.None };
@@ -200,10 +222,11 @@ public partial class MapEditorRoot
 		column.AddChild(new Label
 		{
 			Text = "WASD fly, Space or E up, Q down, Shift faster; middle button looks\n"
-				+ "1 terrain · 2 prefabs · O overlay · T straight down\n"
-				+ "[ ] radius · - = rate or strength · , . core or grade\n"
-				+ "R, Shift+R turn a prefab 15° · G metre grid · Del take up\n"
-				+ "Esc drop a stroke, a ramp or a selection\n"
+				+ "1 terrain · 2 prefabs · 3 roads · 4 bridges · O overlay · T straight down\n"
+				+ "[ ] radius or a road's width · - = rate, strength or a road's grade · , . core or grade\n"
+				+ "R, Shift+R turn a prefab or a section 15° · G metre grid · Del take up\n"
+				+ "Enter grade a road · Tab a section end for end · PgUp PgDn raise, lower it · U supports\n"
+				+ "Esc drop a stroke, a ramp, a road or a selection\n"
 				+ "Ctrl+Z undo · Ctrl+Y redo · Ctrl+S save · F5 test",
 			AutowrapMode = TextServer.AutowrapMode.WordSmart,
 		});
@@ -300,6 +323,138 @@ public partial class MapEditorRoot
 		_selectionPanel.AddChild(takeUp);
 		_parameterFields = new VBoxContainer();
 		_selectionPanel.AddChild(_parameterFields);
+	}
+
+	/// <summary>The road tool's panel (§8.5, LE6): its width and grade limit, what the road being drawn reads as, and its buttons.</summary>
+	private void BuildRoadPanel(VBoxContainer column)
+	{
+		column.AddChild(Heading("Roads: a click adds a point; Enter grades the road; a click on a road moves its points"));
+		var widths = new HBoxContainer();
+		column.AddChild(widths);
+		widths.AddChild(new Label { Text = $"Width ({MapEditorControls.KeyOf(EditorAction.RadiusDown)} {MapEditorControls.KeyOf(EditorAction.RadiusUp)})" });
+		foreach (float width in MapEditorControls.RoadWidths)
+		{
+			float chosen = width;
+			var button = new Button { Text = $"{width:0} m", ToggleMode = true, FocusMode = Control.FocusModeEnum.None };
+			button.Pressed += () => SetRoadWidth(chosen);
+			widths.AddChild(button);
+			_roadWidthButtons[width] = button;
+		}
+
+		_roadGradeSlider = Slider(column, MapEditorControls.RoadGradeRange, v => SetRoadGrade(v / 100f));
+		_roadLabel = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
+		column.AddChild(_roadLabel);
+		var row = new HBoxContainer();
+		column.AddChild(row);
+		var apply = new Button { Text = $"Grade it ({MapEditorControls.KeyOf(EditorAction.Apply)})", FocusMode = Control.FocusModeEnum.None };
+		apply.Pressed += () => ApplyRoad();
+		row.AddChild(apply);
+		var drop = new Button { Text = $"Drop ({MapEditorControls.KeyOf(EditorAction.Cancel)})", FocusMode = Control.FocusModeEnum.None };
+		drop.Pressed += DropRoad;
+		row.AddChild(drop);
+		_roadTakeUp = new Button { Text = $"Take the road up ({MapEditorControls.KeyOf(EditorAction.TakeUp)})", FocusMode = Control.FocusModeEnum.None };
+		_roadTakeUp.Pressed += () => TakeUpRoad(RoadEditing);
+		column.AddChild(_roadTakeUp);
+	}
+
+	/// <summary>The road tool's panel as the draft and its settings are.</summary>
+	private void RefreshRoadPanel()
+	{
+		if (_roadPanel == null || Editing == null)
+		{
+			return;
+		}
+
+		foreach ((float width, Button button) in _roadWidthButtons)
+		{
+			button.SetPressedNoSignal(width == RoadWidth);
+		}
+
+		Show(_roadGradeSlider, RoadGrade * 100f);
+		string editing = RoadEditing >= 0 ? $"moving road {RoadEditing}'s points: " : string.Empty;
+		_roadLabel.Text = $"{MapEditorControls.RoadSettings(RoadWidth, RoadGrade)}\n{editing}"
+			+ MapEditorControls.RoadPreview(RoadPreview, _roadDraft.Count);
+		_roadLabel.Modulate = RoadPreview == null || RoadPreview.IsOk ? Colors.White : new Color(1f, 0.55f, 0.5f);
+		_roadTakeUp.Visible = RoadEditing >= 0;
+	}
+
+	/// <summary>The bridge tool's panel (§8.5, LE6): the sections, supports, end for end, the floating height, the ghost's answer.</summary>
+	private void BuildBridgePanel(VBoxContainer column)
+	{
+		column.AddChild(Heading("Bridges: a click places a section; near a ring it joins there"));
+		foreach (ushort id in MapEditorControls.BridgeSections)
+		{
+			ushort chosen = id;
+			var button = new Button
+			{
+				Text = PrefabSpecs.Get(id).Name,
+				ToggleMode = true,
+				SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+				FocusMode = Control.FocusModeEnum.None,
+			};
+			button.Pressed += () => SelectSection(chosen);
+			column.AddChild(button);
+			_sectionButtons[id] = button;
+		}
+
+		_supportsCheck = new CheckBox { Text = $"Supports: piers to the ground ({MapEditorControls.KeyOf(EditorAction.ToggleSupports)})", FocusMode = Control.FocusModeEnum.None };
+		_supportsCheck.Toggled += on =>
+		{
+			if (on != Supports)
+			{
+				SetSupports(on);
+			}
+		};
+		column.AddChild(_supportsCheck);
+		_endForEndCheck = new CheckBox { Text = $"End for end ({MapEditorControls.KeyOf(EditorAction.TurnEndForEnd)})", FocusMode = Control.FocusModeEnum.None };
+		_endForEndCheck.Toggled += on =>
+		{
+			if (on != EndForEnd)
+			{
+				TurnEndForEnd();
+			}
+		};
+		column.AddChild(_endForEndCheck);
+		var heights = new HBoxContainer();
+		column.AddChild(heights);
+		_floatLabel = new Label { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+		heights.AddChild(_floatLabel);
+		var up = new Button { Text = $"Up ({MapEditorControls.KeyOf(EditorAction.RaiseSection)})", FocusMode = Control.FocusModeEnum.None };
+		up.Pressed += () => NudgeSection(1);
+		heights.AddChild(up);
+		var down = new Button { Text = $"Down ({MapEditorControls.KeyOf(EditorAction.LowerSection)})", FocusMode = Control.FocusModeEnum.None };
+		down.Pressed += () => NudgeSection(-1);
+		heights.AddChild(down);
+		_sectionLabel = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
+		column.AddChild(_sectionLabel);
+		_sectionTakeUp = new Button { Text = $"Take the section up ({MapEditorControls.KeyOf(EditorAction.TakeUp)})", FocusMode = Control.FocusModeEnum.None, Visible = false };
+		_sectionTakeUp.Pressed += () => TakeUpSelected();
+		column.AddChild(_sectionTakeUp);
+	}
+
+	/// <summary>The bridge tool's panel as its settings and the selection are.</summary>
+	private void RefreshBridgePanel()
+	{
+		if (_bridgePanel == null || Editing == null)
+		{
+			return;
+		}
+
+		foreach ((ushort id, Button button) in _sectionButtons)
+		{
+			button.SetPressedNoSignal(id == Section);
+		}
+
+		_supportsCheck.SetPressedNoSignal(Supports);
+		_endForEndCheck.SetPressedNoSignal(EndForEnd);
+		_floatLabel.Text = FloatHeight is float height ? $"floating at {height:0.00} m" : "floating at the ground's height";
+		_sectionTakeUp.Visible = Selected >= 0;
+		if (Selected >= 0)
+		{
+			MapObject placed = Editing.Document.Objects[Selected];
+			_sectionLabel.Text = $"selected: {PrefabSpecs.Get(placed.PrefabId).Name} {Selected}, deck at {placed.Position.Y:0.00} m";
+			_sectionLabel.Modulate = Colors.White;
+		}
 	}
 
 	/// <summary>The palette's counts and selection, the grid, and the selected object's panel.</summary>
@@ -449,8 +604,12 @@ public partial class MapEditorRoot
 
 		_terrainPanel.Visible = Tool == EditorTool.Terrain;
 		_prefabPanel.Visible = Tool == EditorTool.Prefabs;
+		_roadPanel.Visible = Tool == EditorTool.Roads;
+		_bridgePanel.Visible = Tool == EditorTool.Bridges;
 		RefreshBrush(rebuild);
 		RefreshPrefabPanel();
+		RefreshRoadPanel();
+		RefreshBridgePanel();
 		RefreshOverlayPicker();
 		if (_issuesPanel.Visible)
 		{
@@ -493,6 +652,9 @@ public partial class MapEditorRoot
 	}
 
 	/// <summary>Validate (§8.7): what §6.9 finds, listed.</summary>
+	/// <summary>Closes the validator's list, as its Close button does.</summary>
+	public void HideIssues() => _issuesPanel.Visible = false;
+
 	public void ShowIssues()
 	{
 		if (Editing == null)

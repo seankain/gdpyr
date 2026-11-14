@@ -45,6 +45,7 @@ public partial class TerrainNode : StaticBody3D
 	private float _waterLevel;
 	private bool _draws;
 	private bool _buildable;
+	private float[] _coverage = Array.Empty<float>();
 
 	public int Width => _field?.Width ?? 0;
 	public int Depth => _field?.Depth ?? 0;
@@ -105,6 +106,12 @@ public partial class TerrainNode : StaticBody3D
 
 	/// <summary>The water's quad is drawn: there is a quad, and ground under it.</summary>
 	public bool WaterDrawn => _water != null && _water.Visible;
+
+	/// <summary>How much of each sample is road as the mesh is drawn (§6.6, §7.2): a vertex's red. Empty where nothing is drawn.</summary>
+	public ReadOnlySpan<float> RoadCoverage => _coverage;
+
+	/// <summary>Samples that are road in the drawing, any of them.</summary>
+	public int RoadSamples { get; private set; }
 
 	/// <summary>A drawn chunk's vertices as it last drew them, 17 × 17 row by row; null where nothing is drawn.</summary>
 	public Vector3[] ChunkVertices(int chunkX, int chunkZ) =>
@@ -170,6 +177,8 @@ public partial class TerrainNode : StaticBody3D
 
 		if (draws)
 		{
+			_coverage = RoadPath.Coverage(document);
+			CountRoad();
 			BuildMeshes(document, across, down);
 			if (HasWater)
 			{
@@ -312,6 +321,62 @@ public partial class TerrainNode : StaticBody3D
 		}
 	}
 
+	/// <summary>
+	/// A map's roads drawn again (§8.5, LE6): each sample's coverage worked out from the roads as they
+	/// are, and the chunks with a vertex whose coverage changed drawn again. Returns how many.
+	/// Nothing where nothing is drawn.
+	/// </summary>
+	public int RefreshRoads(MapDocument document)
+	{
+		if (!_draws)
+		{
+			return 0;
+		}
+
+		float[] coverage = RoadPath.Coverage(document);
+		SampleRect changed = SampleRect.Empty;
+		for (int i = 0; i < coverage.Length && i < _coverage.Length; i++)
+		{
+			if (coverage[i] != _coverage[i])
+			{
+				changed = changed.With(i % Width, i / Width);
+			}
+		}
+
+		_coverage = coverage;
+		CountRoad();
+		if (changed.IsEmpty)
+		{
+			return 0;
+		}
+
+		// A vertex's own colour only: no normal reads it, so no sample further.
+		ChunksOf(changed, out int minX, out int minZ, out int maxX, out int maxZ);
+		int drawn = 0;
+		for (int cz = minZ; cz <= maxZ; cz++)
+		{
+			for (int cx = minX; cx <= maxX; cx++)
+			{
+				DrawChunk(cx, cz);
+				drawn++;
+			}
+		}
+
+		MeshesRedrawn += drawn;
+		return drawn;
+	}
+
+	private void CountRoad()
+	{
+		int samples = 0;
+		foreach (float c in _coverage)
+		{
+			samples += c > 0f ? 1 : 0;
+		}
+
+		RoadSamples = samples;
+	}
+
 	/// <summary>The editor's overlay (§8.3): the terrain shader's <c>overlay</c>.</summary>
 	public void SetOverlay(int overlay) => _material?.SetShaderParameter("overlay", overlay);
 
@@ -397,9 +462,10 @@ public partial class TerrainNode : StaticBody3D
 				vertices[(z * Side) + x] = _field.Position(sx, sz);
 				normals[(z * Side) + x] = _field.Normal(sx, sz);
 
-				// A road's coverage is LE6's; until then none. Green is buildable, for the editor's overlay.
+				// Red is a road's coverage (§6.6, LE6). Green is buildable, for the editor's overlay.
 				bool buildable = _buildable && BuildableGround.At(_field, _field.WorldX(sx), _field.WorldZ(sz));
-				colors[(z * Side) + x] = new Color(0f, buildable ? 1f : 0f, 0f, 1f);
+				float road = _coverage.Length > 0 ? _coverage[_field.Index(sx, sz)] : 0f;
+				colors[(z * Side) + x] = new Color(road, buildable ? 1f : 0f, 0f, 1f);
 			}
 		}
 
@@ -507,6 +573,7 @@ public partial class TerrainNode : StaticBody3D
 		_shapes = Array.Empty<ConcavePolygonShape3D>();
 		_meshes = Array.Empty<ArrayMesh>();
 		_vertices = Array.Empty<Vector3[]>();
+		_coverage = Array.Empty<float>();
 		_water = null;
 	}
 }
