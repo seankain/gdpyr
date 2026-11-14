@@ -41,6 +41,13 @@
 #   ./scripts/level-editor-checks.sh editor        # the editor, then its test process
 #   ./scripts/level-editor-checks.sh editor-shot   # the editor drawn under a virtual display (xvfb-run): pictures in SHOT_OUT
 #
+# LE5, prefabs and a round's pieces, by the same file (LE4_CHECK=prefabs): every prefab on a 6°
+# slope, each of §6.5's answers, select, turn, parameters, take up, the deep check; then a map made
+# only in the editor, tested — its test process (LE4_CHECK=round) plays a bot round for LE5_SECONDS
+# (600) in which the pillbox the map stands at the start fires and is destroyed.
+#
+#   ./scripts/level-editor-checks.sh editor-prefabs
+#
 # Each part runs on the plan's collider and, where the two could differ, on the heightmap
 # beside it. `frame` and the bake's times in `ground` are wall time: run them on a machine
 # doing nothing else. `net` runs in real time behind tools/EngineChecks/delay_relay.py
@@ -363,6 +370,24 @@ for mode in "${MODES[@]}"; do
 		find "$home" -path '*app_userdata/gdpyr/maps/*' -type f -printf '[maps] %P %s bytes\n' | sort
 		grep -q 'finished-editor' <(ls "$dir") || { echo "[checks] FAIL editor: the editor's part did not finish"; failed=1; }
 		echo "editor: exit $status"
+		[ "$status" -ne 0 ] && failed=1
+		;;
+
+	editor-prefabs)
+		# The editor with no name, and the test process of the map it makes, in a HOME of their own.
+		ground slab
+		dir="$COPY/editor-prefabs"
+		home="$COPY/editor-prefabs-home"
+		rm -rf "$dir" "$home"
+		mkdir -p "$dir" "$home"
+		env -u XDG_DATA_HOME HOME="$home" LE4_CHECK=prefabs LE4_DIR="$dir" LE5_SECONDS="${LE5_SECONDS:-600}" \
+			timeout 3600 "$GODOT" --headless --path "$COPY" -- --edit > "$COPY/editor-prefabs.log" 2>&1
+		status=$?
+		report "$COPY/editor-prefabs.log"
+		grep -E '^\[editor\] (deep|testing)|^\[rts\] the map|^\[level\] built|^\[match\] round live' "$COPY/editor-prefabs.log"
+		forbidden "$COPY/editor-prefabs.log" "editor-prefabs, the editor's and its test process's log"
+		grep -q 'finished-prefabs' <(ls "$dir") || { echo "[checks] FAIL editor-prefabs: the editor's part did not finish"; failed=1; }
+		echo "editor-prefabs: exit $status"
 		[ "$status" -ne 0 ] && failed=1
 		;;
 

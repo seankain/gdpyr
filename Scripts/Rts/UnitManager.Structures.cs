@@ -910,6 +910,58 @@ public partial class UnitManager
 		}
 	}
 
+	/// <summary>The structures a data map's file holds that the last <see cref="PlaceMapStructures"/> put up.</summary>
+	public int MapStructuresPlaced { get; private set; }
+
+	/// <summary>The ones it was refused.</summary>
+	public int MapStructuresRefused { get; private set; }
+
+	/// <summary>
+	/// A data map's structures (docs/LEVEL_EDITOR.md §6.5, LE5): each put up free, finished and
+	/// the strategist's through <see cref="ServerPlaceStructure"/>, so that it is as destructible
+	/// as one a builder made — on the first server tick, after the bake, and again whenever the
+	/// field is cleared for a new round. Each stands at its pad's level and turned by its yaw,
+	/// and is checked as any site is: one the round refuses is logged and left out. Nothing on a
+	/// scene map, or on a client.
+	/// </summary>
+	public void PlaceMapStructures()
+	{
+		MapStructuresPlaced = 0;
+		MapStructuresRefused = 0;
+		if (Gdpyr.Level.LevelRoot.Current is not { Document: { } document }
+			|| NetworkManager.Instance is { IsClient: true })
+		{
+			return;
+		}
+
+		foreach (Gdpyr.Sim.Level.MapObject placed in document.Objects)
+		{
+			if (!Gdpyr.Sim.Level.PrefabSpecs.TryGetStructureKind(placed.PrefabId, out byte kind)
+				|| !Gdpyr.Sim.Level.PrefabSpecs.TryGet(placed.PrefabId, out Gdpyr.Sim.Level.PrefabSpec spec))
+			{
+				continue;
+			}
+
+			Vector3 site = PrefabCatalog.PoseOf(placed, spec).Origin;
+			int slot = ServerPlaceStructure(kind, site, placed.YawRadians, Team.Strategist, out PlacementResult result);
+			if (slot >= 0)
+			{
+				MapStructuresPlaced++;
+			}
+			else
+			{
+				MapStructuresRefused++;
+				GD.PushWarning($"[rts] the map's {StructureCatalog.NameOf(kind)} at {site} was refused:"
+					+ $" {StructurePlacement.Describe(result)}");
+			}
+		}
+
+		if (MapStructuresPlaced + MapStructuresRefused > 0)
+		{
+			GD.Print($"[rts] the map's structures: {MapStructuresPlaced} put up, {MapStructuresRefused} refused");
+		}
+	}
+
 	/// <summary>Takes every structure off the field. Called between rounds, with the units.</summary>
 	private void ClearStructures()
 	{

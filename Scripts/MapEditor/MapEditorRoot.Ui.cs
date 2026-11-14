@@ -38,6 +38,14 @@ public partial class MapEditorRoot
 	private readonly Dictionary<BrushField, HSlider> _brushSliders = new();
 	private readonly Dictionary<BandNumber, HSlider> _bandSliders = new();
 	private OptionButton _overlayPicker;
+	private VBoxContainer _terrainPanel;
+	private VBoxContainer _prefabPanel;
+	private readonly Dictionary<ushort, Button> _paletteButtons = new();
+	private CheckBox _snapCheck;
+	private Label _ghostLabel;
+	private VBoxContainer _selectionPanel;
+	private Label _selectionLabel;
+	private VBoxContainer _parameterFields;
 	private PanelContainer _issuesPanel;
 	private ItemList _issuesList;
 
@@ -64,7 +72,10 @@ public partial class MapEditorRoot
 		|| (_exitDialog?.Visible ?? false) || (_settingsDialog?.Visible ?? false) || (_exportDialog?.Visible ?? false);
 
 	/// <summary>The issues the list shows, as the validator last found them.</summary>
-	public IReadOnlyList<MapIssue> ListedIssues => Editing?.Report.Issues ?? Array.Empty<MapIssue>();
+	public IReadOnlyList<MapIssue> ListedIssues => Editing == null ? Array.Empty<MapIssue>() : ShownReport.Issues;
+
+	/// <summary>The deep check's report while it is of the map as it is; else the validator's.</summary>
+	public MapReport ShownReport => DeepIsCurrent ? DeepReport : Editing.Report;
 
 	private void BuildUi()
 	{
@@ -163,6 +174,43 @@ public partial class MapEditorRoot
 		column.AddThemeConstantOverride("separation", 6);
 		scroll.AddChild(column);
 
+		_terrainPanel = new VBoxContainer();
+		_terrainPanel.AddThemeConstantOverride("separation", 6);
+		column.AddChild(_terrainPanel);
+		BuildTerrainPanel(_terrainPanel);
+
+		_prefabPanel = new VBoxContainer { Visible = false };
+		_prefabPanel.AddThemeConstantOverride("separation", 6);
+		column.AddChild(_prefabPanel);
+		BuildPrefabPanel(_prefabPanel);
+
+		column.AddChild(new HSeparator());
+		column.AddChild(Heading($"Overlay ({MapEditorControls.KeyOf(EditorAction.NextOverlay)})"));
+		_overlayPicker = new OptionButton { FocusMode = Control.FocusModeEnum.None };
+		foreach (TerrainOverlay overlay in Enum.GetValues<TerrainOverlay>())
+		{
+			_overlayPicker.AddItem(MapEditorControls.Name(overlay), (int)overlay);
+		}
+
+		_overlayPicker.ItemSelected += index => SetOverlay((TerrainOverlay)_overlayPicker.GetItemId((int)index));
+		column.AddChild(_overlayPicker);
+
+		column.AddChild(new HSeparator());
+		column.AddChild(Heading("Keys"));
+		column.AddChild(new Label
+		{
+			Text = "WASD fly, Space or E up, Q down, Shift faster; middle button looks\n"
+				+ "1 terrain · 2 prefabs · O overlay · T straight down\n"
+				+ "[ ] radius · - = rate or strength · , . core or grade\n"
+				+ "R, Shift+R turn a prefab 15° · G metre grid · Del take up\n"
+				+ "Esc drop a stroke, a ramp or a selection\n"
+				+ "Ctrl+Z undo · Ctrl+Y redo · Ctrl+S save · F5 test",
+			AutowrapMode = TextServer.AutowrapMode.WordSmart,
+		});
+	}
+
+	private void BuildTerrainPanel(VBoxContainer column)
+	{
 		column.AddChild(Heading("Brushes: raise on the left button, lower on the right"));
 		var presets = new GridContainer { Columns = 2 };
 		column.AddChild(presets);
@@ -188,34 +236,107 @@ public partial class MapEditorRoot
 		column.AddChild(_brushFields);
 
 		column.AddChild(new HSeparator());
-		column.AddChild(Heading($"Overlay ({MapEditorControls.KeyOf(EditorAction.NextOverlay)})"));
-		_overlayPicker = new OptionButton { FocusMode = Control.FocusModeEnum.None };
-		foreach (TerrainOverlay overlay in Enum.GetValues<TerrainOverlay>())
-		{
-			_overlayPicker.AddItem(MapEditorControls.Name(overlay), (int)overlay);
-		}
-
-		_overlayPicker.ItemSelected += index => SetOverlay((TerrainOverlay)_overlayPicker.GetItemId((int)index));
-		column.AddChild(_overlayPicker);
-
-		column.AddChild(new HSeparator());
 		column.AddChild(Heading("Water and bands"));
 		foreach (BandNumber number in Enum.GetValues<BandNumber>())
 		{
 			BandNumber which = number;
 			_bandSliders[number] = Slider(column, MapEditorControls.RangeOf(number), v => SetBand(which, v));
 		}
+	}
 
-		column.AddChild(new HSeparator());
-		column.AddChild(Heading("Keys"));
-		column.AddChild(new Label
+	/// <summary>The prefab tool's panel (§8.4): the palette by kind with counts, the grid, the ghost's answer, the selection.</summary>
+	private void BuildPrefabPanel(VBoxContainer column)
+	{
+		column.AddChild(Heading("Prefabs: a click places one and its pad; a click on one selects it"));
+		foreach (PrefabKind kind in MapEditorControls.PaletteKinds)
 		{
-			Text = "WASD fly, Space or E up, Q down, Shift faster; middle button looks\n"
-				+ "[ ] radius · - = rate or strength · , . core or grade\n"
-				+ "O overlay · T straight down · Esc drop a stroke or a ramp\n"
-				+ "Ctrl+Z undo · Ctrl+Y redo · Ctrl+S save · F5 test",
-			AutowrapMode = TextServer.AutowrapMode.WordSmart,
-		});
+			column.AddChild(new Label { Text = MapEditorControls.Name(kind) });
+			var grid = new GridContainer { Columns = 2 };
+			column.AddChild(grid);
+			foreach (PrefabSpec spec in MapEditorControls.Palette(kind))
+			{
+				ushort id = spec.Id;
+				var button = new Button
+				{
+					ToggleMode = true,
+					SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+					FocusMode = Control.FocusModeEnum.None,
+					ClipText = true,
+				};
+				button.Pressed += () => SelectPrefab(id);
+				grid.AddChild(button);
+				_paletteButtons[id] = button;
+			}
+		}
+
+		_snapCheck = new CheckBox { Text = $"Snap to the metre grid ({MapEditorControls.KeyOf(EditorAction.SnapToGrid)})", FocusMode = Control.FocusModeEnum.None };
+		_snapCheck.Toggled += on =>
+		{
+			if (on != SnapToGrid)
+			{
+				ToggleSnap();
+			}
+		};
+		column.AddChild(_snapCheck);
+		_ghostLabel = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
+		column.AddChild(_ghostLabel);
+
+		_selectionPanel = new VBoxContainer { Visible = false };
+		column.AddChild(_selectionPanel);
+		_selectionLabel = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
+		_selectionPanel.AddChild(_selectionLabel);
+		var row = new HBoxContainer();
+		_selectionPanel.AddChild(row);
+		var left = new Button { Text = "Turn ↺ (R)", FocusMode = Control.FocusModeEnum.None };
+		left.Pressed += () => TurnSelected(1);
+		row.AddChild(left);
+		var right = new Button { Text = "Turn ↻ (Shift+R)", FocusMode = Control.FocusModeEnum.None };
+		right.Pressed += () => TurnSelected(-1);
+		row.AddChild(right);
+		var takeUp = new Button { Text = "Take up (Del)", FocusMode = Control.FocusModeEnum.None };
+		takeUp.Pressed += () => TakeUpSelected();
+		_selectionPanel.AddChild(takeUp);
+		_parameterFields = new VBoxContainer();
+		_selectionPanel.AddChild(_parameterFields);
+	}
+
+	/// <summary>The palette's counts and selection, the grid, and the selected object's panel.</summary>
+	private void RefreshPrefabPanel()
+	{
+		if (_prefabPanel == null || Editing == null)
+		{
+			return;
+		}
+
+		foreach ((ushort id, Button button) in _paletteButtons)
+		{
+			button.Text = MapEditorControls.CountLabel(Editing.Document, PrefabSpecs.Get(id));
+			button.SetPressedNoSignal(id == Prefab && Selected < 0);
+		}
+
+		_snapCheck.SetPressedNoSignal(SnapToGrid);
+		_selectionPanel.Visible = Selected >= 0;
+		foreach (Node child in _parameterFields.GetChildren())
+		{
+			_parameterFields.RemoveChild(child);
+			child.QueueFree();
+		}
+
+		if (Selected < 0)
+		{
+			return;
+		}
+
+		MapObject placed = Editing.Document.Objects[Selected];
+		PrefabSpec spec = PrefabSpecs.Get(placed.PrefabId);
+		_selectionLabel.Text = $"selected: {spec.Name} {Selected}, at ({placed.Position.X:0.0}, {placed.Position.Z:0.0}),"
+			+ $" turned {Mathf.RadToDeg(placed.YawRadians):0}°";
+		foreach (PrefabParameter parameter in spec.Parameters)
+		{
+			byte key = parameter.Key;
+			HSlider slider = Slider(_parameterFields, MapEditorControls.RangeOf(parameter), v => SetSelectedParameter(key, (int)v));
+			Show(slider, spec.ValueOf(placed, key));
+		}
 	}
 
 	/// <summary>The settings the brush shows, as sliders: built again when its kind changes, else their values set.</summary>
@@ -302,7 +423,7 @@ public partial class MapEditorRoot
 		_cursorLabel.Text = MapEditorControls.CursorLine(Editing.Document.Terrain, Editing.Document.Bands.Settings, Cursor);
 		_readoutLabel.Text = Cursor != null ? MapEditorControls.Readout(_steepest) : string.Empty;
 		_readoutLabel.Modulate = MapEditorControls.ColourOf(MapEditorControls.ClassOf(_steepest));
-		_issuesButton.Text = MapEditorControls.Issues(Editing.Report);
+		_issuesButton.Text = MapEditorControls.Issues(ShownReport) + (DeepIsCurrent ? ", deep" : string.Empty);
 		_title.Text = MapEditorControls.Title(Editing.Document.Name, FileName, Editing.Dirty, EverSaved);
 	}
 
@@ -324,7 +445,10 @@ public partial class MapEditorRoot
 			Show(slider, MapEditorControls.GetBand(Editing.Document.Bands, number));
 		}
 
+		_terrainPanel.Visible = Tool == EditorTool.Terrain;
+		_prefabPanel.Visible = Tool == EditorTool.Prefabs;
 		RefreshBrush(rebuild);
+		RefreshPrefabPanel();
 		RefreshOverlayPicker();
 		if (_issuesPanel.Visible)
 		{
@@ -350,6 +474,14 @@ public partial class MapEditorRoot
 		var header = new HBoxContainer();
 		column.AddChild(header);
 		header.AddChild(new Label { Text = "Validate (§6.9): a click flies to it", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill });
+		var deep = new Button
+		{
+			Text = "Deep",
+			FocusMode = Control.FocusModeEnum.None,
+			TooltipText = "bake the navigation mesh, and ask for a path from every barracks door and spawn line to every node",
+		};
+		deep.Pressed += Deep;
+		header.AddChild(deep);
 		var close = new Button { Text = "Close", FocusMode = Control.FocusModeEnum.None };
 		close.Pressed += () => _issuesPanel.Visible = false;
 		header.AddChild(close);
@@ -368,14 +500,15 @@ public partial class MapEditorRoot
 
 		_issuesPanel.Visible = true;
 		FillIssues();
-		MapReport report = Editing.Report;
-		Say($"validated: {MapStore.Describe(report)}" + (report.IsPlayable ? string.Empty : "; errors block hosting, not saving"));
+		MapReport report = ShownReport;
+		Say((DeepIsCurrent ? "validated, deep: " : "validated: ") + MapStore.Describe(report)
+			+ (report.IsPlayable ? string.Empty : "; errors block hosting, not saving"));
 	}
 
 	private void FillIssues()
 	{
 		_issuesList.Clear();
-		IReadOnlyList<MapIssue> issues = Editing.Report.Issues;
+		IReadOnlyList<MapIssue> issues = ShownReport.Issues;
 		if (issues.Count == 0)
 		{
 			_issuesList.AddItem("no issues: it plays");
@@ -431,10 +564,10 @@ public partial class MapEditorRoot
 		var buttons = new HBoxContainer();
 		column.AddChild(buttons);
 		ListButton(buttons, "New…", () => AskName("A new map", "my-map", name => NewMap(name, out _)));
-		ListButton(buttons, "Open", () => OpenRow(Selected()));
+		ListButton(buttons, "Open", () => OpenRow(SelectedRow()));
 		ListButton(buttons, "Clone as…", () =>
 		{
-			int row = Selected();
+			int row = SelectedRow();
 			if (row >= 0)
 			{
 				string from = _rows[row].Path;
@@ -459,7 +592,7 @@ public partial class MapEditorRoot
 		row.AddChild(button);
 	}
 
-	private int Selected()
+	private int SelectedRow()
 	{
 		int[] selected = _maps.GetSelectedItems();
 		return selected.Length > 0 && selected[0] < _rows.Count ? selected[0] : -1;

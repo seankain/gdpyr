@@ -148,7 +148,7 @@ RULES = [
     ("slope-40", CONTROLS, "a face of 40° coloured as past what is walkable",
      "degrees <= MapLimits.WalkableSlopeDegrees ? SlopeClass.Steep", "degrees < MapLimits.WalkableSlopeDegrees ? SlopeClass.Steep"),
     ("overlay-cycle", CONTROLS, "O never reaching the contours",
-     "TerrainOverlay.Slope => TerrainOverlay.Contours,", "TerrainOverlay.Slope => TerrainOverlay.None,"),
+     "TerrainOverlay.Buildable => TerrainOverlay.Contours,", "TerrainOverlay.Buildable => TerrainOverlay.None,"),
     ("readout-disc", CONTROLS, "the readout reading a square, not the brush's disc",
      "if ((dx * dx) + (dz * dz) <= radius * radius)", "if (true)"),
     ("readout-crease", CONTROLS, "the readout reading a cell's first triangle only",

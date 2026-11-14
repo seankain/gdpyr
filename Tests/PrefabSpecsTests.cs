@@ -175,6 +175,43 @@ public class PrefabSpecsTests
 	}
 
 	[Fact]
+	public void TheBunker_IsInsideItsBox()
+	{
+		// Scenes/Environment/Pillbox.tscn's one collider: a ConcavePolygonShape3D, the scene's root.
+		string text = File.ReadAllText(Path.Combine(RepoRoot(), "Scenes", "Environment", "Pillbox.tscn"));
+		RegexMatch data = Regex.Match(text, @"data = PackedVector3Array\(([^)]*)\)");
+		Assert.True(data.Success);
+		Assert.Single(Regex.Matches(text, "type=\"CollisionShape3D\""));
+		float[] v = data.Groups[1].Value.Split(',').Select(n => float.Parse(n, CultureInfo.InvariantCulture)).ToArray();
+		StructureBox box = PrefabSpecs.Get(PrefabSpecs.Bunker).Boxes.Single();
+		for (int i = 0; i < v.Length; i += 3)
+		{
+			Assert.InRange(v[i], box.Center.X - box.HalfExtents.X, box.Center.X + box.HalfExtents.X);
+			Assert.InRange(v[i + 1], box.Center.Y - box.HalfExtents.Y, box.Center.Y + box.HalfExtents.Y);
+			Assert.InRange(v[i + 2], box.Center.Z - box.HalfExtents.Z, box.Center.Z + box.HalfExtents.Z);
+		}
+
+		// And it is as big as its box, to the ten centimetres a box is rounded up to.
+		Assert.Equal(15f, v.Where((_, i) => i % 3 == 0).Max(), 3);
+		Assert.InRange(box.HalfExtents.Y * 2f - v.Where((_, i) => i % 3 == 1).Max(), 0f, 0.1f);
+	}
+
+	[Fact]
+	public void TheStructurePrefabs_AreTheStrategistsStructures()
+	{
+		Assert.True(PrefabSpecs.TryGetStructureKind(PrefabSpecs.StructurePillbox, out byte pillbox));
+		Assert.Equal(StructureKinds.Pillbox, pillbox);
+		Assert.True(PrefabSpecs.TryGetStructureKind(PrefabSpecs.StructureSandbagWall, out byte wall));
+		Assert.Equal(StructureKinds.SandbagWall, wall);
+		Assert.True(PrefabSpecs.TryGetStructureKind(PrefabSpecs.StructureSniperTower, out byte tower));
+		Assert.Equal(StructureKinds.SniperTower, tower);
+		foreach (PrefabSpec spec in PrefabSpecs.All)
+		{
+			Assert.Equal(spec.Kind == PrefabKind.Structure, PrefabSpecs.TryGetStructureKind(spec.Id, out _));
+		}
+	}
+
+	[Fact]
 	public void TheFieldOfPlay_IsCargos()
 	{
 		Assert.Equal(Cargo.FieldHalfExtentMeters, MapLimits.PlayHalfMeters);

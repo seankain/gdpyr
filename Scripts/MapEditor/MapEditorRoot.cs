@@ -59,6 +59,11 @@ public partial class MapEditorRoot : Node3D
 	/// <summary>What <see cref="LevelBuilder"/> last built of the map's objects.</summary>
 	public LevelBuilder.Summary Built { get; private set; }
 
+	/// <summary>The node built for each object, in the file's order; null for a structure, which a round puts up.</summary>
+	public IReadOnlyList<Node3D> BuiltNodes => _builtNodes;
+
+	private readonly List<Node3D> _builtNodes = new();
+
 	/// <summary>How many times the objects and the perimeter have been built.</summary>
 	public int ObjectBuilds { get; private set; }
 
@@ -111,9 +116,14 @@ public partial class MapEditorRoot : Node3D
 
 		_camera = new SpectatorCamera { Name = "Camera", LookButton = MouseButton.Middle, CtrlIsCommand = true };
 		AddChild(_camera);
+		// In group navmesh, so that the deep check's bake reads the ground and everything on it (LE5).
 		_world = new Node3D { Name = "World" };
+		_world.AddToGroup("navmesh");
 		AddChild(_world);
 		BuildRing();
+		BuildGhost();
+		_navigation = new NavigationRegion3D { Name = "Navigation" };
+		AddChild(_navigation);
 		BuildUi();
 
 		string open = OpenOnEnter;
@@ -236,6 +246,9 @@ public partial class MapEditorRoot : Node3D
 		_autosave = new AutosaveClock();
 		_rampFrom = null;
 		_strokeFromMouse = false;
+		Selected = -1;
+		DeepReport = null;
+		_ghostChanges = -1;
 
 		BuildWorld();
 		float highest = Terrain.MaxHeight;
@@ -256,7 +269,7 @@ public partial class MapEditorRoot : Node3D
 		}
 
 		_built = null;
-		Terrain = new TerrainNode { Name = "Terrain" };
+		Terrain = new TerrainNode { Name = "Terrain", Buildable = Overlay == TerrainOverlay.Buildable };
 		Terrain.Build(Editing.Document, Draws);
 		_world.AddChild(Terrain);
 		Terrain.SetOverlay((int)Overlay);
@@ -279,8 +292,10 @@ public partial class MapEditorRoot : Node3D
 
 		_built = new Node3D { Name = "Built", ProcessMode = ProcessModeEnum.Disabled };
 		_world.AddChild(_built);
-		Built = LevelBuilder.Build(_built, _built, Editing.Document, Terrain, Draws);
+		Built = LevelBuilder.Build(_built, _built, Editing.Document, Terrain, Draws, _builtNodes);
+		BuildStructureStandIns();
 		ObjectBuilds++;
+		DrawSelection();
 	}
 
 	// ---- the terrain tool ---------------------------------------------------------------------
@@ -396,6 +411,12 @@ public partial class MapEditorRoot : Node3D
 		SampleRect changed = outcome.Changed;
 		bool edge = !changed.IsEmpty && (changed.MinX == 0 || changed.MinZ == 0 || changed.MaxX == bounds.MaxX
 			|| changed.MaxZ == bounds.MaxZ);
+		if (outcome.ObjectsChanged)
+		{
+			// An index may name another object now; whoever replaced one selects it again.
+			Selected = -1;
+		}
+
 		if (outcome.ObjectsChanged || edge)
 		{
 			RebuildObjects();
@@ -451,7 +472,12 @@ public partial class MapEditorRoot : Node3D
 	public void SetOverlay(TerrainOverlay overlay)
 	{
 		Overlay = overlay;
-		Terrain?.SetOverlay((int)overlay);
+		if (Terrain != null)
+		{
+			Terrain.Buildable = overlay == TerrainOverlay.Buildable;
+			Terrain.SetOverlay((int)overlay);
+		}
+
 		RefreshOverlayPicker();
 		Say($"overlay: {MapEditorControls.Name(overlay)}");
 	}
@@ -465,6 +491,11 @@ public partial class MapEditorRoot : Node3D
 		}
 
 		Tool = tool;
+		if (tool != EditorTool.Prefabs)
+		{
+			Select(-1);
+		}
+
 		RefreshUi(false);
 	}
 
@@ -770,6 +801,7 @@ public partial class MapEditorRoot : Node3D
 			? MapEditorControls.SteepestFaceDegrees(Editing.Document.Terrain, c.X, c.Z, Editing.Brush.RadiusMeters)
 			: 0f;
 		DrawRing();
+		UpdateGhost();
 		RefreshStatus();
 	}
 
@@ -856,17 +888,41 @@ public partial class MapEditorRoot : Node3D
 				break;
 			case EditorAction.Cancel:
 				Cancel();
+				Select(-1);
+				break;
+			case EditorAction.TurnLeft:
+			case EditorAction.TurnRight:
+				if (Tool == EditorTool.Prefabs)
+				{
+					Turn(action == EditorAction.TurnLeft ? 1 : -1);
+				}
+
+				break;
+			case EditorAction.SnapToGrid:
+				if (Tool == EditorTool.Prefabs)
+				{
+					ToggleSnap();
+				}
+
+				break;
+			case EditorAction.TakeUp:
+				TakeUpSelected();
 				break;
 			default:
-				Say(action is EditorAction.TurnEndForEnd or EditorAction.RaiseSection or EditorAction.LowerSection
-					? "bridges are LE6's" : "prefabs are LE5's");
+				Say("bridges are LE6's");
 				break;
 		}
 	}
 
-	/// <summary>A button pressed over the view: a stroke, or a ramp's click.</summary>
+	/// <summary>A button pressed over the view: a stroke, a ramp's click, or the prefab tool's click.</summary>
 	private void Press(bool lower)
 	{
+		if (Tool == EditorTool.Prefabs)
+		{
+			PressPrefab(lower);
+			return;
+		}
+
 		if (Tool != EditorTool.Terrain || Cursor is not { } at)
 		{
 			return;

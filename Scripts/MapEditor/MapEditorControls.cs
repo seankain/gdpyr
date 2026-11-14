@@ -82,7 +82,8 @@ public enum BrushField : byte
 
 /// <summary>
 /// What the terrain is drawn with over its bands (§8.3): the terrain shader's
-/// <c>overlay</c>, by number. <i>Buildable</i> is LE5's.
+/// <c>overlay</c>, by number. <i>Buildable</i> is LE5's, and is where LE-D21 takes a
+/// structure (<see cref="Gdpyr.Sim.Level.BuildableGround"/>).
 /// </summary>
 public enum TerrainOverlay : byte
 {
@@ -90,6 +91,7 @@ public enum TerrainOverlay : byte
 	Bands = 1,
 	Slope = 2,
 	Contours = 3,
+	Buildable = 4,
 }
 
 /// <summary>How the slope overlay and the brush's readout colour a face (LE-D23).</summary>
@@ -277,8 +279,8 @@ public static class MapEditorControls
 		_ => null,
 	};
 
-	/// <summary>Whether a tool is in this build: the terrain is LE4's; prefabs are LE5's, roads and bridges LE6's.</summary>
-	public static bool IsBuilt(EditorTool tool) => tool == EditorTool.Terrain;
+	/// <summary>Whether a tool is in this build: the terrain is LE4's, prefabs LE5's; roads and bridges are LE6's.</summary>
+	public static bool IsBuilt(EditorTool tool) => tool is EditorTool.Terrain or EditorTool.Prefabs;
 
 	/// <summary>What the rail calls a tool, with its key.</summary>
 	public static string ToolLabel(EditorTool tool)
@@ -531,12 +533,13 @@ public static class MapEditorControls
 
 	// ---- overlays, slopes, the readout ----------------------------------------------------------------
 
-	/// <summary><c>O</c>: none, bands, slope, contours, and round again.</summary>
+	/// <summary><c>O</c>: none, bands, slope, buildable, contours, and round again: §8.3's order.</summary>
 	public static TerrainOverlay Next(TerrainOverlay overlay) => overlay switch
 	{
 		TerrainOverlay.None => TerrainOverlay.Bands,
 		TerrainOverlay.Bands => TerrainOverlay.Slope,
-		TerrainOverlay.Slope => TerrainOverlay.Contours,
+		TerrainOverlay.Slope => TerrainOverlay.Buildable,
+		TerrainOverlay.Buildable => TerrainOverlay.Contours,
 		_ => TerrainOverlay.None,
 	};
 
@@ -544,6 +547,7 @@ public static class MapEditorControls
 	{
 		TerrainOverlay.Bands => "bands",
 		TerrainOverlay.Slope => "slope",
+		TerrainOverlay.Buildable => "buildable: where a structure is taken",
 		TerrainOverlay.Contours => "contours every 2 m",
 		_ => "none",
 	};
@@ -646,6 +650,79 @@ public static class MapEditorControls
 		RampResult.TooSmall => "a ramp needs two clicks apart, with ground between them",
 		_ => "too steep for a ramp: the line between the clicks is steeper than 30°",
 	};
+
+	// ---- the prefab tool (§8.4, LE5) ------------------------------------------------------------------
+
+	/// <summary>How far <c>R</c> and <c>Shift+R</c> turn a prefab [degrees].</summary>
+	public const float TurnStepDegrees = 15f;
+
+	/// <summary>The palette's kinds, in its order. Bridge sections are LE6's tool's, not this palette's.</summary>
+	public static readonly PrefabKind[] PaletteKinds = { PrefabKind.Round, PrefabKind.Cover, PrefabKind.Structure, PrefabKind.Scenery };
+
+	public static string Name(PrefabKind kind) => kind switch
+	{
+		PrefabKind.Round => "a round's pieces",
+		PrefabKind.Cover => "cover",
+		PrefabKind.Structure => "structures standing at the start",
+		PrefabKind.Scenery => "scenery",
+		_ => "bridges",
+	};
+
+	/// <summary>The prefabs of a kind on the palette, by id.</summary>
+	public static List<PrefabSpec> Palette(PrefabKind kind)
+	{
+		var specs = new List<PrefabSpec>();
+		foreach (PrefabSpec spec in PrefabSpecs.All)
+		{
+			if (spec.Kind == kind && kind != PrefabKind.Bridge)
+			{
+				specs.Add(spec);
+			}
+		}
+
+		return specs;
+	}
+
+	/// <summary>
+	/// A palette entry's count against its limit (§8.4): <c>barracks 1/4</c>; a group a map
+	/// holds any number of is its count alone, and one it must hold says so while it holds none.
+	/// </summary>
+	public static string CountLabel(MapDocument document, PrefabSpec spec)
+	{
+		int count = document.CountOf(spec.Group);
+		int max = PrefabSpecs.MaxOf(spec.Group);
+		string label = max == int.MaxValue ? $"{spec.Name} {count}" : $"{spec.Name} {count}/{max}";
+		return count < PrefabSpecs.MinOf(spec.Group) ? label + ", needs one" : label;
+	}
+
+	/// <summary>
+	/// <c>R</c> (+1) and <c>Shift+R</c> (−1): the next 15° step that way, from a yaw that may be
+	/// between steps; in [0, 2π).
+	/// </summary>
+	public static float Turn(float yaw, int direction)
+	{
+		float step = TurnStepDegrees * (MathF.PI / 180f);
+		float steps = MathF.Round(yaw / step);
+		float turned = (steps + Math.Sign(direction)) * step;
+		float tau = 2f * MathF.PI;
+		turned %= tau;
+		return turned < 0f ? turned + tau : turned;
+	}
+
+	/// <summary><c>G</c>'s grid: a point on the nearest whole metre.</summary>
+	public static float Snap(float meters) => MathF.Round(meters);
+
+	/// <summary>What the ghost says (§8.4): the prefab, the answer, and the average grade under it.</summary>
+	public static string Ghost(PrefabSpec spec, PlacementCheck check)
+	{
+		string grade = spec.HasFootprint ? $", {F(check.GradeDegrees, "0.0")}° under it" : string.Empty;
+		string limit = check.Result == PrefabPlacementResult.TooSteep ? $" where it takes {F(spec.SteepestDegrees, "0")}°" : string.Empty;
+		return $"{spec.Name}: {PrefabPlacement.Describe(check.Result)}{grade}{limit}";
+	}
+
+	/// <summary>A prefab parameter's slider: its own range, in the file's whole numbers.</summary>
+	public static SliderRange RangeOf(PrefabParameter parameter) =>
+		new(parameter.Name, string.Empty, parameter.Min, parameter.Max, parameter.Max - parameter.Min > 100 ? 50f : 1f);
 
 	// ---- the test process --------------------------------------------------------------------------
 

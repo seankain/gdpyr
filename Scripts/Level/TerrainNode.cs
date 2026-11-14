@@ -44,6 +44,7 @@ public partial class TerrainNode : StaticBody3D
 	private HeightField _field;
 	private float _waterLevel;
 	private bool _draws;
+	private bool _buildable;
 
 	public int Width => _field?.Width ?? 0;
 	public int Depth => _field?.Depth ?? 0;
@@ -74,6 +75,33 @@ public partial class TerrainNode : StaticBody3D
 
 	/// <summary>How long the last <see cref="RefreshColliders"/> took [ms].</summary>
 	public double LastColliderMilliseconds { get; private set; }
+
+	/// <summary>
+	/// Whether each vertex carries LE-D21's answer for a structure there, in its colour's green,
+	/// for the editor's <i>buildable</i> overlay (§8.3, LE5): set by the editor, and every chunk
+	/// is drawn again. The rule reads the ground up to 2.6 m off, so a change draws again three
+	/// samples further while it is on. Off in a round, which draws no overlay.
+	/// </summary>
+	public bool Buildable
+	{
+		get => _buildable;
+		set
+		{
+			if (_buildable == value)
+			{
+				return;
+			}
+
+			_buildable = value;
+			if (_field != null)
+			{
+				RefreshMeshes(_field.Bounds);
+			}
+		}
+	}
+
+	/// <summary>How many samples past a change the buildable answer can change: the rule's reach, 2.55 m, rounded up.</summary>
+	public const int BuildableReach = 3;
 
 	/// <summary>The water's quad is drawn: there is a quad, and ground under it.</summary>
 	public bool WaterDrawn => _water != null && _water.Visible;
@@ -205,7 +233,7 @@ public partial class TerrainNode : StaticBody3D
 			return 0;
 		}
 
-		ChunksOf(samples.Grown(1), out int minX, out int minZ, out int maxX, out int maxZ);
+		ChunksOf(samples.Grown(1 + (_buildable ? BuildableReach : 0)), out int minX, out int minZ, out int maxX, out int maxZ);
 		int drawn = 0;
 		for (int cz = minZ; cz <= maxZ; cz++)
 		{
@@ -369,8 +397,9 @@ public partial class TerrainNode : StaticBody3D
 				vertices[(z * Side) + x] = _field.Position(sx, sz);
 				normals[(z * Side) + x] = _field.Normal(sx, sz);
 
-				// A road's coverage is LE6's; until then none.
-				colors[(z * Side) + x] = new Color(0f, 0f, 0f, 1f);
+				// A road's coverage is LE6's; until then none. Green is buildable, for the editor's overlay.
+				bool buildable = _buildable && BuildableGround.At(_field, _field.WorldX(sx), _field.WorldZ(sz));
+				colors[(z * Side) + x] = new Color(0f, buildable ? 1f : 0f, 0f, 1f);
 			}
 		}
 

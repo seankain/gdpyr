@@ -84,16 +84,17 @@ public class MapEditorControlsTests
 	}
 
 	[Fact]
-	public void TheToolKeys_SelectTheirTools_AndOnlyTheTerrainIsBuilt()
+	public void TheToolKeys_SelectTheirTools_AndTheTerrainAndPrefabsAreBuilt()
 	{
 		Assert.Equal(EditorTool.Terrain, MapEditorControls.ToolOf(EditorAction.TerrainTool));
 		Assert.Equal(EditorTool.Bridges, MapEditorControls.ToolOf(EditorAction.BridgesTool));
 		Assert.Null(MapEditorControls.ToolOf(EditorAction.Undo));
 		Assert.True(MapEditorControls.IsBuilt(EditorTool.Terrain));
-		foreach (EditorTool tool in new[] { EditorTool.Prefabs, EditorTool.Roads, EditorTool.Bridges })
+		Assert.True(MapEditorControls.IsBuilt(EditorTool.Prefabs));
+		foreach (EditorTool tool in new[] { EditorTool.Roads, EditorTool.Bridges })
 		{
 			Assert.False(MapEditorControls.IsBuilt(tool));
-			Assert.Matches("LE[56]", MapEditorControls.NotBuilt(tool));
+			Assert.Matches("LE6", MapEditorControls.NotBuilt(tool));
 		}
 
 		Assert.StartsWith("1", MapEditorControls.ToolLabel(EditorTool.Terrain));
@@ -232,19 +233,21 @@ public class MapEditorControlsTests
 	}
 
 	[Fact]
-	public void TheOverlays_GoRound()
+	public void TheOverlays_GoRound_InSection8_3sOrder()
 	{
 		TerrainOverlay overlay = TerrainOverlay.None;
 		var seen = new List<TerrainOverlay>();
-		for (int i = 0; i < 4; i++)
+		for (int i = 0; i < 5; i++)
 		{
 			seen.Add(overlay);
 			overlay = MapEditorControls.Next(overlay);
 		}
 
 		Assert.Equal(TerrainOverlay.None, overlay);
-		Assert.Equal(new[] { TerrainOverlay.None, TerrainOverlay.Bands, TerrainOverlay.Slope, TerrainOverlay.Contours }, seen);
+		Assert.Equal(new[] { TerrainOverlay.None, TerrainOverlay.Bands, TerrainOverlay.Slope, TerrainOverlay.Buildable,
+			TerrainOverlay.Contours }, seen);
 		Assert.Equal(2, (int)TerrainOverlay.Slope);
+		Assert.Equal(4, (int)TerrainOverlay.Buildable);
 		Assert.Contains("2 m", MapEditorControls.Name(TerrainOverlay.Contours));
 	}
 
@@ -304,6 +307,91 @@ public class MapEditorControlsTests
 		Assert.Equal("Ridge (ridge.map) — not saved yet", MapEditorControls.Title("Ridge", "ridge", true, false));
 		Assert.Contains("too steep", MapEditorControls.Describe(RampResult.TooSteep));
 		Assert.Contains("two clicks", MapEditorControls.Describe(RampResult.TooSmall));
+	}
+
+	[Fact]
+	public void ThePalette_HoldsEveryPrefabButTheBridgeSections_Once_ByKind()
+	{
+		var seen = new HashSet<ushort>();
+		foreach (PrefabKind kind in MapEditorControls.PaletteKinds)
+		{
+			foreach (PrefabSpec spec in MapEditorControls.Palette(kind))
+			{
+				Assert.Equal(kind, spec.Kind);
+				Assert.True(seen.Add(spec.Id), $"{spec.Name} twice");
+			}
+
+			Assert.False(string.IsNullOrEmpty(MapEditorControls.Name(kind)));
+		}
+
+		foreach (PrefabSpec spec in PrefabSpecs.All)
+		{
+			Assert.Equal(spec.Kind != PrefabKind.Bridge, seen.Contains(spec.Id));
+		}
+
+		Assert.Empty(MapEditorControls.Palette(PrefabKind.Bridge));
+	}
+
+	[Fact]
+	public void APaletteEntry_CountsAgainstItsLimit()
+	{
+		MapDocument document = LevelMaps.Generate(1);
+		Assert.Equal($"barracks {document.CountOf(PrefabGroup.Barracks)}/4",
+			MapEditorControls.CountLabel(document, PrefabSpecs.Get(PrefabSpecs.Barracks)));
+		Assert.Equal($"spawn_line {document.CountOf(PrefabGroup.SpawnLine)}",
+			MapEditorControls.CountLabel(document, PrefabSpecs.Get(PrefabSpecs.SpawnLine)));
+		Assert.Equal("heavy_gun 2/8", MapEditorControls.CountLabel(document, PrefabSpecs.Get(PrefabSpecs.HeavyGun))
+			.Replace($"{document.CountOf(PrefabGroup.Emplacement)}/8", "2/8"));
+		MapDocument empty = LevelMaps.Empty();
+		Assert.Equal("barracks 0/4, needs one", MapEditorControls.CountLabel(empty, PrefabSpecs.Get(PrefabSpecs.Barracks)));
+		Assert.Equal("weapon_locker 0, needs one", MapEditorControls.CountLabel(empty, PrefabSpecs.Get(PrefabSpecs.WeaponLocker)));
+		Assert.Equal("bunker 0", MapEditorControls.CountLabel(empty, PrefabSpecs.Get(PrefabSpecs.Bunker)));
+	}
+
+	[Fact]
+	public void R_TurnsAPrefabToTheNext15DegreeStep()
+	{
+		float step = MathF.PI / 12f;
+		Assert.Equal(step, MapEditorControls.Turn(0f, 1), 5);
+		Assert.Equal(23 * step, MapEditorControls.Turn(0f, -1), 5);
+		Assert.Equal(2 * step, MapEditorControls.Turn(step * 1.2f, 1), 5);
+		Assert.Equal(0f, MapEditorControls.Turn(23 * step, 1), 5);
+		float yaw = 0f;
+		for (int i = 0; i < 24; i++)
+		{
+			yaw = MapEditorControls.Turn(yaw, 1);
+			Assert.InRange(yaw, 0f, 2f * MathF.PI);
+		}
+
+		Assert.Equal(0f, yaw, 4);
+		Assert.Equal(3f, MapEditorControls.Snap(2.6f));
+		Assert.Equal(-12f, MapEditorControls.Snap(-12.4f));
+	}
+
+	[Fact]
+	public void TheGhost_SaysWhatPlacingWouldDo()
+	{
+		var check = new PlacementCheck();
+		PrefabSpec barracks = PrefabSpecs.Get(PrefabSpecs.Barracks);
+		Assert.Equal("barracks: ok, 0.0° under it", MapEditorControls.Ghost(barracks, check));
+		MapDocument document = LevelMaps.Empty();
+		PlacementCheck refused = PrefabPlacement.Check(document, new PlacementRequest(PrefabSpecs.Barracks, 119f, 0f, 0f));
+		Assert.Equal("barracks: off the map, 0.0° under it", MapEditorControls.Ghost(barracks, refused));
+		PrefabSpec anchor = PrefabSpecs.Get(PrefabSpecs.StrategistAnchor);
+		Assert.Equal("strategist_anchor: ok", MapEditorControls.Ghost(anchor, new PlacementCheck()));
+	}
+
+	[Fact]
+	public void AParameter_HasItsOwnRange()
+	{
+		PrefabSpec node = PrefabSpecs.Get(PrefabSpecs.ResourceNode);
+		Assert.True(node.TryGetParameter(PrefabSpecs.NodeCaptureRadiusKey, out PrefabParameter radius));
+		SliderRange range = MapEditorControls.RangeOf(radius);
+		Assert.Equal(500f, range.Min);
+		Assert.Equal(1500f, range.Max);
+		Assert.Equal(50f, range.Step);
+		Assert.True(node.TryGetParameter(PrefabSpecs.NodePerkKey, out PrefabParameter perk));
+		Assert.Equal(1f, MapEditorControls.RangeOf(perk).Step);
 	}
 
 	[Fact]

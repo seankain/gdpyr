@@ -70,9 +70,10 @@ dedicated-server authoritative.
 - [`docs/LEVEL_EDITOR.md`](docs/LEVEL_EDITOR.md) — a plan, its ground measured in the engine (LE0,
   `scripts/level-editor-checks.sh`), the ground's rules, the map file and its validator written and
   tested engine-free (LE1, LE2, `Scripts/Sim/Level/`, `tools/Gdpyr.MapTool`), a map played from
-  its file (LE3: `--map`, `Scenes/Maps/MapHost.tscn`, `Scripts/Level/`, one bundled map), and the
+  its file (LE3: `--map`, `Scenes/Maps/MapHost.tscn`, `Scripts/Level/`, one bundled map), the
   editor's shell and terrain tool (LE4: **Map editor** on the menu, `--edit`, `Scenes/MapEditor/`),
-  with prefabs, roads and bridges in it and the fetch not built yet: a level editor in the game —
+  and its prefab tool (LE5: a round's pieces, cover, structures that stand when a round starts, the
+  deep check), with roads, bridges and the fetch not built yet: a level editor in the game —
   terrain raised and lowered with brushes that set its grade and textured by height and slope,
   prefabs placed on ground levelled for them, roads and bridges — and maps as data files that are
   saved, cloned and exported, given to a dedicated server, and fetched by clients from the server
@@ -229,7 +230,13 @@ the core or grade — and draws its bands, slope or contours (`O`). `Ctrl+Z` and
 redo, `Ctrl+S` saves, and an unsaved map is autosaved every minute and offered back. **Validate**
 lists what stops a map being hosted; **Test** (`F5`) plays the saved map in a second process. The
 camera flies on `WASD`, `Space`/`E` and `Q`, and looks on the middle button; `T` looks straight
-down. Prefabs, roads and bridges are LE5's and LE6's.
+down. The prefab tool (`2`, LE5) places a round's pieces, cover, scenery and structures from a
+palette that counts each against its limit: a ghost of the prefab's boxes stands on its pad under the
+cursor, green or red with why; a click places it and levels its pad, a click on a placed one selects
+it, `R` and `Shift+R` turn it 15°, `G` snaps to the metre grid, `Del` takes it up. A structure stands
+when each round starts, the strategist's and as destructible as one a builder made. **Deep**, on the
+validator's list, bakes the navigation mesh and asks for a path from every barracks door and the
+spawn line to every node. Roads and bridges are LE6's.
 
 Two more record a round or watch one back ([`docs/DEMOS.md`](docs/DEMOS.md)):
 

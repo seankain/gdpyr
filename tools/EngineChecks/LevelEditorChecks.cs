@@ -7,6 +7,8 @@ using Gdpyr.Core;
 using Gdpyr.Level;
 using Gdpyr.MapEditor;
 using Gdpyr.Match;
+using Gdpyr.Rts;
+using Gdpyr.Sim;
 using Gdpyr.Sim.Level;
 using Godot;
 
@@ -30,6 +32,16 @@ namespace Gdpyr.EngineChecks;
 /// no name: its list, then a clone of the bundled map with the ring under the cursor, a
 /// stroke, and the slope overlay, each saved as a picture in <c>LE4_DIR</c>. For a person to
 /// look at; nothing here is a fact about how it looks.</item>
+/// <item><c>prefabs</c> (LE5): a process started with <c>--edit</c> and no name. Every prefab of
+/// the catalog placed on a 6° slope stands on a level pad with its colliders inside its boxes;
+/// each of §6.5's answers comes of a placement built to get it, the ghost giving the same; an
+/// object is selected, turned, given a parameter and taken up; the deep check finds every walk
+/// on the slope and none to a node on an island; and then a map made only in the editor — two
+/// barracks, three nodes, cover and a pillbox standing at the start — passes the validator and
+/// the deep check, and is tested.</item>
+/// <item><c>round</c> (LE5): that map's test process, playing it with bots for <c>LE5_SECONDS</c>
+/// (600 unless given): the pillbox is put up at the round's start, as destructible as one a
+/// builder made and inside its boxes, fires, and is destroyed.</item>
 /// <item><c>test-child</c>: the process the editor's Test starts. It is told by its
 /// environment, which it inherits, what file it must be playing and what ground it must
 /// stand on, and leaves a mark in <c>LE4_DIR</c> once the round is live.</item>
@@ -66,6 +78,8 @@ public partial class LevelEditorChecks : Node
 			"editor" => Editor().GetEnumerator(),
 			"test-child" => TestChild().GetEnumerator(),
 			"shot" => Shot().GetEnumerator(),
+			"prefabs" => Prefabs().GetEnumerator(),
+			"round" => Round().GetEnumerator(),
 			_ => null,
 		};
 
@@ -750,6 +764,565 @@ public partial class LevelEditorChecks : Node
 
 	private static bool SameBytes(byte[] a, byte[] b) => a.AsSpan().SequenceEqual(b);
 
+	// ---- LE5: prefabs ------------------------------------------------------------------------------
+
+	/// <summary>How far a collider's corner may be outside its prefab's boxes [m].</summary>
+	private const float BoxTolerance = 0.02f;
+
+	/// <summary>A held stroke at one point, through the editor's commands, for <paramref name="frames"/> frames of 1/60 s.</summary>
+	private static IEnumerable<bool> Hold(MapEditorRoot editor, BrushSettings brush, Vector2 at, int frames, bool lower)
+	{
+		editor.SelectTool(EditorTool.Terrain);
+		editor.SetBrush(brush);
+		editor.BeginStroke(at.X, at.Y, lower);
+		for (int f = 0; f < frames; f++)
+		{
+			editor.StrokeTo(at.X, at.Y, 1f / 60f);
+			yield return true;
+		}
+
+		editor.EndStroke();
+		editor.SelectTool(EditorTool.Prefabs);
+	}
+
+	/// <summary>Every corner of every collider under a node, in the world: box shapes, concave faces, CSG boxes.</summary>
+	private static List<Vector3> ColliderPoints(Node node)
+	{
+		var points = new List<Vector3>();
+		var stack = new Stack<Node>();
+		stack.Push(node);
+		while (stack.Count > 0)
+		{
+			Node current = stack.Pop();
+			foreach (Node child in current.GetChildren())
+			{
+				stack.Push(child);
+			}
+
+			if (current is CollisionShape3D { Shape: BoxShape3D box } boxNode)
+			{
+				AddCorners(points, boxNode.GlobalTransform, box.Size * 0.5f);
+			}
+			else if (current is CollisionShape3D { Shape: ConcavePolygonShape3D concave } concaveNode)
+			{
+				foreach (Vector3 v in concave.GetFaces())
+				{
+					points.Add(concaveNode.GlobalTransform * v);
+				}
+			}
+			else if (current is CollisionShape3D { Shape: ConvexPolygonShape3D convex } convexNode)
+			{
+				foreach (Vector3 v in convex.Points)
+				{
+					points.Add(convexNode.GlobalTransform * v);
+				}
+			}
+			else if (current is CsgBox3D { UseCollision: true } csg)
+			{
+				AddCorners(points, csg.GlobalTransform, csg.Size * 0.5f);
+			}
+		}
+
+		return points;
+	}
+
+	private static void AddCorners(List<Vector3> points, Transform3D at, Vector3 h)
+	{
+		for (int c = 0; c < 8; c++)
+		{
+			points.Add(at * new Vector3((c & 1) == 0 ? -h.X : h.X, (c & 2) == 0 ? -h.Y : h.Y, (c & 4) == 0 ? -h.Z : h.Z));
+		}
+	}
+
+	/// <summary>
+	/// How far the furthest point is outside the object's boxes, in its own frame [m]: 0 when all
+	/// are inside. With <paramref name="plinth"/>, a structure's: LE-D21's plinth, the body's plan
+	/// from 0.5 m under its base to the base (§7.5), is allowed too — under its level pad.
+	/// </summary>
+	private static float OutsideBoxes(MapObject placed, PrefabSpec spec, List<Vector3> world, bool plinth = false)
+	{
+		Transform3D inverse = PrefabCatalog.PoseOf(placed, spec).AffineInverse();
+		List<PlacedBox> placedBoxes = PrefabSpecs.BoxesOf(placed);
+		var boxes = new List<StructureBox>(spec.Boxes);
+		if (plinth)
+		{
+			StructureBox body = spec.Boxes[0];
+			float depth = StructurePlacement.MaxGroundReliefMeters;
+			boxes.Add(new StructureBox(new Vector3(body.Center.X, -depth * 0.5f, body.Center.Z),
+				new Vector3(body.HalfExtents.X, depth * 0.5f, body.HalfExtents.Z)));
+		}
+
+		for (int i = spec.Boxes.Count; i < placedBoxes.Count; i++)
+		{
+			// A pier, back into the section's frame.
+			PlacedBox pier = placedBoxes[i];
+			Vector3 centre = inverse * new Vector3(pier.Plan.Center.X, (pier.Bottom + pier.Top) * 0.5f, pier.Plan.Center.Z);
+			boxes.Add(new StructureBox(centre, new Vector3(pier.Plan.HalfWidth, (pier.Top - pier.Bottom) * 0.5f, pier.Plan.HalfDepth)));
+		}
+
+		float worst = 0f;
+		foreach (Vector3 point in world)
+		{
+			Vector3 local = inverse * point;
+			float best = float.MaxValue;
+			foreach (StructureBox box in boxes)
+			{
+				Vector3 d = (local - box.Center).Abs() - box.HalfExtents;
+				best = MathF.Min(best, MathF.Max(0f, MathF.Max(d.X, MathF.Max(d.Y, d.Z))));
+			}
+
+			worst = MathF.Max(worst, best);
+		}
+
+		return worst;
+	}
+
+	/// <summary>Whether every sample under an object's footprint and within 1.5 m of it is at its pad's level, to the bit.</summary>
+	private static bool PadLevel(HeightField field, MapObject placed, out int samples)
+	{
+		samples = 0;
+		if (!PrefabSpecs.TryGetPadArea(placed, out PadArea area))
+		{
+			return true;
+		}
+
+		float level = PrefabPlacement.PadLevel(placed);
+		SampleRect rect = area.Bounds(field, TerrainConform.PadMarginMeters);
+		for (int z = rect.MinZ; z <= rect.MaxZ; z++)
+		{
+			for (int x = rect.MinX; x <= rect.MaxX; x++)
+			{
+				if (area.DistanceTo(field.WorldX(x), field.WorldZ(z)) <= TerrainConform.PadMarginMeters)
+				{
+					samples++;
+					if (field[x, z] != level)
+					{
+						return false;
+					}
+				}
+			}
+		}
+
+		return true;
+	}
+
+	private IEnumerable<bool> WaitForDeep(MapEditorRoot editor)
+	{
+		editor.Deep();
+		long started = Stopwatch.GetTimestamp();
+		while ((editor.DeepRunning || !editor.DeepIsCurrent) && Ms(started) < 120_000)
+		{
+			yield return true;
+		}
+	}
+
+	private static int Count(MapReport report, MapIssueCode code)
+	{
+		int n = 0;
+		foreach (MapIssue issue in report?.Issues ?? Array.Empty<MapIssue>())
+		{
+			n += issue.Code == code ? 1 : 0;
+		}
+
+		return n;
+	}
+
+	private IEnumerable<bool> Prefabs()
+	{
+		long waiting = Stopwatch.GetTimestamp();
+		while (MapEditorRoot.Current == null && Ms(waiting) < 30_000)
+		{
+			yield return true;
+		}
+
+		MapEditorRoot editor = MapEditorRoot.Current;
+		Fact(editor != null, "the editor is up");
+		if (editor == null)
+		{
+			yield break;
+		}
+
+		// ---- a map on a 6° slope, from a file, opened ------------------------------------------------
+		string slope = Env("LE5_SLOPE", "le5-slope");
+		MapDocument plane = MapDocument.Create(Guid.NewGuid(), slope, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+		float grade = HeightField.Grade(6f);
+		for (int z = 0; z < plane.Terrain.Depth; z++)
+		{
+			for (int x = 0; x < plane.Terrain.Width; x++)
+			{
+				plane.Terrain[x, z] = plane.Terrain.WorldX(x) * grade;
+			}
+		}
+
+		plane.Terrain.Round(plane.Terrain.Bounds);
+		string error = null;
+		Fact(MapStore.TrySave(plane, MapEditorRoot.Directory, slope, 0, out _, out error) && editor.Open(slope, out error),
+			$"a map that is a 6° slope along X opened: {error ?? editor.Message}");
+		if (editor.Editing == null)
+		{
+			yield break;
+		}
+
+		HeightField field = editor.Editing.Document.Terrain;
+		short[] bare = field.ToSamples();
+		editor.SelectTool(EditorTool.Prefabs);
+		Fact(editor.Tool == EditorTool.Prefabs, "the prefab tool is selected");
+
+		// ---- every prefab of the catalog -----------------------------------------------------------
+		var layout = new (ushort Id, float X, float Z)[]
+		{
+			(PrefabSpecs.SpawnLine, -20f, -80f), (PrefabSpecs.WeaponLocker, -20f, -50f), (PrefabSpecs.VehicleKiosk, 20f, -80f),
+			(PrefabSpecs.Barracks, 60f, -80f), (PrefabSpecs.ResourceNode, -15f, 20f), (PrefabSpecs.StrategistAnchor, 90f, 90f),
+			(PrefabSpecs.HeavyGun, 20f, -40f), (PrefabSpecs.MortarLauncher, 30f, -40f), (PrefabSpecs.AmmoCan, 40f, -40f),
+			(PrefabSpecs.CoverLowWall, 20f, 0f), (PrefabSpecs.CoverBlock, 35f, 0f), (PrefabSpecs.Bunker, 80f, 20f),
+			(PrefabSpecs.StructurePillbox, 20f, 40f), (PrefabSpecs.StructureSandbagWall, 30f, 40f),
+			(PrefabSpecs.StructureSniperTower, 40f, 40f), (PrefabSpecs.BridgeSpan, 20f, 80f), (PrefabSpecs.BridgeRamp, 45f, 80f),
+		};
+		Fact(layout.Length == PrefabSpecs.Count, $"{layout.Length} prefabs of the catalog's {PrefabSpecs.Count} to place");
+		float yaw = MathF.PI / 6f;
+		int placedCount = 0;
+		foreach ((ushort id, float x, float z) in layout)
+		{
+			PrefabSpec spec = PrefabSpecs.Get(id);
+			PlacementCheck check;
+			if (spec.FreeHeight)
+			{
+				check = editor.Place(new PlacementRequest(id, x, z, yaw, field.Sample(x, z) + 3f));
+			}
+			else
+			{
+				editor.SelectPrefab(id);
+				editor.SetGhostYaw(yaw);
+				PlacementCheck ghost = editor.Ghost(x, z);
+				check = editor.PlaceAt(x, z);
+				Fact(ghost != null && ghost.Result == check.Result && ghost.GradeDegrees == check.GradeDegrees,
+					$"{spec.Name}: the ghost's answer is the placement's, {ghost?.Result}, {ghost?.GradeDegrees:0.00}°");
+			}
+
+			Fact(check.IsOk, $"{spec.Name}: placed on the 6° slope, {check.GradeDegrees:0.00}° under it: {check.Result}");
+			if (!check.IsOk)
+			{
+				continue;
+			}
+
+			placedCount++;
+			int index = editor.Editing.Document.Objects.Count - 1;
+			MapObject placed = editor.Editing.Document.Objects[index];
+			if (spec.MakesPad)
+			{
+				Fact(PadLevel(field, placed, out int samples), $"{spec.Name}: stands on a level pad, its {samples} samples at"
+					+ $" {PrefabPlacement.PadLevel(placed):0.000} m to the bit");
+			}
+
+			Node3D node = index < editor.BuiltNodes.Count ? editor.BuiltNodes[index] : null;
+			if (spec.Kind == PrefabKind.Structure)
+			{
+				Fact(node == null, $"{spec.Name}: left for the round to put up; its colliders are the round part's to hold");
+				continue;
+			}
+
+			if (node != null && spec.MakesPad)
+			{
+				// A cover box's node is the box, whose origin is its middle (PrefabCatalog).
+				float lift = spec.Kind == PrefabKind.Cover ? spec.Boxes[0].Center.Y : 0f;
+				Fact(node.GlobalPosition.Y == PrefabPlacement.PadLevel(placed) + lift,
+					$"{spec.Name}: its node stands at the pad's level, {node.GlobalPosition.Y - lift:0.000} m");
+			}
+
+			List<Vector3> points = node == null ? new List<Vector3>() : ColliderPoints(node);
+			float outside = OutsideBoxes(placed, spec, points);
+			Fact(node != null && outside <= BoxTolerance, points.Count == 0
+				? $"{spec.Name}: built, with no collider of its own"
+				: $"{spec.Name}: {points.Count} collider corners, the furthest {outside * 100f:0.0} cm outside its boxes");
+		}
+
+		MapReport laid = MapValidator.Validate(editor.Editing.Document);
+		Fact(!laid.Has(MapIssueCode.OffItsPad) && !laid.Has(MapIssueCode.InTheWay),
+			$"the validator finds every padded object on its pad and nothing in the way: {MapStore.Describe(laid)}");
+
+		// ---- each of §6.5's answers ---------------------------------------------------------------
+		MapDocument document = editor.Editing.Document;
+		int Find(ushort id) => document.Objects.FindIndex(o => o.PrefabId == id);
+		MapObject kiosk = document.Objects[Find(PrefabSpecs.VehicleKiosk)];
+		MapObject barracks = document.Objects[Find(PrefabSpecs.Barracks)];
+		var kioskPose = new StructurePose(kiosk.Position, kiosk.YawRadians);
+		var barracksPose = new StructurePose(barracks.Position, barracks.YawRadians);
+		Vector3 besideKiosk = kioskPose.ToWorld(new Vector3(0f, 0f, 7.5f));
+		Vector3 beforeDoor = barracksPose.ToWorld(new Vector3(0f, 0f, -13f));
+
+		// A mound of 30° to be too steep on.
+		foreach (bool step in Hold(editor, TerrainBrush.Presets[6].Settings, new Vector2(-5f, 70f), 120, false))
+		{
+			yield return step;
+		}
+
+		var answers = new (string What, ushort Id, float X, float Z, PrefabPlacementResult Expected)[]
+		{
+			("a second kiosk", PrefabSpecs.VehicleKiosk, -20f, 60f, PrefabPlacementResult.LimitReached),
+			("a locker at the field's edge", PrefabSpecs.WeaponLocker, 119.5f, 0f, PrefabPlacementResult.OutOfBounds),
+			("a locker on the kiosk", PrefabSpecs.WeaponLocker, kiosk.Position.X, kiosk.Position.Z, PrefabPlacementResult.InTheWay),
+			("a locker on the mound's side", PrefabSpecs.WeaponLocker, -1f, 70f, PrefabPlacementResult.TooSteep),
+			("a locker in the water", PrefabSpecs.WeaponLocker, -80f, -30f, PrefabPlacementResult.InWater),
+			("a cover block whose pad would cut the kiosk's", PrefabSpecs.CoverBlock, besideKiosk.X, besideKiosk.Z,
+				PrefabPlacementResult.DisturbsNeighbour),
+			("a pillbox before the barracks' door", PrefabSpecs.StructurePillbox, beforeDoor.X, beforeDoor.Z,
+				PrefabPlacementResult.BlocksDoor),
+		};
+		foreach ((string what, ushort id, float x, float z, PrefabPlacementResult expected) in answers)
+		{
+			short[] before = field.ToSamples();
+			int objects = document.Objects.Count;
+			int steps = editor.Editing.History.UndoCount;
+			editor.SelectPrefab(id);
+			editor.SetGhostYaw(id == PrefabSpecs.StructurePillbox ? barracks.YawRadians : kiosk.YawRadians);
+			PlacementCheck ghost = editor.Ghost(x, z);
+			PlacementCheck check = editor.PlaceAt(x, z);
+			Fact(check.Result == expected && ghost.Result == expected && document.Objects.Count == objects
+				&& editor.Editing.History.UndoCount == steps && SameSamples(before, field.ToSamples()),
+				$"{what}: {PrefabPlacement.Describe(check.Result)}, the ghost the same, and nothing changed"
+				+ (check.Result == expected ? string.Empty : $" (expected {expected})"));
+		}
+
+		PlacementCheck unknown = editor.Place(new PlacementRequest(999, 0f, 0f, 0f));
+		Fact(unknown.Result == PrefabPlacementResult.UnknownPrefab, $"prefab 999: {PrefabPlacement.Describe(unknown.Result)}");
+
+		// ---- select, turn, parameters, take up ------------------------------------------------------
+		int kioskIndex = Find(PrefabSpecs.VehicleKiosk);
+		Fact(editor.SelectAt(kiosk.Position.X + 1f, kiosk.Position.Z) == kioskIndex, $"a click on the kiosk selects it: {editor.Selected}");
+		int stepsBefore = editor.Editing.History.UndoCount;
+		ushort yawBefore = kiosk.Yaw;
+		Press(Key.R, false);
+		yield return true;
+		MapObject turned = document.Objects[kioskIndex];
+		Fact(turned.PrefabId == PrefabSpecs.VehicleKiosk && turned.Yaw != yawBefore
+			&& MathF.Abs(Mathf.Wrap(turned.YawRadians - kiosk.YawRadians, -MathF.PI, MathF.PI) - (MathF.PI / 12f)) < 0.001f
+			&& editor.Editing.History.UndoCount == stepsBefore + 1 && editor.Selected == kioskIndex
+			&& PadLevel(field, turned, out _),
+			$"R turns the selected kiosk 15° where it is in the file, as one step, on a level pad: {Mathf.RadToDeg(turned.YawRadians):0.0}°");
+
+		int nodeIndex = Find(PrefabSpecs.ResourceNode);
+		MapObject node0 = document.Objects[nodeIndex];
+		Fact(editor.SelectAt(node0.Position.X + 6f, node0.Position.Z) == nodeIndex, "a click on the node's disc selects it");
+		PlacementCheck radius = editor.SetSelectedParameter(PrefabSpecs.NodeCaptureRadiusKey, 1200);
+		MapObject wider = document.Objects[nodeIndex];
+		int discSamples = 0;
+		Fact(radius != null && radius.IsOk && wider.Parameter(PrefabSpecs.NodeCaptureRadiusKey, 0) == 1200
+			&& PrefabSpecs.TryGetPadArea(wider, out PadArea disc) && disc.Radius == 12f && PadLevel(field, wider, out discSamples),
+			$"its capture radius to 12 m: placed again, its disc of {discSamples} samples level");
+
+		int canIndex = Find(PrefabSpecs.AmmoCan);
+		MapObject can = document.Objects[canIndex];
+		editor.Select(canIndex);
+		int objectsBefore = document.Objects.Count;
+		Press(Key.Delete, false);
+		yield return true;
+		Fact(document.Objects.Count == objectsBefore - 1 && !document.Objects.Contains(can) && editor.Selected == -1,
+			"Del takes the selected can up");
+		Fact(editor.Undo() && document.Objects[canIndex].Equals(can), "undo puts it back where it was in the file");
+
+		// ---- the deep check: every walk on the slope, and none to a node on an island ------------------
+		foreach (bool step in WaitForDeep(editor))
+		{
+			yield return step;
+		}
+
+		Fact(editor.DeepIsCurrent && editor.DeepVertices > 0 && editor.DeepWalks == 2
+			&& Count(editor.DeepReport, MapIssueCode.Unreachable) == 0,
+			$"deep: {editor.DeepVertices} vertices baked in {editor.DeepBakeMilliseconds:0} ms; {editor.DeepWalks} walks, from the spawn line"
+			+ $" and the barracks' door to the node, {Count(editor.DeepReport, MapIssueCode.Unreachable)} unreached"
+			+ $" (current: {editor.DeepIsCurrent}): {MapStore.Describe(editor.DeepReport)}");
+
+		foreach (bool step in Hold(editor, TerrainBrush.Presets[0].Settings, new Vector2(-100f, 60f), 660, false))
+		{
+			yield return step;
+		}
+
+		editor.SelectPrefab(PrefabSpecs.ResourceNode);
+		PlacementCheck island = editor.PlaceAt(-100f, 60f);
+		Fact(island.IsOk, $"a node on an island raised out of the water: {island.Result}, at {island.Level:0.00} m");
+		foreach (bool step in WaitForDeep(editor))
+		{
+			yield return step;
+		}
+
+		int unreached = Count(editor.DeepReport, MapIssueCode.Unreachable);
+		bool namesIsland = false;
+		foreach (MapIssue issue in editor.DeepReport?.Issues ?? Array.Empty<MapIssue>())
+		{
+			namesIsland |= issue.Code == MapIssueCode.Unreachable && issue.Other == document.Objects.Count - 1;
+		}
+
+		Fact(editor.DeepWalks == 4 && unreached == 2 && namesIsland && (editor.DeepReport?.IsPlayable ?? false),
+			$"deep again: {editor.DeepWalks} walks, the island's two unreached and named, and no error of it:"
+			+ $" {MapStore.Describe(editor.DeepReport)}");
+
+		// ---- undone, to the slope as it was ---------------------------------------------------------
+		while (editor.Editing.History.CanUndo)
+		{
+			editor.Undo();
+		}
+
+		Fact(document.Objects.Count == 0 && SameSamples(bare, field.ToSamples()),
+			$"every placement, turn, parameter and stroke undone: no object, and every sample the slope's ({placedCount} placed)");
+
+		// ---- a map made only in the editor, tested ----------------------------------------------------
+		string made = Env("LE5_MADE", "le5-made");
+		Fact(editor.NewMap(made, out error), $"a new map, {made}: {error ?? editor.Message}");
+		document = editor.Editing.Document;
+		foreach (bool step in Hold(editor, TerrainBrush.Presets[1].Settings, new Vector2(0f, 75f), 90, false))
+		{
+			yield return step;
+		}
+
+		foreach (bool step in Hold(editor, TerrainBrush.Presets[2].Settings, new Vector2(10f, -80f), 90, false))
+		{
+			yield return step;
+		}
+
+		var pieces = new (ushort Id, float X, float Z, float YawDegrees)[]
+		{
+			(PrefabSpecs.SpawnLine, -95f, 0f, 90f), (PrefabSpecs.WeaponLocker, -95f, 14f, 0f),
+			(PrefabSpecs.VehicleKiosk, -85f, -40f, 0f), (PrefabSpecs.Barracks, 90f, 50f, 90f), (PrefabSpecs.Barracks, 90f, -50f, 90f),
+			(PrefabSpecs.ResourceNode, -30f, 0f, 0f), (PrefabSpecs.ResourceNode, 25f, 45f, 0f), (PrefabSpecs.ResourceNode, 25f, -45f, 0f),
+			(PrefabSpecs.CoverBlock, -15f, 18f, 0f), (PrefabSpecs.CoverBlock, -15f, -18f, 0f), (PrefabSpecs.CoverLowWall, -60f, 10f, 0f),
+			(PrefabSpecs.CoverLowWall, -60f, -10f, 0f), (PrefabSpecs.CoverLowWall, 5f, 25f, 45f), (PrefabSpecs.CoverLowWall, 5f, -25f, -45f),
+			(PrefabSpecs.StructurePillbox, -48f, 6f, 90f), (PrefabSpecs.StrategistAnchor, 70f, 0f, 0f),
+			(PrefabSpecs.HeavyGun, -70f, 20f, 90f), (PrefabSpecs.AmmoCan, -92f, 20f, 0f),
+		};
+		bool allPlaced = true;
+		foreach ((ushort id, float x, float z, float yawDegrees) in pieces)
+		{
+			editor.SelectPrefab(id);
+			editor.SetGhostYaw(yawDegrees * (MathF.PI / 180f));
+			PlacementCheck check = editor.PlaceAt(x, z);
+			allPlaced &= check.IsOk;
+			if (!check.IsOk)
+			{
+				Fact(false, $"{PrefabSpecs.Get(id).Name} at ({x}, {z}): {check.Result}");
+			}
+		}
+
+		MapReport report = editor.Editing.Report;
+		Fact(allPlaced && report.IsPlayable, $"{pieces.Length} pieces placed with the prefab tool; it passes the validator:"
+			+ $" {MapStore.Describe(report)}");
+		foreach (bool step in WaitForDeep(editor))
+		{
+			yield return step;
+		}
+
+		Fact(editor.DeepIsCurrent && Count(editor.DeepReport, MapIssueCode.Unreachable) == 0 && editor.DeepReport.IsPlayable,
+			$"and the deep check: {editor.DeepWalks} walks, none unreached: {MapStore.Describe(editor.DeepReport)}");
+		Fact(editor.Save(out error), $"saved: {error ?? editor.Message}");
+
+		MapObject pillbox = document.Objects[document.Objects.FindIndex(o => o.PrefabId == PrefabSpecs.StructurePillbox)];
+		OS.SetEnvironment("LE4_CHECK", "round");
+		OS.SetEnvironment("LE5_PILLBOX", string.Join(",", F(pillbox.Position.X, "R"), F(pillbox.Position.Z, "R"),
+			F(PrefabPlacement.PadLevel(pillbox), "R"), F(pillbox.YawRadians, "R")));
+		OS.SetEnvironment("LE4_EXPECT_HASH", editor.SavedHash);
+		Fact(editor.Test(out error), $"Test: {error ?? editor.Message}");
+		int pid = editor.TestProcessId;
+		int seconds = int.TryParse(Env("LE5_SECONDS", "600"), out int s) ? s : 600;
+		long started = Stopwatch.GetTimestamp();
+		while (pid > 0 && OS.IsProcessRunning(pid) && Ms(started) < (seconds + 300) * 1000.0)
+		{
+			yield return true;
+		}
+
+		string held = Has("round-done") ? File.ReadAllText(Path.Combine(_dir, "round-done")) : "none";
+		string[] counts = held.Split(" of ");
+		Fact(pid > 0 && !OS.IsProcessRunning(pid) && counts.Length == 2 && counts[0] == counts[1],
+			$"the test process played the map made in the editor, {F(Ms(started) / 1000.0, "0")} s, and its facts held: {held}");
+		Measured($"the test process's exit code: {OS.GetProcessExitCode(pid)}"
+			+ (OS.GetProcessExitCode(pid) == 0 ? string.Empty : " — the crash on exit of §13, after its facts were in"));
+	}
+
+	// ---- LE5: the round of the map made in the editor -------------------------------------------------
+
+	private IEnumerable<bool> Round()
+	{
+		string[] at = Env("LE5_PILLBOX", "0,0,0,0").Split(',');
+		float px = float.Parse(at[0], CultureInfo.InvariantCulture);
+		float pz = float.Parse(at[1], CultureInfo.InvariantCulture);
+		float level = float.Parse(at[2], CultureInfo.InvariantCulture);
+		float facing = float.Parse(at[3], CultureInfo.InvariantCulture);
+		int seconds = int.TryParse(Env("LE5_SECONDS", "600"), out int s) ? s : 600;
+
+		long waiting = Stopwatch.GetTimestamp();
+		CombatManager combat = CombatManager.Instance;
+		UnitManager units = UnitManager.Instance;
+		while (!(combat?.Match.IsLive ?? false) && Ms(waiting) < 240_000)
+		{
+			yield return true;
+		}
+
+		Fact(combat?.Match.IsLive ?? false, "the round is live");
+		Fact(Session.Map.IsData && Session.Map.Hash == Env("LE4_EXPECT_HASH", string.Empty),
+			$"on the map made in the editor: {Session.Map}");
+		Fact(units != null && units.MapStructuresPlaced == 1 && units.MapStructuresRefused == 0,
+			$"the round put the map's structure up: {units?.MapStructuresPlaced} put up, {units?.MapStructuresRefused} refused");
+
+		Structure Pillbox()
+		{
+			for (int i = 0; units != null && i < SimConfig.MaxStructures; i++)
+			{
+				Structure structure = units.StructureAt(i);
+				if (structure != null && structure.Kind == StructureKinds.Pillbox
+					&& new Vector2(structure.Pose.Base.X - px, structure.Pose.Base.Z - pz).Length() < 0.05f)
+				{
+					return structure;
+				}
+			}
+
+			return null;
+		}
+
+		Structure first = Pillbox();
+		Fact(first != null && first.IsBuilt && !first.IsDestroyed && first.Team == Team.Strategist
+			&& MathF.Abs(first.Pose.Base.Y - level) < 0.01f && MathF.Abs(Mathf.Wrap(first.Facing - facing, -MathF.PI, MathF.PI)) < 0.001f,
+			$"a finished pillbox of the strategist's stands where the file put it, at its pad's level: {first?.Pose.Base}");
+		if (first != null)
+		{
+			var placed = MapObject.At(PrefabSpecs.StructurePillbox, new Vector3(px, level, pz), facing);
+			List<Vector3> points = ColliderPoints(first);
+			float outside = OutsideBoxes(placed, PrefabSpecs.Get(PrefabSpecs.StructurePillbox), points);
+			float underPlinth = OutsideBoxes(placed, PrefabSpecs.Get(PrefabSpecs.StructurePillbox), points, plinth: true);
+			Fact(points.Count > 0 && underPlinth <= BoxTolerance,
+				$"its {points.Count} collider corners are inside the prefab's boxes and LE-D21's plinth under them, the furthest"
+				+ $" {underPlinth * 100f:0.0} cm out; without the plinth, {outside * 100f:0.0} cm, its depth");
+		}
+
+		bool fired = false;
+		bool destroyed = false;
+		int rounds = 0;
+		bool live = true;
+		long started = Stopwatch.GetTimestamp();
+		while (!(fired && destroyed) && Ms(started) < seconds * 1000.0)
+		{
+			Structure pillbox = Pillbox();
+			fired |= pillbox != null && pillbox.Weapon.ShotIndex > 0;
+			destroyed |= pillbox != null && pillbox.IsDestroyed;
+			if (combat.Match.IsLive != live)
+			{
+				live = combat.Match.IsLive;
+				rounds += live ? 1 : 0;
+			}
+
+			yield return true;
+		}
+
+		Measured($"{F(Ms(started) / 1000.0, "0")} s of the round; {rounds} more rounds began; units trained {units.UnitsProduced}"
+			+ $" this round; structures built {units.StructuresBuilt}, lost {units.StructuresLost}");
+		Fact(fired, "the pillbox fired");
+		Fact(destroyed, "the pillbox was destroyed");
+
+		// The facts, for the editor's part to read: this process's exit code is its failures' count,
+		// but a practice round can crash as it exits, after every fact is in (§13).
+		if (!string.IsNullOrEmpty(_dir))
+		{
+			File.WriteAllText(Path.Combine(_dir, "round-done"), $"{_facts - _failures} of {_facts}");
+		}
+	}
+
 	// ---- pictures ---------------------------------------------------------------------------------
 
 	private IEnumerable<bool> Shot()
@@ -804,6 +1377,38 @@ public partial class LevelEditorChecks : Node
 		editor.SetOverlay(TerrainOverlay.Slope);
 		editor.ShowIssues();
 		foreach (bool step in Picture("le4-editor-slope"))
+		{
+			yield return step;
+		}
+
+		// LE5: the prefab tool's ghost under the cursor, over the buildable overlay.
+		editor.SetOverlay(TerrainOverlay.Buildable);
+		editor.SelectTool(EditorTool.Prefabs);
+		editor.SelectPrefab(PrefabSpecs.StructurePillbox);
+		for (int i = 0; i < 10; i++)
+		{
+			yield return true;
+		}
+
+		Fact(editor.GhostCheck != null, $"the ghost stands under the cursor: {editor.GhostCheck?.Result}");
+		foreach (bool step in Picture("le5-prefabs-buildable"))
+		{
+			yield return step;
+		}
+
+		if (editor.Cursor is { } there)
+		{
+			editor.SelectPrefab(PrefabSpecs.Barracks);
+			editor.PlaceAt(there.X + 25f, there.Z);
+		}
+
+		editor.SetOverlay(TerrainOverlay.None);
+		for (int i = 0; i < 10; i++)
+		{
+			yield return true;
+		}
+
+		foreach (bool step in Picture("le5-prefabs"))
 		{
 			yield return step;
 		}

@@ -1879,6 +1879,9 @@ public partial class CombatManager : Node
 		EmplacementManager.Instance?.ResetAll();
 		UnitManager.Instance?.ClearUnits();
 
+		// A data map's structures stand when a round starts, every round (docs/LEVEL_EDITOR.md §6.5).
+		UnitManager.Instance?.PlaceMapStructures();
+
 		// Every crew vehicle off the field, its riders put down where they sat before the
 		// respawns below put them back on their spawns, and both kinds ready at the kiosk
 		// (docs/GROUND_VEHICLES.md §6.6).

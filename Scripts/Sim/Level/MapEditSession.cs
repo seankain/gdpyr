@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using Godot;
 
 namespace Gdpyr.Sim.Level;
 
@@ -286,6 +288,133 @@ public sealed class MapEditSession
 		Touch();
 		return true;
 	}
+
+	// ---- prefabs (§8.4, LE5) ------------------------------------------------------------------------
+
+	/// <summary>
+	/// What placing would do, without doing it (§6.5): the ghost's answer. With
+	/// <paramref name="replacing"/>, the object at that index taken up and placed again.
+	/// </summary>
+	public PlacementCheck Check(in PlacementRequest request, int replacing = -1) =>
+		PrefabPlacement.Check(Document, request, replacing);
+
+	/// <summary>
+	/// Places a prefab and its pad as one step to undo, when §6.5's checks take it. The
+	/// check comes back either way; <paramref name="outcome"/> is what to draw again.
+	/// </summary>
+	public PlacementCheck Place(in PlacementRequest request, out EditOutcome outcome) =>
+		Commit(PrefabPlacement.Check(Document, request), out outcome);
+
+	/// <summary>
+	/// Takes the object at <paramref name="index"/> up and places it again as asked — turned,
+	/// moved, or with other parameters — as one step, keeping its place in the file. Refused
+	/// as §6.5 refuses a placement, and then the object stays where it was. The ground its old
+	/// pad levelled stays, as any sculpted ground does.
+	/// </summary>
+	public PlacementCheck Replace(int index, in PlacementRequest request, out EditOutcome outcome)
+	{
+		if (index < 0 || index >= Document.Objects.Count)
+		{
+			outcome = default;
+			return new PlacementCheck { Result = PrefabPlacementResult.UnknownPrefab };
+		}
+
+		return Commit(PrefabPlacement.Check(Document, request, index), out outcome);
+	}
+
+	/// <summary>Takes the object at <paramref name="index"/> up, as one step; its pad's ground stays.</summary>
+	public bool TakeUp(int index, out EditOutcome outcome)
+	{
+		outcome = default;
+		if (Stroking || index < 0 || index >= Document.Objects.Count)
+		{
+			return false;
+		}
+
+		History.Do(Document, PrefabPlacement.TakeUp(Document, index));
+		Touch();
+		outcome = new EditOutcome(SampleRect.Empty, SampleRect.Empty, true, true);
+		return true;
+	}
+
+	/// <summary>
+	/// The request that would place an object as it stands: its prefab, its point, its yaw and
+	/// its parameters. What turning it or changing a parameter starts from.
+	/// </summary>
+	public static PlacementRequest RequestFor(MapObject placed)
+	{
+		var parameters = placed.Parameters.ToArray();
+		return new PlacementRequest(placed.PrefabId, placed.Position.X, placed.Position.Z, placed.YawRadians,
+			placed.Position.Y, parameters.Length > 0 ? parameters : null);
+	}
+
+	private PlacementCheck Commit(PlacementCheck check, out EditOutcome outcome)
+	{
+		outcome = default;
+		if (!check.IsOk || Stroking)
+		{
+			return check;
+		}
+
+		History.Do(Document, check.Edit);
+		Touch();
+		outcome = new EditOutcome(check.Edit.Rect, check.Edit.Rect, true, true);
+		return check;
+	}
+
+	/// <summary>
+	/// The object under (x, z) in plan (§8.4: a click on a placed object selects it), or −1:
+	/// one with a box over the point, else one whose footprint covers it, else a marker within
+	/// <see cref="PickMarkerMeters"/>; of several, the one whose box or footprint is smallest, so
+	/// that cover on a node's disc is picked over the node.
+	/// </summary>
+	public static int Pick(MapDocument document, float x, float z)
+	{
+		var point = new Vector3(x, 0f, z);
+		int best = -1;
+		float bestArea = float.MaxValue;
+		var boxes = new List<PlacedBox>(4);
+		for (int i = 0; i < document.Objects.Count; i++)
+		{
+			MapObject placed = document.Objects[i];
+			boxes.Clear();
+			PrefabSpecs.AddBoxes(placed, boxes);
+			float area = float.MaxValue;
+			foreach (PlacedBox box in boxes)
+			{
+				if (box.Plan.Contains(point))
+				{
+					area = MathF.Min(area, 4f * box.Plan.HalfWidth * box.Plan.HalfDepth);
+				}
+			}
+
+			if (area == float.MaxValue && PrefabSpecs.TryGetPadArea(placed, out PadArea pad) && pad.Covers(x, z))
+			{
+				area = pad.IsDisc ? MathF.PI * pad.Radius * pad.Radius : 4f * pad.Rect.HalfWidth * pad.Rect.HalfDepth;
+			}
+
+			if (area == float.MaxValue && boxes.Count == 0)
+			{
+				float dx = placed.Position.X - x;
+				float dz = placed.Position.Z - z;
+				if ((dx * dx) + (dz * dz) <= PickMarkerMeters * PickMarkerMeters)
+				{
+					area = 0f;
+				}
+			}
+
+			if (area < bestArea)
+			{
+				bestArea = area;
+				best = i;
+			}
+		}
+
+		return best;
+	}
+
+	/// <summary>How near a click must be to an object with no body — the strategist's anchor — to pick it [m].</summary>
+	public const float PickMarkerMeters = 2f;
 
 	// ---- the map's numbers and text -------------------------------------------------------------
 
