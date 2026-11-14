@@ -1,0 +1,55 @@
+# LE3, docs/LEVEL_EDITOR.md §11. At fa37670: .NET SDK 8.0.134, Godot 4.6.stable.mono.official.89cea1439, four cores of a cloud VM.
+# ./scripts/level-editor-checks.sh map-practice: --practice --map hills at --fixed-fps 60, LE3_SECONDS 600. Nothing else ran beside it.
+
+[checks] level map check: play
+[rts] navigation baked: 2348 vertices
+[checks] PASS play: hills (data): navigation baked: 2348 vertices
+[checks] measured play: hills (data): the longest frame up to the first tick's bake: 2343.8 ms
+[checks] PASS play: hills (data): baked at 40°, LE-D23's walkable
+[checks] PASS play: hills (data): this process plays 'hills', which it was asked to ('hills')
+[checks] PASS play: hills (data): MapHost.tscn's LevelRoot built the world from the session's document
+[checks] PASS play: hills (data): res://Maps/hills.map is in this build: 27299 bytes
+[checks] PASS play: hills (data): its SHA-256 is the catalog's, 6d0aa3ff6ebe3487…
+[checks] PASS play: hills (data): the document the world was built from is the file read again, field by field and sample by sample
+[checks] PASS play: hills (data): player_spawn markers: 4 in the world, 4 in the file
+[checks] PASS play: hills (data): barracks: 1 in the world, 1 in the file
+[checks] PASS play: hills (data): resource nodes: 3 in the world, 3 in the file
+[checks] PASS play: hills (data): weapon lockers: 1 in the world, 1 in the file
+[checks] PASS play: hills (data): vehicle kiosks: 1 in the world, 1 in the file
+[checks] PASS play: hills (data): emplacements: 2 in the world, 2 in the file
+[checks] PASS play: hills (data): ammo cans: 2 in the world, 2 in the file
+[checks] PASS play: hills (data): cover boxes: 18 in the world, 18 in the file
+[checks] PASS play: hills (data): strategist anchors: 1 in the world, 1 in the file
+[checks] PASS play: hills (data): the managers found them: 1 barracks, 3 nodes
+[checks] PASS play: hills (data): every padded object stands on its pad to the bit: the worst is 0.000 mm off
+[checks] PASS play: hills (data): 1000 of 1000 rays straight down met the ground, the worst 0.017 mm from the file's
+[checks] PASS play: hills (data): 2000 rays at a slant, 16-200 m in plan, from over the ground to under it: 0 passed through, 0 met it off the file's
+[checks] PASS play: hills (data): the round is live (6 on their sides)
+[rts] navigation re-baked around the structures in 1997 ms, 6.8 ms of it on the tick (1 this round)
+[rts] navigation re-baked around the structures in 1933 ms, 7.1 ms of it on the tick (2 this round)
+[rts] navigation re-baked around the structures in 2000 ms, 5.5 ms of it on the tick (3 this round)
+[rts] navigation re-baked around the structures in 1971 ms, 7.2 ms of it on the tick (4 this round)
+[rts] navigation re-baked around the structures in 1890 ms, 5.5 ms of it on the tick (5 this round)
+[rts] navigation re-baked around the structures in 1958 ms, 4.4 ms of it on the tick (6 this round)
+[rts] navigation re-baked around the structures in 1853 ms, 4.5 ms of it on the tick (7 this round)
+[rts] navigation re-baked around the structures in 1950 ms, 5.5 ms of it on the tick (8 this round)
+[rts] navigation re-baked around the structures in 1905 ms, 7.2 ms of it on the tick (9 this round)
+[rts] navigation re-baked around the structures in 1996 ms, 9.5 ms of it on the tick (10 this round)
+[checks] measured play: hills (data): a tick, frame to frame, over 600 s of ticks (197 s of wall time): n 36000, mean 5.484 ms, p50 4.798, p95 9.514, p99 11.841, max 867.134
+[checks] measured play: hills (data): the play: 3 round(s), phase Live at the end; units produced 110, lost 41, on the field 15.4 on average and 40 at the most; structures built 9, lost 4; re-bakes 11; rejected orders 0; ground deaths 107; nodes taken 12 times
+[checks] PASS play: hills (data): the strategist trained units: 110
+[checks] PASS play: hills (data): a node was taken: 12 times
+[checks] PASS play: hills (data): there was a fight: 107 ground deaths
+[checks] play: 24 of 24 facts hold
+[map] playing Hills (hills, 6d0aa3ff) from res://Maps/hills.map, sha-256 6d0aa3ff6ebe3487e53d4f4488318b2ebe47ada2e27fb3ae568320a4a8450958
+[level] built 'Hills' (Hills (hills, 6d0aa3ff)) in 126 ms: terrain 241 x 241 samples, 225 shapes set in 62.6 ms, -1.53 … 10.57 m, water -5.00 m, over none, not drawn
+[level] built 1 spawn lines of 4 markers, 1 lockers, 1 kiosks, 1 barracks, 3 nodes, 1 anchors, 2 emplacements, 2 ammo cans, 18 cover boxes, 1 scenery, 0 bridge sections on 0 piers, the perimeter; 2 structures left for the round's start (LE5)
+[match] round live | tickets 50 | points 1000 | baseline 120/min | 20 minutes
+[match] round live | tickets 50 | points 1000 | baseline 120/min | 20 minutes
+[match] round live | tickets 50 | points 1000 | baseline 120/min | 20 minutes
+[checks] PASS map-practice: the log has no 'no nodes in group'
+[checks] PASS map-practice: the log has no 'no NavigationRegion3D in group'
+[checks] PASS map-practice: the log has no 'navigation bake produced no geometry'
+[checks] PASS map-practice: the log has no 'is scaled or tilted'
+[checks] PASS map-practice: the log has no 'are addressable on the wire'
+map-practice, hills: exit 0

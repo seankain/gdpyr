@@ -1,0 +1,201 @@
+# LE3, docs/LEVEL_EDITOR.md §11. At fa37670: .NET SDK 8.0.134, Godot 4.6.stable.mono.official.89cea1439, four cores of a cloud VM.
+# ./scripts/level-editor-checks.sh slopes: LE0's part on LE0's copy of the greybox, its structure sites held to LE-D21 since LE3 (Sites in
+# tools/EngineChecks/LevelChecks.cs). dotnet test ran beside it for 20 s.
+
+[checks] level check: slopes, ground flat, trimesh
+[checks] terrain: flat, trimesh of 225 shapes, 241 x 241 samples, 67 pads, set in 36.75 ms, decoded in 0.00 ms
+[rts] navigation baked: 533 vertices
+[checks] PASS slopes: the ground is the terrain (trimesh)
+[checks] PASS slopes: the listen host's player is alive on the ground force
+[checks] measured slopes: the body: floor_max_angle 45.0°, floor_snap_length 0.10 m, floor_constant_speed False, floor_block_on_wall True, safe_margin 0.001 m
+[checks] measured slopes: a body walking at 19.97° on the trimesh, 23 m long and 8.36 m high: up it in 5.9 s; on the face, 303 ticks on the floor and 0 on a wall, the normals it met 17.1° to 22.3° (a clean slide would make 4.36 m/s over the ground)
+[checks] measured slopes: a body walking at 30.03° on the trimesh, 14 m long and 8.09 m high: up it in 4.5 s; on the face, 212 ticks on the floor and 0 on a wall, the normals it met 26.7° to 33.5° (a clean slide would make 3.68 m/s over the ground)
+[checks] measured slopes: a body walking at 34.96° on the trimesh, 12 m long and 8.39 m high: up it in 4.3 s; on the face, 201 ticks on the floor and 0 on a wall, the normals it met 31.6° to 38.3° (a clean slide would make 3.28 m/s over the ground)
+[checks] measured slopes: a body walking at 38.00° on the trimesh, 11 m long and 8.59 m high: up it in 4.3 s; on the face, 198 ticks on the floor and 0 on a wall, the normals it met 34.5° to 40.7° (a clean slide would make 3.03 m/s over the ground)
+[checks] measured slopes: a body walking at 38.96° on the trimesh, 10 m long and 8.09 m high: up it in 4.1 s; on the face, 184 ticks on the floor and 0 on a wall, the normals it met 35.8° to 41.9° (a clean slide would make 2.94 m/s over the ground)
+[checks] measured slopes: a body walking at 40.03° on the trimesh, 10 m long and 8.40 m high: up it in 4.2 s; on the face, 189 ticks on the floor and 0 on a wall, the normals it met 40.0° to 41.6° (a clean slide would make 2.85 m/s over the ground)
+[checks] measured slopes: a body walking at 41.06° on the trimesh, 10 m long and 8.71 m high: up it in 4.3 s; on the face, 196 ticks on the floor and 0 on a wall, the normals it met 37.8° to 44.1° (a clean slide would make 2.76 m/s over the ground)
+[checks] measured slopes: a body walking at 42.06° on the trimesh, 9 m long and 8.12 m high: up it in 4.0 s; on the face, 179 ticks on the floor and 0 on a wall, the normals it met 39.4° to 45.4° (a clean slide would make 2.67 m/s over the ground)
+[checks] measured slopes: a body walking at 43.03° on the trimesh, 9 m long and 8.40 m high: not up it in 12 s, up 0.78 m, at x 10.6; on the face, 662 ticks on the floor and 658 on a wall, the normals it met 43.0° to 46.2° (a clean slide would make 2.59 m/s over the ground)
+[checks] measured slopes: a body walking at 43.97° on the trimesh, 9 m long and 8.68 m high: not up it in 12 s, up 3.69 m, at x 13.6; on the face, 661 ticks on the floor and 586 on a wall, the normals it met 44.0° to 45.9° (a clean slide would make 2.51 m/s over the ground)
+[checks] measured slopes: a body walking at 45.00° on the trimesh, 8 m long and 8.00 m high: not up it in 12 s, up 0.83 m, at x 10.6; on the face, 660 ticks on the floor and 657 on a wall, the normals it met 45.0° to 46.6° (a clean slide would make 2.42 m/s over the ground)
+[checks] measured slopes: a body walking at 45.99° on the trimesh, 8 m long and 8.28 m high: not up it in 12 s, up 0.00 m, at x 9.8; on the face, 0 ticks on the floor and 0 on a wall, the normals it met 0.0° to 0.0° (a clean slide would make 2.33 m/s over the ground)
+[checks] measured slopes: the steepest face a body walked up on the trimesh: 42.06°
+[checks] PASS slopes: a body does not walk 46° on the trimesh
+[checks] PASS slopes: a body walks the 39.2° faces a 30° skirt can leave, on the trimesh (steepest walked 42.06°)
+[checks] measured slopes: a body walking at 19.97° on a box, 23 m long and 8.36 m high: up it in 5.9 s; on the face, 303 ticks on the floor and 0 on a wall, the normals it met 20.0° to 20.0° (a clean slide would make 4.36 m/s over the ground)
+[checks] measured slopes: a body walking at 30.03° on a box, 14 m long and 8.09 m high: up it in 4.5 s; on the face, 212 ticks on the floor and 0 on a wall, the normals it met 30.0° to 30.0° (a clean slide would make 3.68 m/s over the ground)
+[checks] measured slopes: a body walking at 34.96° on a box, 12 m long and 8.39 m high: up it in 4.3 s; on the face, 201 ticks on the floor and 0 on a wall, the normals it met 35.0° to 35.0° (a clean slide would make 3.28 m/s over the ground)
+[checks] measured slopes: a body walking at 38.00° on a box, 11 m long and 8.59 m high: up it in 4.3 s; on the face, 198 ticks on the floor and 0 on a wall, the normals it met 38.0° to 38.0° (a clean slide would make 3.03 m/s over the ground)
+[checks] measured slopes: a body walking at 38.96° on a box, 10 m long and 8.09 m high: up it in 4.1 s; on the face, 184 ticks on the floor and 0 on a wall, the normals it met 39.0° to 39.0° (a clean slide would make 2.94 m/s over the ground)
+[checks] measured slopes: a body walking at 40.03° on a box, 10 m long and 8.40 m high: up it in 4.2 s; on the face, 189 ticks on the floor and 0 on a wall, the normals it met 40.0° to 40.0° (a clean slide would make 2.85 m/s over the ground)
+[checks] measured slopes: a body walking at 41.06° on a box, 10 m long and 8.71 m high: up it in 4.3 s; on the face, 196 ticks on the floor and 0 on a wall, the normals it met 41.1° to 41.1° (a clean slide would make 2.76 m/s over the ground)
+[checks] measured slopes: a body walking at 42.06° on a box, 9 m long and 8.12 m high: up it in 4.0 s; on the face, 179 ticks on the floor and 0 on a wall, the normals it met 42.1° to 42.1° (a clean slide would make 2.67 m/s over the ground)
+[checks] measured slopes: a body walking at 43.03° on a box, 9 m long and 8.40 m high: up it in 4.1 s; on the face, 186 ticks on the floor and 0 on a wall, the normals it met 43.0° to 43.0° (a clean slide would make 2.59 m/s over the ground)
+[checks] measured slopes: a body walking at 43.97° on a box, 9 m long and 8.68 m high: up it in 4.3 s; on the face, 191 ticks on the floor and 0 on a wall, the normals it met 44.0° to 44.0° (a clean slide would make 2.51 m/s over the ground)
+[checks] measured slopes: a body walking at 45.00° on a box, 8 m long and 8.00 m high: up it in 4.0 s; on the face, 173 ticks on the floor and 0 on a wall, the normals it met 45.0° to 45.0° (a clean slide would make 2.42 m/s over the ground)
+[checks] measured slopes: a body walking at 45.99° on a box, 8 m long and 8.28 m high: not up it in 12 s, up 0.00 m, at x 9.8; on the face, 0 ticks on the floor and 0 on a wall, the normals it met 0.0° to 0.0° (a clean slide would make 2.33 m/s over the ground)
+[checks] measured slopes: the steepest face a body walked up on a box: 45.00°
+[checks] PASS slopes: a body does not walk 46° on a box
+[checks] measured slopes: a body's speed over the ground on the trimesh: 5.00 m/s on the flat, 4.36 m/s up 19.97°, 5.01 m/s down it (0 of 180 ticks off the floor going down)
+[checks] measured slopes: a rifleman ordered up 19.97° on the trimesh (baked in 352 ms; the mesh is 0.18 m from the face's middle): there in 7.9 s, at (37.5, 8.9, 81.0); past the foot, 400 ticks on the floor and 0 on a wall
+[checks] measured slopes: a rifleman ordered up 30.03° on the trimesh (baked in 406 ms; the mesh is 0.20 m from the face's middle): there in 6.3 s, at (28.5, 8.6, 81.0); past the foot, 300 ticks on the floor and 0 on a wall
+[checks] measured slopes: a rifleman ordered up 34.96° on the trimesh (baked in 409 ms; the mesh is 0.22 m from the face's middle): there in 6.1 s, at (26.5, 8.9, 81.0); past the foot, 288 ticks on the floor and 0 on a wall
+[checks] measured slopes: a rifleman ordered up 38.00° on the trimesh (baked in 406 ms; the mesh is 0.24 m from the face's middle): there in 6.0 s, at (25.5, 9.1, 81.0); past the foot, 285 ticks on the floor and 0 on a wall
+[checks] measured slopes: a rifleman ordered up 40.03° on the trimesh (baked in 406 ms; the mesh is 0.27 m from the face's middle): there in 5.9 s, at (24.5, 8.9, 81.0); past the foot, 275 ticks on the floor and 0 on a wall
+[checks] measured slopes: a rifleman ordered up 42.06° on the trimesh (baked in 404 ms; the mesh is 0.25 m from the face's middle): there in 5.7 s, at (23.6, 8.6, 81.0); past the foot, 265 ticks on the floor and 0 on a wall
+[checks] measured slopes: a rifleman ordered up 43.03° on the trimesh (baked in 434 ms; the mesh is 0.27 m from the face's middle): not there in 30 s, at (13.7, 4.1, 81.0); past the foot, 1720 ticks on the floor and 1639 on a wall
+[checks] measured slopes: a rifleman ordered up 43.97° on the trimesh (baked in 411 ms; the mesh is 0.26 m from the face's middle): not there in 30 s, at (10.7, 1.3, 81.0); past the foot, 1719 ticks on the floor and 1713 on a wall
+[checks] measured slopes: a rifleman ordered up 45.00° on the trimesh (baked in 358 ms; the mesh is 5.79 m from the face's middle): not there in 30 s, at (9.6, 0.5, 81.0); past the foot, 0 ticks on the floor and 0 on a wall
+[checks] measured slopes: a rifleman ordered up 45.99° on the trimesh (baked in 359 ms; the mesh is 5.88 m from the face's middle): not there in 30 s, at (9.6, 0.5, 81.0); past the foot, 0 ticks on the floor and 0 on a wall
+[checks] measured slopes: the steepest face the bake kept on the trimesh: 43.97°; the steepest a rifleman walked up: 42.06°
+[checks] PASS slopes: a rifleman does not walk 46° on the trimesh
+[checks] PASS slopes: a rifleman walks the 39.2° faces a 30° skirt can leave, on the trimesh (steepest walked 42.06°)
+[checks] measured slopes: a rifleman ordered up 19.97° on a box (baked in 421 ms; the mesh is 0.18 m from the face's middle): there in 6.3 s, at (30.6, 8.0, 81.0); past the foot, 303 ticks on the floor and 0 on a wall
+[checks] measured slopes: a rifleman ordered up 30.03° on a box (baked in 404 ms; the mesh is 0.22 m from the face's middle): there in 4.7 s, at (22.1, 7.5, 81.0); past the foot, 206 ticks on the floor and 0 on a wall
+[checks] measured slopes: a rifleman ordered up 34.96° on a box (baked in 419 ms; the mesh is 0.23 m from the face's middle): there in 4.5 s, at (20.2, 7.7, 81.0); past the foot, 193 ticks on the floor and 0 on a wall
+[checks] measured slopes: a rifleman ordered up 38.00° on a box (baked in 416 ms; the mesh is 0.27 m from the face's middle): there in 4.4 s, at (19.2, 7.8, 81.0); past the foot, 188 ticks on the floor and 0 on a wall
+[checks] measured slopes: a rifleman ordered up 40.03° on a box (baked in 371 ms; the mesh is 0.21 m from the face's middle): there in 4.3 s, at (18.3, 7.6, 81.0); past the foot, 177 ticks on the floor and 0 on a wall
+[checks] measured slopes: a rifleman ordered up 42.06° on a box (baked in 357 ms; the mesh is 0.24 m from the face's middle): there in 4.1 s, at (17.3, 7.2, 81.0); past the foot, 165 ticks on the floor and 0 on a wall
+[checks] measured slopes: a rifleman ordered up 43.03° on a box (baked in 364 ms; the mesh is 0.23 m from the face's middle): there in 4.2 s, at (17.3, 7.5, 81.0); past the foot, 171 ticks on the floor and 0 on a wall
+[checks] measured slopes: a rifleman ordered up 43.97° on a box (baked in 364 ms; the mesh is 0.27 m from the face's middle): there in 4.3 s, at (17.4, 7.8, 81.0); past the foot, 177 ticks on the floor and 0 on a wall
+[checks] measured slopes: a rifleman ordered up 45.00° on a box (baked in 356 ms; the mesh is 0.28 m from the face's middle): there in 4.0 s, at (16.3, 7.0, 81.0); past the foot, 156 ticks on the floor and 0 on a wall
+[checks] measured slopes: a rifleman ordered up 45.99° on a box (baked in 428 ms; the mesh is 4.04 m from the face's middle): not there in 30 s, at (9.8, 0.5, 91.0); past the foot, 0 ticks on the floor and 0 on a wall
+[checks] measured slopes: the steepest face the bake kept on a box: 45.00°; the steepest a rifleman walked up: 45.00°
+[checks] PASS slopes: a rifleman does not walk 46° on a box
+[checks] measured slopes: 4x4 from rest at the foot of 2.9° on the trimesh (79 m, 4.0 m high): 4.5 m/s at the foot; over the top in 7.0 s, slowest 6.5 m/s, nose up to 3.7°, off its wheels up to 0 ticks
+[checks] measured slopes: 4x4 from rest at the foot of 4.0° on the trimesh (57 m, 4.0 m high): 4.5 m/s at the foot; over the top in 5.8 s, slowest 6.5 m/s, nose up to 5.0°, off its wheels up to 0 ticks
+[checks] measured slopes: 4x4 from rest at the foot of 4.9° on the trimesh (47 m, 4.0 m high): 4.5 m/s at the foot; over the top in 5.2 s, slowest 6.6 m/s, nose up to 5.9°, off its wheels up to 0 ticks
+[checks] measured slopes: 4x4 from rest at the foot of 6.0° on the trimesh (38 m, 4.0 m high): 4.5 m/s at the foot; over the top in 4.8 s, slowest 6.5 m/s, nose up to 7.2°, off its wheels up to 0 ticks
+[checks] measured slopes: 4x4 from rest at the foot of 6.9° on the trimesh (34 m, 4.1 m high): 4.5 m/s at the foot; over the top in 4.8 s, slowest 6.4 m/s, nose up to 8.7°, off its wheels up to 0 ticks
+[checks] measured slopes: 4x4 from rest at the foot of 8.0° on the trimesh (29 m, 4.1 m high): 4.5 m/s at the foot; over the top in 4.6 s, slowest 6.2 m/s, nose up to 11.7°, off its wheels up to 2 ticks
+[checks] measured slopes: 4x4 from rest at the foot of 9.1° on the trimesh (25 m, 4.0 m high): 4.5 m/s at the foot; over the top in 4.4 s, slowest 6.0 m/s, nose up to 14.6°, off its wheels up to 4 ticks
+[checks] measured slopes: 4x4 from rest at the foot of 10.0° on the trimesh (23 m, 4.0 m high): 4.5 m/s at the foot; not over the top in 20 s, at x 12.3, slowest 0.0 m/s, nose up to 19.7°, off its wheels up to 984 ticks
+[checks] measured slopes: 4x4 from rest at the foot of 11.9° on the trimesh (19 m, 4.0 m high): 4.3 m/s at the foot; not over the top in 20 s, at x 20.5, slowest 0.3 m/s, nose up to 21.1°, off its wheels up to 1125 ticks
+[checks] measured slopes: 4x4 at speed onto 10.0° on the trimesh: 18.1 m/s at the foot; over the top in 8.2 s, slowest 14.0 m/s, nose up to 27.6°, off its wheels up to 156 ticks, its origin up to 1.5 m over the top
+[checks] measured slopes: 4x4 at speed over a 10.0° ridge 4.0 m high on the trimesh: 18.1 m/s at the foot; across in 8.2 s, slowest 16.5 m/s, nose up to 25.7°, off its wheels up to 80 ticks, its origin up to 1.7 m over the crest
+[checks] measured slopes: 4x4 at speed onto 15.1° on the trimesh: 18.0 m/s at the foot; over the top in 7.1 s, slowest 14.7 m/s, nose up to 19.9°, off its wheels up to 104 ticks, its origin up to 1.2 m over the top
+[checks] measured slopes: 4x4 at speed over a 15.1° ridge 4.0 m high on the trimesh: 18.0 m/s at the foot; across in 7.2 s, slowest 17.0 m/s, nose up to 19.9°, off its wheels up to 108 ticks, its origin up to 1.5 m over the crest
+[checks] measured slopes: 4x4 at speed onto 20.0° on the trimesh: 17.8 m/s at the foot; over the top in 6.8 s, slowest 13.6 m/s, nose up to 14.5°, off its wheels up to 91 ticks, its origin up to 1.6 m over the top
+[checks] measured slopes: 4x4 at speed over a 20.0° ridge 4.4 m high on the trimesh: 17.8 m/s at the foot; across in 7.0 s, slowest 15.9 m/s, nose up to 14.6°, off its wheels up to 102 ticks, its origin up to 2.1 m over the crest
+[checks] measured slopes: 4x4 at speed onto 24.9° on the trimesh: 17.8 m/s at the foot; over the top in 6.6 s, slowest 12.5 m/s, nose up to 8.5°, off its wheels up to 87 ticks, its origin up to 2.1 m over the top
+[checks] measured slopes: 4x4 at speed over a 24.9° ridge 4.2 m high on the trimesh: 17.8 m/s at the foot; across in 6.7 s, slowest 15.0 m/s, nose up to 8.6°, off its wheels up to 95 ticks, its origin up to 2.9 m over the crest
+[checks] measured slopes: 4x4 at speed onto 30.0° on the trimesh: 16.9 m/s at the foot; over the top in 6.6 s, slowest 10.7 m/s, nose up to 1.0°, off its wheels up to 97 ticks, its origin up to 2.4 m over the top
+[checks] measured slopes: 4x4 at speed over a 30.0° ridge 4.0 m high on the trimesh: 16.9 m/s at the foot; across in 6.7 s, slowest 13.2 m/s, nose up to 1.0°, off its wheels up to 105 ticks, its origin up to 3.3 m over the crest
+[checks] measured slopes: 4x4 at speed onto 35.0° on the trimesh: 16.7 m/s at the foot; over the top in 6.5 s, slowest 9.9 m/s, nose up to 0.8°, off its wheels up to 95 ticks, its origin up to 2.8 m over the top
+[checks] measured slopes: 4x4 at speed over a 35.0° ridge 4.2 m high on the trimesh: 16.7 m/s at the foot; across in 6.7 s, slowest 12.3 m/s, nose up to 0.8°, off its wheels up to 104 ticks, its origin up to 4.2 m over the crest
+[checks] measured slopes: 4x4 at speed onto 40.0° on the trimesh: 16.9 m/s at the foot; over the top in 6.4 s, slowest 9.8 m/s, nose up to 0.8°, off its wheels up to 88 ticks, its origin up to 3.6 m over the top
+[checks] measured slopes: 4x4 at speed over a 40.0° ridge 4.2 m high on the trimesh: 16.9 m/s at the foot; across in 6.6 s, slowest 11.9 m/s, nose up to 0.8°, off its wheels up to 98 ticks, its origin up to 5.4 m over the crest
+[checks] measured slopes: 4x4 at speed onto 45.0° on the trimesh: 16.5 m/s at the foot; over the top in 6.3 s, slowest 9.2 m/s, nose up to 0.9°, off its wheels up to 84 ticks, its origin up to 4.3 m over the top
+[checks] measured slopes: 4x4 at speed over a 45.0° ridge 4.0 m high on the trimesh: 16.5 m/s at the foot; across in 6.5 s, slowest 10.9 m/s, nose up to 1.0°, off its wheels up to 96 ticks, its origin up to 6.4 m over the crest
+[checks] measured slopes: 4x4 at speed onto 50.0° on the trimesh: 15.1 m/s at the foot; over the top in 6.6 s, slowest 7.1 m/s, nose up to 1.0°, off its wheels up to 98 ticks, its origin up to 3.8 m over the top
+[checks] measured slopes: 4x4 at speed over a 50.0° ridge 4.8 m high on the trimesh: 15.1 m/s at the foot; across in 6.9 s, slowest 8.9 m/s, nose up to 1.0°, off its wheels up to 118 ticks, its origin up to 5.9 m over the crest
+[checks] measured slopes: 4x4 at speed onto 60.0° on the trimesh: 14.3 m/s at the foot; over the top in 6.8 s, slowest 5.5 m/s, nose up to 0.8°, off its wheels up to 111 ticks, its origin up to 4.6 m over the top
+[checks] measured slopes: 4x4 at speed over a 60.0° ridge 5.2 m high on the trimesh: 14.3 m/s at the foot; across in 7.2 s, slowest 6.8 m/s, nose up to 0.8°, off its wheels up to 139 ticks, its origin up to 7.2 m over the crest
+[checks] measured slopes: 4x4 at speed onto 70.0° on the trimesh: 12.1 m/s at the foot; over the top in 7.2 s, slowest 3.7 m/s, nose up to 0.9°, off its wheels up to 139 ticks, its origin up to 5.4 m over the top
+[checks] measured slopes: 4x4 at speed over a 70.0° ridge 5.5 m high on the trimesh: 12.3 m/s at the foot; across in 8.0 s, slowest 4.5 m/s, nose up to 0.9°, off its wheels up to 186 ticks, its origin up to 7.8 m over the crest
+[checks] measured slopes: 4x4 at speed onto 75.0° on the trimesh: 0.0 m/s at the foot; not over the top in 20 s, at x 7.7, slowest 0.0 m/s, nose up to 0.8°, off its wheels up to 0 ticks, its origin up to -10.5 m over the top
+[checks] measured slopes: 4x4 at speed over a 75.0° ridge 7.5 m high on the trimesh: 0.0 m/s at the foot; not across in 20 s, at x 7.7, slowest 0.0 m/s, nose up to 0.8°, off its wheels up to 0 ticks, its origin up to -6.8 m over the crest
+[checks] measured slopes: 4x4 at speed onto 80.0° on the trimesh: 0.0 m/s at the foot; not over the top in 20 s, at x 7.7, slowest 0.0 m/s, nose up to 0.8°, off its wheels up to 0 ticks, its origin up to -10.6 m over the top
+[checks] measured slopes: 4x4 at speed over a 80.0° ridge 5.7 m high on the trimesh: 0.0 m/s at the foot; not across in 20 s, at x 7.7, slowest 0.0 m/s, nose up to 0.8°, off its wheels up to 0 ticks, its origin up to -5.0 m over the crest
+[checks] measured slopes: 4x4 on the trimesh: the steepest it got up from rest at the foot 9.1°, at speed 70.0°, over a ridge 70.0°
+[checks] PASS slopes: the 4x4 climbs 5° from rest and 10° at speed
+[checks] measured slopes: 4x4 stopped on 4.9° with the handbrake: at x 31.4, nose 5.0°, 0.00 m/s after 3 s of it; then it moved 0.00 m in 5 s with its driver holding it, and 0.00 m in 5 s left empty
+[checks] measured slopes: 4x4 stopped on 10.0° with the handbrake: at x 37.9, nose 27.9°, 4.31 m/s after 3 s of it; then it moved 5.56 m in 5 s with its driver holding it, and 0.00 m in 5 s left empty
+[checks] measured slopes: 4x4 stopped on 15.1° with the handbrake: at x 31.4, nose 19.8°, 1.09 m/s after 3 s of it; then it moved 24.00 m in 5 s with its driver holding it, and 0.00 m in 5 s left empty
+[checks] measured slopes: 4x4 stopped on 20.0° with the handbrake: at x 24.4, nose 14.4°, 0.16 m/s after 3 s of it; then it moved 19.67 m in 5 s with its driver holding it, and 21.60 m in 5 s left empty
+[checks] PASS slopes: a helicopter on the open site, on the hills
+[checks] PASS slopes: the local player at its controls (seated)
+[checks] measured slopes: helicopter over the hills, west, the climb held: x 40.0 to -100.2 in 8.6 s; ground under it -3.8 to 8.5 m; skids over the ground 19.8 to 27.7 m (ceiling 25 m); altitude 22.6 to 30.3 m; slowest 15.2 m/s; grounded 0 ticks
+[checks] PASS slopes: with the climb held it crosses the hills without touching them, at most 2.7 m over its ceiling
+[checks] measured slopes: helicopter over the hills, east, nothing held, from 5.7 m over the ground (altitude 6.8 m): x -115.0 to 40.1 in 9.4 s; ground under it -3.9 to 7.7 m; skids over the ground 0.9 to 15.3 m (ceiling 25 m); altitude 6.8 to 15.1 m; slowest 15.2 m/s; grounded 0 ticks
+[checks] PASS slopes: with nothing held it crosses the hills without touching them, at least 0.9 m over the ground
+[checks] PASS slopes: the listen host's player is the strategist
+[checks] measured slopes: ServerConstruct with a builder on 0.0°: pillbox at 0° Ok; pillbox at 45° Ok; pillbox at 90° Ok; sandbag_wall at 0° Ok; sandbag_wall at 45° Ok; sandbag_wall at 90° Ok; sniper_tower at 0° Ok; sniper_tower at 45° Ok; sniper_tower at 90° Ok
+[checks] measured slopes: ServerConstruct with a builder on 4.9°: pillbox at 0° Ok; pillbox at 45° Ok; pillbox at 90° Ok; sandbag_wall at 0° Ok; sandbag_wall at 45° Ok; sandbag_wall at 90° Ok; sniper_tower at 0° Ok; sniper_tower at 45° Ok; sniper_tower at 90° Ok
+[checks] measured slopes: ServerConstruct with a builder on 10.0°: pillbox at 0° TooSteep; pillbox at 45° TooSteep; pillbox at 90° TooSteep; sandbag_wall at 0° TooSteep; sandbag_wall at 45° TooSteep; sandbag_wall at 90° Ok; sniper_tower at 0° TooSteep; sniper_tower at 45° TooSteep; sniper_tower at 90° TooSteep
+[rts] navigation re-baked around the structures in 449 ms, 4.6 ms of it on the tick (1 this round)
+[checks] measured slopes: ServerPlaceStructure, pillbox (3.6 x 3.6 m) at 0°: taken up to 7.57°, its base then 0.24 m over the ground under its centre and 0.48 m over the lowest under it; refused from 8.00° as TooSteep ("the ground is too steep")
+[checks] PASS slopes: LE-D21: the pillbox at 0° stands at most 0.5 m over the lowest ground under it, which its plinth reaches (0.48 m)
+[checks] PASS slopes: LE-D21: the pillbox at 0° is refused as TooSteep past 7.91°, 0.5 m across its 3.60 m
+[rts] navigation re-baked around the structures in 406 ms, 5.4 ms of it on the tick (2 this round)
+[checks] measured slopes: ServerPlaceStructure, pillbox (3.6 x 3.6 m) at 45°: taken up to 5.36°, its base then 0.24 m over the ground under its centre and 0.48 m over the lowest under it; refused from 5.80° as TooSteep ("the ground is too steep")
+[checks] PASS slopes: LE-D21: the pillbox at 45° stands at most 0.5 m over the lowest ground under it, which its plinth reaches (0.48 m)
+[checks] PASS slopes: LE-D21: the pillbox at 45° is refused as TooSteep past 5.61°, 0.5 m across its 5.09 m
+[rts] navigation re-baked around the structures in 423 ms, 9.6 ms of it on the tick (3 this round)
+[checks] measured slopes: ServerPlaceStructure, pillbox (3.6 x 3.6 m) at 90°: taken up to 7.57°, its base then 0.24 m over the ground under its centre and 0.48 m over the lowest under it; refused from 8.00° as TooSteep ("the ground is too steep")
+[checks] PASS slopes: LE-D21: the pillbox at 90° stands at most 0.5 m over the lowest ground under it, which its plinth reaches (0.48 m)
+[checks] PASS slopes: LE-D21: the pillbox at 90° is refused as TooSteep past 7.91°, 0.5 m across its 3.60 m
+[rts] navigation re-baked around the structures in 390 ms, 5.4 ms of it on the tick (4 this round)
+[rts] navigation re-baked around the structures in 401 ms, 7.2 ms of it on the tick (5 this round)
+[checks] measured slopes: ServerPlaceStructure, sandbag_wall (4.0 x 0.8 m) at 0°: taken up to 7.13°, its base then 0.25 m over the ground under its centre and 0.50 m over the lowest under it; refused from 7.57° as TooSteep ("the ground is too steep")
+[checks] PASS slopes: LE-D21: the sandbag_wall at 0° stands at most 0.5 m over the lowest ground under it, which its plinth reaches (0.50 m)
+[checks] PASS slopes: LE-D21: the sandbag_wall at 0° is refused as TooSteep past 7.13°, 0.5 m across its 4.00 m
+[rts] navigation re-baked around the structures in 394 ms, 5.7 ms of it on the tick (6 this round)
+[checks] measured slopes: ServerPlaceStructure, sandbag_wall (4.0 x 0.8 m) at 45°: taken up to 8.00°, its base then 0.24 m over the ground under its centre and 0.48 m over the lowest under it; refused from 8.44° as TooSteep ("the ground is too steep")
+[checks] PASS slopes: LE-D21: the sandbag_wall at 45° stands at most 0.5 m over the lowest ground under it, which its plinth reaches (0.48 m)
+[checks] PASS slopes: LE-D21: the sandbag_wall at 45° is refused as TooSteep past 8.38°, 0.5 m across its 3.39 m
+[rts] navigation re-baked around the structures in 400 ms, 5.5 ms of it on the tick (7 this round)
+[rts] navigation re-baked around the structures in 437 ms, 4.6 ms of it on the tick (8 this round)
+[rts] navigation re-baked around the structures in 392 ms, 5.5 ms of it on the tick (9 this round)
+[rts] navigation re-baked around the structures in 382 ms, 5.4 ms of it on the tick (10 this round)
+[checks] measured slopes: ServerPlaceStructure, sandbag_wall (4.0 x 0.8 m) at 90°: taken up to 17.35°, its base then 0.13 m over the ground under its centre and 0.25 m over the lowest under it; never refused up to 17.4°
+[checks] PASS slopes: LE-D21: the sandbag_wall at 90° stands at most 0.5 m over the lowest ground under it, which its plinth reaches (0.25 m)
+[checks] PASS slopes: LE-D21: the sandbag_wall at 90° is refused as TooSteep past 32.01°, 0.5 m across its 0.80 m
+[rts] navigation re-baked around the structures in 415 ms, 5.4 ms of it on the tick (11 this round)
+[checks] measured slopes: ServerPlaceStructure, sniper_tower (3.2 x 3.2 m) at 0°: taken up to 8.88°, its base then 0.25 m over the ground under its centre and 0.50 m over the lowest under it; refused from 9.32° as TooSteep ("the ground is too steep")
+[checks] PASS slopes: LE-D21: the sniper_tower at 0° stands at most 0.5 m over the lowest ground under it, which its plinth reaches (0.50 m)
+[checks] PASS slopes: LE-D21: the sniper_tower at 0° is refused as TooSteep past 8.88°, 0.5 m across its 3.20 m
+[rts] navigation re-baked around the structures in 401 ms, 5.8 ms of it on the tick (12 this round)
+[rts] navigation re-baked around the structures in 453 ms, 5.6 ms of it on the tick (13 this round)
+[checks] measured slopes: ServerPlaceStructure, sniper_tower (3.2 x 3.2 m) at 45°: taken up to 6.24°, its base then 0.25 m over the ground under its centre and 0.49 m over the lowest under it; refused from 6.68° as TooSteep ("the ground is too steep")
+[checks] PASS slopes: LE-D21: the sniper_tower at 45° stands at most 0.5 m over the lowest ground under it, which its plinth reaches (0.49 m)
+[checks] PASS slopes: LE-D21: the sniper_tower at 45° is refused as TooSteep past 6.30°, 0.5 m across its 4.53 m
+[rts] navigation re-baked around the structures in 432 ms, 5.6 ms of it on the tick (14 this round)
+[checks] measured slopes: ServerPlaceStructure, sniper_tower (3.2 x 3.2 m) at 90°: taken up to 8.88°, its base then 0.25 m over the ground under its centre and 0.50 m over the lowest under it; refused from 9.32° as TooSteep ("the ground is too steep")
+[checks] PASS slopes: LE-D21: the sniper_tower at 90° stands at most 0.5 m over the lowest ground under it, which its plinth reaches (0.50 m)
+[checks] PASS slopes: LE-D21: the sniper_tower at 90° is refused as TooSteep past 8.88°, 0.5 m across its 3.20 m
+[rts] navigation re-baked around the structures in 392 ms, 5.6 ms of it on the tick (15 this round)
+[rts] navigation re-baked around the structures in 397 ms, 5.6 ms of it on the tick (16 this round)
+[checks] slopes: 32 of 32 facts hold
+the game refused a site, by its own log: 8
+slopes, trimesh: exit 0
+[checks] level check: slopes, ground flat, heightmap
+[checks] terrain: flat, heightmap, 241 x 241 samples, 67 pads, set in 0.65 ms, decoded in 0.00 ms
+[rts] navigation baked: 533 vertices
+[checks] PASS slopes: the ground is the terrain (heightmap)
+[checks] PASS slopes: the listen host's player is alive on the ground force
+[checks] measured slopes: the body: floor_max_angle 45.0°, floor_snap_length 0.10 m, floor_constant_speed False, floor_block_on_wall True, safe_margin 0.001 m
+[checks] measured slopes: a body walking at 19.97° on the heightmap, 23 m long and 8.36 m high: up it in 5.9 s; on the face, 303 ticks on the floor and 0 on a wall, the normals it met 17.1° to 22.3° (a clean slide would make 4.36 m/s over the ground)
+[checks] measured slopes: a body walking at 30.03° on the heightmap, 14 m long and 8.09 m high: up it in 4.5 s; on the face, 212 ticks on the floor and 0 on a wall, the normals it met 26.7° to 33.5° (a clean slide would make 3.68 m/s over the ground)
+[checks] measured slopes: a body walking at 34.96° on the heightmap, 12 m long and 8.39 m high: up it in 4.3 s; on the face, 201 ticks on the floor and 0 on a wall, the normals it met 31.6° to 38.3° (a clean slide would make 3.28 m/s over the ground)
+[checks] measured slopes: a body walking at 38.00° on the heightmap, 11 m long and 8.59 m high: up it in 4.3 s; on the face, 198 ticks on the floor and 0 on a wall, the normals it met 34.5° to 40.7° (a clean slide would make 3.03 m/s over the ground)
+[checks] measured slopes: a body walking at 38.96° on the heightmap, 10 m long and 8.09 m high: up it in 4.1 s; on the face, 184 ticks on the floor and 0 on a wall, the normals it met 35.8° to 41.9° (a clean slide would make 2.94 m/s over the ground)
+[checks] measured slopes: a body walking at 40.03° on the heightmap, 10 m long and 8.40 m high: up it in 4.2 s; on the face, 189 ticks on the floor and 0 on a wall, the normals it met 40.0° to 41.6° (a clean slide would make 2.85 m/s over the ground)
+[checks] measured slopes: a body walking at 41.06° on the heightmap, 10 m long and 8.71 m high: up it in 4.3 s; on the face, 196 ticks on the floor and 0 on a wall, the normals it met 37.8° to 44.2° (a clean slide would make 2.76 m/s over the ground)
+[checks] measured slopes: a body walking at 42.06° on the heightmap, 9 m long and 8.12 m high: up it in 4.0 s; on the face, 179 ticks on the floor and 0 on a wall, the normals it met 39.4° to 45.5° (a clean slide would make 2.67 m/s over the ground)
+[checks] measured slopes: a body walking at 43.03° on the heightmap, 9 m long and 8.40 m high: not up it in 12 s, up 0.78 m, at x 10.6; on the face, 662 ticks on the floor and 658 on a wall, the normals it met 43.0° to 46.2° (a clean slide would make 2.59 m/s over the ground)
+[checks] measured slopes: a body walking at 43.97° on the heightmap, 9 m long and 8.68 m high: not up it in 12 s, up 2.72 m, at x 12.6; on the face, 661 ticks on the floor and 610 on a wall, the normals it met 44.0° to 46.0° (a clean slide would make 2.51 m/s over the ground)
+[checks] measured slopes: a body walking at 45.00° on the heightmap, 8 m long and 8.00 m high: not up it in 12 s, up 0.83 m, at x 10.6; on the face, 660 ticks on the floor and 657 on a wall, the normals it met 45.0° to 46.6° (a clean slide would make 2.42 m/s over the ground)
+[checks] measured slopes: a body walking at 45.99° on the heightmap, 8 m long and 8.28 m high: not up it in 12 s, up 0.00 m, at x 9.8; on the face, 0 ticks on the floor and 0 on a wall, the normals it met 0.0° to 0.0° (a clean slide would make 2.33 m/s over the ground)
+[checks] measured slopes: the steepest face a body walked up on the heightmap: 42.06°
+[checks] PASS slopes: a body does not walk 46° on the heightmap
+[checks] PASS slopes: a body walks the 39.2° faces a 30° skirt can leave, on the heightmap (steepest walked 42.06°)
+[checks] measured slopes: a body walking at 19.97° on a box, 23 m long and 8.36 m high: up it in 5.9 s; on the face, 303 ticks on the floor and 0 on a wall, the normals it met 20.0° to 20.0° (a clean slide would make 4.36 m/s over the ground)
+[checks] measured slopes: a body walking at 30.03° on a box, 14 m long and 8.09 m high: up it in 4.5 s; on the face, 212 ticks on the floor and 0 on a wall, the normals it met 30.0° to 30.0° (a clean slide would make 3.68 m/s over the ground)
+[checks] measured slopes: a body walking at 34.96° on a box, 12 m long and 8.39 m high: up it in 4.3 s; on the face, 201 ticks on the floor and 0 on a wall, the normals it met 35.0° to 35.0° (a clean slide would make 3.28 m/s over the ground)
+[checks] measured slopes: a body walking at 38.00° on a box, 11 m long and 8.59 m high: up it in 4.3 s; on the face, 198 ticks on the floor and 0 on a wall, the normals it met 38.0° to 38.0° (a clean slide would make 3.03 m/s over the ground)
+[checks] measured slopes: a body walking at 38.96° on a box, 10 m long and 8.09 m high: up it in 4.1 s; on the face, 184 ticks on the floor and 0 on a wall, the normals it met 39.0° to 39.0° (a clean slide would make 2.94 m/s over the ground)
+[checks] measured slopes: a body walking at 40.03° on a box, 10 m long and 8.40 m high: up it in 4.2 s; on the face, 189 ticks on the floor and 0 on a wall, the normals it met 40.0° to 40.0° (a clean slide would make 2.85 m/s over the ground)
+[checks] measured slopes: a body walking at 41.06° on a box, 10 m long and 8.71 m high: up it in 4.3 s; on the face, 196 ticks on the floor and 0 on a wall, the normals it met 41.1° to 41.1° (a clean slide would make 2.76 m/s over the ground)
+[checks] measured slopes: a body walking at 42.06° on a box, 9 m long and 8.12 m high: up it in 4.0 s; on the face, 179 ticks on the floor and 0 on a wall, the normals it met 42.1° to 42.1° (a clean slide would make 2.67 m/s over the ground)
+[checks] measured slopes: a body walking at 43.03° on a box, 9 m long and 8.40 m high: up it in 4.1 s; on the face, 186 ticks on the floor and 0 on a wall, the normals it met 43.0° to 43.0° (a clean slide would make 2.59 m/s over the ground)
+[checks] measured slopes: a body walking at 43.97° on a box, 9 m long and 8.68 m high: up it in 4.3 s; on the face, 191 ticks on the floor and 0 on a wall, the normals it met 44.0° to 44.0° (a clean slide would make 2.51 m/s over the ground)
+[checks] measured slopes: a body walking at 45.00° on a box, 8 m long and 8.00 m high: up it in 4.0 s; on the face, 173 ticks on the floor and 0 on a wall, the normals it met 45.0° to 45.0° (a clean slide would make 2.42 m/s over the ground)
+[checks] measured slopes: a body walking at 45.99° on a box, 8 m long and 8.28 m high: not up it in 12 s, up 0.00 m, at x 9.8; on the face, 0 ticks on the floor and 0 on a wall, the normals it met 0.0° to 0.0° (a clean slide would make 2.33 m/s over the ground)
+[checks] measured slopes: the steepest face a body walked up on a box: 45.00°
+[checks] PASS slopes: a body does not walk 46° on a box
+[checks] measured slopes: a body's speed over the ground on the heightmap: 5.00 m/s on the flat, 4.36 m/s up 19.97°, 5.01 m/s down it (0 of 180 ticks off the floor going down)
+[checks] slopes: 5 of 5 facts hold
+the game refused a site, by its own log: 0
+slopes, heightmap: exit 0

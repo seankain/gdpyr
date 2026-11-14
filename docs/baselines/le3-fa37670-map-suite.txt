@@ -1,0 +1,8 @@
+# LE3, docs/LEVEL_EDITOR.md §11. At fa37670: .NET SDK 8.0.134, Godot 4.6.stable.mono.official.89cea1439, four cores of a cloud VM.
+# ./scripts/level-editor-checks.sh map-suite: the scenarios that name the bundled map, and the ones each was copied from. Nothing else ran beside it.
+
+six ground players on the four spawn points of the bundled data map all stay on the ground at a round reset .. PASS  (480 ticks, 8.0 s sim, 10.4 s wall, 2 seeds, bot ai htn, bot kits role, unit autonomy on)
+six ground players on the four spawn points of the test map all stay on the ground at a round reset .. PASS  (480 ticks, 8.0 s sim, 10.3 s wall, 2 seeds, bot ai htn, bot kits role, unit autonomy on)
+the strategist spends and builds, on the bundled data map .. PASS  (900 ticks, 15.0 s sim, 17.4 s wall, 1 seed, bot ai htn, bot kits role, unit autonomy on)
+the strategist spends and builds .. PASS  (900 ticks, 15.0 s sim, 17.3 s wall, 1 seed, bot ai htn, bot kits role, unit autonomy on)
+map-suite: exit 0 (output: /tmp/gdpyr-level-checks.cX4BR3/map-suite.txt)

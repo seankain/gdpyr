@@ -27,6 +27,8 @@
 #   ./scripts/level-editor-checks.sh map-frame     # a dedicated server's tick with its bots and a client: the greybox, then MAP
 #   ./scripts/level-editor-checks.sh map-export    # map-server from the stripped server export, the map read from its pack
 #   ./scripts/level-editor-checks.sh map-suite     # the scenarios that name a data map, and the ones they were copied from
+#   ./scripts/level-editor-checks.sh map-basin     # map-practice for LE3_SECONDS (60), a basin dug under the water: the bake's floor
+#   ./scripts/level-editor-checks.sh map-shot      # the map drawn under a virtual display (xvfb-run): pictures in SHOT_OUT
 #
 # Each part runs on the plan's collider and, where the two could differ, on the heightmap
 # beside it. `frame` and the bake's times in `ground` are wall time: run them on a machine
@@ -417,6 +419,40 @@ for mode in "${MODES[@]}"; do
 		grep -E '\.\. (PASS|FAIL)' "$out"
 		echo "map-suite: exit $status (output: $out)"
 		[ "$status" -ne 0 ] && failed=1
+		;;
+
+	map-basin)
+		# The bundled map has no ground under its water: LE3_BASIN digs a disc of it before the
+		# world is built, which the bake's box (LE-D8, §7.3) has to leave out.
+		ground slab
+		dir="$COPY/map-basin"
+		mkdir -p "$dir"
+		LE3_CHECK=play LE3_DIR="$dir" LE3_MAP="$MAP" LE3_SECONDS="${BASIN_SECONDS:-60}" LE3_BASIN="${BASIN:--20,-75,12,3}" \
+			timeout 1800 "$GODOT" --headless --path "$COPY" --fixed-fps 60 -- --practice --map "$MAP" \
+			> "$COPY/map-basin.log" 2>&1
+		status=$?
+		report "$COPY/map-basin.log"
+		echo "map-basin, $MAP: exit $status"
+		[ "$status" -ne 0 ] && failed=1
+		;;
+
+	map-shot)
+		# Drawn, with the Compatibility renderer, in a virtual display: once as the file is, once
+		# with the basin dug. For a person to look at; the facts are only that it drew.
+		ground slab
+		out="${SHOT_OUT:-$COPY/shots}"
+		for basin in "" "${BASIN:--20,-75,12,3}"; do
+			name="map-shot${basin:+-basin}"
+			mkdir -p "$out/$name"
+			LE3_CHECK=shot LE3_DIR="$out/$name" LE3_MAP="$MAP" LE3_BASIN="$basin" timeout 900 \
+				xvfb-run -a -s "-screen 0 1280x720x24" "$GODOT" --path "$COPY" --rendering-driver opengl3 \
+				--resolution 1280x720 -- --practice --map "$MAP" > "$COPY/$name.log" 2>&1
+			status=$?
+			report "$COPY/$name.log"
+			grep -m 1 '^OpenGL API' "$COPY/$name.log"
+			echo "$name, $MAP: exit $status (pictures: $out/$name)"
+			[ "$status" -ne 0 ] && failed=1
+		done
 		;;
 
 	*)

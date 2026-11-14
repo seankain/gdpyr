@@ -1,0 +1,37 @@
+# LE3, docs/LEVEL_EDITOR.md §11. At fa37670: .NET SDK 8.0.134, Godot 4.6.stable.mono.official.89cea1439, four cores of a cloud VM.
+# python3 tools/level_editor_checks/le3_mutations.py --jobs 2, as it printed. Its first two minutes ran beside map-export's export.
+
+PASS the tree as it stands: 376 of 376 tests of StructureGroundTests, PredictionLedgerTests, MapLaunchTests, BundledMapTests, MapCatalogTests, ScenarioTests, LaunchOptionsTests, StructureTests
+PASS relief-limit: a metre of relief taken where half a metre is the limit -- 4 fail: StructureGroundTests.APillboxIsTakenTo7_9DegreesAcrossASideAnd5_6AcrossItsDiagonal, StructureGroundTests.ASandbagWallIsTakenTo7_1DegreesAlongItsLength, StructureGroundTests.HalfAMetreIsTakenAndJustOverIsNot, StructureGroundTests.TheLimitTurnsWithTheFootprint
+PASS relief-not-found: a corner whose ground was not found taken as no relief -- 1 fail: StructureGroundTests.ACornerWhoseGroundWasNotFoundIsTooSteep
+PASS relief-nothing: no heights at all taken -- 1 fail: StructureGroundTests.ACornerWhoseGroundWasNotFoundIsTooSteep
+PASS relief-base: a structure stood on the lowest of its ground, not the highest -- 2 fail: StructureGroundTests.HalfAMetreIsTakenAndJustOverIsNot, StructureGroundTests.ItStandsOnTheHighest
+PASS relief-centre: the centre's ground left out of the relief -- 1 fail: StructureGroundTests.HalfAMetreIsTakenAndJustOverIsNot
+PASS relief-corner: one corner sampled twice and another not at all -- 2 fail: StructureGroundTests.APillboxIsTakenTo7_9DegreesAcrossASideAnd5_6AcrossItsDiagonal, StructureGroundTests.ThePointsAreTheCentreAndTheCorners
+PASS relief-window: corners looked for only as far as the limit, where a corner on it is not found -- 1 fail: StructureGroundTests.TheNumbersAreThePlans
+PASS plinth-depth: a plinth half as deep -- 2 fail: StructureGroundTests.ItStandsOnTheHighest, StructureGroundTests.ThePlinthIsTheBodysPlanFromHalfAMetreDownToTheBase
+PASS too-steep-number: TooSteep put where another result's number is -- 1 fail: StructureGroundTests.TheNumbersAreThePlans
+PASS too-steep-words: TooSteep described as something in the way -- 1 fail: StructureGroundTests.TheNumbersAreThePlans
+PASS threshold: a correction applied from 1 cm -- 3 fail: PredictionLedgerTests.AnErrorIsCorrectedFromTwoCentimetres, PredictionLedgerTests.TheThresholdIsTwoCentimetres, PredictionLedgerTests.TheWiresRoundingOnASlopeIsNeverCorrected
+PASS practice-flag: --practice parsed and forgotten -- 2 fail: MapLaunchTests.PracticeIsAnOfflineRoundWithNoMenu, MapLaunchTests.PracticeTakesTheRoundsOtherFlags
+PASS practice-mode: --practice taken beside a mode flag -- 1 fail: MapLaunchTests.PracticeIsNotAnotherMode
+PASS practice-demo: --practice taken beside --playdemo -- 1 fail: MapLaunchTests.PracticeIsRefusedWhereNobodyCanPlay
+PASS practice-dedicated: --practice taken by a dedicated server -- 1 fail: MapLaunchTests.PracticeIsRefusedWhereNobodyCanPlay
+PASS map-client: --map taken by a client -- 1 fail: MapLaunchTests.AClientAndTheMenuHaveNoMapToGive
+PASS map-no-mode: --map taken with no mode to play it in -- 1 fail: MapLaunchTests.AClientAndTheMenuHaveNoMapToGive
+PASS map-twice: --map given twice, the second taken -- 1 fail: MapLaunchTests.MapTwiceIsRefused
+PASS map-syntax: a reference that is no reference taken as no --map -- 1 fail: MapLaunchTests.AMapThatIsNoReferenceIsRefusedOnTheCommandLine
+PASS name-case: upper-case letters taken in a name -- 3 fail: MapLaunchTests.AMapThatIsNoReferenceIsRefusedOnTheCommandLine, MapLaunchTests.EverythingElseIsNotAName, MapLaunchTests.WhatNamesNothingSaysSo
+PASS name-length: a name of 49 characters taken -- 1 fail: MapLaunchTests.ANameIsAtMost48Characters
+PASS name-flag: a name that starts as a flag does taken -- 2 fail: MapLaunchTests.AMapThatIsNoReferenceIsRefusedOnTheCommandLine, MapLaunchTests.EverythingElseIsNotAName
+PASS hash-short: seven hex digits taken as a hash's start -- 1 fail: MapLaunchTests.AHashPrefixIsEightToSixtyFourHexDigits
+PASS resolve-path: a path ending .map looked for as a name first -- 1 fail: MapLaunchTests.APathEndingDotMapIsAPathAndNothingElse
+PASS resolve-catalog-first: the library asked before the catalog -- 1 fail: MapLaunchTests.ACatalogIdComesBeforeALibraryName
+PASS resolve-ambiguous: a hash's start that two maps share taken as the last of them -- 1 fail: MapLaunchTests.AHashPrefixNamesTheOneMapItStartsAndNotTwo
+PASS resolve-same-hash: one map counted twice where two places hold it -- 1 fail: MapLaunchTests.TheSameHashTwiceIsOneMap
+PASS bundled-hash: the catalog's hash not the bundled file's -- 1 fail: BundledMapTests.ItsFileHashesToItsEntry
+PASS bundled-order: the bundled map listed as a scene map -- 8 fail: BundledMapTests.ItHoldsWhatARoundNeeds, BundledMapTests.ItIsADataMapUnderMaps, BundledMapTests.ItReadsAndPlaysWithNoWarning, BundledMapTests.ItsFileHashesToItsEntry, and 4 more
+PASS scenario-map: a scenario's map taken in any case -- 1 fail: ScenarioTests.AScenarioMayNameItsMap
+PASS scenario-map-kept: a scenario's map parsed and forgotten -- 2 fail: ScenarioTests.AScenarioMayNameItsMap, ScenarioTests.EveryCheckedInScenarioPlaysAMapThisBuildHas
+
+31 of 31 broken rules were caught by a test

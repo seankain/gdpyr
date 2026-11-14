@@ -1,0 +1,139 @@
+# LE3, docs/LEVEL_EDITOR.md §11. At fa37670: .NET SDK 8.0.134, four cores of a cloud VM.
+# dotnet test Tests/Gdpyr.Tests.csproj --filter <LE3's classes, MapCatalogTests, MapSceneTests, PredictionLedgerTests and ScenarioTests' two> --logger "console;verbosity=normal": its line for each test, sorted, and its total.
+# Then dotnet test Tests/Gdpyr.Tests.csproj: its total. Then dotnet build Gdpyr.csproj: its last lines.
+
+Passed Gdpyr.Tests.BundledMapTests.ItHoldsWhatARoundNeeds(id: "hills")
+Passed Gdpyr.Tests.BundledMapTests.ItIsADataMapUnderMaps(id: "hills")
+Passed Gdpyr.Tests.BundledMapTests.ItReadsAndPlaysWithNoWarning(id: "hills")
+Passed Gdpyr.Tests.BundledMapTests.ItsFileHashesToItsEntry(id: "hills")
+Passed Gdpyr.Tests.BundledMapTests.TheGreyboxIsStillTheDefaultAndFirst
+Passed Gdpyr.Tests.BundledMapTests.TheHillsAreTheGeneratorsSeedThree
+Passed Gdpyr.Tests.BundledMapTests.ThereIsOne
+Passed Gdpyr.Tests.MapCatalogTests.AnIdTheCatalogDoesNotHaveIsNotFound(id: "")
+Passed Gdpyr.Tests.MapCatalogTests.AnIdTheCatalogDoesNotHaveIsNotFound(id: "GREYBOX")
+Passed Gdpyr.Tests.MapCatalogTests.AnIdTheCatalogDoesNotHaveIsNotFound(id: "no-such-map")
+Passed Gdpyr.Tests.MapCatalogTests.AnIdTheCatalogDoesNotHaveIsNotFound(id: null)
+Passed Gdpyr.Tests.MapCatalogTests.AnIdTheCatalogHasIsFound
+Passed Gdpyr.Tests.MapCatalogTests.EveryMapHasAnIdANameAndAScene
+Passed Gdpyr.Tests.MapCatalogTests.IdsAreUnique
+Passed Gdpyr.Tests.MapCatalogTests.TheDefaultIsTheGreybox
+Passed Gdpyr.Tests.MapCatalogTests.TheScenesAreInTheCheckout
+Passed Gdpyr.Tests.MapLaunchTests.ACatalogIdComesBeforeALibraryName
+Passed Gdpyr.Tests.MapLaunchTests.AClientAndTheMenuHaveNoMapToGive
+Passed Gdpyr.Tests.MapLaunchTests.ADedicatedServerTakesAMapWithNoModeFlag
+Passed Gdpyr.Tests.MapLaunchTests.AHashPrefixIsEightToSixtyFourHexDigits(text: "", expected: False)
+Passed Gdpyr.Tests.MapLaunchTests.AHashPrefixIsEightToSixtyFourHexDigits(text: "DEADBEEF00", expected: True)
+Passed Gdpyr.Tests.MapLaunchTests.AHashPrefixIsEightToSixtyFourHexDigits(text: "deadbee", expected: False)
+Passed Gdpyr.Tests.MapLaunchTests.AHashPrefixIsEightToSixtyFourHexDigits(text: "deadbeef", expected: True)
+Passed Gdpyr.Tests.MapLaunchTests.AHashPrefixIsEightToSixtyFourHexDigits(text: "deadbeeg", expected: False)
+Passed Gdpyr.Tests.MapLaunchTests.AHashPrefixIsEightToSixtyFourHexDigits(text: null, expected: False)
+Passed Gdpyr.Tests.MapLaunchTests.AHashPrefixNamesTheOneMapItStartsAndNotTwo
+Passed Gdpyr.Tests.MapLaunchTests.ALibraryNameComesBeforeAHash
+Passed Gdpyr.Tests.MapLaunchTests.AMapThatIsNoReferenceIsRefusedOnTheCommandLine(text: "-hills")
+Passed Gdpyr.Tests.MapLaunchTests.AMapThatIsNoReferenceIsRefusedOnTheCommandLine(text: "../hills")
+Passed Gdpyr.Tests.MapLaunchTests.AMapThatIsNoReferenceIsRefusedOnTheCommandLine(text: "Hills")
+Passed Gdpyr.Tests.MapLaunchTests.AMapThatIsNoReferenceIsRefusedOnTheCommandLine(text: "a b")
+Passed Gdpyr.Tests.MapLaunchTests.AMapThatIsNoReferenceIsRefusedOnTheCommandLine(text: "hills.tscn")
+Passed Gdpyr.Tests.MapLaunchTests.ANameIsAtMost48Characters
+Passed Gdpyr.Tests.MapLaunchTests.ANameIsLowerCaseLettersDigitsUnderscoresAndHyphens(text: "  padded  ")
+Passed Gdpyr.Tests.MapLaunchTests.ANameIsLowerCaseLettersDigitsUnderscoresAndHyphens(text: "0-9_z")
+Passed Gdpyr.Tests.MapLaunchTests.ANameIsLowerCaseLettersDigitsUnderscoresAndHyphens(text: "a")
+Passed Gdpyr.Tests.MapLaunchTests.ANameIsLowerCaseLettersDigitsUnderscoresAndHyphens(text: "hills")
+Passed Gdpyr.Tests.MapLaunchTests.ANameIsLowerCaseLettersDigitsUnderscoresAndHyphens(text: "ridge_2")
+Passed Gdpyr.Tests.MapLaunchTests.APathEndingDotMapIsAPathAndNothingElse
+Passed Gdpyr.Tests.MapLaunchTests.AWholeHashIsAPrefixAndOneDigitMoreIsNot
+Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "   ", why: "needs a name")
+Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "", why: "needs a name")
+Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "-x", why: "start with '-'")
+Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "../x", why: "'.'")
+Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "C:x", why: "'C'")
+Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "Hills", why: "'H'")
+Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "a b", why: "' '")
+Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "a/b", why: "'/'")
+Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "a\0b", why: "\\u0000")
+Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "a\\b", why: "'\\'")
+Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "hills.map", why: "'.'")
+Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "é", why: "'é'")
+Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: null, why: "needs a name")
+Passed Gdpyr.Tests.MapLaunchTests.MapIsTheAuthoritysToChoose(mode: "--listen")
+Passed Gdpyr.Tests.MapLaunchTests.MapIsTheAuthoritysToChoose(mode: "--practice")
+Passed Gdpyr.Tests.MapLaunchTests.MapIsTheAuthoritysToChoose(mode: "--server")
+Passed Gdpyr.Tests.MapLaunchTests.MapNeedsAValue(args: ["--map", "--server"])
+Passed Gdpyr.Tests.MapLaunchTests.MapNeedsAValue(args: ["--map"])
+Passed Gdpyr.Tests.MapLaunchTests.MapTwiceIsRefused
+Passed Gdpyr.Tests.MapLaunchTests.NoFlagsIsNotPractice
+Passed Gdpyr.Tests.MapLaunchTests.NoMapIsTheCatalogsDefault
+Passed Gdpyr.Tests.MapLaunchTests.PracticeIsAnOfflineRoundWithNoMenu
+Passed Gdpyr.Tests.MapLaunchTests.PracticeIsNotAnotherMode(mode: ["--client", "127.0.0.1"])
+Passed Gdpyr.Tests.MapLaunchTests.PracticeIsNotAnotherMode(mode: ["--listen"])
+Passed Gdpyr.Tests.MapLaunchTests.PracticeIsNotAnotherMode(mode: ["--server"])
+Passed Gdpyr.Tests.MapLaunchTests.PracticeIsRefusedWhereNobodyCanPlay
+Passed Gdpyr.Tests.MapLaunchTests.PracticeTakesTheRoundsOtherFlags
+Passed Gdpyr.Tests.MapLaunchTests.TheSameHashTwiceIsOneMap
+Passed Gdpyr.Tests.MapLaunchTests.WhatNamesNothingSaysSo(text: "", why: "empty")
+Passed Gdpyr.Tests.MapLaunchTests.WhatNamesNothingSaysSo(text: "Nowhere", why: "is not a map")
+Passed Gdpyr.Tests.MapLaunchTests.WhatNamesNothingSaysSo(text: "a\tb.map", why: "control character")
+Passed Gdpyr.Tests.MapLaunchTests.WhatNamesNothingSaysSo(text: "abababab", why: "no map is called")
+Passed Gdpyr.Tests.MapLaunchTests.WhatNamesNothingSaysSo(text: "nowhere", why: "no map is called 'nowhere'")
+Passed Gdpyr.Tests.MapSceneTests.CoverIsBoxesTheBoardCanHold(scenePath: "res://Scenes/Maps/MapBase.tscn")
+Passed Gdpyr.Tests.MapSceneTests.CoverIsBoxesTheBoardCanHold(scenePath: "res://Scenes/Test.tscn")
+Passed Gdpyr.Tests.MapSceneTests.ItHasANavigationRegionAndGeometryToBakeIt(scenePath: "res://Scenes/Maps/MapBase.tscn")
+Passed Gdpyr.Tests.MapSceneTests.ItHasANavigationRegionAndGeometryToBakeIt(scenePath: "res://Scenes/Test.tscn")
+Passed Gdpyr.Tests.MapSceneTests.ItHasAWeaponLocker(scenePath: "res://Scenes/Maps/MapBase.tscn")
+Passed Gdpyr.Tests.MapSceneTests.ItHasAWeaponLocker(scenePath: "res://Scenes/Test.tscn")
+Passed Gdpyr.Tests.MapSceneTests.ItHasBarracksWithADoorAndNoMoreThanTheWireAddresses(scenePath: "res://Scenes/Maps/MapBase.tscn")
+Passed Gdpyr.Tests.MapSceneTests.ItHasBarracksWithADoorAndNoMoreThanTheWireAddresses(scenePath: "res://Scenes/Test.tscn")
+Passed Gdpyr.Tests.MapSceneTests.ItHasPlayerSpawns(scenePath: "res://Scenes/Maps/MapBase.tscn")
+Passed Gdpyr.Tests.MapSceneTests.ItHasPlayerSpawns(scenePath: "res://Scenes/Test.tscn")
+Passed Gdpyr.Tests.MapSceneTests.ItHasResourceNodesAndNoMoreThanTheWireAddresses(scenePath: "res://Scenes/Maps/MapBase.tscn")
+Passed Gdpyr.Tests.MapSceneTests.ItHasResourceNodesAndNoMoreThanTheWireAddresses(scenePath: "res://Scenes/Test.tscn")
+Passed Gdpyr.Tests.MapSceneTests.TheReaderFollowsInheritanceAndOverrides
+Passed Gdpyr.Tests.MapSceneTests.TheRootIsAWorldRoot(scenePath: "res://Scenes/Maps/MapBase.tscn")
+Passed Gdpyr.Tests.MapSceneTests.TheRootIsAWorldRoot(scenePath: "res://Scenes/Test.tscn")
+Passed Gdpyr.Tests.MapSceneTests.TheTemplateIsNotAMapOfItsOwn
+Passed Gdpyr.Tests.MapSceneTests.WhatThePlayIsAboutIsInsideTheField(scenePath: "res://Scenes/Maps/MapBase.tscn")
+Passed Gdpyr.Tests.MapSceneTests.WhatThePlayIsAboutIsInsideTheField(scenePath: "res://Scenes/Test.tscn")
+Passed Gdpyr.Tests.PredictionLedgerTests.AcknowledgementOutsideTheBuffer_Snaps
+Passed Gdpyr.Tests.PredictionLedgerTests.AnErrorIsCorrectedFromTwoCentimetres(error: 0.0120000001, expected: InSync)
+Passed Gdpyr.Tests.PredictionLedgerTests.AnErrorIsCorrectedFromTwoCentimetres(error: 0.0189999994, expected: InSync)
+Passed Gdpyr.Tests.PredictionLedgerTests.AnErrorIsCorrectedFromTwoCentimetres(error: 0.0209999997, expected: Replay)
+Passed Gdpyr.Tests.PredictionLedgerTests.AnErrorIsCorrectedFromTwoCentimetres(error: 0.0500000007, expected: Replay)
+Passed Gdpyr.Tests.PredictionLedgerTests.MatchingPrediction_NeedsNoCorrection
+Passed Gdpyr.Tests.PredictionLedgerTests.PositionError_TriggersAReplayOfTheUnacknowledgedTicks
+Passed Gdpyr.Tests.PredictionLedgerTests.RecordedInputs_AreReadableForReplay
+Passed Gdpyr.Tests.PredictionLedgerTests.ReorderedSnapshot_IsIgnored
+Passed Gdpyr.Tests.PredictionLedgerTests.RepeatedAcknowledgement_IsIgnored
+Passed Gdpyr.Tests.PredictionLedgerTests.ReplayConvergesOnTheServerTrajectoryAfterADivergence
+Passed Gdpyr.Tests.PredictionLedgerTests.Reset_ForgetsTheOldCharacter
+Passed Gdpyr.Tests.PredictionLedgerTests.SteadyStatePrediction_NeverCorrects
+Passed Gdpyr.Tests.PredictionLedgerTests.SubCentimetreError_IsLeftAlone
+Passed Gdpyr.Tests.PredictionLedgerTests.TheThresholdIsTwoCentimetres
+Passed Gdpyr.Tests.PredictionLedgerTests.TheWiresRoundingOnASlopeIsNeverCorrected
+Passed Gdpyr.Tests.PredictionLedgerTests.UnacknowledgedServer_Snaps
+Passed Gdpyr.Tests.PredictionLedgerTests.VelocityError_TriggersAReplayEvenWhenThePositionAgrees
+Passed Gdpyr.Tests.ScenarioTests.AScenarioMayNameItsMap
+Passed Gdpyr.Tests.ScenarioTests.EveryCheckedInScenarioPlaysAMapThisBuildHas
+Passed Gdpyr.Tests.StructureGroundTests.ACornerWhoseGroundWasNotFoundIsTooSteep
+Passed Gdpyr.Tests.StructureGroundTests.APillboxIsTakenTo7_9DegreesAcrossASideAnd5_6AcrossItsDiagonal
+Passed Gdpyr.Tests.StructureGroundTests.ASandbagWallIsTakenTo7_1DegreesAlongItsLength
+Passed Gdpyr.Tests.StructureGroundTests.HalfAMetreIsTakenAndJustOverIsNot
+Passed Gdpyr.Tests.StructureGroundTests.ItStandsOnTheHighest(degrees: 2)
+Passed Gdpyr.Tests.StructureGroundTests.ItStandsOnTheHighest(degrees: 5)
+Passed Gdpyr.Tests.StructureGroundTests.ItStandsOnTheHighest(degrees: 7.5)
+Passed Gdpyr.Tests.StructureGroundTests.OnLevelGroundNothingChanges
+Passed Gdpyr.Tests.StructureGroundTests.TheLimitTurnsWithTheFootprint
+Passed Gdpyr.Tests.StructureGroundTests.TheNumbersAreThePlans
+Passed Gdpyr.Tests.StructureGroundTests.ThePlinthIsTheBodysPlanFromHalfAMetreDownToTheBase
+Passed Gdpyr.Tests.StructureGroundTests.ThePointsAreTheCentreAndTheCorners(yaw: 0)
+Passed Gdpyr.Tests.StructureGroundTests.ThePointsAreTheCentreAndTheCorners(yaw: 0.600000024)
+Passed Gdpyr.Tests.StructureGroundTests.ThePointsAreTheCentreAndTheCorners(yaw: 2.29999995)
+
+Total tests: 125, all passed
+
+Passed!  - Failed:     0, Passed:  3592, Skipped:     0, Total:  3592, Duration: 12 s - Gdpyr.Tests.dll (net8.0)
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:07.40
