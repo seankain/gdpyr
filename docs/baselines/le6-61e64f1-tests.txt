@@ -1,0 +1,134 @@
+# LE6, docs/LEVEL_EDITOR.md §11. At 61e64f1: .NET SDK 8.0.134, four cores of a cloud VM.
+# dotnet test Tests/Gdpyr.Tests.csproj --filter <LE6's three classes and MapEditorControlsTests> --logger "console;verbosity=normal": its line for each test, sorted, and its total.
+# Then dotnet test Tests/Gdpyr.Tests.csproj: its total. Then dotnet build Gdpyr.csproj: its last lines.
+
+  Passed Gdpyr.Tests.BridgePierKeepingTests.APierStoodOnGroundAStrokeMovedAfterwards_IsGivenItsLengthAgain_InTheStrokesStep
+  Passed Gdpyr.Tests.BridgePierKeepingTests.APierUnderAPadPlacedBesideIt_IsGivenItsLengthAgain_InThePlacementsStep
+  Passed Gdpyr.Tests.BridgePierKeepingTests.ASectionTurnedWhereItIs_HasItsPiersWorkedOutAgain
+  Passed Gdpyr.Tests.BridgeRulesTests.ACursorWithin3MetresOfAFreeConnector_SnapsToIt_AndOneFurtherFloats
+  Passed Gdpyr.Tests.BridgeRulesTests.ALandingThatWouldMoveAPad_DisturbsItsNeighbour
+  Passed Gdpyr.Tests.BridgeRulesTests.APierInAnotherObjectsBox_IsInTheWay_AndSupportsOffIsTheAnswer
+  Passed Gdpyr.Tests.BridgeRulesTests.APierLongerThanAFileHolds_IsOffTheMap
+  Passed Gdpyr.Tests.BridgeRulesTests.ARoadDrawnFromADecksEnd_IsPinnedToIt_AndASectionPutOnARoadsEndTakesItsHeightAndHeading
+  Passed Gdpyr.Tests.BridgeRulesTests.ASectionPutOnAConnector_SharesItsPoint_HeadsTheOtherWay_AndRisesAsItsEndSays(id: 15, which: 0, rise: 0)
+  Passed Gdpyr.Tests.BridgeRulesTests.ASectionPutOnAConnector_SharesItsPoint_HeadsTheOtherWay_AndRisesAsItsEndSays(id: 15, which: 1, rise: 0)
+  Passed Gdpyr.Tests.BridgeRulesTests.ASectionPutOnAConnector_SharesItsPoint_HeadsTheOtherWay_AndRisesAsItsEndSays(id: 16, which: 0, rise: 1.5)
+  Passed Gdpyr.Tests.BridgeRulesTests.ASectionPutOnAConnector_SharesItsPoint_HeadsTheOtherWay_AndRisesAsItsEndSays(id: 16, which: 1, rise: -1.5)
+  Passed Gdpyr.Tests.BridgeRulesTests.ASection_HasAConnectorAtEachEnd_AtTheDecksTop_HeadingOut
+  Passed Gdpyr.Tests.BridgeRulesTests.ASectionsJoinedEnd_IsNotLanded_ThoughItIsNearTheGround
+  Passed Gdpyr.Tests.BridgeRulesTests.AnEndNearTheGround_IsLandedFlush_AndOneFarFromItIsNot
+  Passed Gdpyr.Tests.BridgeRulesTests.SupportsOff_StandsNoPier_AndAnOpenEndIsWarnedOf
+  Passed Gdpyr.Tests.BridgeRulesTests.TakingUpTheSectionThatHeldAJointsPier_GivesItsNeighbourOne_InTheSameStep
+  Passed Gdpyr.Tests.BridgeRulesTests.ThreeSpansOverARiver_StandOnFourPiers_TheirEndsLandedOnTheBanks_WithNoEndOpen
+  Passed Gdpyr.Tests.BridgeRulesTests.TwoEndsOfARoadJoinedToDecksTooFarApartInHeight_AreTooSteepToJoin
+  Passed Gdpyr.Tests.BridgeRulesTests.TwoSectionsEndsAtOnePointInPlan_ButAMetreApartInHeight_AreNotJoined
+  Passed Gdpyr.Tests.MapEditorControlsTests.ABrush_ShowsWhatItReads(kind: GradeLocked, fields: [Radius, Grade, Rate])
+  Passed Gdpyr.Tests.MapEditorControlsTests.ABrush_ShowsWhatItReads(kind: Level, fields: [Radius, Core, Strength])
+  Passed Gdpyr.Tests.MapEditorControlsTests.ABrush_ShowsWhatItReads(kind: Ramp, fields: [Radius])
+  Passed Gdpyr.Tests.MapEditorControlsTests.ABrush_ShowsWhatItReads(kind: Sculpt, fields: [Radius, Core, Rate])
+  Passed Gdpyr.Tests.MapEditorControlsTests.ABrush_ShowsWhatItReads(kind: Smooth, fields: [Radius, Core, Strength])
+  Passed Gdpyr.Tests.MapEditorControlsTests.AKeyNotInTheTable_DoesNothing(key: Key1, ctrl: True, shift: False)
+  Passed Gdpyr.Tests.MapEditorControlsTests.AKeyNotInTheTable_DoesNothing(key: R, ctrl: True, shift: False)
+  Passed Gdpyr.Tests.MapEditorControlsTests.AKeyNotInTheTable_DoesNothing(key: S, ctrl: False, shift: False)
+  Passed Gdpyr.Tests.MapEditorControlsTests.AKeyNotInTheTable_DoesNothing(key: W, ctrl: False, shift: False)
+  Passed Gdpyr.Tests.MapEditorControlsTests.AKeyNotInTheTable_DoesNothing(key: Y, ctrl: False, shift: False)
+  Passed Gdpyr.Tests.MapEditorControlsTests.AKeyNotInTheTable_DoesNothing(key: Z, ctrl: False, shift: False)
+  Passed Gdpyr.Tests.MapEditorControlsTests.APaletteEntry_CountsAgainstItsLimit
+  Passed Gdpyr.Tests.MapEditorControlsTests.AParameter_HasItsOwnRange
+  Passed Gdpyr.Tests.MapEditorControlsTests.ARoadsGradeLimit_StepsAPercent_HeldToSixToFifteen_InTenthsOfAPercent
+  Passed Gdpyr.Tests.MapEditorControlsTests.ARoadsWidth_StepsThroughFourSixAndEight_HeldAtTheEnds
+  Passed Gdpyr.Tests.MapEditorControlsTests.ASectionsGhost_SaysWhereItGoes_ItsAnswer_ItsPiersAndItsLandings
+  Passed Gdpyr.Tests.MapEditorControlsTests.ASharesSteps_StayOnTwentieths
+  Passed Gdpyr.Tests.MapEditorControlsTests.ASlope_IsColouredAsTheOverlayColoursIt(degrees: 0, expected: Walkable)
+  Passed Gdpyr.Tests.MapEditorControlsTests.ASlope_IsColouredAsTheOverlayColoursIt(degrees: 34.9900017, expected: Walkable)
+  Passed Gdpyr.Tests.MapEditorControlsTests.ASlope_IsColouredAsTheOverlayColoursIt(degrees: 35, expected: Steep)
+  Passed Gdpyr.Tests.MapEditorControlsTests.ASlope_IsColouredAsTheOverlayColoursIt(degrees: 40, expected: Steep)
+  Passed Gdpyr.Tests.MapEditorControlsTests.ASlope_IsColouredAsTheOverlayColoursIt(degrees: 40.0099983, expected: TooSteep)
+  Passed Gdpyr.Tests.MapEditorControlsTests.ASlope_IsColouredAsTheOverlayColoursIt(degrees: 70, expected: TooSteep)
+  Passed Gdpyr.Tests.MapEditorControlsTests.AnAutosave_IsDueAMinuteAfterTheFirstChangeNotWritten
+  Passed Gdpyr.Tests.MapEditorControlsTests.EveryKey_IsBoundOnce_AndEveryActionButNone_HasOne
+  Passed Gdpyr.Tests.MapEditorControlsTests.EveryPreset_IsFoundAgain_AndAMovedSettingIsNone
+  Passed Gdpyr.Tests.MapEditorControlsTests.R_TurnsAPrefabToTheNext15DegreeStep
+  Passed Gdpyr.Tests.MapEditorControlsTests.Shift_IsTheCamerasSprint_AndLeavesAKeyWithoutAShiftOfItsOwnAsItIs
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheBandSliders_KeepNumbersAMapCanMean
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheBridgeTool_PlacesSpansAndRamps_AndNudgesAQuarterMetreInsideTheLimits
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheGhost_SaysWhatPlacingWouldDo
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Bracketleft, ctrl: False, shift: False, action: RadiusDown)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Bracketright, ctrl: False, shift: False, action: RadiusUp)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Comma, ctrl: False, shift: False, action: ShapeDown)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Delete, ctrl: False, shift: False, action: TakeUp)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Enter, ctrl: False, shift: False, action: Apply)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Equal, ctrl: False, shift: False, action: AmountUp)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Escape, ctrl: False, shift: False, action: Cancel)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: F5, ctrl: False, shift: False, action: Test)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: G, ctrl: False, shift: False, action: SnapToGrid)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Key1, ctrl: False, shift: False, action: TerrainTool)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Key2, ctrl: False, shift: False, action: PrefabsTool)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Key3, ctrl: False, shift: False, action: RoadsTool)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Key4, ctrl: False, shift: False, action: BridgesTool)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: KpEnter, ctrl: False, shift: False, action: Apply)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Minus, ctrl: False, shift: False, action: AmountDown)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: O, ctrl: False, shift: False, action: NextOverlay)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Pagedown, ctrl: False, shift: False, action: LowerSection)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Pageup, ctrl: False, shift: False, action: RaiseSection)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Period, ctrl: False, shift: False, action: ShapeUp)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: R, ctrl: False, shift: False, action: TurnLeft)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: R, ctrl: False, shift: True, action: TurnRight)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: S, ctrl: True, shift: False, action: Save)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: T, ctrl: False, shift: False, action: StraightDown)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Tab, ctrl: False, shift: False, action: TurnEndForEnd)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: U, ctrl: False, shift: False, action: ToggleSupports)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Y, ctrl: True, shift: False, action: Redo)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Z, ctrl: True, shift: False, action: Undo)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_StepTheBrush_AndHoldItToItsRanges
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheOverlays_GoRound_InSection8_3sOrder
+  Passed Gdpyr.Tests.MapEditorControlsTests.ThePalette_HoldsEveryPrefabButTheBridgeSections_Once_ByKind
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheReadout_IsTheSteepestFaceUnderTheBrush
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheRoadBeingDrawn_SaysWhatToDo_ThenItsAnswer
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheSliders_AreTheBrushsOwnRanges
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheStatusLine_SaysWhereTheCursorIs
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheTestProcess_PlaysTheSavedFile_OnItsOwn
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheToolKeys_SelectTheirTools_AndEveryToolIsBuilt
+  Passed Gdpyr.Tests.RoadPathTests.ACentrelineThatCrossesItself_IsSeen_AndOneThatDoesNotIsNot
+  Passed Gdpyr.Tests.RoadPathTests.ACorner_IsAnArcOfTheRoadsWidth_TangentToBothStraights(width: 4, turnDegrees: 90)
+  Passed Gdpyr.Tests.RoadPathTests.ACorner_IsAnArcOfTheRoadsWidth_TangentToBothStraights(width: 6, turnDegrees: 45)
+  Passed Gdpyr.Tests.RoadPathTests.ACorner_IsAnArcOfTheRoadsWidth_TangentToBothStraights(width: 8, turnDegrees: 120)
+  Passed Gdpyr.Tests.RoadPathTests.AFootprintOnTheRibbon_IsUnderTheRoad_AndOneBesideItIsNot
+  Passed Gdpyr.Tests.RoadPathTests.ALoopOnLevelGround_IsTaken_ForItsTargetsAreLevel
+  Passed Gdpyr.Tests.RoadPathTests.APointOffTheField_IsMalformed_AndARoadOfAnotherStyleIsToo
+  Passed Gdpyr.Tests.RoadPathTests.ARoadAcrossARidge_KeepsItsGradeAlongItsCentreline_AndTheValidatorFindsItSo(what: "4 m at 15 %", line: [(-50, 30), (50, 31)], width: 4, grade: 0.150000006)
+  Passed Gdpyr.Tests.RoadPathTests.ARoadAcrossARidge_KeepsItsGradeAlongItsCentreline_AndTheValidatorFindsItSo(what: "8 m at 6 %", line: [(-80, 10), (80, -10)], width: 8, grade: 0.0599999987)
+  Passed Gdpyr.Tests.RoadPathTests.ARoadAcrossARidge_KeepsItsGradeAlongItsCentreline_AndTheValidatorFindsItSo(what: "straight along x", line: [(-60, 0), (60, 0)], width: 6, grade: 0.100000001)
+  Passed Gdpyr.Tests.RoadPathTests.ARoadAcrossARidge_KeepsItsGradeAlongItsCentreline_AndTheValidatorFindsItSo(what: "straight at an angle", line: [(-60, -20), (60, 25)], width: 6, grade: 0.100000001)
+  Passed Gdpyr.Tests.RoadPathTests.ARoadAcrossARidge_KeepsItsGradeAlongItsCentreline_AndTheValidatorFindsItSo(what: "two corners", line: [(-70, -40), (-20, -10), (25, 10), (70, 45)], width: 6, grade: 0.100000001)
+  Passed Gdpyr.Tests.RoadPathTests.ARoadCrossedByALaterOne_IsNotKept_AndIsWarnedOf
+  Passed Gdpyr.Tests.RoadPathTests.ARoadCrossingItselfAtTwoHeights_IsRefused_AndChangesNothing
+  Passed Gdpyr.Tests.RoadPathTests.ARoadEditedOverAfterwards_IsWarnedOf_AtItsWorst
+  Passed Gdpyr.Tests.RoadPathTests.ARoadOfNumbersItMayNotHave_IsMalformed(points: 1, width: 6, grade: 0.100000001)
+  Passed Gdpyr.Tests.RoadPathTests.ARoadOfNumbersItMayNotHave_IsMalformed(points: 2, width: 5, grade: 0.100000001)
+  Passed Gdpyr.Tests.RoadPathTests.ARoadOfNumbersItMayNotHave_IsMalformed(points: 2, width: 6, grade: 0.0500000007)
+  Passed Gdpyr.Tests.RoadPathTests.ARoadOfNumbersItMayNotHave_IsMalformed(points: 2, width: 6, grade: 0.200000003)
+  Passed Gdpyr.Tests.RoadPathTests.ARoadOfNumbersItMayNotHave_IsMalformed(points: 65, width: 6, grade: 0.100000001)
+  Passed Gdpyr.Tests.RoadPathTests.ARoadThatCannotBeDrawn_IsWarnedOf
+  Passed Gdpyr.Tests.RoadPathTests.ARoadThatWouldCutAPad_DisturbsItsNeighbour_AndAPadOnARoadIsInItsWay
+  Passed Gdpyr.Tests.RoadPathTests.ARoadWhoseRibbonAPadsSkirtWouldMove_DisturbsIt_ThoughItsOwnSkirtMovesNoLevelGround
+  Passed Gdpyr.Tests.RoadPathTests.ARoadsPointsMoved_GradeTheNewLine_KeepItsPlace_AndLeaveTheOldLinesGround
+  Passed Gdpyr.Tests.RoadPathTests.AStraight_IsSampledEvenly_EveryHalfMetreOrLess_EndToEnd
+  Passed Gdpyr.Tests.RoadPathTests.AnEndPinnedOverTheGround_MeetsItExactly_StaysWithinG_AndRejoinsTheFreeProfile
+  Passed Gdpyr.Tests.RoadPathTests.Coverage_IsWholeOnTheRibbon_AndNoneAMetrePastItsEdge
+  Passed Gdpyr.Tests.RoadPathTests.PointsTooCloseForTheirTurn_AreACornerTooTight
+  Passed Gdpyr.Tests.RoadPathTests.RoundTheTightestBend_TheRibbonPassesTheSkirt_Past258DegreesAt10Percent_And212At15(grade: 0.100000001, theory: 258)
+  Passed Gdpyr.Tests.RoadPathTests.RoundTheTightestBend_TheRibbonPassesTheSkirt_Past258DegreesAt10Percent_And212At15(grade: 0.150000006, theory: 212)
+  Passed Gdpyr.Tests.RoadPathTests.TheEnvelope_IsItsDefinition_AndTheProfileIsNoSteeperThanG_AndCutsOrFillsEOverTwo
+  Passed Gdpyr.Tests.RoadPathTests.TheRibbon_IsTheSamplesWithinHalfTheWidth_SquareAtItsEnds_LevelAcross
+  Passed Gdpyr.Tests.RoadPathTests.ThirtyThreeRoads_AreOneTooMany
+  Passed Gdpyr.Tests.RoadPathTests.TwoEndsTooFarApartInHeight_AreTooSteepToJoin_WithTheGradeItWouldTake
+Passed!  - Failed:     0, Passed:   121, Skipped:     0, Total:   121, Duration: 776 ms - Gdpyr.Tests.dll (net8.0)
+
+Passed!  - Failed:     0, Passed:  3783, Skipped:     0, Total:  3783, Duration: 19 s - Gdpyr.Tests.dll (net8.0)
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:11.43

@@ -1,12 +1,13 @@
 # gdpyr — Level editor: terrain, prefabs, roads and bridges, and maps that travel
 
-**Status: a plan, with LE0–LE5 done: its ground is measured; the ground's rules, the map in
+**Status: a plan, with LE0–LE6 done: its ground is measured; the ground's rules, the map in
 memory, its file and its validator are written and tested, engine-free; a tool makes, reads and
 checks map files; a map is played from its file — `--map`, one bundled map, a server and its
 clients, the stripped export; and the game has an editor — the menu's **Map editor** and `--edit`,
-the terrain tool, undo, save and autosave, validate and test, and the prefab tool: a round's pieces,
+the terrain tool, undo, save and autosave, validate and test, the prefab tool: a round's pieces,
 cover, scenery and structures that stand when a round starts, the buildable overlay and the deep
-check. Nothing of roads or bridges in it, or of fetching a map, is built.**
+check; and the road and bridge tools: roads graded to their limit, sections joined end to end on
+piers, ends landed. Nothing of fetching a map is built.**
 Written against `cd0c558`. The
 facts in §2 were read in this repository's source at that commit, and those in §3 in Godot's source
 at tag `4.6-stable`. The arithmetic in §10 was run: `python3
@@ -25,7 +26,10 @@ with no window through its own commands, and `tools/level_editor_checks/le4_muta
 engine-free rules in turn. LE5 (§11) built §8.4's prefab tool, the catalog's engine half, a map's
 structures at a round's start, the buildable overlay and the deep check at `e03c74b` and `bd8361e`:
 the script's `editor-prefabs` part makes a map in the editor alone and plays a bot round on it, and
-`le5_mutations.py` breaks its rules in turn.
+`le5_mutations.py` breaks its rules in turn. LE6 (§11) built §6.6, §6.7 and §8.5 — `RoadPath`,
+`BridgeRules` and their tools — at `f5a2934`, `99e64ea` and `61e64f1`: the script's `editor-roads` part draws roads
+across a ridge and a bridge over a river in the editor, plays the bridge with and without its spans,
+and drives a 4x4 across it by a scenario's script; and `le6_mutations.py` breaks its rules in turn.
 
 **What LE0 changed.** The collider is not a `HeightMapShape3D`: 65 of 20,000 long rays passed
 through one, and it costs a tick more than the same triangles as meshes, which let none through
@@ -87,6 +91,20 @@ node when the path ends within 3 m of it flat and 2 m in height (§6.9). A pract
 crash as it exits, after a round of bots, at LE4's commit as at LE5's; LE5's check reads a test
 process's facts from what it writes, not from its exit code (§13). Where a section says "LE5", it is
 one of these.
+
+**What LE6 changed.** A corner is rounded to the road's width exactly, and points too close for that
+are refused, `CornerTooTight`; the ribbon's ends are square, a sample's nearest point asked of the
+whole line (§6.6). A road's end joins the connector within 0.5 m of it — a section's end or another
+road's — and is pinned to its height; the tool puts a click within 3 m of a free connector on it, with
+a point the road's width out along its heading (§6.6, §8.5). Every pad a road reaches is kept after
+it, as after a stroke, and a road whose ribbon that would move is `DisturbsNeighbour`; a road it
+crosses is not kept, and is warned of (§6.6, §6.9). On the grid the tightest bend is refused past
+284° of turn at 10 % and 232° at 15 %, not 258° and 212° (§10). A section's ends are landed when it is
+placed, first, and its piers worked out on the ground as landed; a landing is a §6.3 pad and cuts a
+bank steeper than its skirt back to it; every pier is given its length again after any edit of the
+ground under it, as a pad is kept; a section taken up gives a neighbour that stood on its pier one of
+its own (§6.7). The validator's road warning is §6.6's E past 5 cm (§6.9). `Enter` grades a road and
+`U` turns a section's supports on and off (§8.2). Where a section says "LE6", it is one of these.
 
 The decisions (LE-D1–LE-D25, §4) are the defaults the plan is written against. Each is one line to
 change; LE-D3, LE-D8, LE-D10 and LE-D18 were the ones to flag before LE1, which was built on them
@@ -253,8 +271,8 @@ Scripts/Sim/Level/   engine-free; compiled into Tests/ by the existing ../Script
   TerrainBands.cs      water, sand, mud, grass, stone from height and slope
   PrefabSpecs.cs       the catalog's engine-free half: ids, footprints, limits, connectors
   PrefabPlacement.cs   may it go here, and the pad it makes
-  RoadPath.cs          centreline, profile, ribbon
-  BridgeRules.cs       connectors, snapping, piers
+  RoadPath.cs          centreline, profile, ribbon; a road checked on a map, the ribbon's coverage (LE6)
+  BridgeRules.cs       connectors, snapping, piers, landings; piers kept after an edit (LE6)
   MapDocument.cs       what a map is, in memory
   MapFile.cs           the container: a writer, and a reader that is total
   MapValidator.cs      what MAPS.md §3 asks, asked of a document
@@ -273,8 +291,9 @@ Scripts/Level/       the engine half
   MapLibrary.cs        user://maps, the cache, the bundled maps
 Scripts/Net/MapTransferService.cs    the messages, their channel, their budget
 Scripts/MapEditor/   the editor scene's root and its commands (MapEditorRoot), the panels (.Ui), the
-                     prefab tool (.Prefabs, LE5) and the deep check (.Deep, LE5); and the keys, a
-                     brush's settings, the palette and the status line, engine-free (MapEditorControls)
+                     prefab tool (.Prefabs, LE5), the deep check (.Deep, LE5), the road and bridge
+                     tools (.Roads, .Bridges, LE6); and the keys, a brush's and a tool's settings, the
+                     palette and the status line, engine-free (MapEditorControls)
 Scripts/Core/PrefabCatalog.cs        the catalog's engine half: what each id is in the world (LE5)
 Scenes/Maps/MapHost.tscn · Scenes/MapEditor/MapEditor.tscn · Levels/materials/terrain.gdshader
 ```
@@ -525,7 +544,7 @@ is defined.
 |---|---|
 | `LimitReached` | the map already holds as many of the kind as it may |
 | `OutOfBounds` | a box leaves ±120 m, or a round's piece has its origin outside ±115 m |
-| `InTheWay` | a box overlaps a box of another object or a pier, in plan by more than 0.05 m and in height (LE-D11); or a pad's prefab stands on a road's ribbon (LE6: the ribbon is `RoadPath`'s) |
+| `InTheWay` | a box overlaps a box of another object or a pier, in plan by more than 0.05 m and in height (LE-D11); or a pad's prefab stands on a road's ribbon: its footprint within half the road's width of its centreline (`RoadPath.RoadUnder`, LE6) |
 | `TooSteep` | the average grade under the footprint is over the spec's |
 | `InWater` | the pad's level, or a round's piece, is under the water |
 | `DisturbsNeighbour` | levelling would move a sample inside another object's pad |
@@ -579,6 +598,9 @@ its pad's level and turned by its yaw, and checked as any site is: one refused i
 out. Its colliders are inside its boxes and, under them, LE-D21's plinth, 0.5 m deep under its level
 pad.
 
+*Built by LE6.* A pier on ground a pad's levelling moved is given its length again in the same step
+(§6.7), and a pad's prefab on a road is `InTheWay`, naming the road.
+
 ### 6.6 Roads — `RoadPath.cs`
 
 A road is 2–64 control points, a width (4, 6 or 8 m) and a grade limit g (6–15 %, 10 % unless set:
@@ -612,6 +634,28 @@ height and a heading.
 A road's surface is drawn by the terrain's shader from a coverage value per vertex, computed on a
 client when it builds the mesh. It is not in the file and nothing reads it but the picture.
 
+*Built by LE6* (`RoadPath`, `RoadCheck`, `MapEditSession.ApplyRoad`). A corner is an arc of the road's
+width exactly; two points too close for the arcs at their ends — each the width times the tangent of
+half its turn along either stretch — are `CornerTooTight`, as are two points in one place. The
+centreline is sampled at the fewest even steps of at most 0.5 m end to end, and m and M are two passes
+each, forward and back, which `RoadPathTests` holds to the definition's every pair. A road is checked
+in this order: `LimitReached` (32 roads), `Malformed` (2–64 points on the field, 4, 6 or 8 m, 6–15 %,
+dirt), `CornerTooTight`, `TooSteepToJoin`, then §6.3's condition on the ribbon — `CrossesItself` when
+the centreline meets itself, else `BendTooSteep` — and `DisturbsNeighbour`. The ribbon's ends are
+square: a sample whose nearest point of the whole line is before the first point or past the last is
+not the road's. An end is joined to the connector within 0.5 m of it in plan — the validator's joint —
+a section's end at the deck's top or another road's end at the ground's height there, and pinned to it.
+Every pad the grading reaches is kept after it, as after a stroke (§6.5), and a road whose ribbon that
+would move is `DisturbsNeighbour`: one through a pad's level ground, or one a pad's skirt would cut. A
+pad's skirt starts no nearer a road than its level ground does, so a road whose own skirt would reach a
+pad's level ground is always one of these; LE6's first mutation run found a check that refused it
+before keeping the pads deciding nothing, and it is gone. A road it crosses is not kept: it is warned
+of as steeper than its limit (§6.9). Grading
+gives every pier on the ground it moved its length again (§6.7), and the road, its ground and those
+piers are one step to undo. Graded across a 12 m ridge with 40 % sides, the collider's ground climbs
+at most 10.16 % between two centreline samples of a 10 % road and 15.39 % of a 15 % one, whose stored
+steps can add 1/256 m either end of a half metre; E after is 3–4 mm (§11, LE6).
+
 ### 6.7 Bridges — `BridgeRules.cs`
 
 | Section | Deck | Rise | Connectors |
@@ -641,7 +685,21 @@ they meet any wall. A ramp's tilt is in its prefab; its pose is still a point an
 deck, their sides are vertical, their ends square at the section's — where they were boxes tilted
 with the deck, which overhung the section's ends by the thickness times the tilt's sine: 7 cm under
 the deck, 12 cm at the rails' tops, into the boxes of a section joined there. A span is boxes still.
-The tools for bridges are LE6's.
+
+*Built by LE6* (`BridgeRules`, `SectionCheck`, `MapEditSession.PlaceSection`). A section is checked by
+landing its ends first, then working out its piers on the ground as landed, then §6.5's checks with the
+piers among its boxes: a pier longer than a file holds, 81 m, is `OutOfBounds`, and a landing that would
+move a pad's level ground `DisturbsNeighbour`. Every end neither joined nor more than 3 m off the ground
+is landed when the section is placed; a landing is a §6.3 pad, 6 × 4 m beyond the end at the deck's top
+with the 30° skirt, so a bank steeper than that is cut and filled back to it round the bridge's end —
+a river's middle keeps its depth. A pier's length is rounded up to the centimetre, so its foot is 0.50
+to 0.51 m under the lowest ground beneath it. **Piers are kept**, as pads are (§6.5): after any edit
+of the ground — a stroke, a ramp, a pad, a road, a landing — every pier on ground it moved is given its
+length again, in the same step. A section taken up gives a neighbour with supports that stood on its
+pier at their joint a pier of its own, in the same step; a section placed again where it is — turned
+from the prefab tool — goes by these rules too. Two connectors join within 0.1 m in plan and
+in height, a road's end within 0.5 m in plan. The first section floats at the ground's height under
+the cursor; after that, at the height of the last placed.
 
 ### 6.8 The document and the file — `MapDocument.cs`, `MapFile.cs`
 
@@ -718,7 +776,10 @@ file about to be listed, a file just received and a server at boot.
 
 *Built by LE2*, every row but two: a road steeper than its limit after later edits needs a road's
 profile, and is LE6's with `RoadPath`, as is `InTheWay`'s road ribbon (§6.5); reach bakes, and is
-LE5's. "A number outside its range" is the terrain's size, the water outside LE-D4 or the band
+LE5's. *Built by LE6*: a road steeper than its limit is §6.6's E of the ground along its centreline
+past 5 cm (`RoadToleranceMeters`), the warning `RoadOffItsGrade` at its worst sample — a road just
+graded is 3–4 mm — and a road whose line cannot be drawn, too tight a corner, is the same warning; a
+padded object on a road's ribbon is the error `InTheWay`, naming the road. "A number outside its range" is the terrain's size, the water outside LE-D4 or the band
 edges out of their order, an object's height outside LE-D4, a flag, a parameter a prefab has not
 or outside its range, a road's style, width (4, 6 or 8 m), grade limit (6–15 %), fewer than two
 points or one off the field, and a text longer than a file holds. A bridge end is joined when
@@ -813,6 +874,12 @@ green under 35°, yellow to 40°, red past it — and contours every 2 m; *build
 placeholder textures are imported with mipmaps, which they were not: at a distance their 1,024-pixel
 grids, 4 m a repeat, drew as white speckle without them. Pictures of the bundled map drawn under a
 virtual display are in `docs/baselines/` (§11, LE3); nothing in them is a check of how it looks.
+
+*Built by LE6* (`TerrainNode.RefreshRoads`, `RoadPath.Coverage`): a vertex's red is its sample's
+coverage by the map's roads — 1 to half a metre inside a ribbon's edge, none half a metre past it,
+between linearly — worked out by a client when it builds the mesh and by the editor when the roads
+change, which draws again the chunks whose coverage changed. The palette names a sixth texture, the
+road's: `greybox_light_solid`, light grey, imported with mipmaps.
 
 ### 7.3 Navigation
 
@@ -962,6 +1029,7 @@ the count of validator issues. The camera is the spectator's fly camera
 | `[` `]` · `-` `=` · `,` `.` | brush radius · rate or strength · core or grade |
 | `R`, `Shift+R` · `G` | turn a prefab 15° either way · snap to the metre grid |
 | `Tab` · `PgUp` `PgDn` | turn a bridge section end for end · raise or lower it |
+| `Enter` · `U` | grade the road drawn · a bridge section's supports on or off (LE6) |
 | `Del` | take up what is selected |
 | `O` | next overlay |
 | `Ctrl+Z`, `Ctrl+Y` · `Ctrl+S` · `F5` | undo, redo · save · test |
@@ -971,7 +1039,8 @@ tested, as `StrategistCards` is; the widgets are not.
 
 *Built by LE4* (`MapEditorRoot.Ui.cs`, `MapEditorControls.cs`). The bar has **Maps**, back to the
 list, beside the others, and the title opens the map's name, author and description. Prefabs, roads
-and bridges are on the rail and off, each saying whose phase it is; their keys say the same. `Esc`
+and bridges are on the rail and off, each saying whose phase it is; their keys say the same. *Since
+LE6* every tool is on the rail. `Esc`
 drops a stroke under way or a ramp's first click. The camera is `SpectatorCamera` with two settings
 the editor turns on: it looks on the middle button, since the right one lowers the ground, and a held
 Ctrl moves it nowhere, so that `Ctrl+Z` is not a step back and down — `Q` lowers it, and `E` or
@@ -1038,6 +1107,21 @@ ground as it is.
 
 A bridge is §6.7: pick a section, toggle supports, click. Free connectors are drawn as rings, and
 the one a section would take is lit.
+
+*Built by LE6* (`MapEditorRoot.Roads.cs`, `MapEditorRoot.Bridges.cs`, `MapEditorControls`). The road
+tool's panel sets the width, 4, 6 or 8 m (`[` `]`), and the grade limit, 6–15 % (`-` `=`, a percent
+at a time); its preview is §6.6's answer for the points clicked so far — the centreline at the
+profile's height and the ribbon's edges, green or red — and a line to the cursor, and it reads the
+road's length, its deepest cut and fill and its joined ends, or why it is refused. A click within 3 m
+of a free connector puts the point on it, and a point the road's width out along the connector's
+heading — after it at a road's start, before it at its end — so that the road meets a deck square.
+With no road being drawn, a click on a road takes its points up: a click near one picks it up and the
+next puts it down, `Enter` grades the new line in the road's place in the file, and `Del` takes the road
+up, its ground staying. `Esc` or the right button drops what is drawn. The bridge tool's panel picks a
+span or a ramp, supports (`U`), end for end (`Tab`) and the floating height (`PgUp` `PgDn`); `R` turns a
+floating section. Its ghost is the section's boxes and its piers' where it would go, green or red with
+§6.5's answer, what it joins, its piers and its landings. A click on a placed section away from a free
+end selects it, and `Del` takes it up.
 
 ### 8.6 Undo, and saving
 
@@ -1318,6 +1402,12 @@ cut or fill at its worst. An end pinned 4 m over the ground meets it exactly at 
 on the free profile in 15 m. Round the tightest corner, where the inside edge climbs twice as
 steeply as the centreline, the ribbon's targets pass the 30° skirt at a bend of 258° for a 10 %
 road, 212° for 15 % and 164° for 20 %.
+
+*On the grid, by LE6* (`RoadPathTests`): a road that is all arc on its tightest radius, climbing at its
+limit end to end, is refused from 284° of turn at 10 % and 232° at 15 %, every 2° asked — later than the
+edge's, since the samples within half the width of the centreline are most of them further out than
+the edge. Over the same 200 lines of their own the two passes are the definition to 10⁻⁴ m, z is
+steeper than g by 2 × 10⁻⁶ at the most, and the deepest cut or fill is E/2 to 4 × 10⁻⁵ m.
 
 **The bands**, with the default numbers. Higher or steeper never gave an earlier band over a
 261 × 179 sweep.
@@ -1879,7 +1969,9 @@ where one meant to place — which no check moves; whether a map made this way p
 on it, beyond one bot round in which the pillbox fell; and the crash as a practice round's process
 exits (§13), which LE5 found and did not take further.
 
-### LE6 — Roads and bridges (4 days)
+### LE6 — Roads and bridges (4 days) — done
+
+What was asked of it:
 
 `RoadPath`, `BridgeRules`, their tools, the road's coverage in the mesh. Engine checks: a road
 across a ridge is no steeper than its limit at any centreline sample; a unit ordered across a
@@ -1887,6 +1979,65 @@ three-span bridge over water deeper than 1 m crosses it, and with the bridge tak
 arrive; a 4x4 driven by a scenario's script crosses it; a free-floating span stays where it was
 put; a pier's top is at its deck and its foot under the ground; a dropship ordered onto the deck
 lands beside it. **Left for a person:** driving it.
+
+**Built at `f5a2934`**, with `99e64ea` and `61e64f1` after it — a section turned where it is going by
+the bridge rules, a test of a road crossed, the pictures framed; and a road's check that the first
+mutation run found decided nothing, taken out — on .NET SDK 8.0.134, Godot
+`4.6.stable.mono.official.89cea1439`, four cores of a cloud VM: `Scripts/Sim/Level/RoadPath.cs` and
+`BridgeRules.cs`; `Scripts/MapEditor/MapEditorRoot.Roads.cs` and `MapEditorRoot.Bridges.cs`; and the
+changes to `EditHistory` (a road put in, taken out or replaced), `MapEditSession` (a road graded and taken
+up, a section placed, piers kept at a stroke's end), `MapValidator` (the road warning, a pad on a road),
+`PrefabPlacement` (a pad on a road, piers kept), `MapEditorControls` (every tool on the rail, `Enter` and
+`U`, a road's width and grade, what the road's preview and a section's ghost say), `TerrainNode` (the
+roads' coverage), `TerrainPalette` and the palette (the road's texture), and the editor's root and panels.
+In `Tests/`, `RoadPathTests`, `BridgeRulesTests` and `BridgePierKeepingTests`, and LE6's cases in
+`MapEditorControlsTests`. The checks are `scripts/level-editor-checks.sh`'s `editor-roads` part over
+`LevelEditorChecks.Roads.cs`' `roads`, `bridge-round` and `bridge-gone` parts and
+`tools/level_editor_checks/le6_4x4_bridge.json`, and two pictures added to `editor-shot`; and
+`le6_mutations.py`.
+
+| Asked | It came to | Where |
+|---|---|---|
+| `RoadPath`, `BridgeRules`, their tools, the road's coverage in the mesh | built, as §6.6, §6.7, §6.9, §7.2 and §8.5 say. Drawn under a virtual display, on a clone of the bundled map: a road's preview, green, on a line its pads leave room for; then the road graded and drawn light grey, and a span floating on its piers with the next one's ghost joined at its free end, its ring lit — red, since its landing would move a pad there | `editor-roads`, `editor-shot` |
+| A road across a ridge is no steeper than its limit at any centreline sample | across a 12 m ridge with 40 % sides, with the road tool: a 6 m road at 10 %, 120 m, 4.50 m of cut and of fill, graded in 27 ms; at each of its 241 centreline samples the collider's ground, by a ray down, climbs at most 10.16 % to the next, where a stored step either end of a half metre allows 11.56 %, and is the document's to 0.008 mm. A 4 m road at 15 % with two corners, 151.2 m: 15.39 % at the most of 304 samples. Each drawn with its coverage and nowhere else, and at its grade to the validator; a point moved grades the new line, 10.14 % at the most, in the road's place, leaving the old line's ground; all undone, every sample the ridge's and the collider the ground | `editor-roads` |
+| A unit ordered across a three-span bridge over water deeper than 1 m crosses it, and with the bridge taken up does not arrive | a river 3 m under water at −5 m, 36 m from bank top to bank top, three spans put with the bridge tool — the first floating at the west bank, each next on the last's free end within 3 m of the click — on 4 piers, both banks landed; roads from both ends, joined and flush; validated, and the deep check's 9 walks found over the bridge. Played by `--listen --map` with no bots: a rifleman ordered from x −40 to 40 crosses in 17.5 s and is never under 0.00 m over the river, the deck's top. The three spans taken up with the tool: the deep check finds the 5 walks across unreached, and the rifleman, ordered again, gets no further than x −8.5 in 90 s | `editor-roads` |
+| A 4x4 driven by a scenario's script crosses it | `le6_4x4_bridge.json` on the map with the bridge, by `tools/Gdpyr.Playtest`: seven seconds of throttle from x −60 on the west road, then the brake; it stops at x 35.8 m, 0.5 m off the bridge's line, never under 0 m: **PASS** | `editor-roads` |
+| A free-floating span stays where it was put | 6 m over dry ground on two piers: in the round, a ray down meets its deck at 6.000 m, before and after the rifleman and the dropship | `editor-roads` |
+| A pier's top is at its deck and its foot under the ground | the round's 6 pier colliders: each one's top at its deck's underside to the millimetre, its foot at least 0.50 m under the lowest ground beneath it; in the editor, each 0.50–0.51 m under, as the ground is after every landing and road | `editor-roads` |
+| A dropship ordered onto the deck lands beside it | ordered onto the floating span's middle, it flies and comes down on the ground 5.6 m from it, off the deck | `editor-roads` |
+| LE4's and LE5's checks | `editor`, 132 of 132 and its test process 3 of 3; `editor-prefabs`, 97 of 97 and its round 7 of 7 — the pillbox fired and was destroyed, 320 s in — its test process exiting with 0; at `f5a2934` | `editor`, `editor-prefabs` |
+| `dotnet test` | 3,783 of 3,783 at `61e64f1`: the 3,721 there were and 62 | `tests` |
+| Every LE6 rule's test fails when it is broken | 48 rules broken one at a time — a road's envelope, profile, pins, corners, sampling, ribbon, coverage, crossing, its condition, the ribbon kept, its joins and its limit; a section's heading, snapping, joints, piers, landings and the piers kept; the validator's road warnings and a pad on a road; the steps a road and a section make, and undo; the tools' widths, grades, nudges, keys and words — each one edit to one file: **48 of 48**, at `61e64f1`. The first run, at `99e64ea`, caught 48 of 49: with the check that refused a road for reaching a pad's level ground taken out, every test held, since the check after it refuses every road it did (§6.6); `61e64f1` takes it out, and its rule. LE2's, LE4's and LE5's three rules whose pieces LE6 moved are brought along, and caught | `mutations` |
+
+The files are `docs/baselines/le6-<commit>-<name>.txt`, each saying in its first lines what was run
+and at which commit, and `le6-61e64f1-road-preview.png` and `-road-bridge.png`. `editor` and
+`editor-prefabs` ran at `f5a2934`, after an `editor-roads` there, one after the other with nothing beside
+them, and the two commits after it change nothing they read; `editor-roads`, `editor-shot`, the tests and
+the mutations at `61e64f1`, where `editor-roads` holds what it held at `f5a2934`, fact for fact, but for the
+milliseconds and the maps' hashes, whose files hold when they were made. The first mutation run is
+`le6-99e64ea-mutations-first.txt`.
+
+**Decided here**, each in the section it changes:
+
+- **§6.6, a corner is its road's width exactly**, and points too close for it are `CornerTooTight`; the
+  ribbon's ends are square; an end joins the connector within 0.5 m and is pinned to it; the pads a road
+  reaches are kept, and a road whose ribbon that would move is `DisturbsNeighbour`; a road crossed is
+  not kept.
+- **§6.7, a section's ends are landed first, and its piers worked out on the ground as landed**; a
+  landing is a §6.3 pad with its skirt; **piers are kept** after any edit of the ground; a section taken
+  up leaves no neighbour on nothing; a pier over 81 m is `OutOfBounds`.
+- **§6.9, the road warning is E past 5 cm**, and a road that cannot be drawn is warned of too; a pad on a
+  road is `InTheWay`.
+- **§7.2**, the road's texture is the palette's sixth, light grey.
+- **§8.2 and §8.5**: `Enter` grades, `U` turns supports on and off, `[` `]` and `-` `=` set a road's width
+  and grade; a clicked end on a connector brings a point the road's width out with it; a click on a road
+  takes its points up.
+
+**Left for a person:** driving it — the 4x4 across the bridge with a person at the wheel, and the
+road's grade under a body; drawing with a mouse — the preview under a moving cursor, a point picked up
+and put down, a section's ghost snapping to a ring — which no check moves; whether a landing that cuts
+a river's banks back to 30° round the bridge's ends reads as it should; and the road's look, a
+placeholder's.
 
 ### LE7 — Fetching a map (3 days)
 
@@ -1915,7 +2066,7 @@ directory, the token and the restart; the README the editor and the flags;
 IMPLEMENTATION_PLAN.md §5's "Multiple maps" cut, struck. This file's status becomes what was built
 and what each phase ran.
 
-**Total: 28½ days**, LE0's 1½, LE1's 3, LE2's 3, LE3's 4, LE4's 4 and LE5's 3 spent.
+**Total: 28½ days**, LE0's 1½, LE1's 3, LE2's 3, LE3's 4, LE4's 4, LE5's 3 and LE6's 4 spent.
 
 ---
 
@@ -1945,7 +2096,8 @@ and what each phase ran.
 | Nothing is in the way of a placed prefab | `PrefabPlacementTests`; LE5's checks | LE2, done; LE5, done |
 | Every prefab stands on a level pad with its colliders inside its boxes; each of §6.5's answers; a map made only in the editor plays, and its pillbox fires and falls | `MapEditPrefabTests`, `MapReachTests`, `BuildableGroundTests`; `editor-prefabs` | LE5, done |
 | Each of LE5's tests fails when its rule is broken | `le5_mutations.py` | LE5, done |
-| A road keeps its grade; a bridge carries units and a 4x4 | `RoadPathTests`; LE6's checks | LE6 |
+| A road keeps its grade; a bridge carries units and a 4x4 | `RoadPathTests`, `BridgeRulesTests`, `BridgePierKeepingTests`; `editor-roads` | LE6, done |
+| Each of LE6's tests fails when its rule is broken | `le6_mutations.py` | LE6, done |
 | A client gets the map it lacks, and only a whole and valid one | `MapTransferTests`; LE7's checks | LE7 |
 | A server takes no map from anyone without the token | `MapTransferTests`; LE8's checks | LE8 |
 
@@ -1966,6 +2118,7 @@ and what each phase ran.
 | **A tick on hills runs out of time**: with a round of bots, 1 in 20 over 14–17 ms and 1 in 100 over 20–23 ms of a 16.7 ms tick, where the slab's worst 1 in 100 is under 10 ms | `level-editor-checks.sh frame`; a server that falls behind its ticks | Measured by LE0 on four cores of a cloud VM. The collider is the cheaper of the two and its chunks cost nothing; what terrain and hills add is not taken apart. LE3 bundled a gentler map, steepest face 33.3°, and on the same VM its tick is 4.6–5.5 ms on average and under 8.9–11.5 ms for 99 in 100, 1.7–2.1 times the greybox's (§10). The box is DEPLOYMENT.md's, and nothing here reached it: measuring it there is a person's |
 | **A ray through the ground** | a round or a sight line that a hill should have stopped | Found by LE0 in `HeightMapShape3D` and designed out (LE-D5); `level-editor-checks.sh ground` casts 10,000 at the collider, and holds it to none |
 | **A practice round's process crashes as it exits**, after a round of bots: `FATAL: Condition "csharp_lang && !csharp_lang->script_bindings.is_empty()"`, then `handle_crash` | an exit code of 134 or 6 after every fact of a check holds | Found by LE5's checks: LE3's `map-practice` for 120 s on the bundled map ended so 2 times of 2 at `c1a9b4b`, LE4's commit, before any of LE5's code, and so did `editor-prefabs`' test process after its round. LE3's 600 s runs ended with 0. LE5 first took it for a re-bake on its worker at the quit; a check that quit with one under way ended with 0 2 times of 2, and one that quit a tick after destroying the map's structures 3 times of 3, and that guess and its code are gone. A C# object is let go of after the runtime has gone, and which is not known. LE5's check reads its test process's facts from what that process writes. A person who quits after a round is where it would be seen |
+| **A bridge's landing reshapes a river's banks**: a landing is a §6.3 pad, and its skirt cuts and fills a bank steeper than 30° back to it for up to its height over 0.58 round the bridge's end | a river narrower, or a bank walkable, where a bridge lands than the map's maker drew it | Found by LE6's own tests: three spans landed on 45° banks 8 m high filled them to 30° for 14 m round each end, the river's middle 3 m deep still. Landing is only for an end within 3 m of the ground, and an end joined to a road is not landed; the deep check shows what units can reach. Whether it reads right is a person's |
 | **The engine moves under the plan**: a later Godot mends the heightmap's walk, or changes what a capsule's contacts are | `level-editor-checks.sh ground` and `slopes` on the new version | The checks are kept for this: the heightmap's rays are measured beside the collider's every time, and the steepest face walked is a number in the output |
 
 ## 14. Not in this plan
