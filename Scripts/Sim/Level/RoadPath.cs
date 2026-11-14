@@ -28,7 +28,7 @@ public enum RoadResult : byte
 	/// <summary>It crosses itself at two heights.</summary>
 	CrossesItself,
 
-	/// <summary>Grading it would move a padded object's level ground, or the pads kept after it would move its ribbon.</summary>
+	/// <summary>The pads kept after it, as after a stroke (§6.5), would move its ribbon: it would cut a pad, or a pad's skirt would cut it.</summary>
 	DisturbsNeighbour,
 }
 
@@ -736,9 +736,9 @@ public sealed class RoadPath
 	/// What drawing a road would do, without doing it (§6.6, §8.5): its line, its ends joined to the
 	/// connectors within <see cref="BridgeRules.RoadJointMeters"/> of them and pinned to their height,
 	/// its profile, and its ribbon levelled by §6.3 with the 30° skirt — §6.3's condition checked first
-	/// — then rounded, and every pad kept (§6.5). A road whose grading would move a padded object's
-	/// level ground, or whose ribbon the pads kept after it would move, is
-	/// <see cref="RoadResult.DisturbsNeighbour"/>. For <see cref="RoadResult.Ok"/> the check carries the
+	/// — then rounded, and every pad kept (§6.5), as after a stroke. A road whose ribbon the pads kept
+	/// after it would move is <see cref="RoadResult.DisturbsNeighbour"/>: one through a pad, or one
+	/// a pad's skirt would cut. For <see cref="RoadResult.Ok"/> the check carries the
 	/// edit: the road put in, or put in place of <paramref name="replacing"/>, and the ground it
 	/// graded, which nothing has applied. The old line's ground stays as it is.
 	/// </summary>
@@ -790,15 +790,9 @@ public sealed class RoadPath
 		}
 
 		trial.Terrain.Round(touched);
-		int disturbed = PrefabPlacement.Disturbed(document, field, trial.Terrain, touched, -1);
-		if (disturbed >= 0)
-		{
-			check.Result = RoadResult.DisturbsNeighbour;
-			check.Other = disturbed;
-			return check;
-		}
 
-		// Every pad kept, as after a stroke; and the ribbon must come through it as it was.
+		// Every pad kept, as after a stroke (§6.5): a pad the grading reached is levelled again. The
+		// ribbon must come through that as it was, or the road is refused.
 		var graded = new float[anchors.Length];
 		for (int i = 0; i < anchors.Length; i++)
 		{
@@ -911,7 +905,7 @@ public sealed class RoadPath
 		RoadResult.TooSteepToJoin => "its two ends are too far apart in height for its grade limit",
 		RoadResult.BendTooSteep => "too steep round a bend: the inside edge passes the 30° skirt",
 		RoadResult.CrossesItself => "it crosses itself at two heights",
-		RoadResult.DisturbsNeighbour => "it would move an object's pad",
+		RoadResult.DisturbsNeighbour => "it runs into an object's pad",
 		_ => result.ToString(),
 	};
 
