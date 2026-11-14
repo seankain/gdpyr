@@ -62,6 +62,9 @@ public enum MapIssueCode : byte
 
 	/// <summary>No path from a barracks door or the spawn line to a node: the editor's deep check, which bakes (LE5).</summary>
 	Unreachable,
+
+	/// <summary>A road steeper than its limit after later edits, or a line that cannot be drawn (LE6).</summary>
+	RoadOffItsGrade,
 }
 
 /// <summary>One thing the validator found, and where: the editor's list flies to it (§8.7).</summary>
@@ -172,9 +175,10 @@ public sealed class MapReport
 /// | limits | a height outside −16 … +64 m; a number outside its range |
 ///
 /// Warnings: a node or the spawn line inside a barracks' defended ring; more than 4 m
-/// of relief inside a node's capture radius; an open bridge end. Two of §6.9's are
-/// not here: a road steeper than its limit after later edits needs LE6's profile
-/// (<c>RoadPath</c>), and reach is the editor's deep check, which bakes (LE5).
+/// of relief inside a node's capture radius; a road steeper than its limit after later
+/// edits (LE6); an open bridge end. One of §6.9's is not here: reach is the editor's deep
+/// check, which bakes (<see cref="Reach"/>, LE5). A padded object on a road's ribbon is in
+/// its way, as two objects are (LE6).
 /// </summary>
 public static class MapValidator
 {
@@ -192,6 +196,13 @@ public static class MapValidator
 
 	/// <summary>A road's end this close to a connector, in plan, joins it [m].</summary>
 	public const float RoadJointMeters = 0.5f;
+
+	/// <summary>
+	/// How far the ground along a road's centreline may be steeper than its limit, as §6.6's E, before
+	/// it is warned of [m] (LE6). A road just graded is within a few centimetres of its profile where
+	/// the triangles between its samples bend; a stroke across it is not.
+	/// </summary>
+	public const float RoadToleranceMeters = 0.05f;
 
 	public static MapReport Validate(MapDocument document)
 	{
@@ -215,7 +226,9 @@ public static class MapValidator
 		}
 
 		InTheWay(document, report, boxes);
+		OnRoads(document, report);
 		Layout(document, report);
+		Roads(document, report);
 		Bridges(document, report);
 		return report;
 	}
@@ -477,7 +490,73 @@ public static class MapValidator
 		}
 	}
 
+	/// <summary>A padded object on a road's ribbon: in its way, as placing it would have been (§6.5, LE6).</summary>
+	private static void OnRoads(MapDocument document, MapReport report)
+	{
+		if (document.Roads.Count == 0)
+		{
+			return;
+		}
+
+		for (int i = 0; i < document.Objects.Count; i++)
+		{
+			MapObject placed = document.Objects[i];
+			if (!PrefabSpecs.TryGet(placed.PrefabId, out PrefabSpec spec) || !spec.MakesPad
+				|| !PrefabSpecs.TryGetPadArea(placed, out PadArea area))
+			{
+				continue;
+			}
+
+			int road = RoadPath.RoadUnder(document, area);
+			if (road >= 0)
+			{
+				report.Error(MapIssueCode.InTheWay, $"{Name(i, spec)} stands on road {road}", i, -1, placed.Position);
+			}
+		}
+	}
+
 	// ---- warnings --------------------------------------------------------------------------
+
+	/// <summary>
+	/// A road steeper than its limit after later edits (§6.9, LE6): §6.6's E of the ground along its
+	/// centreline past <see cref="RoadToleranceMeters"/>, placed at its worst. A road whose line cannot
+	/// be drawn — too tight a corner — is warned of too: its ground is the file's, and only its line
+	/// cannot be edited again.
+	/// </summary>
+	private static void Roads(MapDocument document, MapReport report)
+	{
+		HeightField field = document.Terrain;
+		for (int r = 0; r < document.Roads.Count; r++)
+		{
+			MapRoad road = document.Roads[r];
+			if (MapRoad.Widths.IndexOf(road.WidthDecimeters) < 0 || road.GradeLimitPermille < MapRoad.MinGradeLimitPermille
+				|| road.GradeLimitPermille > MapRoad.MaxGradeLimitPermille || road.Points.Length < MapLimits.MinRoadPoints)
+			{
+				continue;
+			}
+
+			RoadPath path = RoadPath.Of(road);
+			Vector3 first = new(road.Points[0].XMeters, 0f, road.Points[0].ZMeters);
+			if (path.Shape != RoadResult.Ok)
+			{
+				if (path.Shape != RoadResult.Malformed)
+				{
+					report.Warn(MapIssueCode.RoadOffItsGrade, $"road {r} cannot be drawn: {RoadPath.Describe(path.Shape)}", -1, -1, first);
+				}
+
+				continue;
+			}
+
+			float excess = path.ExcessOf(field, out int worst);
+			if (excess > RoadToleranceMeters)
+			{
+				Vector2 at = path.Points[worst];
+				report.Warn(MapIssueCode.RoadOffItsGrade,
+					$"road {r} is steeper than its {road.GradeLimitPermille / 10f:0.#} % by {excess:0.00} m: the ground along it has been edited",
+					-1, -1, new Vector3(at.X, field.Sample(at.X, at.Y), at.Y));
+			}
+		}
+	}
 
 	private static void Layout(MapDocument document, MapReport report)
 	{

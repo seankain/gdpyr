@@ -97,6 +97,7 @@ public partial class MapEditorRoot
 		Selected = Editing != null && index >= 0 && index < Editing.Document.Objects.Count ? index : -1;
 		DrawSelection();
 		RefreshPrefabPanel();
+		RefreshBridgePanel();
 	}
 
 	/// <summary>Selects what is under (x, z), as a click on it does. Returns its index, or −1.</summary>

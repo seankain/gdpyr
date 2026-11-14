@@ -122,6 +122,8 @@ public partial class MapEditorRoot : Node3D
 		AddChild(_world);
 		BuildRing();
 		BuildGhost();
+		BuildRoadLines();
+		BuildBridgeLines();
 		_navigation = new NavigationRegion3D { Name = "Navigation" };
 		AddChild(_navigation);
 		BuildUi();
@@ -249,6 +251,13 @@ public partial class MapEditorRoot : Node3D
 		Selected = -1;
 		DeepReport = null;
 		_ghostChanges = -1;
+		_roadDraft.Clear();
+		RoadEditing = -1;
+		RoadPointHeld = -1;
+		RoadPreview = null;
+		FloatHeight = null;
+		SectionCheck = null;
+		_sectionChanges = -1;
 
 		BuildWorld();
 		float highest = Terrain.MaxHeight;
@@ -379,6 +388,12 @@ public partial class MapEditorRoot : Node3D
 			return false;
 		}
 
+		if (outcome.RoadsChanged)
+		{
+			// The road being moved may be another road now, or none.
+			DropRoad();
+		}
+
 		Apply(outcome);
 		Say($"undone: {outcome}; {Editing.History.UndoCount} steps left to undo");
 		return true;
@@ -392,6 +407,11 @@ public partial class MapEditorRoot : Node3D
 			return false;
 		}
 
+		if (outcome.RoadsChanged)
+		{
+			DropRoad();
+		}
+
 		Apply(outcome);
 		Say($"redone: {outcome}");
 		return true;
@@ -399,12 +419,18 @@ public partial class MapEditorRoot : Node3D
 
 	/// <summary>
 	/// What an edit did, drawn: the meshes over everything it may have moved, the collider over
-	/// what it changed, the water counted again, and the objects and walls built again when it
-	/// changed them or the ground along the edge.
+	/// what it changed, the water counted again, the roads' coverage when it changed the roads
+	/// (LE6), and the objects and walls built again when it changed them or the ground along the
+	/// edge.
 	/// </summary>
 	private void Apply(in EditOutcome outcome)
 	{
 		Terrain.RefreshMeshes(outcome.Area);
+		if (outcome.RoadsChanged)
+		{
+			Terrain.RefreshRoads(Editing.Document);
+		}
+
 		Terrain.RefreshColliders(outcome.Changed);
 		Terrain.RefreshWater();
 		SampleRect bounds = Editing.Document.Terrain.Bounds;
@@ -491,9 +517,10 @@ public partial class MapEditorRoot : Node3D
 		}
 
 		Tool = tool;
-		if (tool != EditorTool.Prefabs)
+		Select(-1);
+		if (tool != EditorTool.Roads)
 		{
-			Select(-1);
+			DropRoad();
 		}
 
 		RefreshUi(false);
@@ -802,6 +829,8 @@ public partial class MapEditorRoot : Node3D
 			: 0f;
 		DrawRing();
 		UpdateGhost();
+		UpdateSectionGhost();
+		DrawRoadPreview();
 		RefreshStatus();
 	}
 
@@ -846,7 +875,7 @@ public partial class MapEditorRoot : Node3D
 
 	private static bool Repeats(EditorAction action) => action is EditorAction.RadiusDown or EditorAction.RadiusUp
 		or EditorAction.AmountDown or EditorAction.AmountUp or EditorAction.ShapeDown or EditorAction.ShapeUp
-		or EditorAction.Undo or EditorAction.Redo;
+		or EditorAction.Undo or EditorAction.Redo or EditorAction.RaiseSection or EditorAction.LowerSection;
 
 	/// <summary>What a key does (§8.2).</summary>
 	public void Do(EditorAction action)
@@ -863,6 +892,26 @@ public partial class MapEditorRoot : Node3D
 			case EditorAction.RadiusUp:
 			case EditorAction.AmountDown:
 			case EditorAction.AmountUp:
+				if (Tool == EditorTool.Roads)
+				{
+					// [ ] the road's width, - = its grade limit (§8.5, LE6).
+					int direction = action is EditorAction.RadiusUp or EditorAction.AmountUp ? 1 : -1;
+					if (action is EditorAction.RadiusDown or EditorAction.RadiusUp)
+					{
+						SetRoadWidth(MapEditorControls.StepRoadWidth(RoadWidth, direction));
+					}
+					else
+					{
+						SetRoadGrade(MapEditorControls.StepRoadGrade(RoadGrade, direction));
+					}
+
+					Say(MapEditorControls.RoadSettings(RoadWidth, RoadGrade));
+					break;
+				}
+
+				SetBrush(MapEditorControls.Step(Editing.Brush, action));
+				Say(MapEditorControls.Describe(Editing.Brush));
+				break;
 			case EditorAction.ShapeDown:
 			case EditorAction.ShapeUp:
 				SetBrush(MapEditorControls.Step(Editing.Brush, action));
@@ -889,12 +938,49 @@ public partial class MapEditorRoot : Node3D
 			case EditorAction.Cancel:
 				Cancel();
 				Select(-1);
+				DropRoad();
 				break;
 			case EditorAction.TurnLeft:
 			case EditorAction.TurnRight:
 				if (Tool == EditorTool.Prefabs)
 				{
 					Turn(action == EditorAction.TurnLeft ? 1 : -1);
+				}
+				else if (Tool == EditorTool.Bridges)
+				{
+					// A floating section's ghost: a placed section is taken up and placed again, not turned.
+					GhostYaw = MapEditorControls.Turn(GhostYaw, action == EditorAction.TurnLeft ? 1 : -1);
+					_sectionChanges = -1;
+					Say($"a floating section turned to {Mathf.RadToDeg(GhostYaw):0}°");
+				}
+
+				break;
+			case EditorAction.TurnEndForEnd:
+				if (Tool == EditorTool.Bridges)
+				{
+					TurnEndForEnd();
+				}
+
+				break;
+			case EditorAction.RaiseSection:
+			case EditorAction.LowerSection:
+				if (Tool == EditorTool.Bridges)
+				{
+					NudgeSection(action == EditorAction.RaiseSection ? 1 : -1);
+				}
+
+				break;
+			case EditorAction.ToggleSupports:
+				if (Tool == EditorTool.Bridges)
+				{
+					SetSupports(!Supports);
+				}
+
+				break;
+			case EditorAction.Apply:
+				if (Tool == EditorTool.Roads)
+				{
+					ApplyRoad();
 				}
 
 				break;
@@ -906,20 +992,37 @@ public partial class MapEditorRoot : Node3D
 
 				break;
 			case EditorAction.TakeUp:
-				TakeUpSelected();
-				break;
-			default:
-				Say("bridges are LE6's");
+				if (Tool == EditorTool.Roads && RoadEditing >= 0)
+				{
+					TakeUpRoad(RoadEditing);
+				}
+				else
+				{
+					TakeUpSelected();
+				}
+
 				break;
 		}
 	}
 
-	/// <summary>A button pressed over the view: a stroke, a ramp's click, or the prefab tool's click.</summary>
+	/// <summary>A button pressed over the view: a stroke, a ramp's click, or the prefab, road or bridge tool's click.</summary>
 	private void Press(bool lower)
 	{
 		if (Tool == EditorTool.Prefabs)
 		{
 			PressPrefab(lower);
+			return;
+		}
+
+		if (Tool == EditorTool.Roads)
+		{
+			PressRoad(lower);
+			return;
+		}
+
+		if (Tool == EditorTool.Bridges)
+		{
+			PressBridge(lower);
 			return;
 		}
 

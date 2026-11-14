@@ -135,7 +135,7 @@ RULES = [
 
     # ---- section 6.5: placement ------------------------------------------------------------------
     ("place-limit", "PrefabPlacement.cs", "a prefab placed past its group's limit",
-     "if (document.Objects.Count >= MapLimits.MaxObjects || document.CountOf(spec.Group) >= PrefabSpecs.MaxOf(spec.Group))",
+     "if ((!moving && document.Objects.Count >= MapLimits.MaxObjects) || alreadyOfGroup >= PrefabSpecs.MaxOf(spec.Group))",
      "if (false)"),
     ("place-bounds", "PrefabPlacement.cs", "a prefab placed off the map",
      "if (IsOutOfBounds(placed))", "if (false)"),

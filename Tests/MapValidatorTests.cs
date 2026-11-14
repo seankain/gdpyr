@@ -352,9 +352,11 @@ public class MapValidatorTests
 		Refused(d => d.Roads.Add(new MapRoad(0, 60, 100, new[] { new RoadPoint(0, 0), new RoadPoint(12100, 0) })),
 			MapIssueCode.NumberOutOfRange, "road 0 has a point off the field");
 
+		// In range, it is no error of its numbers. Laid on ground nothing graded, it is warned of as a road
+		// steeper than its limit (LE6), which RoadPathTests holds.
 		MapDocument document = LevelMaps.Generate(1);
 		document.Roads.Add(new MapRoad(0, 40, 60, new[] { new RoadPoint(-5000, 2000), new RoadPoint(5000, 2000), new RoadPoint(5000, -2000) }));
-		Assert.Empty(MapValidator.Validate(document).Issues);
+		Assert.DoesNotContain(MapValidator.Validate(document).Issues, issue => issue.Code == MapIssueCode.NumberOutOfRange);
 	}
 
 	[Fact]

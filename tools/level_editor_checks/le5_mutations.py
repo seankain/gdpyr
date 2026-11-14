@@ -93,8 +93,8 @@ RULES = [
 
     # ---- the prefab tool's panel and keys (§8.2, §8.4) ------------------------------------------------
     ("tool-built", CONTROLS, "the prefab tool left off the rail",
-     "public static bool IsBuilt(EditorTool tool) => tool is EditorTool.Terrain or EditorTool.Prefabs;",
-     "public static bool IsBuilt(EditorTool tool) => tool == EditorTool.Terrain;"),
+     "tool is EditorTool.Terrain or EditorTool.Prefabs or EditorTool.Roads or EditorTool.Bridges;",
+     "tool is EditorTool.Terrain or EditorTool.Roads or EditorTool.Bridges;"),
     ("palette-bridges", CONTROLS, "bridge sections on the prefab palette",
      "if (spec.Kind == kind && kind != PrefabKind.Bridge)", "if (spec.Kind == kind)"),
     ("count-limit", CONTROLS, "a group with no limit counted against int.MaxValue",

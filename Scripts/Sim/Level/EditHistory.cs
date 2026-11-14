@@ -22,9 +22,28 @@ public readonly struct ObjectChange
 	}
 }
 
+/// <summary>One change to a document's roads: a road put in, taken out, or replaced, at an index (LE6).</summary>
+public readonly struct RoadChange
+{
+	public readonly int Index;
+
+	/// <summary>What was there; null for a road put in.</summary>
+	public readonly MapRoad Before;
+
+	/// <summary>What is there after; null for a road taken out.</summary>
+	public readonly MapRoad After;
+
+	public RoadChange(int index, MapRoad before, MapRoad after)
+	{
+		Index = index;
+		Before = before;
+		After = after;
+	}
+}
+
 /// <summary>
 /// One step to undo (docs/LEVEL_EDITOR.md §8.6): the rectangle of ground it changed,
-/// before and after, as stored samples, and the objects it put in, took out or
+/// before and after, as stored samples, and the objects and roads it put in, took out or
 /// replaced. A stroke keeps its rectangle; a placed object keeps its record and its
 /// pad's rectangle. 2 bytes a sample each way, so a stroke over a 64 m square is 17 KB.
 ///
@@ -34,6 +53,7 @@ public readonly struct ObjectChange
 public sealed class MapEdit
 {
 	private readonly List<ObjectChange> _objects = new();
+	private readonly List<RoadChange> _roads = new();
 	private short[] _before = Array.Empty<short>();
 	private short[] _after = Array.Empty<short>();
 
@@ -42,7 +62,10 @@ public sealed class MapEdit
 
 	public IReadOnlyList<ObjectChange> Objects => _objects;
 
-	public bool IsEmpty => Rect.IsEmpty && _objects.Count == 0;
+	/// <summary>The roads it put in, took out or replaced (LE6): a road's line is what it was drawn from, and the ground it graded is the rectangle's.</summary>
+	public IReadOnlyList<RoadChange> Roads => _roads;
+
+	public bool IsEmpty => Rect.IsEmpty && _objects.Count == 0 && _roads.Count == 0;
 
 	/// <summary>What it holds of the ground: two samples of two bytes for each in its rectangle.</summary>
 	public int TerrainBytes => (_before.Length + _after.Length) * sizeof(short);
@@ -107,7 +130,29 @@ public sealed class MapEdit
 		return this;
 	}
 
-	/// <summary>Makes the edit: the ground after, then the objects in the order they were given.</summary>
+	/// <summary>Puts <paramref name="road"/> in at <paramref name="index"/>. Returns this edit.</summary>
+	public MapEdit InsertRoad(int index, MapRoad road)
+	{
+		_roads.Add(new RoadChange(index, null, road ?? throw new ArgumentNullException(nameof(road))));
+		return this;
+	}
+
+	/// <summary>Takes the road at <paramref name="index"/> out, which is <paramref name="road"/>. Returns this edit.</summary>
+	public MapEdit RemoveRoad(int index, MapRoad road)
+	{
+		_roads.Add(new RoadChange(index, road ?? throw new ArgumentNullException(nameof(road)), null));
+		return this;
+	}
+
+	/// <summary>Replaces the road at <paramref name="index"/>. Returns this edit.</summary>
+	public MapEdit ReplaceRoad(int index, MapRoad before, MapRoad after)
+	{
+		_roads.Add(new RoadChange(index, before ?? throw new ArgumentNullException(nameof(before)),
+			after ?? throw new ArgumentNullException(nameof(after))));
+		return this;
+	}
+
+	/// <summary>Makes the edit: the ground after, then the objects and the roads in the order they were given.</summary>
 	public void Apply(MapDocument document)
 	{
 		Put(document.Terrain, _after);
@@ -115,11 +160,22 @@ public sealed class MapEdit
 		{
 			Change(document.Objects, change.Index, change.Before, change.After);
 		}
+
+		foreach (RoadChange change in _roads)
+		{
+			Change(document.Roads, change.Index, change.Before, change.After);
+		}
 	}
 
-	/// <summary>Undoes it: the objects in reverse, then the ground before.</summary>
+	/// <summary>Undoes it: the roads and the objects in reverse, then the ground before.</summary>
 	public void Revert(MapDocument document)
 	{
+		for (int i = _roads.Count - 1; i >= 0; i--)
+		{
+			RoadChange change = _roads[i];
+			Change(document.Roads, change.Index, change.After, change.Before);
+		}
+
 		for (int i = _objects.Count - 1; i >= 0; i--)
 		{
 			ObjectChange change = _objects[i];
@@ -129,7 +185,7 @@ public sealed class MapEdit
 		Put(document.Terrain, _before);
 	}
 
-	private static void Change(List<MapObject> objects, int index, MapObject from, MapObject to)
+	private static void Change<T>(List<T> objects, int index, T from, T to) where T : class
 	{
 		if (from == null)
 		{

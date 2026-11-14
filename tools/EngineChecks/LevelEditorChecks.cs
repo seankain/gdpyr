@@ -42,6 +42,7 @@ namespace Gdpyr.EngineChecks;
 /// <item><c>round</c> (LE5): that map's test process, playing it with bots for <c>LE5_SECONDS</c>
 /// (600 unless given): the pillbox is put up at the round's start, as destructible as one a
 /// builder made and inside its boxes, fires, and is destroyed.</item>
+/// <item><c>roads</c>, <c>bridge-round</c>, <c>bridge-gone</c> (LE6): <c>LevelEditorChecks.Roads.cs</c>.</item>
 /// <item><c>test-child</c>: the process the editor's Test starts. It is told by its
 /// environment, which it inherits, what file it must be playing and what ground it must
 /// stand on, and leaves a mark in <c>LE4_DIR</c> once the round is live.</item>
@@ -80,6 +81,9 @@ public partial class LevelEditorChecks : Node
 			"shot" => Shot().GetEnumerator(),
 			"prefabs" => Prefabs().GetEnumerator(),
 			"round" => Round().GetEnumerator(),
+			"roads" => Roads().GetEnumerator(),
+			"bridge-round" => BridgeRound().GetEnumerator(),
+			"bridge-gone" => BridgeGone().GetEnumerator(),
 			_ => null,
 		};
 
@@ -1411,6 +1415,41 @@ public partial class LevelEditorChecks : Node
 		foreach (bool step in Picture("le5-prefabs"))
 		{
 			yield return step;
+		}
+
+		// LE6: a road drawn with the road tool, its preview, then graded; and a span floating on piers, its ghost on its end.
+		if (editor.Cursor is { } road)
+		{
+			editor.SelectTool(EditorTool.Roads);
+			editor.AddRoadPoint(road.X - 40f, road.Z + 10f);
+			editor.AddRoadPoint(road.X - 10f, road.Z - 5f);
+			editor.AddRoadPoint(road.X + 20f, road.Z + 15f);
+			for (int i = 0; i < 10; i++)
+			{
+				yield return true;
+			}
+
+			Fact(editor.RoadPreview != null, $"the road tool's preview: {MapEditorControls.RoadPreview(editor.RoadPreview, editor.RoadDraft.Count)}");
+			foreach (bool step in Picture("le6-road-preview"))
+			{
+				yield return step;
+			}
+
+			RoadCheck graded = editor.ApplyRoad();
+			editor.SelectTool(EditorTool.Bridges);
+			editor.SetFloatHeight(editor.Editing.Document.Terrain.Sample(road.X + 5f, road.Z - 25f) + 5f);
+			editor.SetGhostYaw(0.3f);
+			SectionCheck span = editor.PlaceSectionAt(road.X + 5f, road.Z - 25f);
+			Fact(graded?.IsOk == true && span?.IsOk == true, $"a road graded and a span placed on piers: {graded?.Result}, {span?.Result}");
+			for (int i = 0; i < 10; i++)
+			{
+				yield return true;
+			}
+
+			foreach (bool step in Picture("le6-road-bridge"))
+			{
+				yield return step;
+			}
 		}
 	}
 

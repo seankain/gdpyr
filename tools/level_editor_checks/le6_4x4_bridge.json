@@ -1,0 +1,32 @@
+{
+  "name": "le6 4x4 crosses the bridge: driven by its script along the road to the three spans over the river, it stops on the far bank, never a metre under the deck, and 2.5 m of its line (m/256)",
+  "map": "le6-bridge",
+  "seeds": [1],
+  "duration_ticks": 720,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 0 },
+
+  "seats": [
+    { "id": "driver", "team": "ground", "policy": "ground", "step_mul": 4,
+      "script": { "repeat": false, "steps": [
+        { "ticks": 420, "move": [0, -1] },
+        { "ticks": 180, "move": [0, 1] },
+        { "ticks": 120, "move": [0, 0] }
+      ] } }
+  ],
+
+  "spawns": [
+    { "vehicle": "4x4", "id": "truck", "at": [-60, 0.5, 0], "yaw": -1.5708 },
+    { "peer": "driver", "seat": { "vehicle": "truck", "role": "driver" } }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.vehicle_entered[seat=0,peer=@driver].count", "op": "==", "value": 1 },
+    { "metric": "observation.driver.self.position.last", "op": ">=", "value": 0.09765625 },
+    { "metric": "observation.driver.self.position.1.min", "op": ">=", "value": -0.00390625 },
+    { "metric": "observation.driver.self.position.2.last", "op": "<=", "value": 0.009765625 },
+    { "metric": "observation.driver.self.position.2.last", "op": ">=", "value": -0.009765625 },
+    { "metric": "events.vehicle_exited.count", "op": "==", "value": 0 }
+  ]
+}
