@@ -285,6 +285,7 @@ public partial class NetworkManager : Node
 		ServerMapName = null;
 		ServerMapNonce = null;
 		MapTransfer?.ForgetFetch();
+		MapTransfer?.ForgetUpload();
 	}
 
 	/// <summary>A round on your own, against the bots: no peer, no packets (docs/NETCODE.md §9).</summary>
@@ -572,6 +573,7 @@ public partial class NetworkManager : Node
 	{
 		Connected = false;
 		ConnectionFailed = true;
+		MapTransfer?.Upload?.Dropped();
 		GD.PrintErr("[net] server disconnected");
 	}
 

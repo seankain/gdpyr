@@ -1,6 +1,8 @@
 using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
+using System.Security.Cryptography;
+using System.Text;
 using Gdpyr.Sim;
 using Gdpyr.Sim.Level;
 using Xunit;
@@ -573,5 +575,132 @@ public class MapTransferTests
 			Assert.NotEqual(MapReceiveState.Complete, receiver.State);
 			Assert.True(receiver.State == MapReceiveState.Receiving || receiver.Error != null);
 		}
+	}
+
+	// ---- an upload's proof (§6.10, LE8) ---------------------------------------------------------
+
+	private const string Token = "correct-horse-battery-staple";
+
+	private static byte[] Nonce(int seed)
+	{
+		var nonce = new byte[MapTransfer.NonceBytes];
+		new Random(seed).NextBytes(nonce);
+		return nonce;
+	}
+
+	[Fact]
+	public void AProof_IsHmacSha256_OfTheNonceTheHashAndTheOp_KeyedByTheToken()
+	{
+		// Worked outside this code, by Python's hmac: the token as UTF-8 the key; the nonce's 16 bytes,
+		// the hash's 32, and the op's one, the message.
+		byte[] nonce = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
+		const string hash = "a44972c687e19fc7ffddd6292e54c7997ec3979c3b7560537c10a5312c6981d1";
+		Assert.Equal(hash, MapFile.HashHex("gdpyr"u8));
+		Assert.Equal("b8548dc9814a1429ad9778b7e4cb21035c180d57c285a247fbfe85d821a2e32a",
+			Convert.ToHexString(MapProof.Compute(Token, nonce, hash, MapProofOp.Upload)).ToLowerInvariant());
+		Assert.Equal("684729bc4a554906664a2c3235adf084c4ed04097e600c869c1fb90926feb13c",
+			Convert.ToHexString(MapProof.Compute(Token, nonce, hash, MapProofOp.SetNext)).ToLowerInvariant());
+
+		// And by the framework's, over a message put together here.
+		byte[] file = Generated(1);
+		string mapHash = MapFile.HashHex(file);
+		byte[] random = Nonce(3);
+		var message = new List<byte>(random);
+		message.AddRange(MapFile.Hash(file));
+		message.Add(1);
+		using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(Token));
+		byte[] proof = MapProof.Compute(Token, random, mapHash, MapProofOp.Upload);
+		Assert.Equal(hmac.ComputeHash(message.ToArray()), proof);
+		Assert.Equal(32, MapProof.Bytes);
+		Assert.Equal(MapProof.Bytes, proof.Length);
+		Assert.Equal(1, (int)MapProofOp.Upload);
+		Assert.Equal(2, (int)MapProofOp.SetNext);
+		Assert.True(MapProof.Verify(Token, random, mapHash, MapProofOp.Upload, proof));
+	}
+
+	[Fact]
+	public void AProof_DoesNotPass_OnAnotherConnection_ForAnotherFile_ForAnotherOp_OrByAnotherToken()
+	{
+		string hash = MapFile.HashHex(Generated(1));
+		string other = MapFile.HashHex(Generated(2));
+		byte[] nonce = Nonce(1);
+		byte[] proof = MapProof.Compute(Token, nonce, hash, MapProofOp.Upload);
+		Assert.True(MapProof.Verify(Token, nonce, hash, MapProofOp.Upload, proof));
+
+		// Another connection has another nonce: a proof heard on one is not one on the next.
+		Assert.False(MapProof.Verify(Token, Nonce(2), hash, MapProofOp.Upload, proof));
+		Assert.False(MapProof.Verify(Token, nonce, other, MapProofOp.Upload, proof));
+		Assert.False(MapProof.Verify(Token, nonce, hash, MapProofOp.SetNext, proof));
+		Assert.False(MapProof.Verify(Token + "x", nonce, hash, MapProofOp.Upload, proof));
+		Assert.False(MapProof.Verify(Token.ToUpperInvariant(), nonce, hash, MapProofOp.Upload, proof));
+
+		// A nonce one bit away, and a proof one bit away, anywhere in it.
+		for (int bit = 0; bit < MapTransfer.NonceBytes * 8; bit++)
+		{
+			byte[] near = (byte[])nonce.Clone();
+			near[bit / 8] ^= (byte)(1 << (bit % 8));
+			Assert.False(MapProof.Verify(Token, near, hash, MapProofOp.Upload, proof));
+		}
+
+		for (int bit = 0; bit < MapProof.Bytes * 8; bit++)
+		{
+			byte[] near = (byte[])proof.Clone();
+			near[bit / 8] ^= (byte)(1 << (bit % 8));
+			Assert.False(MapProof.Verify(Token, nonce, hash, MapProofOp.Upload, near));
+		}
+	}
+
+	[Fact]
+	public void WhatNoProofCanBeMadeFrom_HasNone_AndAProofOfAnotherLengthIsNotOne()
+	{
+		string hash = MapFile.HashHex(Generated(1));
+		byte[] nonce = Nonce(1);
+		byte[] proof = MapProof.Compute(Token, nonce, hash, MapProofOp.Upload);
+
+		Assert.Null(MapProof.Compute(null, nonce, hash, MapProofOp.Upload));
+		Assert.Null(MapProof.Compute(string.Empty, nonce, hash, MapProofOp.Upload));
+		Assert.Null(MapProof.Compute(Token, nonce.AsSpan(0, 15), hash, MapProofOp.Upload));
+		Assert.Null(MapProof.Compute(Token, new byte[17], hash, MapProofOp.Upload));
+		Assert.Null(MapProof.Compute(Token, ReadOnlySpan<byte>.Empty, hash, MapProofOp.Upload));
+		Assert.Null(MapProof.Compute(Token, nonce, hash.ToUpperInvariant(), MapProofOp.Upload));
+		Assert.Null(MapProof.Compute(Token, nonce, hash[..63], MapProofOp.Upload));
+		Assert.Null(MapProof.Compute(Token, nonce, null, MapProofOp.Upload));
+
+		Assert.False(MapProof.Verify(null, nonce, hash, MapProofOp.Upload, proof));
+		Assert.False(MapProof.Verify(string.Empty, nonce, hash, MapProofOp.Upload, proof));
+		Assert.False(MapProof.Verify(Token, nonce.AsSpan(0, 15), hash, MapProofOp.Upload, proof));
+		Assert.False(MapProof.Verify(Token, nonce, "hills", MapProofOp.Upload, proof));
+		Assert.False(MapProof.Verify(Token, nonce, hash, MapProofOp.Upload, proof.AsSpan(0, 31)));
+		Assert.False(MapProof.Verify(Token, nonce, hash, MapProofOp.Upload, ReadOnlySpan<byte>.Empty));
+		var longer = new byte[33];
+		proof.CopyTo(longer, 0);
+		Assert.False(MapProof.Verify(Token, nonce, hash, MapProofOp.Upload, longer));
+
+		// An empty key's HMAC is a number like any other: with no token there is no proof to match it.
+		using var keyless = new HMACSHA256(Array.Empty<byte>());
+		var message = new List<byte>(nonce);
+		message.AddRange(Convert.FromHexString(hash));
+		message.Add(1);
+		Assert.False(MapProof.Verify(string.Empty, nonce, hash, MapProofOp.Upload, keyless.ComputeHash(message.ToArray())));
+		Assert.False(MapProof.Verify(null, nonce, hash, MapProofOp.Upload, keyless.ComputeHash(message.ToArray())));
+	}
+
+	[Theory]
+	[InlineData("0123456789abcdef", true)]
+	[InlineData("correct-horse-battery-staple", true)]
+	[InlineData("0123456789abcde", false)]
+	[InlineData("hunter2", false)]
+	[InlineData("", false)]
+	[InlineData(null, false)]
+	[InlineData("0123456789 abcdef", false)]
+	[InlineData("0123456789abcdef\n", false)]
+	[InlineData("0123456789\tabcdef", false)]
+	public void AToken_IsSixteenCharactersOrMore_WithNoSpaceInIt(string token, bool taken)
+	{
+		Assert.Equal(taken, MapProof.IsToken(token, out string error));
+		Assert.Equal(taken, error == null);
+		Assert.Equal(16, MapProof.MinTokenLength);
+		Assert.True(MapProof.IsToken(new string('k', MapProof.MaxTokenLength), out _));
+		Assert.False(MapProof.IsToken(new string('k', MapProof.MaxTokenLength + 1), out _));
 	}
 }

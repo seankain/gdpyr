@@ -273,4 +273,70 @@ public class MapLaunchTests
 		Assert.Null(key);
 		Assert.Contains(why, error);
 	}
+
+	// ---- --map-upload-token (§9.5, LE8) ---------------------------------------------------------
+
+	private const string UploadToken = "correct-horse-battery-staple";
+
+	[Fact]
+	public void AServerTakesNoUploads_UnlessItIsGivenAToken()
+	{
+		Assert.Null(LaunchOptions.Parse(new[] { "--server" }).MapUploadToken);
+		Assert.Null(LaunchOptions.Parse(Array.Empty<string>(), dedicatedServer: true).MapUploadToken);
+		Assert.Null(LaunchOptions.Offline.MapUploadToken);
+		Assert.DoesNotContain("map uploads", LaunchOptions.Parse(new[] { "--server" }).ToString());
+	}
+
+	[Fact]
+	public void TheToken_IsTheServers_AndIsNeverPrinted()
+	{
+		var options = LaunchOptions.Parse(new[] { "--server", "7777", "--map-upload-token", UploadToken });
+		Assert.Null(options.Error);
+		Assert.Equal(LaunchMode.Server, options.Mode);
+		Assert.Equal(UploadToken, options.MapUploadToken);
+		Assert.Contains("map uploads (token)", options.ToString());
+		Assert.DoesNotContain(UploadToken, options.ToString());
+
+		// Before the mode, beside a map, and on a dedicated-server build with no mode flag.
+		Assert.Equal(UploadToken, LaunchOptions.Parse(new[] { "--map-upload-token", UploadToken, "--server" }).MapUploadToken);
+		Assert.Equal(UploadToken,
+			LaunchOptions.Parse(new[] { "--server", "--map", "hills", "--map-upload-token", UploadToken }).MapUploadToken);
+		var dedicated = LaunchOptions.Parse(new[] { "--map-upload-token", UploadToken }, dedicatedServer: true);
+		Assert.Null(dedicated.Error);
+		Assert.Equal(LaunchMode.Server, dedicated.Mode);
+		Assert.Equal(UploadToken, dedicated.MapUploadToken);
+		Assert.Contains("--map-upload-token", LaunchOptions.Usage);
+	}
+
+	[Theory]
+	[InlineData("--listen")]
+	[InlineData("--client", "10.0.0.2")]
+	[InlineData("--practice")]
+	[InlineData("--edit")]
+	[InlineData("--playdemo", "a.demo")]
+	[InlineData]
+	public void OnlyTheDedicatedServerTakesAToken(params string[] mode)
+	{
+		var args = new List<string>(mode) { "--map-upload-token", UploadToken };
+		LaunchOptions options = LaunchOptions.Parse(args);
+		Assert.Contains("--map-upload-token needs --server", options.Error);
+		Assert.Null(options.MapUploadToken);
+	}
+
+	[Fact]
+	public void ATokenIsNeeded_Once_AndIsSixteenCharactersOrMoreWithNoSpace()
+	{
+		Assert.Contains("--map-upload-token needs a token", LaunchOptions.Parse(new[] { "--server", "--map-upload-token" }).Error);
+		Assert.Contains("--map-upload-token needs a token",
+			LaunchOptions.Parse(new[] { "--map-upload-token", "--server" }).Error);
+		Assert.Contains("twice",
+			LaunchOptions.Parse(new[] { "--server", "--map-upload-token", UploadToken, "--map-upload-token", UploadToken }).Error);
+
+		LaunchOptions tooShort = LaunchOptions.Parse(new[] { "--server", "--map-upload-token", "hunter2" });
+		Assert.Contains("--map-upload-token: a token is 16 to 256 characters", tooShort.Error);
+		Assert.DoesNotContain("hunter2", tooShort.Error);
+		Assert.Contains("no space", LaunchOptions.Parse(new[] { "--server", "--map-upload-token", "correct horse battery staple" }).Error);
+		Assert.Null(LaunchOptions.Parse(new[] { "--server", "--map-upload-token", "0123456789abcdef" }).Error);
+		Assert.NotNull(LaunchOptions.Parse(new[] { "--server", "--map-upload-token", "0123456789abcde" }).Error);
+	}
 }

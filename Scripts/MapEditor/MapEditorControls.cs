@@ -126,6 +126,28 @@ public enum BandNumber : byte
 }
 
 /// <summary>One key of §8.2's table.</summary>
+/// <summary>Where a publish to a server stands (docs/LEVEL_EDITOR.md §9.5).</summary>
+public enum PublishState : byte
+{
+	/// <summary>None has been asked for.</summary>
+	Idle,
+
+	/// <summary>The link to the server is being opened, or its map and nonce are awaited.</summary>
+	Connecting,
+
+	/// <summary>The map is offered, or its chunks are going.</summary>
+	Sending,
+
+	/// <summary>The server has the map, and is asked to play it next.</summary>
+	AskingNext,
+
+	/// <summary>The server has the map; and, if it was asked to, plays it next.</summary>
+	Done,
+
+	/// <summary>It did not come to that: the status line says why.</summary>
+	Failed,
+}
+
 public readonly struct EditorKey
 {
 	public readonly Key Key;
@@ -859,6 +881,52 @@ public static class MapEditorControls
 		arguments.Add("--map");
 		arguments.Add(mapPath);
 		return arguments;
+	}
+
+	// ---- publishing to a server (§9.5, LE8) -----------------------------------------------------------
+
+	/// <summary>
+	/// Where a publish goes and what proves it: an address, parsed as the menu's box and
+	/// <c>--client</c> parse one, and a token that is not empty. What a token must be is the server's
+	/// to say: a wrong one is its <c>bad_proof</c>.
+	/// </summary>
+	public static bool TryPublishTarget(string address, string token, out string host, out int port, out string error)
+	{
+		if (!Gdpyr.Core.LaunchOptions.TryParseAddress(address, out host, out port, out error))
+		{
+			error = $"the server's address: {error}";
+			return false;
+		}
+
+		if (string.IsNullOrWhiteSpace(token))
+		{
+			error = "the server's upload token is needed: what it was started with, after --map-upload-token";
+			return false;
+		}
+
+		return true;
+	}
+
+	/// <summary>The status line while a map goes: <c>publishing 'ridge' 12 / 27</c>, as a fetch's is (§9.3).</summary>
+	public static string PublishProgress(string name, int sent, int chunks) => $"publishing '{name}' {sent} / {chunks}";
+
+	/// <summary>
+	/// What a publish came to, once the server has the map: that it kept it or had it, and, when it
+	/// was asked to play it next, what it answered — as it came off the wire, null when it was not
+	/// asked.
+	/// </summary>
+	public static string Published(string name, string address, MapUploadState upload, int? nextAnswer)
+	{
+		string text = $"published '{name}' to {address}: "
+			+ (upload == MapUploadState.HaveIt ? "the server has this map already" : "the server kept it");
+		if (nextAnswer is not { } wire)
+		{
+			return text;
+		}
+
+		return text + "; " + (MapAnswers.TryNext(wire, out MapNextAnswer next)
+			? (MapAnswers.Accepted(next) ? string.Empty : "it does not play it next: ") + MapAnswers.Describe(next)
+			: MapAnswers.Unknown(wire));
 	}
 
 	private static string F(float value, string format = "0.00") => value.ToString(format, CultureInfo.InvariantCulture);

@@ -1846,6 +1846,13 @@ public partial class CombatManager : Node
 			return;
 		}
 
+		// A server told its next map plays no next round on this one: the round in progress is over,
+		// and the process goes, for its supervisor to start it on that map (docs/LEVEL_EDITOR.md §9.5).
+		if (NetworkManager.Instance?.MapTransfer?.LeaveForNextMap("the round is over") == true)
+		{
+			return;
+		}
+
 		RestartRound(tick);
 	}
 

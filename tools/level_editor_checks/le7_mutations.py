@@ -113,7 +113,7 @@ RULES = [
      "if (!string.Equals(hash, Hash, StringComparison.Ordinal))\n\t\t{\n\t\t\treturn Refuse(",
      "if (hash == null)\n\t\t{\n\t\t\treturn Refuse("),
     ("receive-unread", TRANSFER, "bytes that are not a map taken",
-     "if (!MapFile.TryRead(_buffer, out MapDocument document, out string error))\n\t\t{\n\t\t\treturn Refuse($\"the host's map does not read: {error}\");\n\t\t}",
+     "if (!MapFile.TryRead(_buffer, out MapDocument document, out string error))\n\t\t{\n\t\t\treturn Refuse($\"{_sender}'s map does not read: {error}\");\n\t\t}",
      "MapFile.TryRead(_buffer, out MapDocument document, out string error);"),
     ("receive-unvalidated", TRANSFER, "a map this build cannot play taken",
      "if (!report.IsPlayable)\n\t\t{\n\t\t\tvar reasons", "if (false)\n\t\t{\n\t\t\tvar reasons"),

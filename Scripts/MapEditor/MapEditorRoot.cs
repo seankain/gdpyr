@@ -146,6 +146,7 @@ public partial class MapEditorRoot : Node3D
 
 	public override void _ExitTree()
 	{
+		AbandonPublish();
 		if (Current == this)
 		{
 			Current = null;
@@ -800,6 +801,7 @@ public partial class MapEditorRoot : Node3D
 
 	public override void _Process(double delta)
 	{
+		PublishStep((float)delta);
 		if (Editing == null)
 		{
 			return;

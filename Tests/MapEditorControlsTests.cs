@@ -514,4 +514,66 @@ public class MapEditorControlsTests
 		SectionCheck joined = BridgeRules.Check(document, BridgeRules.Attach(span.Id, 0, end, true), -1, end);
 		Assert.Equal("bridge_span on section 0's end: ok, 1 pier", MapEditorControls.SectionGhost(span, joined, 4f));
 	}
+
+	// ---- publishing to a server (§9.5, LE8) -----------------------------------------------------------
+
+	[Fact]
+	public void APublish_GoesToAnAddressAsTheMenuParsesOne_WithATokenThatIsNotEmpty()
+	{
+		Assert.True(MapEditorControls.TryPublishTarget("203.0.113.10:7778", "correct-horse-battery-staple", out string host, out int port,
+			out string error));
+		Assert.Equal("203.0.113.10", host);
+		Assert.Equal(7778, port);
+		Assert.Null(error);
+
+		// No port is the game's port, as --client has it.
+		Assert.True(MapEditorControls.TryPublishTarget(" box.example ", "t", out host, out port, out _));
+		Assert.Equal("box.example", host);
+		Assert.Equal(Gdpyr.Core.LaunchOptions.DefaultPort, port);
+
+		Assert.False(MapEditorControls.TryPublishTarget(string.Empty, "correct-horse-battery-staple", out _, out _, out error));
+		Assert.Contains("address", error);
+		Assert.False(MapEditorControls.TryPublishTarget("box:99999", "correct-horse-battery-staple", out _, out _, out error));
+		Assert.Contains("not a port", error);
+
+		foreach (string token in new[] { null, string.Empty, "   " })
+		{
+			Assert.False(MapEditorControls.TryPublishTarget("box:7777", token, out _, out _, out error));
+			Assert.Contains("--map-upload-token", error);
+		}
+	}
+
+	[Fact]
+	public void ThePublishLine_IsAFetchsWithItsOwnWord()
+	{
+		Assert.Equal("publishing 'ridge' 12 / 27", MapEditorControls.PublishProgress("ridge", 12, 27));
+	}
+
+	[Fact]
+	public void WhatAPublishCameTo_SaysWhetherTheServerKeptItOrHadIt_AndWhatItAnsweredTheNextMap()
+	{
+		Assert.Equal("published 'Ridge' to box:7777: the server kept it",
+			MapEditorControls.Published("Ridge", "box:7777", MapUploadState.Stored, null));
+		Assert.Equal("published 'Ridge' to box:7777: the server has this map already",
+			MapEditorControls.Published("Ridge", "box:7777", MapUploadState.HaveIt, null));
+
+		// Taken: what will happen, in the server's answer's words.
+		Assert.Equal("published 'Ridge' to box:7777: the server kept it; " + MapAnswers.Describe(MapNextAnswer.Ok),
+			MapEditorControls.Published("Ridge", "box:7777", MapUploadState.Stored, (int)MapNextAnswer.Ok));
+		Assert.Contains("nothing there starts it again",
+			MapEditorControls.Published("Ridge", "box:7777", MapUploadState.Stored, (int)MapNextAnswer.OkStaysDown));
+		Assert.EndsWith("; the server is playing it now",
+			MapEditorControls.Published("Ridge", "box:7777", MapUploadState.HaveIt, (int)MapNextAnswer.Playing));
+
+		// Not taken: that it is not, and why.
+		foreach (MapNextAnswer answer in new[] { MapNextAnswer.UploadsOff, MapNextAnswer.BadProof, MapNextAnswer.NotHere,
+			MapNextAnswer.Pinned, MapNextAnswer.NotWritten })
+		{
+			Assert.Equal("published 'Ridge' to box:7777: the server kept it; it does not play it next: " + MapAnswers.Describe(answer),
+				MapEditorControls.Published("Ridge", "box:7777", MapUploadState.Stored, (int)answer));
+		}
+
+		Assert.EndsWith("; the server gave an answer this build does not know (42)",
+			MapEditorControls.Published("Ridge", "box:7777", MapUploadState.Stored, 42));
+	}
 }
