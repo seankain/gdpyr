@@ -282,15 +282,16 @@ public partial class LevelFetchChecks : Node
 		Fact(!_timedOut, $"in the round: {PlayerManager.Instance?.PlayerCount ?? 0} on the roster, its own character among them"
 			+ $" ({PlayerManager.Instance?.LocalStateName})");
 
-		if (_role == "drops")
-		{
-			Drops();
-		}
-
-		// A few seconds of the round, for a demo recorded here to have something in it.
+		// A few seconds of the round, for a demo recorded here to have something in it, and for every
+		// probe to be in: a channel held behind its own lost message brings its probes late.
 		for (int i = 0; i < 3 * Second; i++)
 		{
 			yield return true;
+		}
+
+		if (_role == "drops")
+		{
+			Drops();
 		}
 	}
 
@@ -439,8 +440,9 @@ public partial class LevelFetchChecks : Node
 		Measured($"drops: {_defaultProbes} default-channel probes, {_defaultAhead} of them ahead of a chunk sent before them,"
 			+ $" past {_heldChunks.Count} chunk(s) not yet arrived;"
 			+ $" {_transferProbes} probes on the map's channel, {_transferAhead} ahead of a chunk");
-		Fact(_transferProbes > 0 && _transferAhead == 0,
-			$"on the map's own channel, no probe of {_transferProbes} arrived ahead of a chunk sent before it: the control");
+		Fact(_defaultProbes == MapTransfer.ChunkCount(NetworkManager.Instance.ServerMapLength) - 1
+				&& _transferProbes == _defaultProbes && _transferAhead == 0,
+			$"every probe is in, {_defaultProbes} on each channel; on the map's own channel, none arrived ahead of a chunk sent before it: the control");
 		if (!string.IsNullOrEmpty(_dir))
 		{
 			File.WriteAllText(Path.Combine(_dir, $"drops-{OS.GetProcessId()}"),
