@@ -84,18 +84,43 @@ public class DemoCodecTests
 	[InlineData(2)]
 	[InlineData(3)]
 	[InlineData(4)]
-	public void TheVersionIsFive_SinceTheCrewVehiclesAreRecorded_AndAnOlderDemoIsRefusedWithItsReason(int older)
+	[InlineData(5)]
+	public void TheVersionIsSix_SinceADataMapIsNamedByItsHash_AndAnOlderDemoIsRefusedWithItsReason(int older)
 	{
-		// docs/GROUND_VEHICLES.md §7.4: a crew vehicle record beside the snapshots. A
-		// version-4 demo has none, and would play a seated player standing in the air, so it
-		// is refused, saying why (as version 4 refused version 3's player records, whose
-		// 29 bytes would have misread, docs/LOADOUT.md §6.3).
-		Assert.Equal(5, DemoFormat.Version);
+		// docs/LEVEL_EDITOR.md §9.6: the header names a data map as map:<hash>, which a version-5
+		// reader would take for a scene path; a version-5 demo of a data map names MapHost.tscn and
+		// not which map. Refused, saying why, as version 5 refused version 4 (docs/GROUND_VEHICLES.md
+		// §7.4) and version 4 refused version 3's 29-byte player records (docs/LOADOUT.md §6.3).
+		Assert.Equal(6, DemoFormat.Version);
 
 		DemoHeader old = Header();
 		old.Version = (byte)older;
 		Assert.False(old.IsPlayable(out string reason));
-		Assert.Equal($"demo format version {older}; this build reads 5", reason);
+		Assert.Equal($"demo format version {older}; this build reads 6", reason);
+	}
+
+	[Fact]
+	public void ADataMap_IsNamedByItsHash_AndASceneMapByItsScene()
+	{
+		const string hash = "6d0aa3ff6ebe3487e53d4f4488318b2ebe47ada2e27fb3ae568320a4a8450958";
+		Assert.Equal("map:" + hash, DemoFormat.MapName(true, hash, "res://Scenes/Maps/MapHost.tscn"));
+		Assert.Equal("res://Scenes/Test.tscn", DemoFormat.MapName(false, null, "res://Scenes/Test.tscn"));
+
+		Assert.True(DemoFormat.TryParseDataMap("map:" + hash, out string read));
+		Assert.Equal(hash, read);
+		Assert.False(DemoFormat.TryParseDataMap("res://Scenes/Test.tscn", out read));
+		Assert.Null(read);
+		Assert.False(DemoFormat.TryParseDataMap("map:" + hash.ToUpperInvariant(), out _));
+		Assert.False(DemoFormat.TryParseDataMap("map:" + hash[..63], out _));
+		Assert.False(DemoFormat.TryParseDataMap("MAP:" + hash, out _));
+		Assert.False(DemoFormat.TryParseDataMap(null, out _));
+		Assert.False(DemoFormat.TryParseDataMap(string.Empty, out _));
+
+		// The header carries it as it carried a scene's path: within its 255 bytes, read back the same.
+		DemoHeader header = Header();
+		header.Map = DemoFormat.MapName(true, hash, null);
+		Assert.True(DemoHeader.TryDecode(header.Encode(), out DemoHeader back, out _));
+		Assert.Equal("map:" + hash, back.Map);
 	}
 
 	[Fact]

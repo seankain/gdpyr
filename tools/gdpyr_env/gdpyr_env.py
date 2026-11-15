@@ -408,6 +408,9 @@ class GdpyrEnv:
         self.unbounded = bool(welcome.get("unbounded", False))
         self.bot_ai = str(welcome.get("bot_ai", "legacy"))
         self.tick = int(welcome.get("tick", 0))
+        # The map the server plays (docs/LEVEL_EDITOR.md §9.6): {"id", "name", "hash"}, the hash
+        # None for a scene map. None from a server that predates it.
+        self.map = welcome.get("map")
 
         read = Schema(version=version, tick_rate=int(welcome.get("tick_rate", 60)))
 

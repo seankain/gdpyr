@@ -484,6 +484,18 @@ public sealed class GdpyrConnection : IDisposable
 
 	public uint Tick { get; private set; }
 
+	/// <summary>
+	/// The map the server plays, as <c>welcome</c> named it (docs/LEVEL_EDITOR.md §9.6): its catalog
+	/// id, empty for a data map that is not the catalog's. Null from a server that predates it.
+	/// </summary>
+	public string MapId { get; private set; }
+
+	/// <summary>The map's name, as <c>welcome</c> named it; null from a server that predates it.</summary>
+	public string MapName { get; private set; }
+
+	/// <summary>A data map's SHA-256, lower-case hex; null for a scene map or from a server that predates it.</summary>
+	public string MapHash { get; private set; }
+
 	/// <summary>What the last <c>step</c> reported about the seats this session holds.</summary>
 	public IReadOnlyList<GdpyrSeatStatus> LastStep => _lastStep;
 
@@ -538,9 +550,20 @@ public sealed class GdpyrConnection : IDisposable
 			? kits.GetString()
 			: "default";
 		Tick = welcome.TryGetProperty("tick", out JsonElement tick) ? tick.GetUInt32() : 0;
+		if (welcome.TryGetProperty("map", out JsonElement map) && map.ValueKind == JsonValueKind.Object)
+		{
+			MapId = Text(map, "id");
+			MapName = Text(map, "name");
+			MapHash = Text(map, "hash");
+		}
 
 		Schema = ReadSchema(welcome);
 	}
+
+	private static string Text(JsonElement element, string name) =>
+		element.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String
+			? value.GetString()
+			: null;
 
 	private static GdpyrSchema ReadSchema(JsonElement welcome)
 	{

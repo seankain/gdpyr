@@ -115,8 +115,42 @@ public static class DemoFormat
 	/// message, beside the two snapshots (docs/GROUND_VEHICLES.md §7.4). A version-4 reader
 	/// stops at its tag as an unknown one, and a version-4 demo has no vehicles to draw,
 	/// so it is refused rather than played with a seated player standing in the air.
+	///
+	/// 6: the header's map names a data map as <c>map:&lt;hash&gt;</c>, and playback plays the demo on
+	/// the map it names (docs/LEVEL_EDITOR.md §9.6). A version-5 reader would take that for a scene
+	/// path, and a version-5 demo of a data map names <c>MapHost.tscn</c>, which says nothing of which
+	/// map; so a version-5 demo is refused, saying why.
 	/// </summary>
-	public const byte Version = 5;
+	public const byte Version = 6;
+
+	/// <summary>What a header's map starts with when it is a data map, before its hash (docs/LEVEL_EDITOR.md §9.6).</summary>
+	public const string DataMapPrefix = "map:";
+
+	/// <summary>
+	/// What a demo's header names its map as: a data map by its hash, <c>map:&lt;hash&gt;</c>, and a
+	/// scene map by its scene's path.
+	/// </summary>
+	public static string MapName(bool isData, string hash, string scenePath) =>
+		isData ? DataMapPrefix + (hash ?? string.Empty) : scenePath ?? string.Empty;
+
+	/// <summary>Whether a header's map is a data map's name, and its hash: 64 lower-case hex digits after <c>map:</c>.</summary>
+	public static bool TryParseDataMap(string map, out string hash)
+	{
+		hash = null;
+		if (map == null || !map.StartsWith(DataMapPrefix, StringComparison.Ordinal))
+		{
+			return false;
+		}
+
+		string rest = map[DataMapPrefix.Length..];
+		if (!Level.MapTransfer.IsHash(rest))
+		{
+			return false;
+		}
+
+		hash = rest;
+		return true;
+	}
 
 	/// <summary>
 	/// Ceiling on one recorded payload. Comfortably over the largest thing either

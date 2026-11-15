@@ -42,14 +42,14 @@ public partial class Bootstrap : Node
 		if (options.MapReference != null)
 		{
 			if (!Gdpyr.Level.MapLibrary.TryResolve(options.MapReference, out MapInfo map,
-				out Gdpyr.Sim.Level.MapDocument document, out string mapError))
+				out Gdpyr.Sim.Level.MapDocument document, out byte[] bytes, out string mapError))
 			{
 				GD.PrintErr($"gdpyr: --map {options.MapReference}: {mapError}");
 				GetTree().Quit(1);
 				return;
 			}
 
-			Session.SelectResolved(map, document);
+			Session.SelectResolved(map, document, bytes);
 			GD.Print($"[map] playing {map}" + (map.IsData ? $" from {map.Path}, sha-256 {map.Hash}" : string.Empty));
 		}
 

@@ -171,6 +171,18 @@ public static class Program
 				};
 			}
 
+			// A scenario that names its map is checked against the map the server says it plays
+			// (docs/LEVEL_EDITOR.md §9.6): a claim about the hills played on the greybox is not one.
+			if (scenario.Map != null && connection.MapId != scenario.Map)
+			{
+				return new ScenarioResult
+				{
+					Scenario = scenario,
+					BotAi = connection.BotAi,
+					Error = $"this server plays map '{connection.MapId ?? "(not said)"}', and the scenario names '{scenario.Map}'",
+				};
+			}
+
 			// Likewise a claim about one bot kit against a server whose bots carry the other
 			// (docs/LOADOUT.md §8).
 			if (wantedKits != null && connection.BotKits != wantedKits)
