@@ -65,6 +65,9 @@ public partial class MainMenu : Control
 	private VBoxContainer _hostColumn;
 	private OptionButton _mapPicker;
 	private Label _mapDescription;
+
+	/// <summary>What the picker's rows stand for: the catalog, then one's own maps that play (docs/LEVEL_EDITOR.md §9.1).</summary>
+	private readonly List<MapInfo> _pickable = new();
 	private SpinBox _roundMinutes;
 	private SpinBox _groundTickets;
 	private SpinBox _groundForceSize;
@@ -125,6 +128,17 @@ public partial class MainMenu : Control
 			if (Bootstrap.Options.PlayDemo != null || watchBots || practice)
 			{
 				NetworkManager.Instance?.PlayOffline();
+			}
+
+			// A demo is opened here, as the console's `playdemo` opens one from the menu, so the map it
+			// was recorded on is the one loaded (docs/LEVEL_EDITOR.md §9.6). One that cannot be is fatal,
+			// as it was when it was opened in the map.
+			if (Bootstrap.Options.PlayDemo is { } demo && !PlayerManager.BeginPlaybackOf(demo, out string demoError))
+			{
+				_leaving = true;
+				GD.PrintErr($"gdpyr: --playdemo {demo}: {demoError}");
+				GetTree().Quit(1);
+				return;
 			}
 
 			// A client plays the map its server is playing, which it learns once the
@@ -219,6 +233,11 @@ public partial class MainMenu : Control
 					_status.Text = "connected; waiting for the host to say which map it is playing…";
 					return;
 
+				case MapAnswer.Fetching:
+					// docs/LEVEL_EDITOR.md §9.3: `fetching 'ridge' 47 / 114`.
+					_status.Text = FetchProgress(net);
+					return;
+
 				case MapAnswer.Refused:
 					// Dropped rather than kept, as a link that never came up is: the next
 					// address has to be allowed a socket of its own, and whatever of this
@@ -252,10 +271,13 @@ public partial class MainMenu : Control
 		/// <summary>The server has not named its map yet.</summary>
 		Waiting,
 
-		/// <summary>The server's map is this build's, and is now <see cref="Session.Map"/>.</summary>
+		/// <summary>The server's map is a data map this process lacks, and it is arriving (docs/LEVEL_EDITOR.md §9.3).</summary>
+		Fetching,
+
+		/// <summary>The server's map is this process's, and is now <see cref="Session.Map"/>.</summary>
 		Taken,
 
-		/// <summary>The server named a map this build does not have, or never named one.</summary>
+		/// <summary>The server named a map this build cannot play, never named one, or sent one that was refused.</summary>
 		Refused,
 	}
 
@@ -265,6 +287,11 @@ public partial class MainMenu : Control
 	/// replaced with the default: a client on a different floor from its server's is
 	/// a desync from the first tick, and "update the checkout" is something a person
 	/// can do.
+	///
+	/// A data map is named by its hash (docs/LEVEL_EDITOR.md §9.3): one this process has — bundled,
+	/// its own, or received before — is read and validated against this build and played; one it
+	/// lacks is fetched from the server, hashed, read, validated and cached, then played. A map this
+	/// build's validator refuses, or a fetch the transfer refuses, is refused, with why.
 	/// </summary>
 	private MapAnswer TakeServerMap(NetworkManager net, float delta, out string error)
 	{
@@ -283,14 +310,18 @@ public partial class MainMenu : Control
 			return MapAnswer.Refused;
 		}
 
+		if (!string.IsNullOrEmpty(net.ServerMapHash))
+		{
+			return TakeServerDataMap(net, out error);
+		}
+
 		if (net.ServerMapId.Length == 0)
 		{
-			// A map from the host's own library: fetching one is docs/LEVEL_EDITOR.md LE7's.
-			error = "the host is playing a map from its own library, which this build cannot fetch yet.";
+			error = "the host named no map.";
 			return MapAnswer.Refused;
 		}
 
-		if (!MapCatalog.TryFind(net.ServerMapId, out MapInfo map))
+		if (!MapCatalog.TryFind(net.ServerMapId, out MapInfo map) || map.IsData)
 		{
 			error = $"the host is playing map '{net.ServerMapId}', which this build does not have."
 				+ " Update this checkout to match the host's.";
@@ -305,6 +336,81 @@ public partial class MainMenu : Control
 
 		return MapAnswer.Taken;
 	}
+
+	/// <summary>The data-map half of <see cref="TakeServerMap"/>: have it, or fetch it (docs/LEVEL_EDITOR.md §9.3).</summary>
+	private MapAnswer TakeServerDataMap(NetworkManager net, out string error)
+	{
+		error = null;
+		string hash = net.ServerMapHash;
+		string name = string.IsNullOrEmpty(net.ServerMapName) ? Gdpyr.Sim.Level.MapTransfer.Short(hash) : net.ServerMapName;
+		MapTransferService transfer = net.MapTransfer;
+
+		if (transfer.Fetch is { } fetch && fetch.Hash == hash)
+		{
+			switch (fetch.State)
+			{
+				case Gdpyr.Sim.Level.MapReceiveState.Receiving:
+					return MapAnswer.Fetching;
+
+				case Gdpyr.Sim.Level.MapReceiveState.Refused:
+					error = $"could not fetch the host's map '{name}': {fetch.Error}";
+					return MapAnswer.Refused;
+			}
+
+			// Hashed, read and validated as it arrived (§6.10): kept, then played from what arrived.
+			if (!Gdpyr.Level.MapLibrary.TryCache(fetch.File, fetch.Document, out MapInfo fetched, out string unkept))
+			{
+				GD.PushWarning($"[maps] '{name}' is played but not kept: {unkept}");
+			}
+			else
+			{
+				GD.Print($"[maps] kept '{name}' as {fetched.Path}");
+			}
+
+			Session.SelectResolved(fetched, fetch.Document, fetch.File);
+			return MapAnswer.Taken;
+		}
+
+		if (Gdpyr.Level.MapLibrary.TryFindHash(hash, out MapInfo map, out Gdpyr.Sim.Level.MapDocument document,
+			out byte[] bytes, out Gdpyr.Level.MapLibrary.Source source, out string unplayable, out string note))
+		{
+			GD.Print($"[maps] the host's map '{name}' is in {SourceName(source)}: {map.Path}, sha-256 {hash}; nothing to fetch");
+			Session.SelectResolved(map, document, bytes);
+			return MapAnswer.Taken;
+		}
+
+		if (source != Gdpyr.Level.MapLibrary.Source.None)
+		{
+			error = $"the host is playing '{name}', and this build's copy of it does not play: {unplayable}";
+			return MapAnswer.Refused;
+		}
+
+		if (note != null)
+		{
+			GD.PushWarning($"[maps] {note}; fetching it again");
+		}
+
+		if (!transfer.BeginFetch(hash, net.ServerMapLength, name, out string refused))
+		{
+			error = $"cannot fetch the host's map '{name}': {refused}";
+			return MapAnswer.Refused;
+		}
+
+		return MapAnswer.Fetching;
+	}
+
+	private static string SourceName(Gdpyr.Level.MapLibrary.Source source) => source switch
+	{
+		Gdpyr.Level.MapLibrary.Source.Bundled => "this build",
+		Gdpyr.Level.MapLibrary.Source.Library => "this process's own maps",
+		_ => "the cache",
+	};
+
+	/// <summary>The status line while a map arrives.</summary>
+	private static string FetchProgress(NetworkManager net) =>
+		net.MapTransfer.Fetch is { } fetch
+			? Gdpyr.Sim.Level.MapTransfer.Progress(net.MapTransfer.FetchName, fetch.Received, fetch.Chunks)
+			: "fetching the host's map…";
 
 	/// <summary>
 	/// The `--client` launch's half of <see cref="WatchConnection"/>: no widgets to
@@ -330,11 +436,16 @@ public partial class MainMenu : Control
 		switch (TakeServerMap(net, delta, out string error))
 		{
 			case MapAnswer.Waiting:
+			case MapAnswer.Fetching:
 				return;
 
 			case MapAnswer.Refused:
+				// The link is dropped before the process goes, so the server hears it now and not
+				// when it gives up on a silent peer (docs/LEVEL_EDITOR.md §9.3).
 				_leaving = true;
 				GD.PrintErr($"gdpyr: {error}");
+				PlayerManager.Instance?.ForgetClientRoster();
+				net.AbandonConnection();
 				GetTree().Quit(1);
 				return;
 		}
@@ -434,14 +545,42 @@ public partial class MainMenu : Control
 		_groundForceSize.Apply();
 		_strategistSize.Apply();
 
-		return new HostSettings(SelectedMapId(), (int)_roundMinutes.Value, (int)_groundTickets.Value,
+		return new HostSettings(SelectedMap(), (int)_roundMinutes.Value, (int)_groundTickets.Value,
 			(int)_groundForceSize.Value, (int)_strategistSize.Value);
 	}
 
-	private string SelectedMapId()
+	private MapInfo SelectedMap()
 	{
 		int index = _mapPicker.Selected;
-		return index >= 0 && index < MapCatalog.Count ? MapCatalog.All[index].Id : MapCatalog.Default.Id;
+		return index >= 0 && index < _pickable.Count ? _pickable[index] : MapCatalog.Default;
+	}
+
+	/// <summary>
+	/// The picker's rows (docs/LEVEL_EDITOR.md §9.1): the catalog, then every map of one's own that
+	/// reads and validates (LE-D16), asked again each time the panel opens, since the editor may have
+	/// saved one since. A client that lacks one of one's own fetches it from this host (§9.3).
+	/// </summary>
+	private void FillMapPicker(MapInfo selected)
+	{
+		_pickable.Clear();
+		_pickable.AddRange(MapCatalog.All);
+		_pickable.AddRange(Gdpyr.Level.MapLibrary.PlayableOwnMaps());
+
+		_mapPicker.Clear();
+		int chosen = 0;
+		for (int i = 0; i < _pickable.Count; i++)
+		{
+			MapInfo map = _pickable[i];
+			bool own = map.IsData && string.IsNullOrEmpty(map.Id);
+			_mapPicker.AddItem(own ? $"{map.Name} — {System.IO.Path.GetFileNameWithoutExtension(map.Path)}, yours" : map.Name, i);
+			if (map.Kind == selected.Kind && map.Id == selected.Id && map.Path == selected.Path)
+			{
+				chosen = i;
+			}
+		}
+
+		_mapPicker.Selected = chosen;
+		DescribeSelectedMap();
 	}
 
 	private void ShowHostPanel(bool show)
@@ -457,6 +596,7 @@ public partial class MainMenu : Control
 
 		if (show)
 		{
+			FillMapPicker(SelectedMap());
 			_startHosting.GrabFocus();
 		}
 		else
@@ -756,17 +896,12 @@ public partial class MainMenu : Control
 		column.AddChild(grid);
 
 		_mapPicker = new OptionButton { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-		for (int i = 0; i < MapCatalog.Count; i++)
-		{
-			_mapPicker.AddItem(MapCatalog.All[i].Name, i);
-		}
-		_mapPicker.Selected = Math.Max(MapCatalog.IndexOf(defaults.MapId), 0);
 		_mapPicker.ItemSelected += _ => DescribeSelectedMap();
 		AddRow(grid, "Map", _mapPicker);
 
 		_mapDescription = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart };
 		AddRow(grid, string.Empty, _mapDescription);
-		DescribeSelectedMap();
+		FillMapPicker(defaults.Map);
 
 		_roundMinutes = NewSpinBox(HostSettings.MinRoundMinutes, HostSettings.MaxRoundMinutes,
 			defaults.RoundMinutes, " min");
@@ -809,7 +944,16 @@ public partial class MainMenu : Control
 	private void DescribeSelectedMap()
 	{
 		int index = _mapPicker.Selected;
-		_mapDescription.Text = index >= 0 && index < MapCatalog.Count ? MapCatalog.All[index].Description : string.Empty;
+		if (index < 0 || index >= _pickable.Count)
+		{
+			_mapDescription.Text = string.Empty;
+			return;
+		}
+
+		MapInfo map = _pickable[index];
+		_mapDescription.Text = map.IsData && string.IsNullOrEmpty(map.Id)
+			? $"{map.Description}\none of your own maps: a player who has not got it fetches it from you as they join."
+			: map.Description;
 	}
 
 	private static void AddRow(GridContainer grid, string label, Control control)

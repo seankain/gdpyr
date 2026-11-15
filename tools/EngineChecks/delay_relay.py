@@ -33,7 +33,7 @@ class Link:
         self.sd = args.jitter_ms / 1000.0
         self.loss = args.loss
         self.random = random.Random(args.seed)
-        self.counts = {"up": 0, "down": 0, "dropped": 0}
+        self.counts = {"up": 0, "down": 0, "dropped": 0, "dropped down": 0, "dropped down over 1000 B": 0}
         self.delays = []
 
     def delay(self):
@@ -42,9 +42,13 @@ class Link:
             self.delays.append(d)
         return d
 
-    def dropped(self):
+    def dropped(self, data=None, down=False):
         if self.loss > 0 and self.random.random() < self.loss:
             self.counts["dropped"] += 1
+            if down:
+                self.counts["dropped down"] += 1
+                if data is not None and len(data) > 1000:
+                    self.counts["dropped down over 1000 B"] += 1
             return True
         return False
 
@@ -66,7 +70,7 @@ class Upstream(asyncio.DatagramProtocol):
 
     def datagram_received(self, data, addr):
         link = self.relay.link
-        if link.dropped():
+        if link.dropped(data, down=True):
             return
         link.counts["down"] += 1
         loop = asyncio.get_running_loop()
@@ -108,7 +112,8 @@ def summary(link):
     if not d:
         return "relay: nothing relayed"
     ms = [x * 1000.0 for x in d]
-    return (f"relay: up {link.counts['up']} down {link.counts['down']} dropped {link.counts['dropped']};"
+    return (f"relay: up {link.counts['up']} down {link.counts['down']} dropped {link.counts['dropped']}"
+            f" ({link.counts['dropped down']} down, {link.counts['dropped down over 1000 B']} of them over 1,000 B);"
             f" one-way delay mean {statistics.fmean(ms):.1f} ms, sd {statistics.pstdev(ms):.1f} ms,"
             f" min {min(ms):.1f}, max {max(ms):.1f}")
 

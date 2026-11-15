@@ -574,6 +574,30 @@ public partial class PlayerManager : Node
 			return false;
 		}
 
+		// The demo is played on the map it names (docs/LEVEL_EDITOR.md §9.6): from the menu that map
+		// is the one loaded; from a map, it has to be the one already there.
+		if (!DemoPlayback.TryFindMap(playback.Header, out MapInfo map, out Gdpyr.Sim.Level.MapDocument document,
+			out byte[] bytes, out string mapError))
+		{
+			message = $"{playback.FileName}: {mapError}";
+			playback.Dispose();
+			return false;
+		}
+
+		bool sameMap = map.Kind == Session.Map.Kind && map.Id == Session.Map.Id && map.Hash == Session.Map.Hash
+			&& map.ScenePath == Session.Map.ScenePath;
+		if (Instance is { _started: true } && !sameMap)
+		{
+			message = $"{playback.FileName} was recorded on {map.Name}, not {Session.Map.Name}: quit to the main menu to watch it";
+			playback.Dispose();
+			return false;
+		}
+
+		if (!sameMap)
+		{
+			Session.SelectResolved(map, document, bytes);
+		}
+
 		message = $"playing {playback.FileName}: {playback.Header}";
 
 		if (Instance is { _started: true } manager)

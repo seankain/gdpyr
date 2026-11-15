@@ -82,7 +82,8 @@ public sealed class DemoRecorder : IDisposable
 		}
 
 		DemoHeader header = DemoHeader.Create(kind, startTick, DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-			CombatManager.Instance?.RoundSeed ?? 0, localPeerId, Session.WorldScenePath, DescribeRecorder());
+			CombatManager.Instance?.RoundSeed ?? 0, localPeerId,
+			DemoFormat.MapName(Session.Map.IsData, Session.Map.Hash, Session.WorldScenePath), DescribeRecorder());
 
 		var writer = new DemoWriter(stream, header);
 		if (writer.Failed != null)

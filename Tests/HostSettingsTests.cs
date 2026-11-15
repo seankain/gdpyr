@@ -69,6 +69,41 @@ public class HostSettingsTests
 	}
 
 	[Fact]
+	public void AMapFromTheHostsLibrary_IsHeldAsItsFileAndHash_WithNoCatalogId()
+	{
+		// docs/LEVEL_EDITOR.md §9.1, LE7: the picker lists the catalog, then one's own maps, and a
+		// client that lacks one fetches it.
+		const string hash = "1111111111111111111111111111111111111111111111111111111111111111";
+		MapInfo own = MapInfo.Data(string.Empty, "Ridge", "user://maps/ridge.map", hash, "a ridge");
+		var settings = new HostSettings(own, 20, 50, 6, 1);
+
+		Assert.Equal(string.Empty, settings.MapId);
+		Assert.True(settings.Map.IsData);
+		Assert.Equal("user://maps/ridge.map", settings.Map.Path);
+		Assert.Equal(hash, settings.Map.Hash);
+		Assert.Equal(MapCatalog.DataMapScenePath, settings.Map.ScenePath);
+		Assert.StartsWith("map Ridge (user://maps/ridge.map, 11111111)", settings.ToString());
+
+		// A map that is not one is the default, as an unknown id is.
+		Assert.Equal(MapCatalog.Default.Id, new HostSettings(default(MapInfo), 20, 50, 6, 1).MapId);
+		Assert.Equal(MapCatalog.Default.Id,
+			new HostSettings(MapInfo.Data(string.Empty, "Nothing", null, hash, null), 20, 50, 6, 1).MapId);
+	}
+
+	[Fact]
+	public void ACatalogMapByItsId_IsTheCatalogsEntry_DataOrScene()
+	{
+		foreach (MapInfo map in MapCatalog.All)
+		{
+			var settings = new HostSettings(map.Id, 20, 50, 6, 1);
+			Assert.Equal(map.Id, settings.MapId);
+			Assert.Equal(map.Kind, settings.Map.Kind);
+			Assert.Equal(map.Hash, settings.Map.Hash);
+			Assert.Equal(map.ScenePath, settings.Map.ScenePath);
+		}
+	}
+
+	[Fact]
 	public void TheDefaultsAreTheGameModesNumbersOnTheDefaultMap()
 	{
 		// default_gamemode.tres: 20 minutes, 50 tickets, 6 ground and 1 strategist.

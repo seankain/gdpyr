@@ -46,6 +46,13 @@ public static class Session
 	public static Gdpyr.Sim.Level.MapDocument Document { get; private set; }
 
 	/// <summary>
+	/// A data map's file as it was read, the bytes <see cref="Map"/>'s hash is of; null for a scene
+	/// map. What a server sends a client that lacks the map (docs/LEVEL_EDITOR.md §6.10): the bytes it
+	/// loaded, so a file saved again under a running server changes nothing.
+	/// </summary>
+	public static byte[] Bytes { get; private set; }
+
+	/// <summary>
 	/// What the host picked in the main menu's host panel, or null: a round launched
 	/// from the command line, offline, joined or watched is played on the game mode's
 	/// numbers and the flags' (<c>Match/default_gamemode.tres</c>). Read by the bot
@@ -68,23 +75,30 @@ public static class Session
 		}
 
 		Gdpyr.Sim.Level.MapDocument document = null;
-		if (map.IsData && !Gdpyr.Level.MapLibrary.TryLoad(map, out document, out error))
+		byte[] bytes = null;
+		if (map.IsData && !Gdpyr.Level.MapLibrary.TryLoad(map, out document, out bytes, out error))
 		{
 			return false;
 		}
 
 		Map = map;
 		Document = document;
+		Bytes = bytes;
 		return true;
 	}
 
-	/// <summary>A map already read and validated, as <c>--map</c> resolves one (Gdpyr.Level.MapLibrary.TryResolve).</summary>
-	public static void SelectResolved(MapInfo map, Gdpyr.Sim.Level.MapDocument document)
+	/// <summary>
+	/// A map already read and validated: as <c>--map</c> resolves one (Gdpyr.Level.MapLibrary.TryResolve),
+	/// or as a client finds or fetches its server's (docs/LEVEL_EDITOR.md §9.3). A data map comes with
+	/// its document and its bytes, a scene map with neither.
+	/// </summary>
+	public static void SelectResolved(MapInfo map, Gdpyr.Sim.Level.MapDocument document, byte[] bytes)
 	{
-		if (map.IsValid && map.IsData == (document != null))
+		if (map.IsValid && map.IsData == (document != null) && map.IsData == (bytes != null))
 		{
 			Map = map;
 			Document = document;
+			Bytes = bytes;
 		}
 	}
 

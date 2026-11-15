@@ -161,6 +161,23 @@ public sealed partial class AgentServer
 				writer.WriteString("unit_autonomy", MicroAutonomyNames.Name(units.AutonomyDefault));
 			}
 
+			// The map the round is on (docs/LEVEL_EDITOR.md §9.6): its catalog id, empty for a data map
+			// that is not the catalog's; its name; and a data map's SHA-256, null for a scene map.
+			MapInfo map = Session.Map;
+			writer.WriteStartObject("map");
+			writer.WriteString("id", map.Id ?? string.Empty);
+			writer.WriteString("name", map.IsData && Session.Document != null ? Session.Document.Name : map.Name);
+			if (map.IsData)
+			{
+				writer.WriteString("hash", map.Hash);
+			}
+			else
+			{
+				writer.WriteNull("hash");
+			}
+
+			writer.WriteEndObject();
+
 			AgentJson.WriteSchema(writer);
 		});
 

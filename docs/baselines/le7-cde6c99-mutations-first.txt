@@ -1,0 +1,47 @@
+# LE7, docs/LEVEL_EDITOR.md §11. The first run of python3 tools/level_editor_checks/le7_mutations.py, as it printed: three at a time,
+# on the tree cde6c99 was committed from but for the change it led to — MapTransferTests' stall test, given a clock that NaN must not stop.
+
+PASS the tree as it stands: 100 of 100 tests of MapTransferTests, HostSettingsTests, DemoCodecTests
+PASS chunk-size: a chunk of 1,200 B, two datagrams with its header -- 6 fail: MapTransferTests.AChunkOfTheWrongSize_IsRefused_ShortOrLong_InTheMiddleOrAtTheEnd, MapTransferTests.AChunk_Is1024BytesBehindItsIndex_AndItsMessageIsOneDatagram, MapTransferTests.AFile_IsCutIntoWholeChunksAndARemainder, MapTransferTests.AMessageThatIsNotAChunk_IsRefused, and 2 more
+PASS chunk-count-floor: the chunks a file is sent in counted without its remainder -- 9 fail: MapTransferTests.AChunkOfTheWrongSize_IsRefused_ShortOrLong_InTheMiddleOrAtTheEnd, MapTransferTests.AChunkOutOfTurn_IsRefused_WhetherAheadOrRepeated, MapTransferTests.AFile_IsCutIntoWholeChunksAndARemainder, MapTransferTests.AGeneratedMap_SentChunkByChunk_ArrivesAsTheSameBytesAndTheSameMap, and 5 more
+PASS chunk-last-whole: the last chunk taken for a whole one -- 12 fail: MapTransferTests.AChunkOfTheWrongSize_IsRefused_ShortOrLong_InTheMiddleOrAtTheEnd, MapTransferTests.AChunkOutOfTurn_IsRefused_WhetherAheadOrRepeated, MapTransferTests.AFetchCutOffAtAnyChunk_NeverCompletes_AndIsRefusedWhenItStalls, MapTransferTests.AFile_IsCutIntoWholeChunksAndARemainder, and 8 more
+PASS packet-index-endian: a chunk's index written big-endian -- 10 fail: MapTransferTests.AChunkOfTheWrongSize_IsRefused_ShortOrLong_InTheMiddleOrAtTheEnd, MapTransferTests.AChunkOutOfTurn_IsRefused_WhetherAheadOrRepeated, MapTransferTests.AFetchCutOffAtAnyChunk_NeverCompletes_AndIsRefusedWhenItStalls, MapTransferTests.AGeneratedMap_SentChunkByChunk_ArrivesAsTheSameBytesAndTheSameMap, and 6 more
+PASS packet-offset: a chunk's bytes taken from the start of the file -- 7 fail: MapTransferTests.AGeneratedMap_SentChunkByChunk_ArrivesAsTheSameBytesAndTheSameMap, MapTransferTests.AMapThisBuildCannotPlay_IsRefused_WithTheValidatorsReason, MapTransferTests.APacket_IsItsIndexLittleEndian_ThenThoseBytesOfTheFile, MapTransferTests.ARefusal_IsFinal_AndAFetchThatIsDone_TakesNothingMore, and 3 more
+PASS rate-per-tick: eight chunks a tick across peers, over 256 KB/s -- 2 fail: MapTransferTests.TheRates_AreLE_D17s_AndSection10sTimes, MapTransferTests.TheSender_SendsAChunkATickToAPeer_AndAtMostFourATick_ThePeersInTurn
+PASS stall-time: a stream refused after 5 s with nothing -- 2 fail: MapTransferTests.AStreamThatStallsForTenSeconds_IsRefused_AndAChunkStartsTheClockAgain, MapTransferTests.TheRates_AreLE_D17s_AndSection10sTimes
+PASS hash-upper: a hash in upper case taken for one -- 3 fail: DemoCodecTests.ADataMap_IsNamedByItsHash_AndASceneMapByItsScene, MapTransferTests.AHash_IsSixtyFourLowerCaseHexDigits, MapTransferTests.TheReceiver_RefusesANameThatIsNotAHash
+PASS hash-length: a hash of any length taken -- 2 fail: DemoCodecTests.ADataMap_IsNamedByItsHash_AndASceneMapByItsScene, MapTransferTests.AHash_IsSixtyFourLowerCaseHexDigits
+PASS progress-line: the status line without the chunks expected -- 1 fail: MapTransferTests.TheStatusLine_IsSection9_3s
+PASS sender-any-map: a request for another map's hash sent this one -- 1 fail: MapTransferTests.TheSender_SendsOnlyTheMapItIsPlaying_OnlyToAPeerThatAsked_OnceAConnection
+PASS sender-twice: a peer that asked before sent the map again -- 1 fail: MapTransferTests.TheSender_SendsOnlyTheMapItIsPlaying_OnlyToAPeerThatAsked_OnceAConnection
+PASS sender-forget: a connection gone, and what it asked kept -- 1 fail: MapTransferTests.TheSender_SendsOnlyTheMapItIsPlaying_OnlyToAPeerThatAsked_OnceAConnection
+PASS sender-forget-turn: a peer gone still sent chunks -- 1 fail: MapTransferTests.TheSender_SendsOnlyTheMapItIsPlaying_OnlyToAPeerThatAsked_OnceAConnection
+PASS sender-copy: the sender sending from the array it was given, not a copy -- 1 fail: MapTransferTests.TheSender_SendsTheBytesItLoaded_NotWhatTheirArrayHoldsLater
+PASS sender-rotate: a peer kept at the front of the line, served every tick -- 1 fail: MapTransferTests.TheSender_SendsAChunkATickToAPeer_AndAtMostFourATick_ThePeersInTurn
+PASS sender-cap: every peer fetching served each tick, however many -- 1 fail: MapTransferTests.TheSender_SendsAChunkATickToAPeer_AndAtMostFourATick_ThePeersInTurn
+PASS sender-sent: what a peer was sent not counted -- 1 fail: MapTransferTests.AGeneratedMap_SentChunkByChunk_ArrivesAsTheSameBytesAndTheSameMap
+PASS receive-long: a map over 1 MiB fetched -- 1 fail: MapTransferTests.TheReceiver_RefusesALengthNoMapCanBe
+PASS receive-empty: a map of no bytes fetched -- 1 fail: MapTransferTests.TheReceiver_RefusesALengthNoMapCanBe
+PASS receive-hash-named: a fetch begun for a name that is not a hash -- 1 fail: MapTransferTests.TheReceiver_RefusesANameThatIsNotAHash
+PASS receive-short-message: a message of four bytes or fewer taken for a chunk -- 1 fail: MapTransferTests.AMessageThatIsNotAChunk_IsRefused
+PASS receive-long-message: a message longer than a chunk's taken -- 1 fail: MapTransferTests.AMessageThatIsNotAChunk_IsRefused
+PASS receive-past-length: a chunk past the length let through to the turn's check -- 1 fail: MapTransferTests.AChunkPastTheLength_IsRefused
+PASS receive-turn: a chunk taken out of turn, written where its index says -- 2 fail: MapTransferTests.AChunkOutOfTurn_IsRefused_WhetherAheadOrRepeated, MapTransferTests.ARefusal_IsFinal_AndAFetchThatIsDone_TakesNothingMore
+PASS receive-size: a chunk of the wrong size taken -- 1 fail: MapTransferTests.AChunkOfTheWrongSize_IsRefused_ShortOrLong_InTheMiddleOrAtTheEnd
+PASS receive-stall-reset: a chunk not starting the stall's clock again -- 1 fail: MapTransferTests.AStreamThatStallsForTenSeconds_IsRefused_AndAChunkStartsTheClockAgain
+PASS receive-stall-never: a stream that stalls never refused -- 2 fail: MapTransferTests.AFetchCutOffAtAnyChunk_NeverCompletes_AndIsRefusedWhenItStalls, MapTransferTests.AStreamThatStallsForTenSeconds_IsRefused_AndAChunkStartsTheClockAgain
+FAIL receive-nan: time that is not a number counted -- and every test still passed
+PASS receive-unhashed: a whole stream taken whatever it hashes to -- 1 fail: MapTransferTests.AStreamWhoseBytesDoNotHashToWhatWasNamed_IsRefused_ByteByByte
+PASS receive-unread: bytes that are not a map taken -- 1 fail: MapTransferTests.BytesThatHashRightButAreNotAMap_AreRefused
+PASS receive-unvalidated: a map this build cannot play taken -- 1 fail: MapTransferTests.AMapThisBuildCannotPlay_IsRefused_WithTheValidatorsReason
+PASS receive-refusal-final: chunks taken after a refusal -- 1 fail: MapTransferTests.ARefusal_IsFinal_AndAFetchThatIsDone_TakesNothingMore
+PASS receive-refusal-keeps: a refused stream's bytes kept -- 10 fail: MapTransferTests.AChunkOfTheWrongSize_IsRefused_ShortOrLong_InTheMiddleOrAtTheEnd, MapTransferTests.AChunkOutOfTurn_IsRefused_WhetherAheadOrRepeated, MapTransferTests.AChunkPastTheLength_IsRefused, MapTransferTests.AFetchCutOffAtAnyChunk_NeverCompletes_AndIsRefusedWhenItStalls, and 6 more
+PASS host-own-map: a map of one's own replaced by the catalog's default -- 1 fail: HostSettingsTests.AMapFromTheHostsLibrary_IsHeldAsItsFileAndHash_WithNoCatalogId
+PASS host-invalid: a map that is not one held -- 1 fail: HostSettingsTests.AMapFromTheHostsLibrary_IsHeldAsItsFileAndHash_WithNoCatalogId
+PASS host-describe: the settings' line saying nothing of a map that is not the catalog's -- 1 fail: HostSettingsTests.AMapFromTheHostsLibrary_IsHeldAsItsFileAndHash_WithNoCatalogId
+PASS demo-version: the format left at version 5 -- 1 fail: DemoCodecTests.TheVersionIsSix_SinceADataMapIsNamedByItsHash_AndAnOlderDemoIsRefusedWithItsReason
+PASS demo-name-scene: a data map named by its scene, MapHost.tscn -- 1 fail: DemoCodecTests.ADataMap_IsNamedByItsHash_AndASceneMapByItsScene
+PASS demo-parse-hash: anything after map: taken for a hash -- 1 fail: DemoCodecTests.ADataMap_IsNamedByItsHash_AndASceneMapByItsScene
+PASS demo-parse-prefix: the prefix matched in any case -- 1 fail: DemoCodecTests.ADataMap_IsNamedByItsHash_AndASceneMapByItsScene
+
+40 of 41 broken rules were caught by a test

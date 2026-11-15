@@ -1,0 +1,111 @@
+# LE7, docs/LEVEL_EDITOR.md §11. At 3182617: .NET SDK 8.0.134, four cores of a cloud VM.
+# dotnet test Tests/Gdpyr.Tests.csproj --filter <MapTransferTests, HostSettingsTests, DemoCodecTests> --logger "console;verbosity=normal": its line for each test, sorted, and its total.
+# Then dotnet test Tests/Gdpyr.Tests.csproj: its total. Then dotnet build Gdpyr.csproj: its last lines.
+
+  Passed Gdpyr.Tests.DemoCodecTests.ADataMap_IsNamedByItsHash_AndASceneMapByItsScene
+  Passed Gdpyr.Tests.DemoCodecTests.AFileThatWasNeverClosedReadsToItsEndWithNoError
+  Passed Gdpyr.Tests.DemoCodecTests.AJournalledTickIsTwelveBytesPerPlayerPlusATag
+  Passed Gdpyr.Tests.DemoCodecTests.AName_BecomesAFileName(typed: "  game  ", expected: "game.dem")
+  Passed Gdpyr.Tests.DemoCodecTests.AName_BecomesAFileName(typed: "game", expected: "game.dem")
+  Passed Gdpyr.Tests.DemoCodecTests.AName_BecomesAFileName(typed: "game.dem", expected: "game.dem")
+  Passed Gdpyr.Tests.DemoCodecTests.AName_BecomesAFileName(typed: "game.demo", expected: "game.demo")
+  Passed Gdpyr.Tests.DemoCodecTests.AName_BecomesAFileName(typed: "last night", expected: "last night.dem")
+  Passed Gdpyr.Tests.DemoCodecTests.AName_HasACeiling
+  Passed Gdpyr.Tests.DemoCodecTests.AName_ThatIsNotAFileNameIsRefused(typed: "   ")
+  Passed Gdpyr.Tests.DemoCodecTests.AName_ThatIsNotAFileNameIsRefused(typed: "")
+  Passed Gdpyr.Tests.DemoCodecTests.AName_ThatIsNotAFileNameIsRefused(typed: "..")
+  Passed Gdpyr.Tests.DemoCodecTests.AName_ThatIsNotAFileNameIsRefused(typed: "../../etc/passwd")
+  Passed Gdpyr.Tests.DemoCodecTests.AName_ThatIsNotAFileNameIsRefused(typed: ".hidden")
+  Passed Gdpyr.Tests.DemoCodecTests.AName_ThatIsNotAFileNameIsRefused(typed: "C:game")
+  Passed Gdpyr.Tests.DemoCodecTests.AName_ThatIsNotAFileNameIsRefused(typed: "demos/game")
+  Passed Gdpyr.Tests.DemoCodecTests.AName_ThatIsNotAFileNameIsRefused(typed: "demos\\game")
+  Passed Gdpyr.Tests.DemoCodecTests.AName_ThatIsNotAFileNameIsRefused(typed: "pipe|it")
+  Passed Gdpyr.Tests.DemoCodecTests.AName_ThatIsNotAFileNameIsRefused(typed: "quote\"it")
+  Passed Gdpyr.Tests.DemoCodecTests.AName_ThatIsNotAFileNameIsRefused(typed: "star*")
+  Passed Gdpyr.Tests.DemoCodecTests.AName_ThatIsNotAFileNameIsRefused(typed: "what?")
+  Passed Gdpyr.Tests.DemoCodecTests.AName_ThatIsNotAFileNameIsRefused(typed: null)
+  Passed Gdpyr.Tests.DemoCodecTests.AName_WithAControlCharacterIsRefused
+  Passed Gdpyr.Tests.DemoCodecTests.APayloadBiggerThanTheCeilingIsRefusedRatherThanTruncated
+  Passed Gdpyr.Tests.DemoCodecTests.ARecordStampedWithAnEarlierTickJoinsTheBlockBeingWritten
+  Passed Gdpyr.Tests.DemoCodecTests.ATruncatedFileEndsWhereItWasCutAndSaysSo
+  Passed Gdpyr.Tests.DemoCodecTests.AnUnknownRecordTagEndsTheStreamRatherThanBeingSkipped
+  Passed Gdpyr.Tests.DemoCodecTests.BlocksThatGoBackwardsInTheFileAreRefusedOnRead
+  Passed Gdpyr.Tests.DemoCodecTests.Header_RefusesATruncatedOne
+  Passed Gdpyr.Tests.DemoCodecTests.Header_RefusesAVersionOrATickRateThisBuildCannotPlay
+  Passed Gdpyr.Tests.DemoCodecTests.Header_RefusesAnythingThatIsNotADemo
+  Passed Gdpyr.Tests.DemoCodecTests.Header_RoundTripsEveryField
+  Passed Gdpyr.Tests.DemoCodecTests.Header_TruncatesAnAbsurdlyLongNameOnACharacterBoundary
+  Passed Gdpyr.Tests.DemoCodecTests.RoundTrip_PreservesEveryRecordAndItsTick
+  Passed Gdpyr.Tests.DemoCodecTests.Summary_CountsWhatIsInTheFile
+  Passed Gdpyr.Tests.DemoCodecTests.Summary_OfAnEmptyRecordingIsNotAnError
+  Passed Gdpyr.Tests.DemoCodecTests.TheLargestSnapshotEitherCodecProducesFitsARecord
+  Passed Gdpyr.Tests.DemoCodecTests.TheVersionIsSix_SinceADataMapIsNamedByItsHash_AndAnOlderDemoIsRefusedWithItsReason(older: 1)
+  Passed Gdpyr.Tests.DemoCodecTests.TheVersionIsSix_SinceADataMapIsNamedByItsHash_AndAnOlderDemoIsRefusedWithItsReason(older: 2)
+  Passed Gdpyr.Tests.DemoCodecTests.TheVersionIsSix_SinceADataMapIsNamedByItsHash_AndAnOlderDemoIsRefusedWithItsReason(older: 3)
+  Passed Gdpyr.Tests.DemoCodecTests.TheVersionIsSix_SinceADataMapIsNamedByItsHash_AndAnOlderDemoIsRefusedWithItsReason(older: 4)
+  Passed Gdpyr.Tests.DemoCodecTests.TheVersionIsSix_SinceADataMapIsNamedByItsHash_AndAnOlderDemoIsRefusedWithItsReason(older: 5)
+  Passed Gdpyr.Tests.DemoCodecTests.TickMarkers_AreWrittenOncePerTickAndNotAtAllForAnIdleOne
+  Passed Gdpyr.Tests.DemoCodecTests.TryOpen_RefusesAnEmptyFile
+  Passed Gdpyr.Tests.DemoCodecTests.TryOpen_RefusesSomethingThatIsNotADemo
+  Passed Gdpyr.Tests.DemoCodecTests.TryReadTick_HandsBackOneBlockAtATime
+  Passed Gdpyr.Tests.DemoCodecTests.WritingToABrokenStreamStopsTheRecordingAndNotTheRound
+  Passed Gdpyr.Tests.HostSettingsTests.ACatalogMapByItsId_IsTheCatalogsEntry_DataOrScene
+  Passed Gdpyr.Tests.HostSettingsTests.AMapFromTheHostsLibrary_IsHeldAsItsFileAndHash_WithNoCatalogId
+  Passed Gdpyr.Tests.HostSettingsTests.AMapTheCatalogDoesNotHaveIsTheDefault
+  Passed Gdpyr.Tests.HostSettingsTests.NoBotsOnTheCommandLineStillOffersASideOfOne
+  Passed Gdpyr.Tests.HostSettingsTests.TeamSizesArePulledIntoRange(ground: 0, strategists: 0, expectedGround: 1, expectedStrategists: 1)
+  Passed Gdpyr.Tests.HostSettingsTests.TeamSizesArePulledIntoRange(ground: 99, strategists: 99, expectedGround: 14, expectedStrategists: 2)
+  Passed Gdpyr.Tests.HostSettingsTests.TheDefaultsAreTheGameModesNumbersOnTheDefaultMap
+  Passed Gdpyr.Tests.HostSettingsTests.TheLargestSidesFitInOneSnapshot
+  Passed Gdpyr.Tests.HostSettingsTests.TheRoundLengthIsPulledIntoRange(asked: -5, expected: 1)
+  Passed Gdpyr.Tests.HostSettingsTests.TheRoundLengthIsPulledIntoRange(asked: 0, expected: 1)
+  Passed Gdpyr.Tests.HostSettingsTests.TheRoundLengthIsPulledIntoRange(asked: 61, expected: 60)
+  Passed Gdpyr.Tests.HostSettingsTests.TheStrategistSizeCapsTheChairsAndFillsThem
+  Passed Gdpyr.Tests.HostSettingsTests.TheTicketPoolIsPulledIntoRange(asked: 0, expected: 1)
+  Passed Gdpyr.Tests.HostSettingsTests.TheTicketPoolIsPulledIntoRange(asked: 1000, expected: 999)
+  Passed Gdpyr.Tests.HostSettingsTests.WhatTheHostPicksIsWhatTheRoundGets
+  Passed Gdpyr.Tests.MapTransferTests.AChunkOfTheWrongSize_IsRefused_ShortOrLong_InTheMiddleOrAtTheEnd
+  Passed Gdpyr.Tests.MapTransferTests.AChunkOutOfTurn_IsRefused_WhetherAheadOrRepeated
+  Passed Gdpyr.Tests.MapTransferTests.AChunkPastTheLength_IsRefused
+  Passed Gdpyr.Tests.MapTransferTests.AChunk_Is1024BytesBehindItsIndex_AndItsMessageIsOneDatagram
+  Passed Gdpyr.Tests.MapTransferTests.AFetchCutOffAtAnyChunk_NeverCompletes_AndIsRefusedWhenItStalls
+  Passed Gdpyr.Tests.MapTransferTests.AFile_IsCutIntoWholeChunksAndARemainder(length: 1, chunks: 1, last: 1)
+  Passed Gdpyr.Tests.MapTransferTests.AFile_IsCutIntoWholeChunksAndARemainder(length: 1024, chunks: 1, last: 1024)
+  Passed Gdpyr.Tests.MapTransferTests.AFile_IsCutIntoWholeChunksAndARemainder(length: 1025, chunks: 2, last: 1)
+  Passed Gdpyr.Tests.MapTransferTests.AFile_IsCutIntoWholeChunksAndARemainder(length: 2048, chunks: 2, last: 1024)
+  Passed Gdpyr.Tests.MapTransferTests.AFile_IsCutIntoWholeChunksAndARemainder(length: 27299, chunks: 27, last: 675)
+  Passed Gdpyr.Tests.MapTransferTests.AGeneratedMap_SentChunkByChunk_ArrivesAsTheSameBytesAndTheSameMap(seed: 1)
+  Passed Gdpyr.Tests.MapTransferTests.AGeneratedMap_SentChunkByChunk_ArrivesAsTheSameBytesAndTheSameMap(seed: 2)
+  Passed Gdpyr.Tests.MapTransferTests.AGeneratedMap_SentChunkByChunk_ArrivesAsTheSameBytesAndTheSameMap(seed: 3)
+  Passed Gdpyr.Tests.MapTransferTests.AHash_IsSixtyFourLowerCaseHexDigits
+  Passed Gdpyr.Tests.MapTransferTests.AMapThisBuildCannotPlay_IsRefused_WithTheValidatorsReason
+  Passed Gdpyr.Tests.MapTransferTests.AMessageThatIsNotAChunk_IsRefused(length: 0)
+  Passed Gdpyr.Tests.MapTransferTests.AMessageThatIsNotAChunk_IsRefused(length: 1029)
+  Passed Gdpyr.Tests.MapTransferTests.AMessageThatIsNotAChunk_IsRefused(length: 3)
+  Passed Gdpyr.Tests.MapTransferTests.AMessageThatIsNotAChunk_IsRefused(length: 4)
+  Passed Gdpyr.Tests.MapTransferTests.APacket_IsItsIndexLittleEndian_ThenThoseBytesOfTheFile
+  Passed Gdpyr.Tests.MapTransferTests.ARefusal_IsFinal_AndAFetchThatIsDone_TakesNothingMore
+  Passed Gdpyr.Tests.MapTransferTests.AStreamThatStallsForTenSeconds_IsRefused_AndAChunkStartsTheClockAgain
+  Passed Gdpyr.Tests.MapTransferTests.AStreamWhoseBytesDoNotHashToWhatWasNamed_IsRefused_ByteByByte
+  Passed Gdpyr.Tests.MapTransferTests.BytesThatHashRightButAreNotAMap_AreRefused
+  Passed Gdpyr.Tests.MapTransferTests.TheRates_AreLE_D17s_AndSection10sTimes
+  Passed Gdpyr.Tests.MapTransferTests.TheReceiver_NeverThrows_OnNoise
+  Passed Gdpyr.Tests.MapTransferTests.TheReceiver_RefusesALengthNoMapCanBe(length: -1, because: "bytes long")
+  Passed Gdpyr.Tests.MapTransferTests.TheReceiver_RefusesALengthNoMapCanBe(length: 0, because: "bytes long")
+  Passed Gdpyr.Tests.MapTransferTests.TheReceiver_RefusesALengthNoMapCanBe(length: 1048577, because: "over the")
+  Passed Gdpyr.Tests.MapTransferTests.TheReceiver_RefusesANameThatIsNotAHash(hash: "")
+  Passed Gdpyr.Tests.MapTransferTests.TheReceiver_RefusesANameThatIsNotAHash(hash: "6D0AA3FF6EBE3487E53D4F4488318B2EBE47ADA2E27FB3AE56"···)
+  Passed Gdpyr.Tests.MapTransferTests.TheReceiver_RefusesANameThatIsNotAHash(hash: "hills")
+  Passed Gdpyr.Tests.MapTransferTests.TheReceiver_RefusesANameThatIsNotAHash(hash: null)
+  Passed Gdpyr.Tests.MapTransferTests.TheSender_RefusesAnEmptyFile
+  Passed Gdpyr.Tests.MapTransferTests.TheSender_SendsAChunkATickToAPeer_AndAtMostFourATick_ThePeersInTurn
+  Passed Gdpyr.Tests.MapTransferTests.TheSender_SendsOnlyTheMapItIsPlaying_OnlyToAPeerThatAsked_OnceAConnection
+  Passed Gdpyr.Tests.MapTransferTests.TheSender_SendsTheBytesItLoaded_NotWhatTheirArrayHoldsLater
+  Passed Gdpyr.Tests.MapTransferTests.TheStatusLine_IsSection9_3s
+Passed!  - Failed:     0, Passed:   100, Skipped:     0, Total:   100, Duration: 521 ms - Gdpyr.Tests.dll (net8.0)
+Passed!  - Failed:     0, Passed:  3825, Skipped:     0, Total:  3825, Duration: 15 s - Gdpyr.Tests.dll (net8.0)
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:08.18

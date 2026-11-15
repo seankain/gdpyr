@@ -73,8 +73,10 @@ dedicated-server authoritative.
   its file (LE3: `--map`, `Scenes/Maps/MapHost.tscn`, `Scripts/Level/`, one bundled map), the
   editor's shell and terrain tool (LE4: **Map editor** on the menu, `--edit`, `Scenes/MapEditor/`),
   its prefab tool (LE5: a round's pieces, cover, structures that stand when a round starts, the
-  deep check), and its road and bridge tools (LE6: roads graded to a limit, bridge sections joined end
-  to end on piers), with the fetch not built yet: a level editor in the game —
+  deep check), its road and bridge tools (LE6: roads graded to a limit, bridge sections joined end
+  to end on piers), and a client fetching the map it lacks from its server (LE7: the host panel's own
+  maps, `user://maps/cache/`, demos that name their map), with the dedicated server's side not built
+  yet: a level editor in the game —
   terrain raised and lowered with brushes that set its grade and textured by height and slope,
   prefabs placed on ground levelled for them, roads and bridges — and maps as data files that are
   saved, cloned and exported, given to a dedicated server, and fetched by clients from the server
@@ -159,7 +161,12 @@ hosts or runs a round on its own. **Host…** opens a panel for the round it hos
 round's length, the ground force's starting tickets, and how many players each side is filled to —
 bots take the seats nobody is in, and the strategist size is also the most strategists at once
 ([`docs/LAN.md`](docs/LAN.md) §3.4). A client loads whichever map its host picked. Adding a map
-to the picker is [`docs/MAPS.md`](docs/MAPS.md). A launch that
+to the picker is [`docs/MAPS.md`](docs/MAPS.md); one's own maps from the editor that pass the
+validator are listed after the catalog's. A client without the host's map fetches it from the host
+as it joins — `fetching 'ridge' 47 / 114` — hashes, reads and validates it, and keeps it in
+`user://maps/cache/<sha-256>.map` for next time; a map it cannot play, or a fetch that stalls or
+does not hash to what the host named, is refused and the link dropped, saying why
+([`docs/LEVEL_EDITOR.md`](docs/LEVEL_EDITOR.md) §9.3). A launch that
 named a mode on the command line goes straight past it into the map, before a widget is built — so
 the headless server, the playtest harness and the training runs are on the path they always were.
 
@@ -221,7 +228,7 @@ Three more choose the map and play it on your own, or make one ([`docs/LEVEL_EDI
 
 | Flag | Effect |
 |---|---|
-| `--map <map>` | with `--server`, `--listen` or `--practice`: a catalog id (`greybox`, `hills`), a map's name in `user://maps`, 8 or more hex digits of a map file's SHA-256, or a path ending `.map`. A map file that does not read or does not pass the validator is a launch error |
+| `--map <map>` | with `--server`, `--listen` or `--practice`: a catalog id (`greybox`, `hills`), a map's name in `user://maps`, 8 or more hex digits of a map file's SHA-256 (one's own, bundled or received), or a path ending `.map`. A map file that does not read or does not pass the validator is a launch error. A client that has not got the map fetches it from the server |
 | `--practice` | the main menu's "Practice offline", with no menu |
 | `--edit [name]` | the main menu's **Map editor**, with no menu: one's own map `user://maps/<name>.map`, or a new one by that name; with no name, the editor's list of maps to open and to clone. Leaving it comes back to the menu |
 
@@ -250,7 +257,7 @@ Two more record a round or watch one back ([`docs/DEMOS.md`](docs/DEMOS.md)):
 | Flag | Effect |
 |---|---|
 | `--record <name>` | write a demo from the round's first tick; how a headless server records |
-| `--playdemo <name>` | watch a demo instead of playing; no mode flag may go beside it |
+| `--playdemo <name>` | watch a demo instead of playing, on the map it was recorded on (a data map is found by its hash in the build, one's own maps or the cache); no mode flag may go beside it |
 
 Four more open the agent control channel, which lets a process that is not a Godot client take a
 bot's seat ([`docs/AGENT_API.md`](docs/AGENT_API.md)):

@@ -57,12 +57,37 @@ public partial class NetworkManager : Node
 	/// Client only: the id of the map the server is playing (<see cref="MapCatalog"/>),
 	/// or null until it has said. The server says it first thing on every connection,
 	/// before the roster, and the menu loads that map rather than its own default
-	/// (docs/LAN.md §3.4).
+	/// (docs/LAN.md §3.4). Empty for a data map that is not the catalog's, which is named by
+	/// <see cref="ServerMapHash"/> (docs/LEVEL_EDITOR.md §9.3).
 	/// </summary>
 	public string ServerMapId { get; private set; }
 
-	/// <summary>Bytes counted for the map message, for the bandwidth HUD: an id is a few characters.</summary>
-	private const int MapMessageBytes = 16;
+	/// <summary>
+	/// Client only: a data map's SHA-256, lower-case hex, as the server named it; empty for a scene
+	/// map, null until the server has said (docs/LEVEL_EDITOR.md §9.3).
+	/// </summary>
+	public string ServerMapHash { get; private set; }
+
+	/// <summary>Client only: a data map's file's length in bytes, as the server named it; 0 for a scene map.</summary>
+	public int ServerMapLength { get; private set; }
+
+	/// <summary>Client only: what the server calls its map, for the menu's status line.</summary>
+	public string ServerMapName { get; private set; }
+
+	/// <summary>
+	/// Client only: the random bytes the server sent with its map on this connection, which an
+	/// upload's proof is made over (docs/LEVEL_EDITOR.md §6.10, LE8).
+	/// </summary>
+	public byte[] ServerMapNonce { get; private set; }
+
+	/// <summary>Server only: the nonce each connection was sent with the map.</summary>
+	private readonly System.Collections.Generic.Dictionary<int, byte[]> _mapNonces = new();
+
+	/// <summary>Server only: the nonce a peer's connection was sent with the map, or null.</summary>
+	public byte[] MapNonceOf(int peerId) => _mapNonces.TryGetValue(peerId, out byte[] nonce) ? nonce : null;
+
+	/// <summary>The fetch of a map a client lacks, and the server's half of it (docs/LEVEL_EDITOR.md §6.10).</summary>
+	public MapTransferService MapTransfer { get; private set; }
 
 	/// <summary>
 	/// True once a transport has been chosen, whether by the command line or in the
@@ -125,6 +150,10 @@ public partial class NetworkManager : Node
 		{
 			_probeIds[i] = uint.MaxValue;
 		}
+
+		// Before any peer: its path, /root/NetworkManager/MapTransfer, is the same on every one.
+		MapTransfer = new MapTransferService { Name = "MapTransfer" };
+		AddChild(MapTransfer);
 
 		LaunchOptions options = Bootstrap.Options;
 
@@ -251,6 +280,11 @@ public partial class NetworkManager : Node
 		Connected = false;
 		ConnectionFailed = false;
 		ServerMapId = null;
+		ServerMapHash = null;
+		ServerMapLength = 0;
+		ServerMapName = null;
+		ServerMapNonce = null;
+		MapTransfer?.ForgetFetch();
 	}
 
 	/// <summary>A round on your own, against the bots: no peer, no packets (docs/NETCODE.md §9).</summary>
@@ -448,19 +482,53 @@ public partial class NetworkManager : Node
 	/// Reliable, and sent before <see cref="PeerJoined"/> is raised, so it is the
 	/// first thing on the channel — ahead of the roster, which is about characters
 	/// standing on it.
+	///
+	/// A scene map is its catalog id, with no hash and no length (docs/LAN.md §3.4). A data map
+	/// is its hash and its file's length as well, which is what a client that lacks it fetches it
+	/// by, and its id only when it is the catalog's; the name is what the menu shows while it
+	/// arrives. The nonce is this connection's, 16 random bytes an upload's proof is made over
+	/// (docs/LEVEL_EDITOR.md §9.3, §6.10).
 	/// </summary>
 	[Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
 		TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-	private void ServerMap(string mapId)
+	private void ServerMap(string mapId, string hash, int length, string name, byte[] nonce)
 	{
 		if (!IsClient)
 		{
 			return;
 		}
 
-		Stats.RecordReceived(MapMessageBytes);
+		Stats.RecordReceived(MapMessageBytes(mapId, hash, name));
 		ServerMapId = mapId ?? string.Empty;
-		GD.Print($"[net] the server is playing map '{ServerMapId}'");
+		ServerMapHash = hash ?? string.Empty;
+		ServerMapLength = length;
+		ServerMapName = name ?? string.Empty;
+		ServerMapNonce = nonce;
+		GD.Print(ServerMapHash.Length == 0
+			? $"[net] the server is playing map '{ServerMapId}'"
+			: $"[net] the server is playing map '{ServerMapName}'"
+				+ (ServerMapId.Length > 0 ? $" ('{ServerMapId}')" : string.Empty)
+				+ $", {ServerMapLength:N0} B, sha-256 {ServerMapHash}");
+	}
+
+	/// <summary>Bytes counted for the map message, for the bandwidth HUD: its strings, the length, the nonce, a header.</summary>
+	private static int MapMessageBytes(string mapId, string hash, string name) =>
+		8 + (mapId?.Length ?? 0) + (hash?.Length ?? 0) + 4 + System.Text.Encoding.UTF8.GetByteCount(name ?? string.Empty)
+		+ Gdpyr.Sim.Level.MapTransfer.NonceBytes;
+
+	/// <summary>Tells a peer that has just connected which map this is, with its connection's nonce.</summary>
+	private void SendServerMap(int peerId)
+	{
+		var nonce = new byte[Gdpyr.Sim.Level.MapTransfer.NonceBytes];
+		System.Security.Cryptography.RandomNumberGenerator.Fill(nonce);
+		_mapNonces[peerId] = nonce;
+
+		MapInfo map = Session.Map;
+		string hash = map.IsData ? map.Hash ?? string.Empty : string.Empty;
+		int length = map.IsData ? Session.Bytes?.Length ?? 0 : 0;
+		string name = map.IsData && Session.Document != null ? Session.Document.Name : map.Name;
+		RpcId(peerId, MethodName.ServerMap, map.Id ?? string.Empty, hash, length, name ?? string.Empty, nonce);
+		Stats.RecordSent(MapMessageBytes(map.Id, hash, name));
 	}
 
 	// ---- peer lifecycle ----------------------------------------------------
@@ -469,8 +537,7 @@ public partial class NetworkManager : Node
 	{
 		GD.Print($"[net] peer {id} connected ({Multiplayer.GetPeers().Length} total)");
 
-		RpcId(id, MethodName.ServerMap, Session.Map.Id);
-		Stats.RecordSent(MapMessageBytes);
+		SendServerMap((int)id);
 
 		PeerJoined?.Invoke((int)id);
 	}
@@ -478,6 +545,8 @@ public partial class NetworkManager : Node
 	private void OnPeerDisconnected(long id)
 	{
 		_peerLagTicks.Remove((int)id);
+		_mapNonces.Remove((int)id);
+		MapTransfer?.ForgetPeer((int)id);
 		GD.Print($"[net] peer {id} disconnected ({Multiplayer.GetPeers().Length} remaining)");
 		PeerLeft?.Invoke((int)id);
 	}

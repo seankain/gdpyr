@@ -59,6 +59,21 @@
 #
 #   ./scripts/level-editor-checks.sh editor-roads
 #
+# LE7, fetching a map, by tools/EngineChecks/LevelFetchChecks.cs (LE7_CHECK): a --server on a map
+# no client has (gdpyr-map generate --seed FETCH_SEED, 7 unless given), and clients behind
+# tools/EngineChecks/delay_relay.py, each under a HOME of its own. Behind NET_DELAY_MS ±
+# NET_JITTER_MS each way: a client fetches the map and records a demo on it; the same client joins
+# again from its cache and asks for nothing; one with another map's bytes under the hash's name
+# fetches again; one whose server stops sending at half the chunks refuses the stream after 10 s
+# and drops the link; one sent the map with a byte changed refuses it. Behind a second relay with
+# no jitter that drops FETCH_LOSS (0.1) of datagrams each way, FETCH_DROPS (4) clients fetch while
+# the server sends each, every tick, a reliable message on the default channel and one on the
+# map's: a chunk sent again holds back the second and not the first. The first of them is traced
+# (LE7_TRACE): a line for each of those messages as it arrives. Then the demo plays back on
+# the map it names, from the cache, and in a home without the map it is refused, naming the hash.
+#
+#   ./scripts/level-editor-checks.sh map-fetch
+#
 # Each part runs on the plan's collider and, where the two could differ, on the heightmap
 # beside it. `frame` and the bake's times in `ground` are wall time: run them on a machine
 # doing nothing else. `net` runs in real time behind tools/EngineChecks/delay_relay.py
@@ -88,6 +103,10 @@ LE6_BRIDGE="${LE6_BRIDGE:-le6-bridge}"
 LE6_GONE="${LE6_GONE:-le6-nobridge}"
 LE3_SECONDS="${LE3_SECONDS:-600}"
 FRAME_SECONDS="${FRAME_SECONDS:-300}"
+FETCH_SEED="${FETCH_SEED:-7}"
+FETCH_LOSS="${FETCH_LOSS:-0.1}"
+FETCH_DROPS="${FETCH_DROPS:-4}"
+DROP_RELAY_PORT="${DROP_RELAY_PORT:-7798}"
 if [ $# -eq 0 ]; then
 	MODES=(ground slopes)
 else
@@ -112,8 +131,9 @@ fi
 mkdir -p "$COPY/EngineChecks"
 cp "$PROJECT_DIR/tools/EngineChecks/LevelChecks.cs" "$PROJECT_DIR/tools/EngineChecks/LevelTerrain.cs" \
 	"$PROJECT_DIR/tools/EngineChecks/LevelMapChecks.cs" "$PROJECT_DIR/tools/EngineChecks/LevelEditorChecks.cs" \
-	"$PROJECT_DIR/tools/EngineChecks/LevelEditorChecks.Roads.cs" "$COPY/EngineChecks/"
-sed -i 's#^GameConsole="\*res://Scripts/Ui/GameConsole.cs"#&\nLevelChecks="*res://EngineChecks/LevelChecks.cs"\nLevelMapChecks="*res://EngineChecks/LevelMapChecks.cs"\nLevelEditorChecks="*res://EngineChecks/LevelEditorChecks.cs"#' \
+	"$PROJECT_DIR/tools/EngineChecks/LevelEditorChecks.Roads.cs" "$PROJECT_DIR/tools/EngineChecks/LevelFetchChecks.cs" \
+	"$COPY/EngineChecks/"
+sed -i 's#^GameConsole="\*res://Scripts/Ui/GameConsole.cs"#&\nLevelChecks="*res://EngineChecks/LevelChecks.cs"\nLevelMapChecks="*res://EngineChecks/LevelMapChecks.cs"\nLevelEditorChecks="*res://EngineChecks/LevelEditorChecks.cs"\nLevelFetchChecks="*res://EngineChecks/LevelFetchChecks.cs"#' \
 	"$COPY/project.godot"
 
 # §10's hills as a map file's samples would be, and the greybox with and without its slab.
@@ -579,6 +599,138 @@ for mode in "${MODES[@]}"; do
 		report "$COPY/map-basin.log"
 		echo "map-basin, $MAP: exit $status"
 		[ "$status" -ne 0 ] && failed=1
+		;;
+
+	map-fetch)
+		ground slab
+		dir="$COPY/map-fetch"
+		rm -rf "$dir"
+		mkdir -p "$dir"
+		userdir() { echo "$1/.local/share/godot/app_userdata/gdpyr"; }
+		if ! (cd "$PROJECT_DIR" && dotnet run --project tools/Gdpyr.MapTool -c Release -- generate "$dir/ridge.map" \
+			--seed "$FETCH_SEED" --name Ridge) > "$COPY/map-fetch-maptool.log" 2>&1; then
+			cat "$COPY/map-fetch-maptool.log" >&2
+			echo "map-fetch: the map was not generated"
+			failed=1
+			continue
+		fi
+		sed 's/^/[map] /' "$COPY/map-fetch-maptool.log"
+		hash=$(sha256sum "$dir/ridge.map" | cut -d' ' -f1)
+		echo none > "$dir/fault"
+
+		env -u XDG_DATA_HOME HOME="$dir/home-server" LE7_CHECK=server LE7_DIR="$dir" LE7_HASH="$hash" timeout 1800 \
+			"$GODOT" --headless --path "$COPY" -- --server "$GAME_PORT" --map "$dir/ridge.map" --no-advertise --no-bots \
+			> "$COPY/map-fetch-server.log" 2>&1 &
+		server=$!
+		python3 "$PROJECT_DIR/tools/EngineChecks/delay_relay.py" --listen "$NET_RELAY_PORT" \
+			--server "127.0.0.1:$GAME_PORT" --delay-ms "$NET_DELAY_MS" --jitter-ms "$NET_JITTER_MS" \
+			> "$COPY/map-fetch-relay.log" 2>&1 &
+		relay=$!
+		python3 "$PROJECT_DIR/tools/EngineChecks/delay_relay.py" --listen "$DROP_RELAY_PORT" \
+			--server "127.0.0.1:$GAME_PORT" --delay-ms "$NET_DELAY_MS" --jitter-ms 0 --loss "$FETCH_LOSS" --seed 7 \
+			> "$COPY/map-fetch-relay-drops.log" 2>&1 &
+		relay_drops=$!
+		sleep 8
+
+		# One client: its phase for the server, its part, the relay, its home, the exit it should
+		# end with, and its own arguments after those.
+		fetch_client() {
+			local name="$1" role="$2" port="$3" home="$4" expect="$5" status
+			shift 5
+			echo "$name" > "$dir/phase"
+			mkdir -p "$home"
+			env -u XDG_DATA_HOME HOME="$home" LE7_CHECK="$role" LE7_DIR="$dir" LE7_HASH="$hash" LE7_EXPECT="${expect_text:-}" LE7_TRACE="${trace:-0}" \
+				timeout 300 "$GODOT" --headless --path "$COPY" --max-fps 60 -- --client "127.0.0.1:$port" "$@" \
+				> "$COPY/map-fetch-$name.log" 2>&1
+			status=$?
+			report "$COPY/map-fetch-$name.log"
+			grep -E '\[maps\]|^gdpyr:' "$COPY/map-fetch-$name.log" | sed 's/^WARNING: //'
+			if [ "$status" -eq "$expect" ]; then
+				echo "[checks] PASS map-fetch, $name: the client exited $status"
+			else
+				echo "[checks] FAIL map-fetch, $name: the client exited $status, not $expect"
+				failed=1
+			fi
+			grep -q '^\[checks\] FAIL' "$COPY/map-fetch-$name.log" && failed=1
+			return 0
+		}
+
+		# What is left in a home's cache, as a fact.
+		cache_holds() {
+			local home="$1" name="$2" want="$3" have
+			have=$(ls "$(userdir "$home")/maps/cache" 2>/dev/null | tr '\n' ' ')
+			if [ "$have" = "$want" ]; then
+				echo "[checks] PASS map-fetch, $name: the cache holds '${have% }'"
+			else
+				echo "[checks] FAIL map-fetch, $name: the cache holds '${have% }', not '${want% }'"
+				failed=1
+			fi
+		}
+
+		expect_text=""
+		fetch_client fetch fetch "$NET_RELAY_PORT" "$dir/home-1" 0 --record le7-fetch
+		cache_holds "$dir/home-1" fetch "$hash.map "
+		fetch_client cached cached "$NET_RELAY_PORT" "$dir/home-1" 0
+
+		mkdir -p "$(userdir "$dir/home-2")/maps/cache"
+		cp "$COPY/Maps/hills.map" "$(userdir "$dir/home-2")/maps/cache/$hash.map"
+		fetch_client wrong wrong "$NET_RELAY_PORT" "$dir/home-2" 0
+		cache_holds "$dir/home-2" wrong "$hash.map "
+
+		echo cut > "$dir/fault"
+		expect_text="the map stopped arriving"
+		fetch_client cut refused "$NET_RELAY_PORT" "$dir/home-3" 1
+		cache_holds "$dir/home-3" cut ""
+
+		echo mismatch > "$dir/fault"
+		expect_text="the host named"
+		fetch_client mismatch refused "$NET_RELAY_PORT" "$dir/home-4" 1
+		cache_holds "$dir/home-4" mismatch ""
+
+		echo none > "$dir/fault"
+		expect_text=""
+		for n in $(seq 1 "$FETCH_DROPS"); do
+			# The first is traced: a line for each probe as it arrives.
+			trace=$([ "$n" -eq 1 ] && echo 1 || echo 0)
+			fetch_client drops drops "$DROP_RELAY_PORT" "$dir/home-drops-$n" 0
+			mv "$COPY/map-fetch-drops.log" "$COPY/map-fetch-drops-$n.log"
+		done
+		trace=0
+
+		touch "$dir/stop"
+		wait "$server"
+		status=$?
+		kill "$relay" "$relay_drops" 2>/dev/null
+		wait "$relay" "$relay_drops" 2>/dev/null
+		report "$COPY/map-fetch-server.log"
+		grep -E '\[maps\]' "$COPY/map-fetch-server.log" | sed 's/^WARNING: //'
+		echo "[relay] jitter: $(tail -n 1 "$COPY/map-fetch-relay.log")"
+		echo "[relay] drops: $(tail -n 1 "$COPY/map-fetch-relay-drops.log")"
+		echo "map-fetch, the server: exit $status"
+		[ "$status" -ne 0 ] && failed=1
+
+		# The demo the first client recorded, played back: in its home, where the cache has the map;
+		# then in a home that has the demo and not the map.
+		env -u XDG_DATA_HOME HOME="$dir/home-1" LE7_CHECK=playback LE7_DIR="$dir" LE7_HASH="$hash" timeout 300 \
+			"$GODOT" --headless --path "$COPY" --max-fps 60 -- --playdemo le7-fetch > "$COPY/map-fetch-playback.log" 2>&1
+		status=$?
+		report "$COPY/map-fetch-playback.log"
+		grep -E '^\[demo\]|^\[level\] built' "$COPY/map-fetch-playback.log" | head -n 3
+		echo "map-fetch, playback: exit $status"
+		[ "$status" -ne 0 ] && failed=1
+
+		mkdir -p "$(userdir "$dir/home-5")"
+		cp -r "$(userdir "$dir/home-1")/demos" "$(userdir "$dir/home-5")/"
+		env -u XDG_DATA_HOME HOME="$dir/home-5" timeout 120 "$GODOT" --headless --path "$COPY" --max-fps 60 \
+			-- --playdemo le7-fetch > "$COPY/map-fetch-playback-nomap.log" 2>&1
+		status=$?
+		line=$(grep -m 1 '^gdpyr: --playdemo' "$COPY/map-fetch-playback-nomap.log")
+		if [ "$status" -eq 1 ] && echo "$line" | grep -q "recorded on map $hash, which is not in this build"; then
+			echo "[checks] PASS map-fetch, playback without the map: exit 1, '$line'"
+		else
+			echo "[checks] FAIL map-fetch, playback without the map: exit $status, '$line'"
+			failed=1
+		fi
 		;;
 
 	map-shot)

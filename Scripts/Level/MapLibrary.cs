@@ -14,7 +14,7 @@ namespace Gdpyr.Level;
 /// <summary>
 /// Where data maps are, and the one place a map's bytes are read (docs/LEVEL_EDITOR.md
 /// §9.1): <c>user://maps/&lt;name&gt;.map</c>, one's own; <c>user://maps/cache/&lt;hash&gt;.map</c>,
-/// received (LE7); <c>res://Maps/&lt;id&gt;.map</c>, bundled with the build and listed in
+/// received from a server (LE7, <see cref="TryCache"/>); <c>res://Maps/&lt;id&gt;.map</c>, bundled with the build and listed in
 /// <see cref="MapCatalog"/>.
 ///
 /// A file is a map only if it reads (§6.8) and the validator finds no error in it (§6.9):
@@ -39,10 +39,12 @@ public static class MapLibrary
 	/// map comes back with no document. False with every reason when it names nothing or
 	/// names a file that is not a map.
 	/// </summary>
-	public static bool TryResolve(string reference, out MapInfo map, out MapDocument document, out string error)
+	public static bool TryResolve(string reference, out MapInfo map, out MapDocument document, out byte[] file,
+		out string error)
 	{
 		map = default;
 		document = null;
+		file = null;
 
 		var known = new Dictionary<string, string>(StringComparer.Ordinal);
 		MapReferenceKind kind = MapNames.Resolve(reference,
@@ -54,22 +56,22 @@ public static class MapLibrary
 		{
 			case MapReferenceKind.Catalog:
 				MapCatalog.TryFind(key, out map);
-				return !map.IsData || TryLoad(map, out document, out error);
+				return !map.IsData || TryLoad(map, out document, out file, out error);
 
 			case MapReferenceKind.Library:
-				return TryLoadFile(UserDirectory + MapNames.FileName(key), null, out map, out document, out error);
+				return TryLoadFile(UserDirectory + MapNames.FileName(key), null, out map, out document, out file, out error);
 
 			case MapReferenceKind.Hash:
 				if (FindBundled(key, out MapInfo bundled))
 				{
 					map = bundled;
-					return TryLoad(map, out document, out error);
+					return TryLoad(map, out document, out file, out error);
 				}
 
-				return TryLoadFile(known[key], key, out map, out document, out error);
+				return TryLoadFile(known[key], key, out map, out document, out file, out error);
 
 			case MapReferenceKind.Path:
-				return TryLoadFile(key, null, out map, out document, out error);
+				return TryLoadFile(key, null, out map, out document, out file, out error);
 
 			default:
 				return false;
@@ -80,9 +82,17 @@ public static class MapLibrary
 	/// Reads, hashes, reads as a map and validates a data map's file. For a bundled map the
 	/// hash must be its catalog entry's.
 	/// </summary>
-	public static bool TryLoad(in MapInfo map, out MapDocument document, out string error)
+	public static bool TryLoad(in MapInfo map, out MapDocument document, out string error) =>
+		TryLoad(map, out document, out _, out error);
+
+	/// <summary>
+	/// <see cref="TryLoad(in MapInfo, out MapDocument, out string)"/>, with the bytes that were read:
+	/// the file a server sends is the one it loaded (§6.10).
+	/// </summary>
+	public static bool TryLoad(in MapInfo map, out MapDocument document, out byte[] file, out string error)
 	{
 		document = null;
+		file = null;
 		if (!map.IsData)
 		{
 			error = $"{map} is a scene, not a map file";
@@ -97,19 +107,28 @@ public static class MapLibrary
 		string hash = MapFile.HashHex(bytes);
 		if (!string.IsNullOrEmpty(map.Hash) && !string.Equals(hash, map.Hash, StringComparison.Ordinal))
 		{
-			error = $"{map.Path} hashes to {hash[..8]}…, not the {map.Hash[..8]}… this build was made with";
+			error = string.IsNullOrEmpty(map.Id)
+				? $"{map.Path} hashes to {hash[..8]}…, not the {map.Hash[..8]}… it did when it was listed: it has changed since"
+				: $"{map.Path} hashes to {hash[..8]}…, not the {map.Hash[..8]}… this build was made with";
 			return false;
 		}
 
-		return TryParse(map.Path, bytes, out document, out error);
+		if (!TryParse(map.Path, bytes, out document, out error))
+		{
+			return false;
+		}
+
+		file = bytes;
+		return true;
 	}
 
 	/// <summary>A file named by its path, as a map from the library: no catalog id, its name and hash its own.</summary>
 	private static bool TryLoadFile(string path, string expectedHash, out MapInfo map, out MapDocument document,
-		out string error)
+		out byte[] file, out string error)
 	{
 		map = default;
 		document = null;
+		file = null;
 		if (!TryReadBytes(path, out byte[] bytes, out error))
 		{
 			return false;
@@ -128,6 +147,7 @@ public static class MapLibrary
 		}
 
 		map = MapInfo.Data(string.Empty, document.Name, path, hash, document.Description);
+		file = bytes;
 		return true;
 	}
 
@@ -227,6 +247,130 @@ public static class MapLibrary
 			error = $"{path}: {e.Message}";
 			return false;
 		}
+	}
+
+	/// <summary>The received map with this hash is kept here (LE-D16).</summary>
+	public static string CachePathOf(string hash) => Path.Combine(CacheRoot, hash + MapFile.Extension);
+
+	/// <summary>Where a map this process has is: built in, one's own, or received.</summary>
+	public enum Source : byte
+	{
+		None,
+		Bundled,
+		Library,
+		Cache,
+	}
+
+	/// <summary>
+	/// The map with this hash, if this process has it (docs/LEVEL_EDITOR.md §9.3, LE7): bundled with the
+	/// build, one's own, or in the cache under the hash's name — read, hashed again and validated, as
+	/// every map is when it is loaded. A file in the cache under the hash's name that does not hash to
+	/// it is not that map, and is passed over (<paramref name="note"/> says so): the fetch that follows
+	/// writes the real one over it. False with <see cref="Source.None"/> when there is no such map; false
+	/// with where it is, and <paramref name="error"/>, when there is and it does not play on this build.
+	/// </summary>
+	public static bool TryFindHash(string hash, out MapInfo map, out MapDocument document, out byte[] file,
+		out Source source, out string error, out string note)
+	{
+		map = default;
+		document = null;
+		file = null;
+		source = Source.None;
+		error = null;
+		note = null;
+		if (!Gdpyr.Sim.Level.MapTransfer.IsHash(hash))
+		{
+			error = $"'{hash}' is not a map's hash";
+			return false;
+		}
+
+		if (FindBundled(hash, out MapInfo bundled))
+		{
+			source = Source.Bundled;
+			map = bundled;
+			return TryLoad(map, out document, out file, out error);
+		}
+
+		string cached = CachePathOf(hash);
+		if (File.Exists(cached))
+		{
+			if (TryReadBytes(cached, out byte[] bytes, out string unread) && MapFile.HashHex(bytes) == hash)
+			{
+				source = Source.Cache;
+				return TryLoadFile(cached, hash, out map, out document, out file, out error);
+			}
+
+			note = unread ?? $"{CacheDirectory}{hash}{MapFile.Extension} is not that map: it hashes to"
+				+ $" {Gdpyr.Sim.Level.MapTransfer.Short(MapFile.HashHex(bytes))}";
+		}
+
+		foreach (string path in FilesIn(UserRoot))
+		{
+			string stem = Path.GetFileNameWithoutExtension(path);
+			if (MapNames.TryParseName(stem, out string name, out _) && name == stem
+				&& TryReadBytes(path, out byte[] bytes, out _) && MapFile.HashHex(bytes) == hash)
+			{
+				source = Source.Library;
+				return TryLoadFile(path, hash, out map, out document, out file, out error);
+			}
+		}
+
+		return false;
+	}
+
+	/// <summary>
+	/// Keeps a received map (§6.10): a file that has been hashed, read and validated, written to
+	/// <c>cache/&lt;hash&gt;.map</c> through a file beside it and a rename, so the name is only ever
+	/// the whole map. Its bytes as they arrived: a file is not re-encoded (LE-D15).
+	/// </summary>
+	public static bool TryCache(byte[] file, MapDocument document, out MapInfo map, out string error)
+	{
+		string hash = MapFile.HashHex(file);
+		string path = CachePathOf(hash);
+		map = MapInfo.Data(string.Empty, document.Name, path, hash, document.Description);
+		string part = path + ".part";
+		try
+		{
+			Directory.CreateDirectory(CacheRoot);
+			File.WriteAllBytes(part, file);
+			File.Move(part, path, overwrite: true);
+			error = null;
+			return true;
+		}
+		catch (Exception e) when (e is IOException or UnauthorizedAccessException or NotSupportedException
+			or ArgumentException)
+		{
+			try
+			{
+				File.Delete(part);
+			}
+			catch (Exception gone) when (gone is IOException or UnauthorizedAccessException)
+			{
+				// Nothing more to do: a .part is never read as a map.
+			}
+
+			error = $"{path}: {e.Message}";
+			return false;
+		}
+	}
+
+	/// <summary>
+	/// One's own maps a round can be played on, for the host panel's picker (§9.1): every map in
+	/// <c>user://maps/</c> that reads and that the validator finds no error in, by name (LE-D16).
+	/// </summary>
+	public static List<MapInfo> PlayableOwnMaps()
+	{
+		var maps = new List<MapInfo>();
+		foreach (StoredMap stored in MapStore.List(UserRoot))
+		{
+			if (stored.Reads && stored.Report.IsPlayable)
+			{
+				maps.Add(MapInfo.Data(string.Empty, stored.Document.Name, stored.Path, stored.Hash,
+					stored.Document.Description));
+			}
+		}
+
+		return maps;
 	}
 
 	/// <summary>Every hash a map can be named by, and where its file is: the bundled maps', the library's and the cache's.</summary>

@@ -148,6 +148,51 @@ public sealed class DemoPlayback : IDisposable
 	}
 
 	/// <summary>
+	/// The map a demo was recorded on, as its header names it (docs/LEVEL_EDITOR.md §9.6): a data map
+	/// by its hash, found in the build, one's own maps or the cache, read and validated; a scene map
+	/// by its scene, which must be the catalog's. A header that names no map is played on the
+	/// catalog's default, as a demo always was. False, with which map is lacking, otherwise.
+	/// </summary>
+	public static bool TryFindMap(in DemoHeader header, out Gdpyr.Core.MapInfo map,
+		out Gdpyr.Sim.Level.MapDocument document, out byte[] bytes, out string error)
+	{
+		map = Gdpyr.Core.MapCatalog.Default;
+		document = null;
+		bytes = null;
+		error = null;
+		if (string.IsNullOrEmpty(header.Map))
+		{
+			return true;
+		}
+
+		if (DemoFormat.TryParseDataMap(header.Map, out string hash))
+		{
+			if (Gdpyr.Level.MapLibrary.TryFindHash(hash, out map, out document, out bytes,
+				out Gdpyr.Level.MapLibrary.Source source, out string unplayable, out _))
+			{
+				return true;
+			}
+
+			error = source == Gdpyr.Level.MapLibrary.Source.None
+				? $"it was recorded on map {hash}, which is not in this build, one's own maps or the cache"
+				: $"it was recorded on map {hash}, and this build's copy of it does not play: {unplayable}";
+			return false;
+		}
+
+		foreach (Gdpyr.Core.MapInfo candidate in Gdpyr.Core.MapCatalog.All)
+		{
+			if (!candidate.IsData && candidate.ScenePath == header.Map)
+			{
+				map = candidate;
+				return true;
+			}
+		}
+
+		error = $"it was recorded on {header.Map}, which this build has not got";
+		return false;
+	}
+
+	/// <summary>
 	/// The records of the next recorded tick, in the order they were written.
 	/// False at the end of the file, which is also when <see cref="Ended"/> is set.
 	///

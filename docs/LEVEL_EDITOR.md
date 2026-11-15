@@ -1,13 +1,15 @@
 # gdpyr — Level editor: terrain, prefabs, roads and bridges, and maps that travel
 
-**Status: a plan, with LE0–LE6 done: its ground is measured; the ground's rules, the map in
+**Status: a plan, with LE0–LE7 done: its ground is measured; the ground's rules, the map in
 memory, its file and its validator are written and tested, engine-free; a tool makes, reads and
 checks map files; a map is played from its file — `--map`, one bundled map, a server and its
 clients, the stripped export; and the game has an editor — the menu's **Map editor** and `--edit`,
 the terrain tool, undo, save and autosave, validate and test, the prefab tool: a round's pieces,
 cover, scenery and structures that stand when a round starts, the buildable overlay and the deep
 check; and the road and bridge tools: roads graded to their limit, sections joined end to end on
-piers, ends landed. Nothing of fetching a map is built.**
+piers, ends landed; and a client fetches the map it lacks from its server, keeps it in its cache,
+and plays it — the host panel lists one's own maps, and demos and the agent's `welcome` name the
+map. Nothing of the dedicated server's side, LE8's, is built.**
 Written against `cd0c558`. The
 facts in §2 were read in this repository's source at that commit, and those in §3 in Godot's source
 at tag `4.6-stable`. The arithmetic in §10 was run: `python3
@@ -30,6 +32,11 @@ the script's `editor-prefabs` part makes a map in the editor alone and plays a b
 `BridgeRules` and their tools — at `f5a2934`, `99e64ea` and `61e64f1`: the script's `editor-roads` part draws roads
 across a ridge and a bridge over a river in the editor, plays the bridge with and without its spans,
 and drives a 4x4 across it by a scenario's script; and `le6_mutations.py` breaks its rules in turn.
+LE7 (§11) built §6.10, §9.3, §9.4's first three messages, the host panel's own maps, demos at version
+6 and the `welcome`'s map at `cde6c99`: the script's `map-fetch` part has clients behind the delay
+relay fetch a map no client has, find it in their cache, fetch over a wrong file, refuse a stream cut
+off at half and one with a byte changed, and fetch while the relay drops datagrams; a demo recorded on
+the fetched map plays back; and `le7_mutations.py` breaks its rules in turn.
 
 **What LE0 changed.** The collider is not a `HeightMapShape3D`: 65 of 20,000 long rays passed
 through one, and it costs a tick more than the same triangles as meshes, which let none through
@@ -105,6 +112,15 @@ bank steeper than its skirt back to it; every pier is given its length again aft
 ground under it, as a pad is kept; a section taken up gives a neighbour that stood on its pier one of
 its own (§6.7). The validator's road warning is §6.6's E past 5 cm (§6.9). `Enter` grades a road and
 `U` turns a section's supports on and off (§8.2). Where a section says "LE6", it is one of these.
+
+**What LE7 changed.** A data map is named on the wire by its hash and found by it, the catalog's id
+told for what it is worth; a copy this build's validator refuses is refused, not fetched (§9.3). A
+second request on a connection, or one for another map, is sent nothing; the stall is real time
+since the request or the last chunk, since the menu does not tick (§6.10). `--playdemo` opens its demo
+in the menu, so the map it names is the one loaded (§9.6). ENet passes over a reliable message too
+big for what is left of its window, which loss shrinks, and sends the ones after it that fit: a
+small message can leave ahead of a chunk that was never lost (§3). Where a section says "LE7", it is
+one of these.
 
 The decisions (LE-D1–LE-D25, §4) are the defaults the plan is written against. Each is one line to
 change; LE-D3, LE-D8, LE-D10 and LE-D18 were the ones to flag before LE1, which was built on them
@@ -200,6 +216,7 @@ was written; a class reference quoted here is the XML that site is generated fro
 | A floating body stops against a wall whose normal is within `wall_min_slide_angle` (15°) + 0.01 rad of its velocity reversed, and slides along anything else: moving level, along any face under 74.4° | `character_body_3d.cpp:429` |
 | ENet: a host made with a channel count of 0 has 255. Transfer channel n > 0 is ENet channel n + 1; the first two are the default's. On a channel of its own, "reliable data will only block delivery of other packets on that channel". Default MTU 1,392 B; a packet may be 32 MiB | `modules/enet/enet_connection.cpp:308`; `modules/enet/enet_multiplayer_peer.cpp:357`; `doc/classes/MultiplayerPeer.xml`; `thirdparty/enet/enet/enet.h:222` |
 | `ENetMultiplayerPeer.create_server` hands `create_host_bound` a channel count of 0 whatever it was given, and puts its own `max_channels` argument, when that is above 0, plus 2 in the incoming-bandwidth position | `modules/enet/enet_multiplayer_peer.cpp:65`; `modules/enet/enet_connection.cpp:45` |
+| A reliable command with data that does not fit in what is left of its peer's window — `packetThrottle × windowSize / 32`, never under the MTU; the throttle falls as datagrams are lost — is passed over, and the commands queued after it that fit are sent, on any channel. **Found by LE7**: under loss a small reliable message can leave ahead of a large one queued before it that was never lost, so LE7's check makes its probes bigger than a chunk (§11) | `thirdparty/enet/protocol.c:1469`; `thirdparty/enet/enet/enet.h:227` |
 | An RPC whose only argument is a byte array is sent as those bytes behind a header of 3–7 B: a command byte, a node id, a method id | `modules/multiplayer/scene_rpc_interface.cpp:357` |
 | C#'s `[Rpc]` takes `TransferChannel` | `modules/mono/glue/GodotSharp/GodotSharp/Core/Attributes/RpcAttribute.cs` |
 | The Compatibility renderer has no decals. It has `sampler2DArray` | godot-docs `tutorials/rendering/renderers.rst`; `doc/classes/Decal.xml`; godot-docs `tutorials/shaders/shader_reference/shading_language.rst` |
@@ -277,7 +294,7 @@ Scripts/Sim/Level/   engine-free; compiled into Tests/ by the existing ../Script
   MapFile.cs           the container: a writer, and a reader that is total
   MapValidator.cs      what MAPS.md §3 asks, asked of a document
   MapNames.cs          a map's name, and what a --map reference names (LE3)
-  MapTransfer.cs       sender and receiver as state machines over chunks; the upload's proof
+  MapTransfer.cs       sender and receiver as state machines over chunks (LE7); the upload's proof (LE8)
   EditHistory.cs       undo and redo
   MapEditSession.cs    the editor's commands: a stroke, a ramp, undo, the bands, the text (LE4);
                        a placement, a turn, a parameter, a take-up, a pick (LE5)
@@ -289,7 +306,7 @@ Scripts/Level/       the engine half
   TerrainPalette.cs    the five textures and their scales (LE3)
   LevelBuilder.cs      prefabs, a round's pieces, bridges and piers, the walls
   MapLibrary.cs        user://maps, the cache, the bundled maps
-Scripts/Net/MapTransferService.cs    the messages, their channel, their budget
+Scripts/Net/MapTransferService.cs    the messages, their channel, their budget (LE7)
 Scripts/MapEditor/   the editor scene's root and its commands (MapEditorRoot), the panels (.Ui), the
                      prefab tool (.Prefabs, LE5), the deep check (.Deep, LE5), the road and bridge
                      tools (.Roads, .Bridges, LE6); and the keys, a brush's and a tool's settings, the
@@ -813,6 +830,22 @@ receiver does with a short, long, repeated, out-of-order or never-finished strea
   the server sends each connection with its map. The token never crosses the wire, and a proof
   does not replay on another connection or for another file.
 
+*Built by LE7* (`MapTransfer`, `MapSender`, `MapReceiver`), but for the upload's proof, which is LE8's
+with the upload; the nonce is sent with every map already. A chunk's index is a little-endian `u32`,
+and every chunk but the last carries 1,024 B. **The sender** keeps a copy of the bytes it was given —
+the server's `Session.Bytes`, the file as `MapLibrary` read it — and answers a request with the map
+only when the hash named is its own and the peer has not asked before on its connection; any second
+request, and a first that names another map, is sent nothing. It sends a chunk a tick to each peer it
+is sending to and at most four a tick in all — 245,760 B/s, under the 256 KB/s — the peers taken in
+turn, each put at the back of the line once served: six peers fetching at once are each served every
+tick and a half. **The receiver** refuses a hash that is not 64 lower-case hex digits, a length of
+nothing or over 1 MiB, a message of 4 B or less or over 1,028 B, an index at or past the chunk count,
+one that is not the next — ahead or repeated — and a chunk whose length is not 1,024 or, for the last,
+the remainder. Its stall is 10 s of real time since the last chunk, or since the request: the client
+waits in the menu, which does not tick. At the last chunk it hashes, reads and validates, and is
+complete only when all three pass; a refusal lets go of the bytes and takes nothing after it.
+`MapTransferTests` holds each, and `le7_mutations.py` breaks each in turn (§11).
+
 ---
 
 ## 7. The world from a file
@@ -1205,6 +1238,16 @@ the one parser of a name and of a reference (§9.5). The one bundled map is `hil
 `6d0aa3ff…`, which `BundledMapTests` makes again from the generator byte for byte. The preset's
 `include_filter` is `*.map`, and a `.map` is binary to git (`.gitattributes`).
 
+*Built by LE7*: the host panel's picker lists the catalog, then every map in `user://maps/` that
+reads and that the validator finds no error in (`MapLibrary.PlayableOwnMaps`, over `MapStore.List`),
+asked again each time the panel opens; `HostSettings` holds the `MapInfo`, whose catalog id is empty
+for one's own. A map of one's own picked is read again when hosting begins, and refused if it no longer
+hashes to what was listed. `Session.Bytes` is the file a data map was read from, which is what a server
+sends. `MapLibrary.TryFindHash` is where a client looks for a map by its hash: bundled, then
+`cache/<hash>.map`, then one's own; each read, hashed again and validated, and a file in the cache under
+the hash's name that hashes to something else passed over. `MapLibrary.TryCache` keeps a fetched map
+through a `.part` file and a rename.
+
 ### 9.2 Save, clone, export, import
 
 | | |
@@ -1224,7 +1267,8 @@ Console (`Scripts/Core/ConsoleCommands.cs`): `maps`, `mapinfo <name>`, `clonemap
 fork of it — a new GUID, with the GUID and hash of the file it was saved as for its parent, saved as
 revision 1 — so that two files never share a lineage, and saves one that has none under the new name; export, which saves
 first what is not saved; and **Show folder**. Import and the console's commands are not built: no
-phase of §11 names them, and they wait for the library's picker, LE7's.
+phase of §11 names them, and they wait for the library's picker, LE7's. *LE7* built the picker
+(§9.1); import and the console's commands are still not built, and no phase names them.
 
 ### 9.3 Hosting and joining
 
@@ -1244,6 +1288,16 @@ side is; its role request is kept (§2). The 5 s wait for `ServerMap` itself is 
 Both ends still want the same commit (LAN.md §5). A map moves between builds whose prefab catalogs
 agree up to the ids it uses, and the file says how many it was made against.
 
+*Built by LE7* (`NetworkManager.ServerMap`, `MapTransferService`, `MainMenu.TakeServerMap`). A data
+map is named by its hash, whatever its id: a client with the bundled map plays the catalog's entry,
+and one that has it in its library or cache plays that file. The menu's states are *waiting* for the
+map's name, as before; *fetching*, its status line §9.3's; *taken*; and *refused*. A map this process
+has that its validator refuses is refused without a fetch, since the same bytes would arrive. A fetch
+is played from what arrived, kept in the cache first; a disk that will not take it is a warning, not a
+refusal. A refusal drops the link before `--client` exits 1, so the server hears it at once. A scene
+map is its catalog id, with an empty hash, as LAN.md §3.4 has it, and an id this build has but that is
+a data map is not taken for one.
+
 ### 9.4 Messages
 
 | Message | Direction | Transfer | Rate | ~Size |
@@ -1261,6 +1315,10 @@ default channel count has 255, and `create_server`'s `max_channels` argument mus
 at 4.6 it lands in the incoming-bandwidth position (§3). A fetching peer costs 61 KB/s over the
 21 KB/s of NETCODE.md §7 for at most 2.5 s.
 
+*Built by LE7*: `ServerMap(id, hash, length, name, nonce)` on the default channel, as before, and
+`ClientRequestMap(hash)` and `ServerMapChunk(packet)`, reliable on transfer channel 1, on
+`/root/NetworkManager/MapTransfer`. `TransportFactory` is untouched. The other six are LE8's.
+
 ### 9.5 A dedicated server
 
 - **`--map <ref>`**, for `--server`, `--listen` and `--practice`: a catalog id, a library name, a
@@ -1270,7 +1328,7 @@ at 4.6 it lands in the incoming-bandwidth position (§3). A fetching peer costs 
   in that order, a path being a path and nothing else; a hash's start that two maps share names
   neither; with `--client`, or with no mode, `--map` is refused. A map from the library is played with
   an empty catalog id, and a client told an empty id says the host's map is one it cannot fetch yet
-  (LE7).
+  (LE7). *Since LE7* a client fetches it (§9.3).
 - **`scripts/deploy-map.sh <file> [--activate]`** copies a map to the box's `user://maps` —
   under the unit's `HOME`, by Godot's default
   `/var/lib/gdpyr/.local/share/godot/app_userdata/gdpyr/maps/`, inside the unit's one writable
@@ -1294,8 +1352,15 @@ at 4.6 it lands in the incoming-bandwidth position (§3). A fetching peer costs 
   cache or says which hash it lacks. `DemoFormat.Version` 6: a version-5 reader would take the
   string for a scene path. *Until LE7*, a demo recorded on a data map names `MapHost.tscn`, and is
   played back on the catalog's default, as a demo of any map is: playback does not read the name.
+  *Built by LE7*: version 6; a scene map is still named by its scene's path. Playback reads the
+  header before the world is loaded — `--playdemo` opens the demo in the menu, as the console's
+  `playdemo` does — and loads the map it names; a demo named from inside a map is refused if it was
+  recorded on another, and a header that names no map plays on the catalog's default. A version-5
+  demo is refused, saying so.
 - The agent's `welcome` gains `map: { id, name, hash }`. The observation is unchanged: positions
-  still scale by 256 m, and the passability plane is still rays.
+  still scale by 256 m, and the passability plane is still rays. *Built by LE7*: the hash is `null`
+  for a scene map; `GdpyrConnection` and `gdpyr_env` read it, and `tools/Gdpyr.Playtest` refuses to
+  run a scenario that names a map on a server whose `welcome` names another.
 - A scenario file gains an optional `"map"`, a catalog id; the harness passes it as `--map`.
   Scenarios without one play the greybox, as now. *Built by LE3*, with two:
   `hills_strategist_economy.json` and `hills_spawn_points_shared.json`, the scenarios of those names
@@ -1550,8 +1615,8 @@ LE0 ─► LE1 ─► LE2 ─► LE3 ─┬─► LE4 ─► LE5 ─► LE6     
 ```
 
 LE0–LE3 with LE7 is the smallest thing worth having: maps that are data, played and fetched, with
-no editor yet — 14½ days, LE0's 1½, LE1's 3, LE2's 3 and LE3's 4 of them spent. Their first maps
-come from LE2's generator.
+no editor yet — 14½ days, all of them spent: LE0's 1½, LE1's 3, LE2's 3, LE3's 4 and LE7's 3. Their
+first maps come from LE2's generator.
 
 ### LE0 — The baseline and the spike (1½ days) — done
 
@@ -2039,7 +2104,9 @@ and put down, a section's ghost snapping to a ring — which no check moves; whe
 a river's banks back to 30° round the bridge's ends reads as it should; and the road's look, a
 placeholder's.
 
-### LE7 — Fetching a map (3 days)
+### LE7 — Fetching a map (3 days) — done
+
+What was asked of it:
 
 `MapTransfer`, `MapTransferService`, `ServerMap`'s fields, the menu's states, the host panel's
 picker, the cache, demos at version 6, the agent's `welcome`. Engine checks, with a `--server`
@@ -2049,6 +2116,70 @@ the hash's name fetches again; a fetch cut off at half is refused and the link d
 hash-mismatched stream is refused; with the relay dropping datagrams, a chunk that has to be sent
 again does not hold back a message on the default channel sent after it; a demo recorded on a data
 map plays back. **Left for a person:** two machines, as LAN.md §6.
+
+**Built at `cde6c99`**, with `b45e724` and `3182617` after it — the drop check's measure, twice: what
+it timed said nothing, and it counted too soon (below) — on .NET SDK 8.0.134, Godot
+`4.6.stable.mono.official.89cea1439`, four cores of a cloud VM: `Scripts/Sim/Level/MapTransfer.cs`,
+the chunks, `MapSender` and `MapReceiver`; `Scripts/Net/MapTransferService.cs`, their two messages on
+transfer channel 1; and the changes to `NetworkManager` (`ServerMap`'s fields, a nonce a connection,
+the service as its child), `MainMenu` (the fetch's states, the picker's own maps, `--playdemo` opened
+in the menu), `MapLibrary` (the bytes it read, a map by its hash, the cache, one's own playable maps),
+`Session` (`Bytes`), `HostSettings` (a `MapInfo`), `Bootstrap`, `DemoFormat` (version 6, `map:<hash>`),
+`DemoRecorder`, `DemoPlayback` and `PlayerManager` (the map a demo names), `AgentServerOps` (`welcome`'s
+map), `GdpyrConnection`, `gdpyr_env` and `tools/Gdpyr.Playtest` (reading it, and holding a scenario's
+map to it). In `Tests/`, `MapTransferTests`, and LE7's cases in `HostSettingsTests` and
+`DemoCodecTests`. The checks are `scripts/level-editor-checks.sh`'s `map-fetch` part over
+`tools/EngineChecks/LevelFetchChecks.cs`, with `delay_relay.py` now counting what it drops; and
+`le7_mutations.py`.
+
+| Asked | It came to | Where |
+|---|---|---|
+| `MapTransfer`, `MapTransferService`, `ServerMap`'s fields, the menu's states, the picker, the cache, demos at version 6, the `welcome` | built, as §6.10, §9.1, §9.3, §9.4 and §9.6 say. The map no client has is `gdpyr-map generate --seed 7 --name Ridge`: 26,861 B, 27 chunks, `af682abc…`, played by a `--server --map <path> --no-bots`; every client under a home of its own, behind the relay at 40 ± 10 ms each way | `map-fetch` |
+| A client without the map fetches it, hashes it and is in the round | its cache empty; the server names the map by hash and length, no id, a 16 B nonce; one request; 27 of 27 chunks; the cache holds `<hash>.map`, hashing to it, and nothing else; it plays that file, and the world is the file — the document read again, field by field, ray after ray straight down where the file says, the spawn markers and nodes counted — and its character is on the roster: 14 facts of 14. The server: asked once, sent 27 chunks in 0.45 s | `map-fetch` |
+| A second join reads the cache and sends no request | the same home: 14 of 14, no request and nothing fetched; the server: asked 0 times, sent 0 chunks | `map-fetch` |
+| A client with a wrong file under the hash's name fetches again | the bundled map's bytes under `af682abc….map`, hashing to `6d0aa3ff…`: passed over, saying so, fetched, and the right file in its place: 14 of 14 | `map-fetch` |
+| A fetch cut off at half is refused and the link dropped | the server's map service stopped at 13 of 27 chunks — its node's tick turned off by the check, the link up: the client refuses the stream 10.29 s after asking, "the map stopped arriving: 13 of 27 chunks, then nothing for 10 s", keeps nothing, drops the link and exits 1, saying why; the server sees it leave 10.1 s after the cut | `map-fetch` |
+| A hash-mismatched stream is refused | the 27 chunks sent in turn in place of the service, through its own message, with byte 13,430 changed: refused at the last chunk, "the bytes that arrived hash to `df274e0a…`, not the `af682abc…` the host named", nothing kept, the link dropped, exit 1 | `map-fetch` |
+| With the relay dropping datagrams, a chunk that has to be sent again does not hold back a message on the default channel sent after it | behind the second relay, its delay fixed, which dropped 264 datagrams on their way to a client, 48 of them over 1,000 B: four clients fetched the map whole in 0.59–1.26 s, against 0.60 s behind the first. Each tick of each fetch the server sent, after that tick's chunk, a reliable message on the default channel and one on the map's, each bigger than a chunk so that ENet's window sends neither ahead of a chunk it holds (§3). **60 of the 104 on the default channel arrived ahead of a chunk sent before them**, past 5 chunks not yet in, in every one of the four fetches; on the map's channel, **0 of 104**. The first fetch's trace has both ways of it: the default channel's messages sent after chunks 20–22 arrived with 20 chunks in, and chunk 20 came 266 ms later; and its messages sent after chunks 23–25 arrived 807 ms after those chunks had, held back by losses on their own channel | `map-fetch` |
+| A demo recorded on a data map plays back | the first client's `--record`: its header names `map:af682abc…`; `--playdemo` in that home plays it on the map from the cache, the world the file's, 8 of 8; in a home with the demo and not the map it is refused, exit 1, naming the hash | `map-fetch` |
+| LE3's and LE4's checks | `map-server` for 120 s, the bundled map named by its hash and found in the build, 24 of 24 and 20 of 20; `map-suite`, the four scenarios, each of the two on `hills` checked against the `welcome`'s map, PASS; `editor`, 132 of 132 and its test process 3 of 3; at `b45e724` | `map-server`, `map-suite`, `editor` |
+| `dotnet test` | 3,825 of 3,825 at `3182617`: the 3,783 there were and 42. `ContactMemoryTests.ObservingAndAgeing_AllocateNothing`, which counts what its thread allocates, failed one of the six whole runs made with LE7's changes, and passed the other five and alone | `tests` |
+| Every LE7 rule's test fails when it is broken | 41 rules broken one at a time — a chunk's size, count, last length, index and bytes; the rate and the stall; a hash's case and length; the status line; the sender's map, its once a connection, its forgetting, its copy, its turns, its cap and its count; the receiver's length, hash, message sizes, past the length, out of turn, chunk size, stall, clock, hash, read and validation, and a refusal final and empty; a map of one's own in the host's settings; a demo's version, its map's name and how it is read — each one edit to one file: **41 of 41**, at `3182617`. The first run, on `cde6c99`'s tree but for the one change it led to, caught 40: with time that is not a number taken for time, every test passed, since the test gave the clock a NaN and then too little time to tell a stopped clock from a running one; it gives it enough now | `mutations` |
+
+The files are `docs/baselines/le7-<commit>-<name>.txt`, each saying in its first lines what was run
+and at which commit. `map-fetch` ran at `3182617`, with nothing beside it; `map-server`, `map-suite` and
+`editor` at `b45e724`, one after another after a `map-fetch` there, with nothing beside them, and
+`3182617` changed nothing they read; the tests and the mutations at `3182617`, after `map-fetch`. The
+first mutation run is `le7-cde6c99-mutations-first.txt`. The game's code is `cde6c99`'s throughout:
+`b45e724` and `3182617` changed only the check. The first `map-fetch`, at `cde6c99`, held every fact
+but timed how long a probe was ahead of a chunk, and gaps of 0–1 ms said that was not a resend's
+time; a trace showed each channel held behind its own lost messages too, so `b45e724` counts and
+does not time, and traces the first fetch. Its run counted a fetch's probes as soon as the client was
+in the round, with 11 of the traced fetch's still to come; `3182617` counts them after the client's
+three seconds there, and holds that every one is in.
+
+**Decided here**, each in the section it changes:
+
+- **§6.10**: a chunk's index is little-endian; the sender keeps a copy of the bytes; a second request
+  on a connection, or a first for another map, is sent nothing; four chunks a tick in all, the peers
+  in turn; the stall is real time since the request or the last chunk.
+- **§9.1**: the picker lists one's own maps that play after the catalog, and `HostSettings` holds the
+  `MapInfo`; a client looks for a hash among the bundled maps, then the cache, then its own.
+- **§9.3**: a data map is named by its hash, whatever its id; a copy this build refuses is not
+  fetched; a fetch is kept, then played from what arrived, and a cache that will not take it is a
+  warning; a refusal drops the link before `--client` exits.
+- **§9.6**: `--playdemo` opens its demo in the menu; a demo named from a map recorded on another is
+  refused; a scenario that names a map is held to the `welcome`'s.
+- **§3**: ENet passes over a reliable message too big for what is left of its window, which loss
+  shrinks, and sends what fits after it. The check's probes are bigger than a chunk, so the window
+  sends none ahead of one it is holding back, and behind a relay with no jitter a probe arrives ahead
+  of a chunk sent before it only when that chunk, or one before it on its channel, was lost.
+
+**Left for a person:** two machines, as LAN.md §6 — every process here was on one VM, over loopback
+through the relay; the menu's status line while a map arrives, and its refusals, which no check
+draws (`--client` was driven, and logs them); a map from one's own library hosted from the panel and
+fetched by a person joining from the menu, which no check clicks through; and the dedicated server's
+side — `deploy-map.sh`, the token, an upload, the next map — which is LE8's.
 
 ### LE8 — The dedicated server (2 days)
 
@@ -2066,7 +2197,7 @@ directory, the token and the restart; the README the editor and the flags;
 IMPLEMENTATION_PLAN.md §5's "Multiple maps" cut, struck. This file's status becomes what was built
 and what each phase ran.
 
-**Total: 28½ days**, LE0's 1½, LE1's 3, LE2's 3, LE3's 4, LE4's 4, LE5's 3 and LE6's 4 spent.
+**Total: 28½ days**, LE0's 1½, LE1's 3, LE2's 3, LE3's 4, LE4's 4, LE5's 3, LE6's 4 and LE7's 3 spent.
 
 ---
 
@@ -2085,7 +2216,7 @@ and what each phase ran.
 | A map the validator passes holds what a round needs | `MapValidatorTests`; `BundledMapTests`; a bot round | LE2, done; LE3, done |
 | Placing then undoing restores every sample | `PrefabPlacementTests`, `EditHistoryTests` | LE2, done |
 | Each of LE2's tests fails when its rule is broken | `le2_mutations.py`, 99 rules | LE2, done |
-| Every peer builds the same ground | no float in the file; exact samples; the hash; a client's world held to its file | LE2, done; LE3, done; LE7 |
+| Every peer builds the same ground | no float in the file; exact samples; the hash; a client's world held to its file | LE2, done; LE3, done; LE7, done |
 | A server without meshes builds and bakes it | the stripped export's check | LE3, done |
 | A map is played from its file, and the world is the file's | `map-practice`, `map-server`, `map-export`: counts, rays, a bot round | LE3, done |
 | A structure is refused as too steep where LE-D21 says, and stands on its plinth | `StructureGroundTests`; `slopes` | LE3, done |
@@ -2098,7 +2229,9 @@ and what each phase ran.
 | Each of LE5's tests fails when its rule is broken | `le5_mutations.py` | LE5, done |
 | A road keeps its grade; a bridge carries units and a 4x4 | `RoadPathTests`, `BridgeRulesTests`, `BridgePierKeepingTests`; `editor-roads` | LE6, done |
 | Each of LE6's tests fails when its rule is broken | `le6_mutations.py` | LE6, done |
-| A client gets the map it lacks, and only a whole and valid one | `MapTransferTests`; LE7's checks | LE7 |
+| A client gets the map it lacks, and only a whole and valid one | `MapTransferTests`; `map-fetch` | LE7, done |
+| A demo plays on the map it names | `DemoCodecTests`; `map-fetch` | LE7, done |
+| Each of LE7's tests fails when its rule is broken | `le7_mutations.py` | LE7, done |
 | A server takes no map from anyone without the token | `MapTransferTests`; LE8's checks | LE8 |
 
 ## 13. Risks
@@ -2108,7 +2241,7 @@ and what each phase ran.
 | **The navigation bake on terrain is slow**, at the first tick or at every structure | `[rts] navigation re-baked … ms of it on the tick` | Measured by LE0 (§7.3): 2.0–2.3 s at the first tick on hills, 6–11 ms on the tick at a re-bake and 2 s to the new mesh. Not too much to build on; if the 2 s shows, tiles first |
 | **Bodies catch on the collider's creases**, or prediction drifts on slopes | mispredictions a second above the flat baseline; visible hitching | Measured by LE0, and decided. They do not catch under 43°, and from there they stall: walkable is 40° (LE-D23). Prediction is corrected up to 2.5 times a second crossing a 20° slope, by 10–16 mm, which is the wire's rounding against a 1 cm threshold and stops at 2 cm (LE-D25). Whether any of it shows is a person's to say. LE3 made 2 cm the threshold, with its tests |
 | **A flat-ground assumption §7.4 missed** | a bot round on hills that does what one on the slab does not | LE0 found one, the 4x4's level hull (LE-D24), and played ten bot rounds on hills (§10). LE3 played seven on the bundled map, three of them ten minutes long, and found none: units trained, nodes taken, structures built and lost, and the scenarios that it re-ran pass; the list is where to add one |
-| **A hostile map file** from a server | — | A reader that is total, limits before allocation, a known inflated size, no scene and no object decoded, and tests over the hostile cases (§6.8). A client decodes only after the hash matches what it was told |
+| **A hostile map file** from a server | — | A reader that is total, limits before allocation, a known inflated size, no scene and no object decoded, and tests over the hostile cases (§6.8). A client decodes only after the hash matches what it was told. *Built by LE7*: a length over 1 MiB is refused before a byte is taken, and `map-fetch` sends a client a stream with a byte changed and one cut off at half, each refused, nothing kept |
 | **The upload socket is write access to a public box** | — | Off unless a token was given; the deploy unit gives none; HMAC with a nonce; one upload at a time; the cache directory only; validated before written |
 | **Two builds disagree about a prefab** | a wall drawn where the server has a box of another size | The catalog is append-only and a test holds it; the file names the count it was made against; a client refuses ids it lacks. Sizes changing under an id is LAN.md §5's problem, unchanged |
 | **The editor grows** | LE4–LE6 overrun | Destructive edits, one field size, no painting, no layers (§14). LE0–LE3 with LE7 ships without it |

@@ -6,7 +6,8 @@ namespace Gdpyr.Match;
 
 /// <summary>
 /// What a host picks in the main menu's host panel before the round opens
-/// (docs/LAN.md §3.4): the map, the round's length, the ground force's ticket pool,
+/// (docs/LAN.md §3.4): the map — the catalog's, or since docs/LEVEL_EDITOR.md LE7 one of the
+/// host's own — the round's length, the ground force's ticket pool,
 /// and how many players each side is.
 ///
 /// A side's size is the number of players it is filled to, humans included —
@@ -48,16 +49,31 @@ public sealed class HostSettings
 
 	public HostSettings(string mapId, int roundMinutes, int groundForceTickets, int groundForceSize,
 		int strategistSize)
+		: this(MapCatalog.TryFind(mapId, out MapInfo map) ? map : MapCatalog.Default, roundMinutes, groundForceTickets,
+			groundForceSize, strategistSize)
 	{
-		MapId = MapCatalog.IndexOf(mapId) >= 0 ? mapId : MapCatalog.Default.Id;
+	}
+
+	/// <summary>
+	/// A map from the catalog or from the host's own library (docs/LEVEL_EDITOR.md §9.1, LE7): a data
+	/// map that is not the catalog's is named by its file and hash, and its clients fetch it. A map
+	/// that is not one is replaced by the catalog's default.
+	/// </summary>
+	public HostSettings(MapInfo map, int roundMinutes, int groundForceTickets, int groundForceSize,
+		int strategistSize)
+	{
+		Map = map.IsValid ? map : MapCatalog.Default;
 		RoundMinutes = Math.Clamp(roundMinutes, MinRoundMinutes, MaxRoundMinutes);
 		GroundForceTickets = Math.Clamp(groundForceTickets, MinGroundForceTickets, MaxGroundForceTickets);
 		GroundForceSize = Math.Clamp(groundForceSize, MinTeamSize, MaxGroundForceSize);
 		StrategistSize = Math.Clamp(strategistSize, MinTeamSize, MaxStrategistSize);
 	}
 
-	/// <summary>A map from <see cref="MapCatalog"/>. An id the catalog does not have is replaced by its default.</summary>
-	public string MapId { get; }
+	/// <summary>
+	/// The map's catalog id: empty for one from the host's library. An id the catalog does not have
+	/// is replaced by its default.
+	/// </summary>
+	public string MapId => Map.Id;
 
 	/// <summary>How long a round lasts on the clock, in minutes.</summary>
 	public int RoundMinutes { get; }
@@ -71,7 +87,8 @@ public sealed class HostSettings
 	/// <summary>Strategists to fill to, humans included, and the most there may be at once.</summary>
 	public int StrategistSize { get; }
 
-	public MapInfo Map => MapCatalog.TryFind(MapId, out MapInfo map) ? map : MapCatalog.Default;
+	/// <summary>The map the round is played on: the catalog's, or one of the host's own (LE7).</summary>
+	public MapInfo Map { get; }
 
 	/// <summary>The round's length in simulation ticks.</summary>
 	public int RoundTicks => RoundMinutes * 60 * SimConfig.TickRate;
@@ -85,6 +102,6 @@ public sealed class HostSettings
 		new(MapCatalog.Default.Id, roundMinutes, groundForceTickets, groundForceSize, strategistSize);
 
 	public override string ToString() =>
-		$"map {MapId} | {RoundMinutes} min | {GroundForceTickets} tickets"
+		$"map {(string.IsNullOrEmpty(MapId) ? Map.ToString() : MapId)} | {RoundMinutes} min | {GroundForceTickets} tickets"
 		+ $" | {GroundForceSize} ground force, {StrategistSize} strategist{(StrategistSize == 1 ? string.Empty : "s")}";
 }
