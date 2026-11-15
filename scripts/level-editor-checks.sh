@@ -68,7 +68,8 @@
 # and drops the link; one sent the map with a byte changed refuses it. Behind a second relay with
 # no jitter that drops FETCH_LOSS (0.1) of datagrams each way, FETCH_DROPS (4) clients fetch while
 # the server sends each, every tick, a reliable message on the default channel and one on the
-# map's: a chunk sent again holds back the second and not the first. Then the demo plays back on
+# map's: a chunk sent again holds back the second and not the first. The first of them is traced
+# (LE7_TRACE): a line for each of those messages as it arrives. Then the demo plays back on
 # the map it names, from the cache, and in a home without the map it is refused, naming the hash.
 #
 #   ./scripts/level-editor-checks.sh map-fetch
@@ -638,7 +639,7 @@ for mode in "${MODES[@]}"; do
 			shift 5
 			echo "$name" > "$dir/phase"
 			mkdir -p "$home"
-			env -u XDG_DATA_HOME HOME="$home" LE7_CHECK="$role" LE7_DIR="$dir" LE7_HASH="$hash" LE7_EXPECT="${expect_text:-}" \
+			env -u XDG_DATA_HOME HOME="$home" LE7_CHECK="$role" LE7_DIR="$dir" LE7_HASH="$hash" LE7_EXPECT="${expect_text:-}" LE7_TRACE="${trace:-0}" \
 				timeout 300 "$GODOT" --headless --path "$COPY" --max-fps 60 -- --client "127.0.0.1:$port" "$@" \
 				> "$COPY/map-fetch-$name.log" 2>&1
 			status=$?
@@ -689,9 +690,12 @@ for mode in "${MODES[@]}"; do
 		echo none > "$dir/fault"
 		expect_text=""
 		for n in $(seq 1 "$FETCH_DROPS"); do
+			# The first is traced: a line for each probe as it arrives.
+			trace=$([ "$n" -eq 1 ] && echo 1 || echo 0)
 			fetch_client drops drops "$DROP_RELAY_PORT" "$dir/home-drops-$n" 0
 			mv "$COPY/map-fetch-drops.log" "$COPY/map-fetch-drops-$n.log"
 		done
+		trace=0
 
 		touch "$dir/stop"
 		wait "$server"

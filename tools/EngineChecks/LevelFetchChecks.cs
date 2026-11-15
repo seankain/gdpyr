@@ -387,9 +387,6 @@ public partial class LevelFetchChecks : Node
 	private int _transferProbes;
 	private int _transferAhead;
 	private readonly HashSet<int> _heldChunks = new();
-	private readonly Dictionary<int, long> _heldSince = new();
-	private readonly List<double> _heldMs = new();
-	private int _lastReceived;
 
 	private int Received => NetworkManager.Instance?.MapTransfer?.Fetch?.Received ?? 0;
 
@@ -397,7 +394,7 @@ public partial class LevelFetchChecks : Node
 	[Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
 	private void ProbeDefault(int sent, byte[] pad)
 	{
-		ArrivedSince();
+		Trace("default", sent);
 		_defaultProbes++;
 		int received = Received;
 		if (received < sent)
@@ -406,10 +403,7 @@ public partial class LevelFetchChecks : Node
 			// behind it. With the relay's delay fixed, a chunk is behind a later message only when it,
 			// or one ahead of it on its channel, was lost and is being sent again.
 			_defaultAhead++;
-			if (_heldChunks.Add(received))
-			{
-				_heldSince[received] = Stopwatch.GetTimestamp();
-			}
+			_heldChunks.Add(received);
 		}
 	}
 
@@ -418,33 +412,32 @@ public partial class LevelFetchChecks : Node
 		TransferChannel = MapTransferService.Channel)]
 	private void ProbeTransfer(int sent, byte[] pad)
 	{
-		ArrivedSince();
+		Trace("map's", sent);
 		_transferProbes++;
 		_transferAhead += Received < sent ? 1 : 0;
 	}
 
-	/// <summary>Chunks that arrived since last asked: a held one's wait ends.</summary>
-	private void ArrivedSince()
-	{
-		int received = Received;
-		for (int index = _lastReceived; index < received; index++)
-		{
-			if (_heldSince.Remove(index, out long since))
-			{
-				_heldMs.Add(Seconds(since) * 1000.0);
-			}
-		}
+	private static readonly bool Tracing = System.Environment.GetEnvironmentVariable("LE7_TRACE") == "1";
 
-		_lastReceived = received;
+	/// <summary>With <c>LE7_TRACE=1</c>, a line for each probe as it arrives: when, in which frame, and what had arrived.</summary>
+	private void Trace(string channel, int sent)
+	{
+		if (Tracing)
+		{
+			GD.Print($"[checks] trace {_role}: {F(Time.GetTicksUsec() / 1000.0, "0.0")} ms, frame {Engine.GetProcessFrames()}:"
+				+ $" the {channel} channel's probe sent after chunk {sent - 1}; {Received} chunks in");
+		}
 	}
 
+	/// <summary>
+	/// What arrived ahead of what. Each channel is also held behind its own lost messages, as a
+	/// reliable channel is, so how long a probe was ahead of a chunk says nothing of when that chunk
+	/// was sent again, and is not measured.
+	/// </summary>
 	private void Drops()
 	{
-		ArrivedSince();
-		_heldMs.Sort();
-		string waits = _heldMs.Count == 0 ? "none" : $"{F(_heldMs[0], "0")}–{F(_heldMs[^1], "0")} ms";
 		Measured($"drops: {_defaultProbes} default-channel probes, {_defaultAhead} of them ahead of a chunk sent before them,"
-			+ $" held back behind {_heldChunks.Count} chunk(s) the default channel went past, each arriving {waits} after the first probe past it;"
+			+ $" past {_heldChunks.Count} chunk(s) not yet arrived;"
 			+ $" {_transferProbes} probes on the map's channel, {_transferAhead} ahead of a chunk");
 		Fact(_transferProbes > 0 && _transferAhead == 0,
 			$"on the map's own channel, no probe of {_transferProbes} arrived ahead of a chunk sent before it: the control");
@@ -664,7 +657,7 @@ public partial class LevelFetchChecks : Node
 		{
 			Fact(ahead > 0 && held > 0 && transferProbes > 0 && transferAhead == 0,
 				$"over {clients} fetches behind a relay that drops datagrams: {ahead} of {defaultProbes} default-channel messages arrived ahead of a chunk"
-				+ $" sent before them, past {held} chunk(s) being sent again; on the map's channel {transferAhead} of {transferProbes}");
+				+ $" sent before them, past {held} chunk(s) not yet arrived; on the map's channel {transferAhead} of {transferProbes}");
 		}
 	}
 }
