@@ -1,0 +1,298 @@
+# LE7, docs/LEVEL_EDITOR.md §11. At 3182617: .NET SDK 8.0.134, Godot 4.6.stable.mono.official.89cea1439, four cores of a cloud VM.
+# ./scripts/level-editor-checks.sh map-fetch, with nothing beside it: a --server on gdpyr-map generate --seed 7 --name Ridge, given by its path,
+# --no-bots; clients behind tools/EngineChecks/delay_relay.py at 40 ± 10 ms each way, then four behind a second relay at 40 ms with no jitter
+# dropping 0.1 of datagrams each way, the first of them traced (LE7_TRACE); each client under a HOME of its own. Then the first client's demo
+# played back in its home, and in a home with the demo and not the map. The game's code is cde6c99's. The copy of the tree is written $COPY.
+
+hills: 58081 samples, -7.25 .. 21.80 m, 116162 B
+scene: the slab and the CSG floor are out, Terrain is in
+[map] $COPY/map-fetch/ridge.map: 'Ridge', seed 7, 26,861 bytes, sha-256 af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2
+[map] 0 errors, 0 warnings: it plays
+[checks] level fetch check: fetch; the cache is $COPY/map-fetch/home-1/.local/share/godot/app_userdata/gdpyr/maps/cache/
+[checks] PASS fetch: before joining, the cache holds nothing (0 files)
+[checks] PASS fetch: connected, and the server named its map
+[checks] PASS fetch: the server named map 'Ridge' by its hash af682abc…, 26,861 B, with no catalog id and a nonce of 16 B
+[checks] PASS fetch: in the game, 1.06 s after starting
+[checks] PASS fetch: it asked for the map 1 times; 1 expected
+[checks] PASS fetch: the fetch is complete: 27 of 27 chunks, Complete
+[checks] PASS fetch: the cache holds the map under its hash, and it hashes to it (af682abc…)
+[checks] PASS fetch: and nothing else: 1 file(s) in the cache
+[checks] PASS fetch: this client plays Ridge ($COPY/map-fetch/home-1/.local/share/godot/app_userdata/gdpyr/maps/cache/af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2.map, af682abc)
+[checks] PASS fetch: MapHost.tscn's LevelRoot built the world from the session's document
+[checks] PASS fetch: the document the world was built from is af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2.map read again, field by field and sample by sample
+[checks] PASS fetch: 490 of 500 rays straight down met the ground first, the worst 0.015 mm from the file's
+[checks] PASS fetch: the file's pieces are in the world: 4 spawn markers, 3 resource nodes
+[checks] PASS fetch: in the round: 1 on the roster, its own character among them (PlayerIdleState)
+[checks] fetch: 14 of 14 facts hold
+[maps] fetching 'Ridge' from the server: 26,861 B in 27 chunks, sha-256 af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2
+[maps] fetched 'Ridge': 26,861 B in 27 chunks, 0.60 s; it hashes to af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2, reads and validates (0 warnings)
+[maps] kept 'Ridge' as $COPY/map-fetch/home-1/.local/share/godot/app_userdata/gdpyr/maps/cache/af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2.map
+[checks] PASS map-fetch, fetch: the client exited 0
+[checks] PASS map-fetch, fetch: the cache holds 'af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2.map'
+[checks] level fetch check: cached; the cache is $COPY/map-fetch/home-1/.local/share/godot/app_userdata/gdpyr/maps/cache/
+[checks] PASS cached: before joining, the cache holds the map under its hash, and it hashes to it (af682abc…)
+[checks] PASS cached: connected, and the server named its map
+[checks] PASS cached: the server named map 'Ridge' by its hash af682abc…, 26,861 B, with no catalog id and a nonce of 16 B
+[checks] PASS cached: in the game, 0.48 s after starting
+[checks] PASS cached: it asked for the map 0 times; 0 expected
+[checks] PASS cached: nothing was fetched
+[checks] PASS cached: the cache holds the map under its hash, and it hashes to it (af682abc…)
+[checks] PASS cached: and nothing else: 1 file(s) in the cache
+[checks] PASS cached: this client plays Ridge ($COPY/map-fetch/home-1/.local/share/godot/app_userdata/gdpyr/maps/cache/af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2.map, af682abc)
+[checks] PASS cached: MapHost.tscn's LevelRoot built the world from the session's document
+[checks] PASS cached: the document the world was built from is af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2.map read again, field by field and sample by sample
+[checks] PASS cached: 490 of 500 rays straight down met the ground first, the worst 0.015 mm from the file's
+[checks] PASS cached: the file's pieces are in the world: 4 spawn markers, 3 resource nodes
+[checks] PASS cached: in the round: 1 on the roster, its own character among them (PlayerIdleState)
+[checks] cached: 14 of 14 facts hold
+[maps] the host's map 'Ridge' is in the cache: $COPY/map-fetch/home-1/.local/share/godot/app_userdata/gdpyr/maps/cache/af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2.map, sha-256 af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2; nothing to fetch
+[checks] PASS map-fetch, cached: the client exited 0
+[checks] level fetch check: wrong; the cache is $COPY/map-fetch/home-2/.local/share/godot/app_userdata/gdpyr/maps/cache/
+[checks] PASS wrong: before joining, the cache holds a file under the map's hash that is not the map: it hashes to 6d0aa3ff…
+[checks] PASS wrong: connected, and the server named its map
+[checks] PASS wrong: the server named map 'Ridge' by its hash af682abc…, 26,861 B, with no catalog id and a nonce of 16 B
+[checks] PASS wrong: in the game, 1.25 s after starting
+[checks] PASS wrong: it asked for the map 1 times; 1 expected
+[checks] PASS wrong: the fetch is complete: 27 of 27 chunks, Complete
+[checks] PASS wrong: the cache holds the map under its hash, and it hashes to it (af682abc…)
+[checks] PASS wrong: and nothing else: 1 file(s) in the cache
+[checks] PASS wrong: this client plays Ridge ($COPY/map-fetch/home-2/.local/share/godot/app_userdata/gdpyr/maps/cache/af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2.map, af682abc)
+[checks] PASS wrong: MapHost.tscn's LevelRoot built the world from the session's document
+[checks] PASS wrong: the document the world was built from is af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2.map read again, field by field and sample by sample
+[checks] PASS wrong: 490 of 500 rays straight down met the ground first, the worst 0.015 mm from the file's
+[checks] PASS wrong: the file's pieces are in the world: 4 spawn markers, 3 resource nodes
+[checks] PASS wrong: in the round: 1 on the roster, its own character among them (PlayerIdleState)
+[checks] wrong: 14 of 14 facts hold
+[maps] user://maps/cache/af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2.map is not that map: it hashes to 6d0aa3ff…; fetching it again
+[maps] fetching 'Ridge' from the server: 26,861 B in 27 chunks, sha-256 af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2
+[maps] fetched 'Ridge': 26,861 B in 27 chunks, 0.60 s; it hashes to af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2, reads and validates (0 warnings)
+[maps] kept 'Ridge' as $COPY/map-fetch/home-2/.local/share/godot/app_userdata/gdpyr/maps/cache/af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2.map
+[checks] PASS map-fetch, wrong: the client exited 0
+[checks] PASS map-fetch, wrong: the cache holds 'af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2.map'
+[checks] level fetch check: refused; the cache is $COPY/map-fetch/home-3/.local/share/godot/app_userdata/gdpyr/maps/cache/
+[checks] PASS refused: before joining, the cache holds nothing (0 files)
+[checks] PASS refused: the fetch was refused, with 'the map stopped arriving': the map stopped arriving: 13 of 27 chunks, then nothing for 10 s
+[checks] measured refused: 13 of 27 chunks had arrived
+[checks] PASS refused: it keeps no bytes and no map
+[checks] PASS refused: and nothing is in the cache: 0 files
+[checks] PASS refused: and it is not playing the map: Greybox (greybox)
+[checks] refused: 5 of 5 facts hold
+[maps] fetching 'Ridge' from the server: 26,861 B in 27 chunks, sha-256 af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2
+[maps] refused 'Ridge' after 10.29 s: the map stopped arriving: 13 of 27 chunks, then nothing for 10 s
+gdpyr: could not fetch the host's map 'Ridge': the map stopped arriving: 13 of 27 chunks, then nothing for 10 s
+[checks] PASS map-fetch, cut: the client exited 1
+[checks] PASS map-fetch, cut: the cache holds ''
+[checks] level fetch check: refused; the cache is $COPY/map-fetch/home-4/.local/share/godot/app_userdata/gdpyr/maps/cache/
+[checks] PASS refused: before joining, the cache holds nothing (0 files)
+[checks] PASS refused: the fetch was refused, with 'the host named': the bytes that arrived hash to df274e0a…, not the af682abc… the host named
+[checks] measured refused: 27 of 27 chunks had arrived
+[checks] PASS refused: it keeps no bytes and no map
+[checks] PASS refused: and nothing is in the cache: 0 files
+[checks] PASS refused: and it is not playing the map: Greybox (greybox)
+[checks] refused: 5 of 5 facts hold
+[maps] fetching 'Ridge' from the server: 26,861 B in 27 chunks, sha-256 af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2
+[maps] refused 'Ridge' after 0.56 s: the bytes that arrived hash to df274e0a…, not the af682abc… the host named
+gdpyr: could not fetch the host's map 'Ridge': the bytes that arrived hash to df274e0a…, not the af682abc… the host named
+[checks] PASS map-fetch, mismatch: the client exited 1
+[checks] PASS map-fetch, mismatch: the cache holds ''
+[checks] level fetch check: drops; the cache is $COPY/map-fetch/home-drops-1/.local/share/godot/app_userdata/gdpyr/maps/cache/
+[checks] PASS drops: before joining, the cache holds nothing (0 files)
+[checks] PASS drops: connected, and the server named its map
+[checks] PASS drops: the server named map 'Ridge' by its hash af682abc…, 26,861 B, with no catalog id and a nonce of 16 B
+[checks] trace drops: 4479.1 ms, frame 231: the map's channel's probe sent after chunk 0; 1 chunks in
+[checks] trace drops: 4491.0 ms, frame 232: the map's channel's probe sent after chunk 1; 2 chunks in
+[checks] trace drops: 4507.7 ms, frame 233: the map's channel's probe sent after chunk 2; 3 chunks in
+[checks] trace drops: 4524.4 ms, frame 234: the map's channel's probe sent after chunk 3; 4 chunks in
+[checks] trace drops: 4541.0 ms, frame 235: the map's channel's probe sent after chunk 4; 5 chunks in
+[checks] trace drops: 4557.7 ms, frame 236: the map's channel's probe sent after chunk 5; 6 chunks in
+[checks] trace drops: 4574.3 ms, frame 237: the map's channel's probe sent after chunk 6; 7 chunks in
+[checks] trace drops: 4591.0 ms, frame 238: the map's channel's probe sent after chunk 7; 8 chunks in
+[checks] trace drops: 4740.2 ms, frame 238: the default channel's probe sent after chunk 0; 8 chunks in
+[checks] trace drops: 4751.8 ms, frame 239: the map's channel's probe sent after chunk 8; 9 chunks in
+[checks] trace drops: 4751.9 ms, frame 239: the map's channel's probe sent after chunk 9; 10 chunks in
+[checks] trace drops: 4751.9 ms, frame 239: the map's channel's probe sent after chunk 10; 11 chunks in
+[checks] trace drops: 4752.0 ms, frame 239: the map's channel's probe sent after chunk 11; 12 chunks in
+[checks] trace drops: 4752.0 ms, frame 239: the map's channel's probe sent after chunk 12; 13 chunks in
+[checks] trace drops: 4752.0 ms, frame 239: the map's channel's probe sent after chunk 13; 14 chunks in
+[checks] trace drops: 4752.0 ms, frame 239: the map's channel's probe sent after chunk 14; 15 chunks in
+[checks] trace drops: 4752.0 ms, frame 239: the default channel's probe sent after chunk 1; 15 chunks in
+[checks] trace drops: 4752.0 ms, frame 239: the default channel's probe sent after chunk 2; 15 chunks in
+[checks] trace drops: 4752.0 ms, frame 239: the default channel's probe sent after chunk 3; 15 chunks in
+[checks] trace drops: 4752.0 ms, frame 239: the map's channel's probe sent after chunk 15; 16 chunks in
+[checks] trace drops: 4768.4 ms, frame 241: the default channel's probe sent after chunk 4; 16 chunks in
+[checks] trace drops: 4768.4 ms, frame 241: the default channel's probe sent after chunk 5; 16 chunks in
+[checks] trace drops: 4768.4 ms, frame 241: the default channel's probe sent after chunk 6; 16 chunks in
+[checks] trace drops: 4768.5 ms, frame 241: the default channel's probe sent after chunk 7; 16 chunks in
+[checks] trace drops: 4768.5 ms, frame 241: the default channel's probe sent after chunk 8; 16 chunks in
+[checks] trace drops: 4768.5 ms, frame 241: the default channel's probe sent after chunk 9; 16 chunks in
+[checks] trace drops: 4768.5 ms, frame 241: the default channel's probe sent after chunk 10; 16 chunks in
+[checks] trace drops: 4768.5 ms, frame 241: the default channel's probe sent after chunk 11; 16 chunks in
+[checks] trace drops: 4768.5 ms, frame 241: the default channel's probe sent after chunk 12; 16 chunks in
+[checks] trace drops: 4768.5 ms, frame 241: the default channel's probe sent after chunk 13; 16 chunks in
+[checks] trace drops: 4768.5 ms, frame 241: the default channel's probe sent after chunk 14; 16 chunks in
+[checks] trace drops: 4768.5 ms, frame 241: the default channel's probe sent after chunk 15; 16 chunks in
+[checks] trace drops: 4901.7 ms, frame 249: the map's channel's probe sent after chunk 16; 17 chunks in
+[checks] trace drops: 4901.8 ms, frame 249: the map's channel's probe sent after chunk 17; 18 chunks in
+[checks] trace drops: 4901.8 ms, frame 249: the map's channel's probe sent after chunk 18; 19 chunks in
+[checks] trace drops: 4918.3 ms, frame 250: the default channel's probe sent after chunk 16; 20 chunks in
+[checks] trace drops: 4918.4 ms, frame 250: the default channel's probe sent after chunk 17; 20 chunks in
+[checks] trace drops: 4918.4 ms, frame 250: the default channel's probe sent after chunk 18; 20 chunks in
+[checks] trace drops: 4918.4 ms, frame 250: the default channel's probe sent after chunk 19; 20 chunks in
+[checks] trace drops: 4918.4 ms, frame 250: the default channel's probe sent after chunk 20; 20 chunks in
+[checks] trace drops: 4919.3 ms, frame 250: the default channel's probe sent after chunk 21; 20 chunks in
+[checks] trace drops: 4919.6 ms, frame 250: the default channel's probe sent after chunk 22; 20 chunks in
+[checks] trace drops: 5185.0 ms, frame 266: the map's channel's probe sent after chunk 19; 20 chunks in
+[checks] trace drops: 5185.2 ms, frame 266: the map's channel's probe sent after chunk 20; 21 chunks in
+[checks] trace drops: 5185.2 ms, frame 266: the map's channel's probe sent after chunk 21; 22 chunks in
+[checks] trace drops: 5185.2 ms, frame 266: the map's channel's probe sent after chunk 22; 23 chunks in
+[checks] trace drops: 5185.3 ms, frame 266: the map's channel's probe sent after chunk 23; 24 chunks in
+[checks] trace drops: 5185.3 ms, frame 266: the map's channel's probe sent after chunk 24; 25 chunks in
+[checks] trace drops: 5185.3 ms, frame 266: the map's channel's probe sent after chunk 25; 26 chunks in
+[checks] PASS drops: in the game, 4.81 s after starting
+[checks] PASS drops: it asked for the map 1 times; 1 expected
+[checks] PASS drops: the fetch is complete: 27 of 27 chunks, Complete
+[checks] PASS drops: the cache holds the map under its hash, and it hashes to it (af682abc…)
+[checks] PASS drops: and nothing else: 1 file(s) in the cache
+[checks] PASS drops: this client plays Ridge ($COPY/map-fetch/home-drops-1/.local/share/godot/app_userdata/gdpyr/maps/cache/af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2.map, af682abc)
+[checks] PASS drops: MapHost.tscn's LevelRoot built the world from the session's document
+[checks] PASS drops: the document the world was built from is af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2.map read again, field by field and sample by sample
+[checks] PASS drops: 490 of 500 rays straight down met the ground first, the worst 0.015 mm from the file's
+[checks] PASS drops: the file's pieces are in the world: 4 spawn markers, 3 resource nodes
+[checks] PASS drops: in the round: 1 on the roster, its own character among them (PlayerIdleState)
+[checks] trace drops: 5992.2 ms, frame 302: the default channel's probe sent after chunk 23; 27 chunks in
+[checks] trace drops: 5992.2 ms, frame 302: the default channel's probe sent after chunk 24; 27 chunks in
+[checks] trace drops: 5992.2 ms, frame 302: the default channel's probe sent after chunk 25; 27 chunks in
+[checks] measured drops: drops: 26 default-channel probes, 3 of them ahead of a chunk sent before them, past 1 chunk(s) not yet arrived; 26 probes on the map's channel, 0 ahead of a chunk
+[checks] PASS drops: every probe is in, 26 on each channel; on the map's own channel, none arrived ahead of a chunk sent before it: the control
+[checks] drops: 15 of 15 facts hold
+[maps] fetching 'Ridge' from the server: 26,861 B in 27 chunks, sha-256 af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2
+[maps] fetched 'Ridge': 26,861 B in 27 chunks, 0.85 s; it hashes to af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2, reads and validates (0 warnings)
+[maps] kept 'Ridge' as $COPY/map-fetch/home-drops-1/.local/share/godot/app_userdata/gdpyr/maps/cache/af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2.map
+[checks] PASS map-fetch, drops: the client exited 0
+[checks] level fetch check: drops; the cache is $COPY/map-fetch/home-drops-2/.local/share/godot/app_userdata/gdpyr/maps/cache/
+[checks] PASS drops: before joining, the cache holds nothing (0 files)
+[checks] PASS drops: connected, and the server named its map
+[checks] PASS drops: the server named map 'Ridge' by its hash af682abc…, 26,861 B, with no catalog id and a nonce of 16 B
+[checks] PASS drops: in the game, 1.72 s after starting
+[checks] PASS drops: it asked for the map 1 times; 1 expected
+[checks] PASS drops: the fetch is complete: 27 of 27 chunks, Complete
+[checks] PASS drops: the cache holds the map under its hash, and it hashes to it (af682abc…)
+[checks] PASS drops: and nothing else: 1 file(s) in the cache
+[checks] PASS drops: this client plays Ridge ($COPY/map-fetch/home-drops-2/.local/share/godot/app_userdata/gdpyr/maps/cache/af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2.map, af682abc)
+[checks] PASS drops: MapHost.tscn's LevelRoot built the world from the session's document
+[checks] PASS drops: the document the world was built from is af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2.map read again, field by field and sample by sample
+[checks] PASS drops: 490 of 500 rays straight down met the ground first, the worst 0.015 mm from the file's
+[checks] PASS drops: the file's pieces are in the world: 4 spawn markers, 3 resource nodes
+[checks] PASS drops: in the round: 1 on the roster, its own character among them (PlayerIdleState)
+[checks] measured drops: drops: 26 default-channel probes, 26 of them ahead of a chunk sent before them, past 1 chunk(s) not yet arrived; 26 probes on the map's channel, 0 ahead of a chunk
+[checks] PASS drops: every probe is in, 26 on each channel; on the map's own channel, none arrived ahead of a chunk sent before it: the control
+[checks] drops: 15 of 15 facts hold
+[maps] fetching 'Ridge' from the server: 26,861 B in 27 chunks, sha-256 af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2
+[maps] fetched 'Ridge': 26,861 B in 27 chunks, 1.26 s; it hashes to af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2, reads and validates (0 warnings)
+[maps] kept 'Ridge' as $COPY/map-fetch/home-drops-2/.local/share/godot/app_userdata/gdpyr/maps/cache/af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2.map
+[checks] PASS map-fetch, drops: the client exited 0
+[checks] level fetch check: drops; the cache is $COPY/map-fetch/home-drops-3/.local/share/godot/app_userdata/gdpyr/maps/cache/
+[checks] PASS drops: before joining, the cache holds nothing (0 files)
+[checks] PASS drops: connected, and the server named its map
+[checks] PASS drops: the server named map 'Ridge' by its hash af682abc…, 26,861 B, with no catalog id and a nonce of 16 B
+[checks] PASS drops: in the game, 2.07 s after starting
+[checks] PASS drops: it asked for the map 1 times; 1 expected
+[checks] PASS drops: the fetch is complete: 27 of 27 chunks, Complete
+[checks] PASS drops: the cache holds the map under its hash, and it hashes to it (af682abc…)
+[checks] PASS drops: and nothing else: 1 file(s) in the cache
+[checks] PASS drops: this client plays Ridge ($COPY/map-fetch/home-drops-3/.local/share/godot/app_userdata/gdpyr/maps/cache/af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2.map, af682abc)
+[checks] PASS drops: MapHost.tscn's LevelRoot built the world from the session's document
+[checks] PASS drops: the document the world was built from is af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2.map read again, field by field and sample by sample
+[checks] PASS drops: 490 of 500 rays straight down met the ground first, the worst 0.015 mm from the file's
+[checks] PASS drops: the file's pieces are in the world: 4 spawn markers, 3 resource nodes
+[checks] PASS drops: in the round: 1 on the roster, its own character among them (PlayerIdleState)
+[checks] measured drops: drops: 26 default-channel probes, 14 of them ahead of a chunk sent before them, past 1 chunk(s) not yet arrived; 26 probes on the map's channel, 0 ahead of a chunk
+[checks] PASS drops: every probe is in, 26 on each channel; on the map's own channel, none arrived ahead of a chunk sent before it: the control
+[checks] drops: 15 of 15 facts hold
+[maps] fetching 'Ridge' from the server: 26,861 B in 27 chunks, sha-256 af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2
+[maps] fetched 'Ridge': 26,861 B in 27 chunks, 1.13 s; it hashes to af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2, reads and validates (0 warnings)
+[maps] kept 'Ridge' as $COPY/map-fetch/home-drops-3/.local/share/godot/app_userdata/gdpyr/maps/cache/af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2.map
+[checks] PASS map-fetch, drops: the client exited 0
+[checks] level fetch check: drops; the cache is $COPY/map-fetch/home-drops-4/.local/share/godot/app_userdata/gdpyr/maps/cache/
+[checks] PASS drops: before joining, the cache holds nothing (0 files)
+[checks] PASS drops: connected, and the server named its map
+[checks] PASS drops: the server named map 'Ridge' by its hash af682abc…, 26,861 B, with no catalog id and a nonce of 16 B
+[checks] PASS drops: in the game, 1.08 s after starting
+[checks] PASS drops: it asked for the map 1 times; 1 expected
+[checks] PASS drops: the fetch is complete: 27 of 27 chunks, Complete
+[checks] PASS drops: the cache holds the map under its hash, and it hashes to it (af682abc…)
+[checks] PASS drops: and nothing else: 1 file(s) in the cache
+[checks] PASS drops: this client plays Ridge ($COPY/map-fetch/home-drops-4/.local/share/godot/app_userdata/gdpyr/maps/cache/af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2.map, af682abc)
+[checks] PASS drops: MapHost.tscn's LevelRoot built the world from the session's document
+[checks] PASS drops: the document the world was built from is af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2.map read again, field by field and sample by sample
+[checks] PASS drops: 490 of 500 rays straight down met the ground first, the worst 0.015 mm from the file's
+[checks] PASS drops: the file's pieces are in the world: 4 spawn markers, 3 resource nodes
+[checks] PASS drops: in the round: 2 on the roster, its own character among them (PlayerIdleState)
+[checks] measured drops: drops: 26 default-channel probes, 17 of them ahead of a chunk sent before them, past 2 chunk(s) not yet arrived; 26 probes on the map's channel, 0 ahead of a chunk
+[checks] PASS drops: every probe is in, 26 on each channel; on the map's own channel, none arrived ahead of a chunk sent before it: the control
+[checks] drops: 15 of 15 facts hold
+[maps] fetching 'Ridge' from the server: 26,861 B in 27 chunks, sha-256 af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2
+[maps] fetched 'Ridge': 26,861 B in 27 chunks, 0.59 s; it hashes to af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2, reads and validates (0 warnings)
+[maps] kept 'Ridge' as $COPY/map-fetch/home-drops-4/.local/share/godot/app_userdata/gdpyr/maps/cache/af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2.map
+[checks] PASS map-fetch, drops: the client exited 0
+[checks] level fetch check: server; the cache is $COPY/map-fetch/home-server/.local/share/godot/app_userdata/gdpyr/maps/cache/
+[rts] navigation baked: 2130 vertices
+[checks] PASS server: the server plays Ridge ($COPY/map-fetch/ridge.map, af682abc), 26,861 B loaded, hashing to it
+[rts] navigation re-baked around the structures in 1963 ms, 7.4 ms of it on the tick (1 this round)
+[checks] server: peer 364787595 (fetch) left: asked 1 times, sent 27 of 27 chunks
+[checks] server: peer 1019834060 (cached) left: asked 0 times, sent 0 of 27 chunks
+[checks] server: peer 1514725969 (wrong) left: asked 1 times, sent 27 of 27 chunks
+[checks] server: the map's sender stopped at 13 of 27 chunks for peer 21000688
+[checks] server: peer 21000688 (cut) left: asked 1 times, sent 13 of 27 chunks
+[checks] server: sent peer 2104558778 the map's 27 chunks with byte 13430 changed
+[checks] server: peer 2104558778 (mismatch) left: asked 1 times, sent 0 of 27 chunks, 27 forged
+[checks] server: peer 1528813223 (drops) left: asked 1 times, sent 27 of 27 chunks
+[checks] server: peer 794555496 (drops) left: asked 1 times, sent 27 of 27 chunks
+[checks] measured server: 9 peers joined; 104 pairs of probes sent
+[checks] PASS server: peer 364787595, fetch: asked 1 times, sent 27 of 27 chunks
+[checks] PASS server: peer 1019834060, cached: asked 0 times, sent 0 of 27 chunks: the second join sent no request
+[checks] PASS server: peer 1514725969, wrong: asked 1 times, sent 27 of 27 chunks
+[checks] PASS server: peer 21000688, cut: asked 1 times, sent 13 of 27 chunks; the sender stopped at 13, and the peer dropped the link 10.1 s later
+[checks] PASS server: peer 2104558778, mismatch: asked 1 times, sent 0 of 27 chunks; 27 chunks sent with a byte changed, and the peer dropped the link 0.1 s after the last
+[checks] PASS server: peer 1528813223, drops: asked 1 times, sent 27 of 27 chunks
+[checks] PASS server: peer 794555496, drops: asked 1 times, sent 27 of 27 chunks
+[checks] PASS server: peer 1872760420, drops: asked 1 times, sent 27 of 27 chunks
+[checks] PASS server: peer 1498846267, drops: asked 1 times, sent 27 of 27 chunks
+[checks] PASS server: over 4 fetches behind a relay that drops datagrams: 60 of 104 default-channel messages arrived ahead of a chunk sent before them, past 5 chunk(s) not yet arrived; on the map's channel 0 of 104
+[checks] server: 11 of 11 facts hold
+[maps] sending 'Ridge' to peer 364787595: 26,861 B in 27 chunks
+[maps] sent 'Ridge' to peer 364787595: 27 chunks, 26,861 B, in 0.45 s
+[maps] sending 'Ridge' to peer 1514725969: 26,861 B in 27 chunks
+[maps] sent 'Ridge' to peer 1514725969: 27 chunks, 26,861 B, in 0.45 s
+[maps] sending 'Ridge' to peer 21000688: 26,861 B in 27 chunks
+[maps] peer 21000688 left with 13 of 27 chunks sent
+[maps] sending 'Ridge' to peer 2104558778: 26,861 B in 27 chunks
+[maps] peer 2104558778 left with 0 of 27 chunks sent
+[maps] sending 'Ridge' to peer 1528813223: 26,861 B in 27 chunks
+[maps] sent 'Ridge' to peer 1528813223: 27 chunks, 26,861 B, in 0.45 s
+[maps] sending 'Ridge' to peer 794555496: 26,861 B in 27 chunks
+[maps] sent 'Ridge' to peer 794555496: 27 chunks, 26,861 B, in 0.45 s
+[maps] sending 'Ridge' to peer 1872760420: 26,861 B in 27 chunks
+[maps] sent 'Ridge' to peer 1872760420: 27 chunks, 26,861 B, in 0.45 s
+[maps] sending 'Ridge' to peer 1498846267: 26,861 B in 27 chunks
+[maps] sent 'Ridge' to peer 1498846267: 27 chunks, 26,861 B, in 0.45 s
+[relay] jitter: relay: up 799 down 2908 dropped 0 (0 down, 0 of them over 1,000 B); one-way delay mean 40.1 ms, sd 9.9 ms, min 8.5, max 72.8
+[relay] drops: relay: up 655 down 2642 dropped 328 (264 down, 48 of them over 1,000 B); one-way delay mean 40.0 ms, sd 0.0 ms, min 40.0, max 40.0
+map-fetch, the server: exit 0
+[checks] level fetch check: playback; the cache is $COPY/map-fetch/home-1/.local/share/godot/app_userdata/gdpyr/maps/cache/
+[checks] PASS playback: in the map, a demo playing
+[checks] PASS playback: the demo's header names its map map:af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2
+[checks] PASS playback: and it is played on that map, from the cache: Ridge ($COPY/map-fetch/home-1/.local/share/godot/app_userdata/gdpyr/maps/cache/af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2.map, af682abc)
+[checks] PASS playback: MapHost.tscn's LevelRoot built the world from the session's document
+[checks] PASS playback: the document the world was built from is af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2.map read again, field by field and sample by sample
+[checks] PASS playback: 490 of 500 rays straight down met the ground first, the worst 0.015 mm from the file's
+[checks] PASS playback: the file's pieces are in the world: 4 spawn markers, 3 resource nodes
+[checks] PASS playback: it plays: from tick 0 to 515, 121 ticks played; 1 on the roster
+[checks] playback: 8 of 8 facts hold
+[level] built 'Ridge' (Ridge ($COPY/map-fetch/home-1/.local/share/godot/app_userdata/gdpyr/maps/cache/af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2.map, af682abc)) in 127 ms: terrain 241 x 241 samples, 225 shapes set in 67.2 ms, -3.68 … 9.63 m, water -5.00 m, over none, not drawn
+[level] built 1 spawn lines of 4 markers, 1 lockers, 1 kiosks, 1 barracks, 3 nodes, 1 anchors, 2 emplacements, 2 ammo cans, 18 cover boxes, 1 scenery, 0 bridge sections on 0 piers, the perimeter; 2 structures for the round to put up
+[demo] playing le7-fetch.dem: Stream demo, 60 Hz, from tick 0, map:af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2, recorded by vm
+map-fetch, playback: exit 0
+[checks] PASS map-fetch, playback without the map: exit 1, 'gdpyr: --playdemo le7-fetch.dem: le7-fetch.dem: it was recorded on map af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2, which is not in this build, one's own maps or the cache'
+kept $COPY
+exit 0
