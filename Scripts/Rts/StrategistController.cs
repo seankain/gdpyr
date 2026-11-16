@@ -57,11 +57,11 @@ public partial class StrategistController : Node3D
 
 	/// <summary>
 	/// How far below the horizon the view may be tipped: from nearly level to
-	/// straight down. Never above it — a strategist looking at the sky has no map
-	/// to click on.
+	/// straight down, which is where a click on the map puts it. Never above it — a
+	/// strategist looking at the sky has no map to click on.
 	/// </summary>
 	private static readonly float MinPitch = Mathf.DegToRad(5f);
-	private static readonly float MaxPitch = Mathf.DegToRad(89f);
+	private static readonly float MaxPitch = Mathf.DegToRad(90f);
 
 	/// <summary>Pixels from the window edge that start an edge scroll.</summary>
 	private const float EdgeScrollMargin = 12f;
@@ -120,6 +120,12 @@ public partial class StrategistController : Node3D
 	/// <summary>The right button has been dragged far enough to be turning the view rather than giving an order.</summary>
 	private bool _turning;
 
+	/// <summary>The left button went down on the map and has not come up: the camera follows the pointer across it.</summary>
+	private bool _mapHeld;
+
+	/// <summary>Scratch for the corners of the ground the camera sees, handed to the map every frame.</summary>
+	private readonly Vector2[] _viewCorners = new Vector2[4];
+
 	/// <summary>Where the right button went down. The pointer is put back here when a turn ends.</summary>
 	private Vector2 _rightFrom;
 
@@ -173,6 +179,9 @@ public partial class StrategistController : Node3D
 		_hud.UnloadPressed += UnloadSelected;
 		_hud.TacticsPressed += ToggleTactics;
 		_hud.TacticsDefaultPressed += ToggleTacticsDefault;
+		_hud.Minimap.MapEvent += OnMapEvent;
+		_hud.Minimap.Track(_selected);
+		_hud.Minimap.Survey(_groundY);
 
 		// A strategist needs a pointer. The first-person rig takes the mouse back when
 		// this node goes away (fps_controller.EnterFirstPerson).
@@ -196,6 +205,7 @@ public partial class StrategistController : Node3D
 		}
 
 		UpdateGhost();
+		UpdateMapView();
 	}
 
 	/// <summary>Called once per simulation tick by the combat manager, which owns this node.</summary>
@@ -231,7 +241,8 @@ public partial class StrategistController : Node3D
 			return;
 		}
 
-		if (@event.IsActionPressed("rts_order_attack")) { Arm(OrderKind.Attack); }
+		if (@event.IsActionPressed("rts_map_zoom")) { ZoomMapAtCursor(); }
+		else if (@event.IsActionPressed("rts_order_attack")) { Arm(OrderKind.Attack); }
 		else if (@event.IsActionPressed("rts_order_patrol")) { Arm(OrderKind.Patrol); }
 		else if (@event.IsActionPressed("rts_order_defend")) { Arm(OrderKind.Defend); }
 		else if (@event.IsActionPressed("rts_order_stop")) { Stop(); }
@@ -289,6 +300,110 @@ public partial class StrategistController : Node3D
 		_pitch = Mathf.Clamp(_pitch + (motion.Relative.Y * LookSensitivity), MinPitch, MaxPitch);
 		GetViewport().SetInputAsHandled();
 	}
+
+	// ---- the map (Scripts/Ui/Minimap.cs) --------------------------------------
+
+	/// <summary>
+	/// A mouse event on the map, in map pixels. The left button, clicked or dragged, puts the
+	/// camera over that point looking straight down; the zoom input and the wheel zoom the map,
+	/// not the camera, about the point under the pointer. Anything else on the map — the right
+	/// button among them — does nothing: the map has stopped it from reaching the world.
+	/// </summary>
+	private void OnMapEvent(InputEvent @event)
+	{
+		Minimap map = _hud.Minimap;
+
+		if (@event is InputEventMouseMotion motion)
+		{
+			if (_mapHeld)
+			{
+				LookDownAt(map.WorldAt(motion.Position));
+			}
+
+			return;
+		}
+
+		if (@event is not InputEventMouseButton button)
+		{
+			return;
+		}
+
+		if (button.IsAction("rts_select"))
+		{
+			_mapHeld = button.Pressed;
+			if (button.Pressed)
+			{
+				LookDownAt(map.WorldAt(button.Position));
+			}
+
+			return;
+		}
+
+		if (!button.Pressed)
+		{
+			return;
+		}
+
+		if (button.IsAction("rts_map_zoom")) { map.View.CycleZoom(button.Position, map.MapSize); }
+		else if (button.IsAction("rts_zoom_in")) { map.View.ZoomBy(1, button.Position, map.MapSize); }
+		else if (button.IsAction("rts_zoom_out")) { map.View.ZoomBy(-1, button.Position, map.MapSize); }
+	}
+
+	/// <summary>
+	/// The zoom input when it is not on the mouse, so the map never saw it: it zooms the map
+	/// if the pointer is over the map, and does nothing anywhere else.
+	/// </summary>
+	private void ZoomMapAtCursor()
+	{
+		Minimap map = _hud.Minimap;
+		Vector2 at = GetViewport().GetMousePosition() - map.GlobalPosition;
+		if (new Rect2(Vector2.Zero, map.MapSize).HasPoint(at))
+		{
+			map.View.CycleZoom(at, map.MapSize);
+		}
+	}
+
+	/// <summary>
+	/// The camera to straight over <paramref name="point"/>, <c>(x, z)</c>, looking straight
+	/// down, at the height it was. Its yaw is kept: the top of the screen stays whichever way
+	/// the strategist had turned it.
+	/// </summary>
+	private void LookDownAt(Vector2 point)
+	{
+		_position.X = point.X;
+		_position.Z = point.Y;
+		_pitch = MaxPitch;
+		KeepOverTheGround();
+		_camera.GlobalTransform = new Transform3D(Look, _position);
+	}
+
+	/// <summary>
+	/// Hands the map the ground the camera sees — where the rays through the screen's corners
+	/// meet the anchor's plane, or the field's width out along them where they never do — and
+	/// the point at its middle, which the map keeps in view when zoomed in. Not while the
+	/// left button is held on the map: the map stays put under a drag across it.
+	/// </summary>
+	private void UpdateMapView()
+	{
+		if (_mapHeld && (Gdpyr.Core.InputFocus.TextEntry || !Input.IsActionPressed("rts_select")))
+		{
+			// The release went somewhere else: the console, or another window.
+			_mapHeld = false;
+		}
+
+		Minimap map = _hud.Minimap;
+		Vector2 screen = GetViewport().GetVisibleRect().Size;
+		float reach = 2f * map.View.FieldHalf;
+
+		_viewCorners[0] = GroundAt(Vector2.Zero, reach);
+		_viewCorners[1] = GroundAt(new Vector2(screen.X, 0f), reach);
+		_viewCorners[2] = GroundAt(screen, reach);
+		_viewCorners[3] = GroundAt(new Vector2(0f, screen.Y), reach);
+		map.SetView(_viewCorners, GroundAt(screen * 0.5f, reach), follow: !_mapHeld);
+	}
+
+	private Vector2 GroundAt(Vector2 screen, float reach) =>
+		MinimapView.GroundPoint(_camera.ProjectRayOrigin(screen), _camera.ProjectRayNormal(screen), _groundY, reach);
 
 	// ---- contacts (docs/IMPLEMENTATION_PLAN.md §M4) -------------------------
 

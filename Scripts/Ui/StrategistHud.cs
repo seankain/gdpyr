@@ -139,6 +139,9 @@ public partial class StrategistHud : CanvasLayer
 
 	public SelectionOverlay Overlay { get; private set; }
 
+	/// <summary>The map in the bottom-right corner (<see cref="Ui.Minimap"/>).</summary>
+	public Minimap Minimap { get; private set; }
+
 	/// <summary>A unit button on the card was pressed. Carries the unit's catalog id.</summary>
 	public event Action<byte> BuildPressed;
 
@@ -190,6 +193,7 @@ public partial class StrategistHud : CanvasLayer
 
 		BuildNotice(root);
 		BuildKeys(root);
+		BuildMinimap(root);
 		BuildCard(root);
 		ShowKeys(s_keysShown);
 	}
@@ -489,7 +493,7 @@ public partial class StrategistHud : CanvasLayer
 	}
 
 	/// <summary>
-	/// The card sits in the bottom-right corner, and above the key list while that is
+	/// The card sits at the bottom beside the map, and above the key list while that is
 	/// open: the list is as wide as a narrow window.
 	/// </summary>
 	private void PlaceCard()
@@ -604,10 +608,29 @@ public partial class StrategistHud : CanvasLayer
 	}
 
 	/// <summary>
+	/// The map, pinned to the bottom-right corner at its own size. Built before the card so
+	/// the card, which grows to whatever its buttons need, is drawn over it should a narrow
+	/// window ever bring the two together.
+	/// </summary>
+	private void BuildMinimap(Control root)
+	{
+		Minimap = new Minimap { Name = "Minimap" };
+		root.AddChild(Minimap);
+
+		Minimap.SetAnchorsPreset(Control.LayoutPreset.BottomRight);
+		Minimap.GrowHorizontal = Control.GrowDirection.Begin;
+		Minimap.GrowVertical = Control.GrowDirection.Begin;
+		Minimap.OffsetLeft = -Margin - Minimap.SizePixels;
+		Minimap.OffsetTop = -Margin - Minimap.SizePixels;
+		Minimap.OffsetRight = -Margin;
+		Minimap.OffsetBottom = -Margin;
+	}
+
+	/// <summary>
 	/// The command card: a status line, then the rows the selection has — what a
 	/// barracks or structure trains, what builders put up, the orders — and a footer
 	/// with cancel, unload, tactics and what a right-click does. Up only while
-	/// something is selected, in the bottom-right corner.
+	/// something is selected, at the bottom, just left of the map.
 	/// </summary>
 	private void BuildCard(Control root)
 	{
@@ -700,13 +723,14 @@ public partial class StrategistHud : CanvasLayer
 		_cardHint.AddThemeFontSizeOverride("font_size", 12);
 		footer.AddChild(_cardHint);
 
-		// Pinned by its bottom-right corner and grown up and to the left, so it is
-		// whatever size its buttons need without this having to know it.
+		// Pinned by its bottom-right corner, beside the map, and grown up and to the left,
+		// so it is whatever size its buttons need without this having to know it.
+		float right = -Margin - Minimap.SizePixels - Gap;
 		panel.SetAnchorsPreset(Control.LayoutPreset.BottomRight);
 		panel.GrowHorizontal = Control.GrowDirection.Begin;
 		panel.GrowVertical = Control.GrowDirection.Begin;
-		panel.OffsetLeft = -Margin;
-		panel.OffsetRight = -Margin;
+		panel.OffsetLeft = right;
+		panel.OffsetRight = right;
 		panel.OffsetTop = -Margin;
 		panel.OffsetBottom = -Margin;
 
