@@ -1,20 +1,21 @@
 # Maps
 
-Status: **built.** `Scenes/Maps/MapBase.tscn` holds everything a round needs. New maps inherit from
-it. A map shows up in the host panel's **Map** picker once it has an entry in
-`Scripts/Core/MapCatalog.cs`. `Tests/MapSceneTests.cs` checks the requirements below against every
-catalog map and against the template, and needs no Godot install.
+Status: **built.** There are two kinds of map. A **scene map** inherits `Scenes/Maps/MapBase.tscn`,
+which holds everything a round needs, and shows up in the host panel's **Map** picker once it has an
+entry in `Scripts/Core/MapCatalog.cs`; `Tests/MapSceneTests.cs` checks the requirements below against
+every catalog scene and against the template, and needs no Godot install. A **data map** is a `.map`
+file made in the game's map editor, which one scene, `Scenes/Maps/MapHost.tscn`, builds the world
+from; it needs no entry and no checkout to play, and a client that lacks it fetches it from its
+server (§6, [`LEVEL_EDITOR.md`](LEVEL_EDITOR.md)).
 
 Scope: how a map reaches the map select, what the template holds, what the engine looks for in a map
-scene, and how to check a new one. Hosting and the wire are in [`LAN.md`](LAN.md) §3.4. Cover is in
-[`COVER.md`](COVER.md). Nodes and perks are in [`CONTROL_POINTS.md`](CONTROL_POINTS.md).
+scene, how to check a new one, and data maps (§6). Hosting and the wire are in [`LAN.md`](LAN.md)
+§3.4. Cover is in [`COVER.md`](COVER.md). Nodes and perks are in
+[`CONTROL_POINTS.md`](CONTROL_POINTS.md).
 
-A second kind of map is a data file, a `.map`, which one scene, `Scenes/Maps/MapHost.tscn`, builds
-the world from ([`LEVEL_EDITOR.md`](LEVEL_EDITOR.md) §7). Playing one is built (LE3): one is bundled,
-`res://Maps/hills.map`, with a catalog entry after the greybox; `--map` names any. The editor that
-makes one and a client fetching one from its server are planned and not built. Nothing here changes
-for scene maps: a data map's world has every node §3 names, and `Tests/BundledMapTests.cs` holds a
-bundled one to the validator in place of `MapSceneTests`.
+Nothing in §1–§5 changes for scene maps. A data map's world has every node §3 names, built from the
+file by `LevelBuilder` ([`LEVEL_EDITOR.md`](LEVEL_EDITOR.md) §7.1), and the validator
+(`MapValidator`) asks of a file what `MapSceneTests` asks of a scene.
 
 ---
 
@@ -29,7 +30,7 @@ new("dunes", "Dunes", "res://Scenes/Maps/Dunes.tscn",
 
 | Field | Rule |
 |---|---|
-| `Id` | What the server sends to every client (`NetworkManager.ServerMap`), and how the client finds the map in its own catalog. Matched exactly and case-sensitive. **Never change an id once a build that has it is out.** It must be unique (`MapCatalogTests.IdsAreUnique`). |
+| `Id` | What the server sends to every client (`NetworkManager.ServerMap`), and how the client finds a scene map in its own catalog. Matched exactly and case-sensitive. **Never change an id once a build that has it is out.** It must be unique (`MapCatalogTests.IdsAreUnique`). A data map is found by its hash, not its id (§6). |
 | `Name` | The picker's text. |
 | `ScenePath` | `res://…/*.tscn`. The file must exist (`MapCatalogTests.TheScenesAreInTheCheckout`) and must meet §3 (`MapSceneTests`). |
 | `Description` | One line under the picker. |
@@ -39,9 +40,13 @@ new("dunes", "Dunes", "res://Scenes/Maps/Dunes.tscn",
   load it; `--map <id>` names another for `--server`, `--listen` and `--practice`
   ([`LEVEL_EDITOR.md`](LEVEL_EDITOR.md) §9.5). Keep the greybox first
   (`MapCatalogTests.TheDefaultIsTheGreybox`) and add new maps after it.
-- **The host and every client need the entry.** A client whose build lacks the host's map id refuses
-  it and disconnects instead of guessing. Both machines must run the same commit
-  ([`LAN.md`](LAN.md) §3.4, §5).
+- **The host and every client need a scene map's entry.** A client whose build lacks the host's map
+  id refuses it and disconnects instead of guessing. Both machines must run the same commit
+  ([`LAN.md`](LAN.md) §3.4, §5). A data map is not held to this: a client that lacks it fetches it
+  (§6).
+- **After the catalog, the picker lists one's own data maps** — every `user://maps/<name>.map` that
+  reads and that the validator finds no error in, as `Name — name, yours` — asked again each time the
+  panel opens.
 - The template itself has no entry and must not get one (`MapSceneTests.TheTemplateIsNotAMapOfItsOwn`).
 
 ---
@@ -214,3 +219,93 @@ The only new log line on any of them was the CSG warning above, from the inherit
    `Node3D`s with `ResourceNode.cs` (up to 8). Name them so the sorted order is the one you mean.
 5. Add the `MapCatalog` entry (§1), after the greybox, with an id that will never change.
 6. Run `dotnet test` (§4), then host it from the menu and read the log.
+
+---
+
+## 6. Data maps
+
+A `.map` is the whole map in one file: the ground as a 241 × 241 heightfield over the 240 m field,
+1 m between samples; the water level and the texture bands; every object as a prefab id from
+`Scripts/Core/PrefabCatalog.cs`, a position, a yaw and its parameters; and the roads. There is no
+scene, no script and no float in it, and it is at most 1 MiB ([`LEVEL_EDITOR.md`](LEVEL_EDITOR.md)
+§6.8). **A data map is its SHA-256**: the wire names it by its hash, a client's cache keeps it under
+it, and `maps/active` and a demo name it by it. A file is never re-encoded, so a map saved again is a
+new map with a new hash, and the same bytes under two names are one map.
+
+### 6.1 Where one comes from
+
+| Made by | How |
+|---|---|
+| The map editor | **Map editor** on the main menu, or `godot --path . -- --edit [name]`: terrain brushes, prefabs, roads and bridges, undo, save and autosave, **Validate**, **Deep** and **Test** ([`LEVEL_EDITOR.md`](LEVEL_EDITOR.md) §8; the keys are in the [README](../README.md)) |
+| The generator | `dotnet run --project tools/Gdpyr.MapTool -- generate <file> --seed N --name TEXT`: rolling hills with a round's pieces levelled into them. It made the bundled map, and the maps the fetch and upload checks play |
+| A server | a map a client fetched is kept in its cache; a map clients upload to a dedicated server started with `--map-upload-token` is kept in the server's ([`LEVEL_EDITOR.md`](LEVEL_EDITOR.md) §9.5) |
+
+### 6.2 Where it lives
+
+| Place | Holds | Listed in the host panel |
+|---|---|---|
+| `user://maps/<name>.map` | one's own maps: what the editor saves | yes, when it reads and has no error |
+| `user://maps/cache/<sha-256>.map` | maps received: fetched from a server, or uploaded to one | no |
+| `res://Maps/<id>.map` | maps bundled with the build, each with a catalog entry | yes, as a catalog map |
+| `user://maps/active` | on a dedicated server, the hash of the map it plays when started with no `--map` | — |
+
+`user://` is `~/.local/share/godot/app_userdata/gdpyr/` on Linux. A name is `a-z`, `0-9`, `_` and
+`-`, at most 48, and is the only place a typed string becomes a path (`MapNames`).
+
+### 6.3 What it must hold
+
+What `MapValidator` refuses, in the terms of §3.1 — a map with any of these is not listed, hosted,
+sent or loaded, and an unfinished map with them is still saved:
+
+| | Error |
+|---|---|
+| Counts | no spawn line (four `player_spawn` markers 4 m apart); no weapon locker; barracks not 1–4; resource nodes not 1–8; more than 8 heavy guns and mortar launchers, 12 ammunition cans, 96 cover boxes, 16 structures, one vehicle kiosk or one strategist anchor |
+| Ids | a prefab id this build's catalog does not have: "needs a newer build" |
+| Place | an object outside ±120 m, or a round's piece outside ±115 m (§3.1, item 7); two objects in each other's way |
+| Ground | a padded object not on its levelled pad; a round's piece under the water |
+| Limits | ground outside −16…+64 m; a number outside its range |
+
+Shown and played: a node or the spawn line inside a barracks' defended ring (§2.3); more than 4 m of
+relief inside a node's capture radius; a road steeper than its limit; a bridge end left open; and,
+from the editor's **Deep** check, which bakes the navigation mesh, a node that no barracks door or
+spawn line has a path to. The list in full is [`LEVEL_EDITOR.md`](LEVEL_EDITOR.md) §6.9.
+
+Three things differ from a scene map. The navigation bake's walkable slope is 40°, not §3.1's 45°,
+since a body stalls on a face of 43° (LEVEL_EDITOR LE-D23). The world's nodes are named by their
+order in the file — `Barracks1`, `ResourceNode3`, `AmmoCan07` — so the name-sorted indices of §3 are
+the same on every peer. And a structure in the file — a pillbox, a sandbag wall, a sniper tower —
+stands when each round starts, the strategist's and as destructible as one a builder made.
+
+### 6.4 Checking one
+
+**Without Godot:**
+
+```bash
+dotnet run --project tools/Gdpyr.MapTool -- validate f.map   # 0 plays, 1 refused (with each reason), 2 not a file
+dotnet run --project tools/Gdpyr.MapTool -- info f.map       # what is in it, and its hash
+```
+
+**In the editor:** **Validate** lists every issue, and a click on one flies to it; **Deep** also bakes
+and asks for every path; **Test** (`F5`) saves and plays the map in a second process.
+
+**In the engine:** `godot --path . -- --practice --map f.map`, or `--server`/`--listen` with the
+same `--map`. The log says `[map] playing … from <path>, sha-256 <hash>`, then the lines §4 lists. A
+file that does not read or does not validate is a launch error, exit 1, with every reason.
+
+### 6.5 Bundling one with the build
+
+1. Put the file in `Maps/` as `<id>.map`, the id a map's name (§6.2). `.gitattributes` marks `*.map`
+   binary, and the export preset's `include_filter` takes `*.map` into the pack.
+2. Add the entry after the scene maps:
+   ```csharp
+   MapInfo.Data("ridge", "Ridge", BundledDirectory + "ridge.map", "<64 hex digits>",
+   	"a data map: …"),
+   ```
+   The hash is the file's: `dotnet run --project tools/Gdpyr.MapTool -- hash Maps/ridge.map`.
+3. `dotnet test`. `BundledMapTests` holds each bundled map's file to its entry's hash, reads and
+   validates it with no warning, and holds it to what a round needs. It also holds that there is
+   exactly one bundled map (`ThereIsOne`), so a second changes that test.
+
+Bundling is only for a map every build should carry. A map a server plays does not need it: a client
+fetches it (LAN.md §3.4), and a dedicated server is given one with `scripts/deploy-map.sh`
+([`DEPLOYMENT.md`](DEPLOYMENT.md) §3.1).

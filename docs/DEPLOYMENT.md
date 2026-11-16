@@ -47,6 +47,10 @@ box with an Elastic IP could never appear in it. `deploy/gdpyr-server.service` p
 reach this server the way this page has always said: its address, typed into the menu's address box
 or passed to `--client`.
 
+**Maps need no rule either.** A client that lacks the server's map fetches it over the game's own
+UDP 7777 as it joins, and an upload to a server started with `--map-upload-token` comes the same way
+(§3.1). A map put on the box by `scripts/deploy-map.sh` goes over the SSH rule.
+
 **If and only if you use a custom Network ACL:** NACLs are *stateless*. You need inbound UDP 7777
 **and** outbound UDP 1024–65535. The default VPC NACL allows everything and needs no change. This is
 the single most common "the port is open but nothing connects" cause on AWS.
@@ -137,6 +141,74 @@ ssh -i $GDPYR_SSH_KEY $GDPYR_HOST \
    sudo systemctl daemon-reload &&
    sudo systemctl enable --now gdpyr-server'
 ```
+
+### 3.1 The map it plays
+
+The server plays a scene map from its build, or a **data map** — a `.map` file made in the game's
+map editor ([`MAPS.md`](MAPS.md) §6, [`LEVEL_EDITOR.md`](LEVEL_EDITOR.md) §9.5). A data map is not
+part of the export. It goes to the box on its own, and players who have not got it fetch it from the
+server as they join, so no player needs a new build or checkout for it.
+
+```bash
+./scripts/deploy-map.sh ridge.map                 # copy it; the server plays what it played
+./scripts/deploy-map.sh ridge.map --activate      # copy it, make it the map, restart the unit
+```
+
+`deploy-map.sh` uses the same `GDPYR_HOST` and `GDPYR_SSH_KEY` as `deploy.sh`. It validates the
+file first with `tools/Gdpyr.MapTool`, by `dotnet run` — so the .NET SDK where it runs, or
+`GDPYR_MAPTOOL` naming a built `gdpyr-map` — and a file that is not a map, or does not play, is not
+copied (exit 1). Then:
+
+| Step | Where |
+|---|---|
+| The map is copied, as the unit's user, through a file beside it and a rename, and hashed again where it landed | `/var/lib/gdpyr/.local/share/godot/app_userdata/gdpyr/maps/<name>.map` — the unit's `HOME` is `/var/lib/gdpyr`, its one writable directory, and that is Godot's `user://maps` under it |
+| With `--activate`, its SHA-256 is written there as `active`, 64 hex digits and a line's end | `…/maps/active` |
+| The unit is restarted, and asked 3 s later whether it is up; if not, the script fails and prints the last 40 lines of its journal | `systemctl restart gdpyr-server` |
+
+The name it is kept under is the file's less `.map`, or `--name <name>`: `a-z`, `0-9`, `_` and `-`,
+at most 48. `GDPYR_MAP_DIR`, `GDPYR_MAP_USER` and `GDPYR_SERVICE` change the directory, its owner and
+the unit, for a box set up otherwise.
+
+**A server started with no `--map` plays the map `maps/active` names**, and the catalog's default
+when there is no such file. The unit passes no `--map` for that reason. It says so as it starts:
+
+```
+[map] this server's maps are in /var/lib/gdpyr/.local/share/godot/app_userdata/gdpyr/maps/; active names af682abc8f1a…
+[map] playing Ridge (…/maps/ridge.map, af682abc) from …/maps/ridge.map, sha-256 af682abc8f1a…
+```
+
+(LE8's check, with the home shortened; the hashes are 64 digits in the log.) With no `maps/active` the
+first line ends `no active there: the catalog's default`.
+
+**A `maps/active` that is not a hash, or names a map the server has not got or cannot play, is a
+fatal start-up error**, exit 1 with its reason, as a bad `--map` is. The box does not come up on the
+default map and say nothing: it does not come up, and `deploy-map.sh` says so. Put it right by
+running `deploy-map.sh` again with a map that plays, or by deleting the file to go back to the
+default. (Under the unit's `Restart=always` systemd starts it again, to refuse again; nothing in this
+repository has been run under the unit — LEVEL_EDITOR LE8.) A scene map has no hash, so deleting `maps/active` is the one way
+back to one.
+
+#### Publishing from the editor, which this unit does not do
+
+A server started with `--map-upload-token <token>` also takes maps from the game's map editor —
+**Publish…**: an address, the token, and *Make it the map the server plays next* — over the game's
+own UDP port, and lets a client that holds the token name its next map
+([`NETCODE.md`](NETCODE.md) §12.2). **`deploy/gdpyr-server.service` does not pass it, and that is
+deliberate**: with it, anybody who holds the token can write map files to this box and change the map
+it plays; the link is not encrypted, so a proof overheard can have tokens tried against it at
+leisure; and the token is on the process's command line, where the box's other users can read it.
+Use it on a server you run by hand for a session — 16 characters or more, random, a fresh one each
+time — and give maps to this one with `deploy-map.sh`, over ssh.
+
+**Told its next map, the server plays its round out.** When the round in progress ends and its
+intermission is over, it closes its link a second after its last word — every player is dropped,
+and nothing tells them why — and exits 0. The unit's `Restart=always` starts it again on the new map
+three seconds later, and players join again. It goes at once when no round is in progress or nobody
+is connected. A server nothing restarts — one run by hand, which it knows by systemd's
+`INVOCATION_ID` being absent and `GDPYR_SUPERVISED=1` not set — answers `ok_stays_down` and stays
+down. One started with `--map` answers `pinned` and keeps playing its map, since it would play that
+map again whenever it started. A request that names the map being played is `playing`, and calls off
+a change asked for before.
 
 ---
 

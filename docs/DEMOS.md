@@ -46,6 +46,10 @@ first record means anything: the kind, the three rates the recording was made at
 the wall clock, the round's seed, the peer that recorded it, the map, and a free-text name for the
 machine.
 
+The map is a scene map's scene path, or since version 6 a data map as `map:<sha-256>`
+([`LEVEL_EDITOR.md`](LEVEL_EDITOR.md) §9.6) — a data map is a file every map is built from in one
+scene, `MapHost.tscn`, so the scene's path would say nothing of which map it was.
+
 The rates are in the file rather than assumed because they are protocol constants
 (`SimConfig.TickRate`). A demo recorded at 60 Hz and replayed by a build that ticks at anything else
 is not the same round — every recorded tick index means something different — so
@@ -200,9 +204,11 @@ Recording starts on the round's first tick. A dedicated server has no console to
 is how a box records; a failure to open the file is a warning rather than fatal, because a round
 that is not being recorded is still a round and a full disk should not stop a server starting.
 
-`--playdemo <name>` is the other half and goes straight past the main menu into the map. It names no
-mode and refuses one beside it: a demo is watched, not played, so there is no authority, no peer and
-nobody to be. A dedicated-server build refuses it outright — there is nowhere to draw it.
+`--playdemo <name>` is the other half: it opens the demo in the main menu, as the console's
+`playdemo` does, and goes straight on into the map the header names, with no widget built. It names
+no mode and refuses one beside it: a demo is watched, not played, so there is no authority, no peer
+and nobody to be. A demo whose map this process has not got, or cannot play, is a launch error,
+exit 1, naming it. A dedicated-server build refuses it outright — there is nowhere to draw it.
 
 ---
 
@@ -210,8 +216,14 @@ nobody to be. A dedicated-server build refuses it outright — there is nowhere 
 
 ### 5.1 Getting there
 
-From the main menu, `playdemo` loads the map and holds the file until `PlayerManager` has somewhere
-to put it. From a demo already playing, a second one goes straight over the first. From a **live
+From the main menu, `playdemo` reads the header, loads the map it names and holds the file until
+`PlayerManager` has somewhere to put it. A scene map is found by its scene among the catalog's; a
+data map by its hash, in the build, one's own maps or the cache (`user://maps/cache/`, where a map
+fetched from a server is kept), read and validated again. A map this process has not got is refused,
+naming its hash — a demo of a map fetched on another machine plays where that map was fetched too. A
+header that names no map plays on the catalog's default. From a demo already playing, a second one
+goes straight over the first if it was recorded on the map that is loaded, and is refused, saying
+so, if not: quit to the menu to watch it. From a **live
 round** it is refused: the roster, the clock and the prediction ledger are all built around this
 process's place in that round, and none of them is rebuilt by loading a file — the same reason
 leaving a round you are in is still quitting the process ([`LAN.md`](LAN.md) §4).
@@ -321,4 +333,8 @@ Stated rather than discovered:
   journalled: the record carries what they changed. Version 5 is the fourth: the crew vehicles'
   message as a record of its own, tag 8 ([`GROUND_VEHICLES.md`](GROUND_VEHICLES.md) §7.4). A
   version-4 demo has no vehicles to draw and would play a seated player standing in the air, so it
-  is refused, saying "demo format version 4; this build reads 5".
+  is refused, saying "demo format version 4; this build reads 5". Version 6 is the fifth, and is not
+  the wire's: the header names a data map as `map:<hash>` and playback loads the map the header
+  names ([`LEVEL_EDITOR.md`](LEVEL_EDITOR.md) §9.6). A version-5 reader would take `map:…` for a
+  scene's path, and a version-5 demo recorded on a data map names `MapHost.tscn`, which is every
+  data map; so a version-5 demo is refused, saying "demo format version 5; this build reads 6".

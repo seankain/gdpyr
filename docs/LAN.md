@@ -153,7 +153,7 @@ another port, but it skips the menu and so the panel.)
 
 | Setting | Range | Starts at | What it sets |
 |---|---|---|---|
-| Map | `MapCatalog.All` | Greybox (`Scenes/Test.tscn`) | the scene the host and every client load |
+| Map | `MapCatalog.All`, then one's own maps from the editor that play | Greybox (`Scenes/Test.tscn`) | the map the host and every client load |
 | Round length | 1–60 min | 20 | `GameModeDefinition.RoundDurationMinutes` |
 | Ground force tickets | 1–999 | 50 | `GameModeDefinition.GroundForceTickets`: the respawns the ground force shares |
 | Ground force team size | 1–14 | 6 | ground-force players filled to, humans included |
@@ -175,18 +175,36 @@ The settings live for the process: they are put over a copy of the game mode bef
 command line sets them, and a `--server` or `--listen` launch plays the game mode's numbers and the
 default map as before.
 
-**Clients load the host's map.** The server names its map (`MapInfo.Id`) to every peer the moment
-it connects, ahead of the roster (`NetworkManager.ServerMap`). A client — from the menu or from
-`--client` — loads that map rather than its own default. A map id the client's build does not have
-is refused rather than guessed at: the menu says which map and drops the link, a `--client` launch
-logs it and exits 1. So does a server that names no map within five seconds, which is a server from
-before this panel. Either way, both machines want the same commit (§5).
+**Clients load the host's map.** The server names its map to every peer the moment it connects,
+ahead of the roster (`NetworkManager.ServerMap`): its catalog id; for a data map its SHA-256, its
+file's length and its name as well; and 16 random bytes for the connection, which only an upload to
+a dedicated server uses ([`LEVEL_EDITOR.md`](LEVEL_EDITOR.md) §6.10). A client — from the menu or
+from `--client` — loads that map rather than its own default.
 
-A map is one entry in `Scripts/Core/MapCatalog.cs`: an id, a name, a scene and a line of
+- **A scene map** is found by its id in the client's catalog. An id the client's build does not
+  have is refused rather than guessed at: the menu says which map and drops the link, a `--client`
+  launch logs it and exits 1.
+- **A data map** is found by its hash: in the build, then the cache, then one's own maps, each read
+  again, hashed and validated. One the client has not got it **fetches from the host** over the
+  same connection, before it is put on the field: the menu's line reads `fetching 'ridge' 47 / 114`,
+  a chunk of 1,024 B a tick: 27 chunks and 0.45 s for a 27 KB map. It is hashed, read and
+  validated, kept as `user://maps/cache/<sha-256>.map` for the next time, and played. A fetch that
+  stalls for 10 s, a stream that does not hash to what the host named, and a map this build's
+  validator refuses — a prefab id it has not got — are refused, the menu saying why, and the link
+  dropped; `--client` logs it and exits 1. While a client fetches it is connected and held off the
+  field, as anybody who has not picked a side is.
+
+A server that names no map within five seconds is refused too — it is a server from before this
+panel. Either way, both machines want the same commit (§5): a fetched map is data, but what its
+prefab ids are is the build's.
+
+A scene map is one entry in `Scripts/Core/MapCatalog.cs`: an id, a name, a scene and a line of
 description. The scene inherits `Scenes/Maps/MapBase.tscn`, which holds what a round needs —
 `player_spawn` markers, a barracks, a resource node, a weapon locker, a navigation region — and the
-id must never change once a build with it is out, because it is what a client is told. The full
-list of requirements, and how to check a map against them, is [`MAPS.md`](MAPS.md).
+id must never change once a build with it is out, because it is what a client is told. A data map
+is a file made in the game's map editor and needs no entry: one of one's own that the validator
+passes is listed after the catalog's, as `Name — name, yours`. The full list of requirements, and
+how to check a map against them, is [`MAPS.md`](MAPS.md); a data map is its §6.
 
 ---
 
@@ -285,6 +303,11 @@ So a mismatched client connects — successfully — and then disagrees. What th
 
 `git rev-parse --short HEAD` on every machine before the first round, and `dotnet build` after every
 pull. It is thirty seconds against an evening of blaming the Wi-Fi.
+
+A data map the host made in the editor is the one thing that does not need the same checkout: a
+client fetches it (§3.4). It still names its pieces by the build's prefab catalog, which is
+append-only, so a client a few commits behind refuses a map that uses a prefab it has not got, and
+says so, rather than building something else.
 
 ---
 

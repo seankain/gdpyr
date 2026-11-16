@@ -529,7 +529,7 @@ obtained by cheating is not a result about this game.
 | `op` | Direction | Purpose |
 |---|---|---|
 | `hello` | → | protocol version, observation format, token |
-| `welcome` | ← | tick rate, build id, observation schema, current seed, `bot_ai` — what the server's bots decide with, `legacy` or `htn` ([`HTN_BOTS.md`](HTN_BOTS.md) §8, D5; added in H6, and absent from a server that predates it, whose bots were legacy) — `bot_kits`, what the server's ground bots carry besides their primary, `default` or `role` ([`LOADOUT.md`](LOADOUT.md) §8; `role` only under `htn`; absent from a server that predates it, whose bots carried the default kit) — and `unit_autonomy`, what the strategist side's new units start with, `on` or `off` ([`TACTICS.md`](TACTICS.md) §5.9; absent from a server that predates it, whose units had no tactics: off) |
+| `welcome` | ← | tick rate, build id, observation schema, current seed, `bot_ai` — what the server's bots decide with, `legacy` or `htn` ([`HTN_BOTS.md`](HTN_BOTS.md) §8, D5; added in H6, and absent from a server that predates it, whose bots were legacy) — `bot_kits`, what the server's ground bots carry besides their primary, `default` or `role` ([`LOADOUT.md`](LOADOUT.md) §8; `role` only under `htn`; absent from a server that predates it, whose bots carried the default kit) — `unit_autonomy`, what the strategist side's new units start with, `on` or `off` ([`TACTICS.md`](TACTICS.md) §5.9; absent from a server that predates it, whose units had no tactics: off) — and `map`, the map the round is played on: `{ "id", "name", "hash" }`, the id the catalog's (empty for a data map that is not bundled), the hash a data map's SHA-256 and `null` for a scene map ([`LEVEL_EDITOR.md`](LEVEL_EDITOR.md) §9.6; absent from a server that predates it, which played the greybox). `GdpyrConnection.MapId`, `MapName` and `MapHash` and `gdpyr_env`'s `map` read it. The observation does not change with the map: positions still scale by 256 m, and the passability plane is still probed by rays |
 | `config` | → | `mode` (realtime/stepped), `step_timeout_ms`, feature planes on/off |
 | `list_seats` | → ← | every roster slot: peer id, team, controller (human/bot/agent), alive |
 | `list_units` | → ← | a strategist seat's army, in the order its observation carries it, **with the ids an order names** (§7.5) |
@@ -958,6 +958,18 @@ default`; `--bot-kits` on the harness's command line overrides it, which is how 
 are checked in either. A server whose `welcome` names other kits is a harness error, not a run.
 Anything but `default` or `role` is refused when the file is read.
 
+**A scenario can name its map** ([`LEVEL_EDITOR.md`](LEVEL_EDITOR.md) §9.6): `"map": "hills"`
+starts the harness's server with `--map hills`; with none, the server plays the catalog's default,
+the greybox, as every scenario did before. The value is a map's name — `a-z`, `0-9`, `_` and `-`, at
+most 48, not starting with `-` — so a catalog id or a map in the server's `user://maps`, never a path;
+anything else is refused when the file is read, and every checked-in scenario's must be a catalog id
+(`ScenarioTests.EveryCheckedInScenarioPlaysAMapThisBuildHas`). The server's `welcome` is held to it:
+its `map.id`, or for a map of one's own, which has none, its `map.name`. One that plays another map —
+an `--attach`ed server started otherwise — is a harness error, not a run (exit 2): *this server plays
+map 'greybox', and the scenario names 'hills'*. `hills_strategist_economy.json` and
+`hills_spawn_points_shared.json` are the two that name one: the scenarios of those names, on the
+bundled data map.
+
 **A strategist seat's script is commands, not input.** Its steps carry `commands` instead of
 `move`, `look` and `buttons`, naming units by spawn label:
 
@@ -1156,6 +1168,7 @@ The same rule the rest of the codebase follows: the interesting part is engine-f
 | `unit_task`'s goal 33, escorting a builder; a script's `construct`, and each malformed one as a sentence | `Tests/AgentEventTests.cs`, `Tests/EscortTests.cs`, `Tests/ScenarioTests.cs` | TACTICS T9 |
 | The strategist vector's `autonomy`, the last of a unit's 15 floats, and 1,156 floats in all (`gdpyr-agent-obs-3`); the client and the server name one schema version | `Tests/AgentObservationTests.cs`, `Tests/AgentInteropTests.cs` | TACTICS T8 |
 | The ground vector's kit block, the last five of 150 floats (`gdpyr-agent-obs-4`): appended, the kit normalized, the primary's reserve whatever is in the hands and no pouches empty, no vest apart from a spent one, the load's cap and floor, named in JSON beside the extras; the .NET client, the Python client and the server name one schema version | `Tests/AgentObservationTests.cs`, `Tests/AgentInteropTests.cs` | LOADOUT L8 |
+| A scenario's `map`, and each malformed one as a sentence; every checked-in scenario's map is one the catalog has | `Tests/ScenarioTests.cs` | LEVEL_EDITOR LE3 |
 | The seven `vehicle_*` kinds appended as 23–29, `vehicle_rammed` the last; a vehicle's kind named `type`, since every record has a `kind` | `Tests/AgentEventTests.cs` | GROUND_VEHICLES GV4 |
 | The `vehicle` and `list_vehicles` ops: a vehicle spawn and a seat placement, and each malformed one as a sentence; a ground step's `vehicle` and `look_at`; the `first` aggregate; the harness's kinds, seats, health and refusals against the files and `KioskRules`; `list_vehicles` as the server writes it and the client reads it; the state hash over a vehicle; a unit aboard a crew vehicle and a strategist command naming one refused | `Tests/CrewVehicleAgentTests.cs`, `Tests/ScenarioTests.cs` | GROUND_VEHICLES GV7 |
 

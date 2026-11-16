@@ -484,6 +484,13 @@ route, so there is no second behaviour to write.
 | `ClientLockerLoadout` | C→S | Reliable | per kit taken at a locker | ~7 B |
 | `ServerKitResult` (to the requester) | S→C | Reliable | per `ClientLockerLoadout` | ~4 B |
 | `ClockProbe` / `ClockReply` | both | Unreliable | 2 Hz | ~12 B |
+| `ServerMap` | S→C | Reliable | once a connection, ahead of the roster | ~16 B for a scene map; ~100 B for a data map: its id, hash, length, name and the connection's 16-byte nonce (§12) |
+| `ClientRequestMap` | C→S | Reliable, channel 1 | once a connection, by a client that lacks the data map | ~80 B: the hash, as its 64 characters |
+| `ServerMapChunk` | S→C | Reliable, channel 1 | 60 Hz while a peer fetches | ≤ 1,035 B: a 4-byte index and 1,024 B of the file |
+| `ClientOfferMap` / `ServerMapOffer` | C→S / S→C | Reliable, channel 1 | per upload, to a server with `--map-upload-token` | ~120 B / ~7 B |
+| `ClientMapChunk` | C→S | Reliable, channel 1 | 60 Hz during an upload | ≤ 1,035 B |
+| `ServerMapStored` | S→C | Reliable, channel 1 | per upload | ~85 B and the reason it was not kept |
+| `ClientSetNextMap` / `ServerNextMap` | C→S / S→C | Reliable, channel 1 | per request | ~117 B / ~79 B |
 
 Both snapshots say *visible*, and since M4 the player one means it: a strategist peer is sent its
 own record, the other strategists' and whichever of the ground force its units can see (§6.2), so
@@ -559,6 +566,13 @@ same twelve-byte frame. The one byte the input packet's header gained is how far
 frame the client drew the vehicles, so the server knows where a seated shooter saw the seat
 (the `Input` row above). The player record is unchanged: a seated player's record is where the seat
 was.
+
+**A map that travels is eight messages, and seven of them are on a channel of their own** (§12).
+`ServerMap` is what it always was, the first thing a connection is sent, and gained a data map's
+hash, length and name and a nonce. Everything else — a client fetching the map it lacks, and a client
+uploading one to a dedicated server — is reliable on transfer channel 1, so that a lost 1 KB chunk
+holds back only the chunks behind it and none of the round's reliable messages. A fetching peer costs
+61 KB/s over the 21 KB/s above for at most 2.5 s, before it is on the field.
 
 **LAN discovery is not on this wire at all.** The server browser answers "who is listening?" before
 there is a connection to ask it over, so it is its own datagram on its own UDP socket
@@ -1536,3 +1550,88 @@ mystery, and the same check refuses a demo recorded at a different `SimConfig.Ti
 recorded tick index would mean something else.
 
 The whole of it, including what this first cut does not replay, is [`DEMOS.md`](DEMOS.md).
+
+---
+
+## 12. Maps on the wire
+
+Added by the level editor ([`LEVEL_EDITOR.md`](LEVEL_EDITOR.md) LE7, LE8). A **data map** is a file,
+at most 1 MiB, that every peer builds the same world from: no float in it, the samples exact, and its
+SHA-256 its name (LEVEL_EDITOR §6.8). A scene map is still its catalog id, as [`LAN.md`](LAN.md) §3.4
+has it, and costs nothing new.
+
+**Naming the map.** `ServerMap(id, hash, length, name, nonce)` is sent to each peer as it connects,
+ahead of the roster, on the default channel. For a scene map the hash is empty and the length 0. For
+a data map the hash is 64 lower-case hex digits and the id the catalog's only when it is bundled; a
+client finds the map by its hash — in its build, its cache, its own maps — whatever the id says. The
+nonce is 16 random bytes for this connection (§12.3).
+
+**Fetching it** (`Scripts/Sim/Level/MapTransfer.cs`; the engine half is
+`Scripts/Net/MapTransferService.cs`, at `/root/NetworkManager/MapTransfer`). A client that has not got
+the map sends `ClientRequestMap(hash)` and is sent the file as `ServerMapChunk`s: a little-endian
+`u32` index and 1,024 B of the file, every chunk but the last, about 1,035 B on the wire with Godot's
+header — one datagram, under ENet's MTU, never a fragment.
+
+| | Rule |
+|---|---|
+| The server | sends only the map it plays, from the bytes it loaded, and only to a peer that asked once on its connection for that hash; a second request, or one for another map, is sent nothing. One chunk a tick to a peer, at most four a tick across peers, the peers taken in turn |
+| The client | knows the hash and the length before the first chunk; refuses a hash that is not 64 lower-case hex digits, a length of nothing or over 1 MiB, a chunk out of turn, past the end or of the wrong size, and 10 s of real time with nothing arriving — real time, since the menu that waits does not tick |
+| At the last chunk | the bytes are hashed, read and validated against this build, and only then kept in `user://maps/cache/<hash>.map` and played. A refusal keeps nothing, says why, and drops the link |
+
+The client is connected and held off the field while it fetches, as a person who has not picked a
+side is (§7's `ServerRequestRoleChoice`). Its role request is kept.
+
+### 12.1 Transfer channel 1
+
+The seven messages after `ServerMap` are `[Rpc(TransferChannel = 1)]`, reliable. A chunk is a
+reliable message on the same link as the round, and ENet holds each channel's reliable messages
+behind its own lost ones: on the default channel a lost chunk would hold back every reliable message
+the round sent after it. `TransportFactory` is not touched — a host made with the default channel
+count has 255 — and `create_server`'s `max_channels` must stay unset, since at 4.6 it lands in the
+incoming-bandwidth position (LEVEL_EDITOR §3).
+
+LE7 measured it behind a relay that dropped datagrams: of 104 reliable messages sent on the default
+channel after a chunk, 60 arrived ahead of a chunk sent before them, and of 104 sent on the map's
+channel, none. Which is the point: the round's messages do not wait for the map's, and the map's
+arrive in order (LEVEL_EDITOR §11, LE7).
+
+### 12.2 Uploading to a dedicated server
+
+Off unless the server was started with `--map-upload-token <token>`, which the deploy unit never
+passes ([`DEPLOYMENT.md`](DEPLOYMENT.md) §3.1). With no token every offer and next-map request is
+answered `uploads_off` and every chunk is dropped.
+
+| Message | Arguments | Answer |
+|---|---|---|
+| `ClientOfferMap` | hash, length, proof | `ServerMapOffer`, by number: `ok` 0, `have_it` 1, `uploads_off` 2, `bad_proof` 3, `too_large` 4, `busy` 5. Asked in the order `uploads_off`, `bad_proof`, `too_large` (nothing, or over 1 MiB), `have_it`, `busy`, else `ok` |
+| `ClientMapChunk` | a chunk, as `ServerMapChunk`'s | — : after `ok`, from that peer alone, a chunk a tick |
+| — | — | `ServerMapStored(hash, error)`: kept as `cache/<hash>.map`, or why not |
+| `ClientSetNextMap` | hash, proof | `ServerNextMap(answer, hash)`: `ok` 0, `ok_stays_down` 1, `playing` 2, `uploads_off` 3, `bad_proof` 4, `not_here` 5, `pinned` 6, `not_written` 7 |
+
+The server takes one upload at a time, through the same receiver a client fetches with, and writes
+nothing until the bytes hash to the offer, read and validate; the name on its disk is the hash it
+worked out, never anything a peer sent. A next-map request writes `maps/active`; when the round in
+progress has had its intermission, the server keeps its link up a second, so that what it has said
+arrives, closes it and exits 0, and its supervisor starts it on the new map. Nothing tells a client
+why it was dropped (LEVEL_EDITOR §9.5, §14).
+
+### 12.3 The proof
+
+`HMAC-SHA256(token, nonce ‖ hash ‖ op)`: the connection's 16-byte nonce, the map's hash as its 32
+bytes, and one byte of op — 1 to upload a map, 2 to name the next one. It is keyed by the token as
+UTF-8 and compared in constant time; the token never crosses the wire. A proof is good for one map,
+one op and one connection: sent on another connection, which was sent another nonce, it is
+`bad_proof`. The proof is asked for before anything else is said, so a peer without the token learns
+nothing of what the server has.
+
+The link is not encrypted, and what a proof is made over crosses it in the clear beside it: whoever
+hears one can try tokens against it at leisure. So a token is 16 to 256 characters with no space, a
+shorter one is a fatal start-up error, and a long random one is the defence (LEVEL_EDITOR §13).
+
+### 12.4 What a map costs the round
+
+A fetching peer is sent 61,440 B/s — a chunk a tick — over §7's 21 KB/s, before it is on the
+field: 0.45 s for a 27 KB map, 2.5 s for the largest file a map of this field can be (151,643 B,
+LEVEL_EDITOR §10), and 17.1 s for the reader's limit of 1 MiB. Four chunks a tick go out in all,
+245,760 B/s: more than four peers fetching share them in turn, and six are each sent a chunk every
+tick and a half.
