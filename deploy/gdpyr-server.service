@@ -19,6 +19,12 @@ WorkingDirectory=/opt/gdpyr
 # has no inbound rule for the agent port (docs/AGENT_API.md §4.1,
 # docs/TRAINING.md §8).
 #
+# --map-upload-token is absent for the same reason: with it, anybody who holds the
+# token can write map files to this box over the game's port and change the map it
+# plays (docs/LEVEL_EDITOR.md §9.5). A map gets here by scripts/deploy-map.sh, over
+# ssh. --map is absent too, on purpose: with none, the server plays the map that
+# maps/active names — which deploy-map.sh --activate writes — or the default.
+#
 # --no-advertise for a reason that is not security: LAN discovery is a broadcast
 # (docs/LAN.md §4) and a broadcast does not cross the internet, so the socket
 # would bind a port on a public box to answer questions nobody can ask. Players

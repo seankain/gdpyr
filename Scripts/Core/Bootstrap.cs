@@ -52,6 +52,29 @@ public partial class Bootstrap : Node
 			Session.SelectResolved(map, document, bytes);
 			GD.Print($"[map] playing {map}" + (map.IsData ? $" from {map.Path}, sha-256 {map.Hash}" : string.Empty));
 		}
+		else if (options.Mode == LaunchMode.Server)
+		{
+			// A dedicated server with no --map plays the map maps/active names, if there is one
+			// (docs/LEVEL_EDITOR.md §9.5): what scripts/deploy-map.sh --activate and a client's
+			// next-map request write. One that names a map this server cannot play is as fatal as a
+			// --map that does: the box does not come up on another map and say nothing.
+			if (!Gdpyr.Level.MapLibrary.TryResolveActive(out bool named, out MapInfo active,
+				out Gdpyr.Sim.Level.MapDocument document, out byte[] bytes, out string activeError))
+			{
+				GD.PrintErr($"gdpyr: {activeError}");
+				GetTree().Quit(1);
+				return;
+			}
+
+			GD.Print($"[map] this server's maps are in {Gdpyr.Level.MapLibrary.UserRoot}; "
+				+ (named ? $"{Gdpyr.Sim.Level.MapChange.ActiveFileName} names {active.Hash}"
+					: $"no {Gdpyr.Sim.Level.MapChange.ActiveFileName} there: the catalog's default"));
+			if (named)
+			{
+				Session.SelectResolved(active, document, bytes);
+				GD.Print($"[map] playing {active} from {active.Path}, sha-256 {active.Hash}");
+			}
+		}
 
 		Options = options;
 

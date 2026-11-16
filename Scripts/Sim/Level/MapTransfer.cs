@@ -1,6 +1,8 @@
 using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Gdpyr.Sim.Level;
 
@@ -71,7 +73,7 @@ public static class MapTransfer
 	/// <summary>A stream that brings no chunk for this long is refused.</summary>
 	public const double StallSeconds = 10.0;
 
-	/// <summary>The random bytes a server sends each connection with its map, for an upload's proof (LE8).</summary>
+	/// <summary>The random bytes a server sends each connection with its map, for an upload's proof (<see cref="MapProof"/>).</summary>
 	public const int NonceBytes = 16;
 
 	/// <summary>The chunks a file of <paramref name="length"/> bytes is sent in.</summary>
@@ -129,6 +131,103 @@ public static class MapTransfer
 
 	/// <summary>The first eight digits of a hash, for a line a person reads.</summary>
 	public static string Short(string hash) => hash is { Length: >= 8 } ? hash[..8] + "…" : hash ?? string.Empty;
+}
+
+/// <summary>What a proof is for: a proof made for one does not pass for the other (docs/LEVEL_EDITOR.md §6.10).</summary>
+public enum MapProofOp : byte
+{
+	/// <summary>Offering a map to a server, to keep in its cache (§9.5).</summary>
+	Upload = 1,
+
+	/// <summary>Naming the map a server plays when it next starts (§9.5).</summary>
+	SetNext = 2,
+}
+
+/// <summary>
+/// An upload's proof (docs/LEVEL_EDITOR.md §6.10, LE8): <c>HMAC-SHA256(token, nonce ‖ hash ‖ op)</c>.
+/// The token is the server's <c>--map-upload-token</c>, as UTF-8, and is the key: it never crosses the
+/// wire. The nonce is the 16 random bytes the server sent this connection with its map, so a proof
+/// heard on one connection is not one on another; the hash is the map's SHA-256, its 32 bytes, so a
+/// proof for one file is not one for another; the op is one byte, so leave to upload a map is not
+/// leave to make it the next one played. Compared in constant time.
+/// </summary>
+public static class MapProof
+{
+	/// <summary>A proof: HMAC-SHA256's 32 bytes.</summary>
+	public const int Bytes = 32;
+
+	/// <summary>
+	/// The fewest characters a token may be. A proof and what it was made over cross the wire in the
+	/// clear, so a token is as strong as it is hard to guess: a short one is refused at start-up.
+	/// </summary>
+	public const int MinTokenLength = 16;
+
+	/// <summary>The most characters a token may be.</summary>
+	public const int MaxTokenLength = 256;
+
+	/// <summary>
+	/// Whether a text is a token: <see cref="MinTokenLength"/> to <see cref="MaxTokenLength"/>
+	/// characters, none of them a space or a control character.
+	/// </summary>
+	public static bool IsToken(string token, out string error)
+	{
+		error = null;
+		if (string.IsNullOrEmpty(token))
+		{
+			error = "a token is not empty";
+			return false;
+		}
+
+		if (token.Length < MinTokenLength || token.Length > MaxTokenLength)
+		{
+			error = $"a token is {MinTokenLength} to {MaxTokenLength} characters, and this one is {token.Length}";
+			return false;
+		}
+
+		foreach (char c in token)
+		{
+			if (char.IsWhiteSpace(c) || char.IsControl(c))
+			{
+				error = "a token holds no space and no control character";
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	/// <summary>
+	/// The proof for an op on a map over a connection's nonce; null when there is none to make: no
+	/// token, a nonce that is not <see cref="MapTransfer.NonceBytes"/> long, or a hash that is not one.
+	/// </summary>
+	public static byte[] Compute(string token, ReadOnlySpan<byte> nonce, string hash, MapProofOp op)
+	{
+		if (string.IsNullOrEmpty(token) || nonce.Length != MapTransfer.NonceBytes || !MapTransfer.IsHash(hash))
+		{
+			return null;
+		}
+
+		Span<byte> message = stackalloc byte[MapTransfer.NonceBytes + MapDocument.HashBytes + 1];
+		nonce.CopyTo(message);
+		Convert.FromHexString(hash).CopyTo(message[MapTransfer.NonceBytes..]);
+		message[^1] = (byte)op;
+		return HMACSHA256.HashData(Encoding.UTF8.GetBytes(token), message);
+	}
+
+	/// <summary>
+	/// Whether <paramref name="proof"/> is the proof for this op on this map over this nonce, by this
+	/// token. False for anything no proof could be made from, and for a proof of any other length.
+	/// </summary>
+	public static bool Verify(string token, ReadOnlySpan<byte> nonce, string hash, MapProofOp op, ReadOnlySpan<byte> proof)
+	{
+		if (proof.Length != Bytes)
+		{
+			return false;
+		}
+
+		byte[] expected = Compute(token, nonce, hash, op);
+		return expected != null && CryptographicOperations.FixedTimeEquals(expected, proof);
+	}
 }
 
 /// <summary>
@@ -249,17 +348,29 @@ public sealed class MapSender
 /// reads them (§6.8) and validates them (§6.9), and only a map that passes all three is
 /// <see cref="MapReceiveState.Complete"/>: whole, the server's, and one this build plays.
 /// A refusal keeps nothing, and nothing after it changes it.
+///
+/// A server taking an upload is the same machine (§9.5, LE8, <see cref="MapUploadGate"/>): the length
+/// and the hash are the offer's, and what a refusal says of the stream names
+/// <see cref="Uploader"/> where a fetch's names <see cref="Host"/>.
 /// </summary>
 public sealed class MapReceiver
 {
+	/// <summary>Who a fetch's stream is from, in a refusal's words.</summary>
+	public const string Host = "the host";
+
+	/// <summary>Who an upload's stream is from, in a refusal's words.</summary>
+	public const string Uploader = "the uploader";
+
+	private readonly string _sender;
 	private byte[] _buffer;
 	private double _quiet;
 
-	private MapReceiver(string hash, int length)
+	private MapReceiver(string hash, int length, string sender)
 	{
 		Hash = hash;
 		Length = length;
 		Chunks = MapTransfer.ChunkCount(length);
+		_sender = sender;
 		_buffer = new byte[length];
 	}
 
@@ -289,9 +400,18 @@ public sealed class MapReceiver
 		}
 
 		error = null;
-		receiver = new MapReceiver(hash, length);
+		receiver = new MapReceiver(hash, length, Host);
 		return true;
 	}
+
+	/// <summary>
+	/// A stream of an upload a server has taken the offer of (§9.5): as <see cref="TryStart"/>, the
+	/// hash and the length the offer's. Null when no map can be what was offered.
+	/// </summary>
+	public static MapReceiver StartUpload(string hash, int length) =>
+		MapTransfer.IsHash(hash) && length > 0 && length <= MapLimits.MaxFileBytes
+			? new MapReceiver(hash, length, Uploader)
+			: null;
 
 	/// <summary>What the server named the map by: its bytes must hash to this.</summary>
 	public string Hash { get; }
@@ -374,12 +494,12 @@ public sealed class MapReceiver
 		string hash = MapFile.HashHex(_buffer);
 		if (!string.Equals(hash, Hash, StringComparison.Ordinal))
 		{
-			return Refuse($"the bytes that arrived hash to {MapTransfer.Short(hash)}, not the {MapTransfer.Short(Hash)} the host named");
+			return Refuse($"the bytes that arrived hash to {MapTransfer.Short(hash)}, not the {MapTransfer.Short(Hash)} {_sender} named");
 		}
 
 		if (!MapFile.TryRead(_buffer, out MapDocument document, out string error))
 		{
-			return Refuse($"the host's map does not read: {error}");
+			return Refuse($"{_sender}'s map does not read: {error}");
 		}
 
 		MapReport report = MapValidator.Validate(document);
@@ -394,7 +514,7 @@ public sealed class MapReceiver
 				}
 			}
 
-			return Refuse($"the host's map does not play on this build: {string.Join("; ", reasons)}");
+			return Refuse($"{_sender}'s map does not play on this build: {string.Join("; ", reasons)}");
 		}
 
 		File = _buffer;

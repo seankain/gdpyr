@@ -1,0 +1,406 @@
+# LE8, docs/LEVEL_EDITOR.md §11. At 30662f1: .NET SDK 8.0.134, Godot 4.6.stable.mono.official.89cea1439, four cores of a cloud VM.
+# ./scripts/level-editor-checks.sh map-upload, with nothing beside it: gdpyr-map generate --seed 7, 11 and 13 as Ridge, Valley and Third;
+# scripts/deploy-map.sh against a home on this machine (GDPYR_LOCAL=1), and its path to a box with ssh, scp, sudo, systemctl and journalctl
+# stood in for; then five servers one after another on one port, each under a HOME of its own, and each client under its own: one run by
+# hand with a token; one with no token; one started with --map and a token; one with its bots, a round a minute long and
+# GDPYR_SUPERVISED=1; and that one started again by the same command. The game's code is 278fec0's. The copy of the tree is written $COPY.
+
+hills: 58081 samples, -7.25 .. 21.80 m, 116162 B
+scene: the slab and the CSG floor are out, Terrain is in
+[map] $COPY/map-upload/ridge.map: 'Ridge', seed 7, 26,861 bytes, sha-256 af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2
+[map] 0 errors, 0 warnings: it plays
+[map] $COPY/map-upload/valley.map: 'Valley', seed 11, 27,053 bytes, sha-256 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b
+[map] 0 errors, 0 warnings: it plays
+[map] $COPY/map-upload/third.map: 'Third', seed 13, 26,626 bytes, sha-256 9d19641312feaeaf136a162ae3ebbe67c891f359cf244d30d071ca14e67fe429
+[map] 0 errors, 0 warnings: it plays
+[deploy] >> validating $COPY/map-upload/ridge.map
+[deploy] 0 errors, 0 warnings: it plays
+[deploy] >> $COPY/map-upload/home-hand/.local/share/godot/app_userdata/gdpyr/maps/ridge.map
+[deploy] >> copied: ridge.map, 26861 bytes, sha-256 af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2
+[deploy] >> $COPY/map-upload/home-hand/.local/share/godot/app_userdata/gdpyr/maps/active names af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2
+[deploy] >> a server started on this machine with no --map plays it; nothing here was restarted
+[checks] PASS map-upload: deploy-map.sh --activate: exit 0; ridge.map is in the home's user://maps, hashing to af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2, and maps/active holds that
+[deploy] >> validating $COPY/map-upload/noise.map
+[deploy] refused: not a gdpyr map
+[deploy] error: $COPY/map-upload/noise.map is not a map that plays: nothing was copied
+[checks] PASS map-upload: deploy-map.sh on 3,000 bytes that are not a map: exit 1, nothing copied, maps/active as it was
+[checks] PASS map-upload: deploy-map.sh on a file whose name is not a map's: exit 2, nothing copied (error: 'Not A Name' is not a map's name: a-z, 0-9, _ and -, at most 48, not starting with '-'.)
+[deploy] >> validating $COPY/map-upload/ridge.map
+[deploy] 0 errors, 0 warnings: it plays
+[deploy] >> uploading $COPY/map-upload/ridge.map (26861 bytes) -> ubuntu@box.example
+[deploy] >> $COPY/map-upload/box/var/lib/gdpyr/.local/share/godot/app_userdata/gdpyr/maps/ridge.map
+[deploy] >> copied: ridge.map, 26861 bytes, sha-256 af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2
+[deploy] >> $COPY/map-upload/box/var/lib/gdpyr/.local/share/godot/app_userdata/gdpyr/maps/active names af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2
+[deploy] >> restarting gdpyr-server
+[deploy] >> gdpyr-server is up
+[deploy] [map] the unit's log, stood in for
+[checks] PASS map-upload: deploy-map.sh --activate to a box, its commands stood in for: exit 0; the map and maps/active are in the unit's directory, made and written as its user, and the unit was restarted and asked whether it is up
+[checks] PASS map-upload: and with the unit not up after the restart: exit 1, saying so
+[checks] level upload check: answers; the maps are in $COPY/map-upload/home-answers/.local/share/godot/app_userdata/gdpyr/maps/
+[checks] PASS answers: connected to 127.0.0.1:7795; the server named its map af682abc… and sent a nonce of 16 B
+[checks] PASS answers: the server plays the first map, af682abc…
+[checks] PASS answers: an upload by a wrong token: bad_proof, 0 chunks sent; 'the server refused the token'
+[checks] PASS answers: an offer with the right token's proof for the other op, naming the next map: bad_proof
+[checks] PASS answers: an offer with the right token's proof for another file: bad_proof
+[checks] PASS answers: an offer with the right proof less its last byte: bad_proof
+[checks] PASS answers: an offer with no proof: bad_proof
+[checks] PASS answers: an offer of a map named by its hash in upper case: bad_proof
+[checks] PASS answers: an offer of 1,048,577 B with the right proof: too_large
+[checks] PASS answers: an offer of 0 B with the right proof: too_large
+[checks] PASS answers: an offer of 1,048,577 B by a wrong token: bad_proof
+[checks] PASS answers: an upload of the map the server plays: have_it, 0 chunks sent
+[checks] PASS answers: a next-map request by a wrong token: bad_proof
+[checks] PASS answers: a next-map request with the right token's proof for an upload of that map: bad_proof
+[checks] PASS answers: a next-map request, rightly proved, for a map the server has not got: not_here
+[checks] PASS answers: a next-map request, rightly proved, for the map the server plays: playing
+[checks] PASS answers: connected to 127.0.0.1:7795; the server named its map af682abc… and sent a nonce of 16 B
+[checks] PASS answers: a second connection was sent another nonce
+[checks] PASS answers: the first connection's proof, right there, replayed on the second: bad_proof
+[checks] PASS answers: the first connection's next-map proof replayed on the second: bad_proof
+[checks] PASS answers: an offer of a third map, rightly proved: ok
+[checks] PASS answers: its 27 chunks sent with byte 13313 changed: the server did not keep it, 'the bytes that arrived hash to ce640234…, not the 9d196413… the uploader named'
+[checks] PASS answers: the third map offered again, the refused upload let go of: ok
+[checks] PASS answers: an offer on the same connection while its own upload is stopped at 2 chunks: busy
+[checks] PASS answers: the upload stopped at 2 chunks was refused 10.0 s after the second: 'the map stopped arriving: 2 of 27 chunks, then nothing for 10 s'
+[checks] answers: 25 of 25 facts hold
+[maps] offering 'Valley' to the server: 27,053 B in 27 chunks, sha-256 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b
+[maps] the server answered the offer of 'Valley': bad_proof
+[maps] 'Valley' was not published after 0.22 s: the server refused the token
+[maps] offering 'Ridge' to the server: 26,861 B in 27 chunks, sha-256 af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2
+[maps] the server answered the offer of 'Ridge': have_it
+[maps] the server has 'Ridge' already (af682abc…): nothing was sent
+[maps] asking the server to play 33a94f10… next
+[maps] the server answered the next map, 33a94f10…: bad_proof
+[maps] asking the server to play 33a94f10… next
+[maps] the server answered the next map, 33a94f10…: not_here
+[maps] asking the server to play af682abc… next
+[maps] the server answered the next map, af682abc…: playing
+[checks] PASS map-upload: answers: the client exited 0
+[checks] PASS map-upload: answers: the client's part ran to its end
+[checks] level upload check: slow; the maps are in $COPY/map-upload/home-slow/.local/share/godot/app_userdata/gdpyr/maps/
+[checks] PASS slow: connected to 127.0.0.1:7795; the server named its map af682abc… and sent a nonce of 16 B
+[checks] PASS slow: the second client is connected, and waiting
+[checks] PASS slow: an upload begun, of 27,053 B
+[checks] PASS slow: the offer was answered ok, and the upload is held at 13 of 27 chunks
+[checks] PASS slow: it was still held at 13 chunks when the second client had its answer, 0.1 s on
+[checks] PASS slow: let go on, it was kept: Stored, 27 of 27 chunks, 0.60 s in all
+[checks] slow: 6 of 6 facts hold
+[maps] offering 'Valley' to the server: 27,053 B in 27 chunks, sha-256 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b
+[maps] the server answered the offer of 'Valley': ok
+[maps] the server kept 'Valley': 27,053 B in 27 chunks, 0.58 s
+[checks] PASS map-upload: slow: the client exited 0
+[checks] PASS map-upload: slow: the client's part ran to its end
+[checks] level upload check: busy; the maps are in $COPY/map-upload/home-busy/.local/share/godot/app_userdata/gdpyr/maps/
+[checks] PASS busy: connected to 127.0.0.1:7795; the server named its map af682abc… and sent a nonce of 16 B
+[checks] PASS busy: the first client's upload is under way, and held
+[checks] PASS busy: the same map offered while the server is taking it from another: busy, 0 chunks sent; 'the server is taking another upload: try again in a moment'
+[checks] PASS busy: the first client's upload was kept
+[checks] PASS busy: offered again, once the server has kept it: have_it, 0 chunks sent
+[checks] busy: 5 of 5 facts hold
+[maps] offering 'Valley' to the server: 27,053 B in 27 chunks, sha-256 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b
+[maps] the server answered the offer of 'Valley': busy
+[maps] 'Valley' was not published after 0.02 s: the server is taking another upload: try again in a moment
+[maps] offering 'Valley' to the server: 27,053 B in 27 chunks, sha-256 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b
+[maps] the server answered the offer of 'Valley': have_it
+[maps] the server has 'Valley' already (33a94f10…): nothing was sent
+[checks] PASS map-upload: busy: the client exited 0
+[checks] PASS map-upload: busy: the client's part ran to its end
+[checks] level upload check: next-by-hand; the maps are in $COPY/map-upload/home-next/.local/share/godot/app_userdata/gdpyr/maps/
+[checks] PASS next-by-hand: connected to 127.0.0.1:7795; the server named its map af682abc… and sent a nonce of 16 B
+[checks] PASS next-by-hand: a next-map request, rightly proved, for the map the server now has: ok_stays_down; ok_stays_down expected
+[checks] measured next-by-hand: the editor would say: the server stops when its round ends, and nothing there starts it again: it plays this map the next time somebody starts it
+[checks] PASS next-by-hand: the server dropped the link 1.00 s after its answer: no round was in its way
+[checks] next-by-hand: 3 of 3 facts hold
+[maps] asking the server to play 33a94f10… next
+[maps] the server answered the next map, 33a94f10…: ok_stays_down
+[checks] PASS map-upload: next-by-hand: the client exited 0
+[checks] PASS map-upload: next-by-hand: the client's part ran to its end
+[checks] level upload check: server, by hand; the maps are in $COPY/map-upload/home-hand/.local/share/godot/app_userdata/gdpyr/maps/
+[rts] navigation baked: 2130 vertices
+[checks] PASS server, by hand: the server's user://maps is $COPY/map-upload/home-hand/.local/share/godot/app_userdata/gdpyr/maps/: where deploy-map.sh put the map
+[checks] PASS server, by hand: the server plays Ridge ($COPY/map-upload/home-hand/.local/share/godot/app_userdata/gdpyr/maps/ridge.map, af682abc), from $COPY/map-upload/home-hand/.local/share/godot/app_userdata/gdpyr/maps/ridge.map
+[checks] PASS server, by hand: which is the file it was given
+[checks] PASS server, by hand: and the world was built from that file, read again field by field
+[checks] PASS server, by hand: it takes uploads: it was given a token
+[checks] measured server, by hand: maps/active holds af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2; the cache holds none
+[rts] navigation re-baked around the structures in 2608 ms, 9.2 ms of it on the tick (1 this round)
+[checks] PASS server, by hand: offers answered: 14
+[checks] PASS server, by hand: next-map requests answered: 5
+[checks] PASS server, by hand: chunks dropped, from peers whose offer was not taken: 3
+[checks] PASS server, by hand: uploads kept: 0
+[checks] PASS server, by hand: uploads taken and then refused: 2
+[checks] PASS server, by hand: the last offer's answer: busy
+[checks] PASS server, by hand: the last next-map request's answer: bad_proof
+[checks] PASS server, by hand: the cache holds, each file hashing to its name: none
+[checks] PASS server, by hand: maps/active holds: af682abc…
+[checks] PASS server, by hand: the map it leaves for: none
+[checks] PASS server, by hand: an upload is being taken from: nobody
+[checks] PASS server, by hand: offers answered: 17
+[checks] PASS server, by hand: uploads kept: 1
+[checks] PASS server, by hand: uploads taken and then refused: 2
+[checks] PASS server, by hand: the last offer's answer: have_it
+[checks] PASS server, by hand: the cache holds, each file hashing to its name: 33a94f10…
+[checks] PASS server, by hand: maps/active holds: af682abc…
+[checks] PASS server, by hand: the map it leaves for: none
+[checks] PASS server, by hand: an upload is being taken from: nobody
+[checks] PASS server, by hand: leaving: no
+[checks] PASS server, by hand: leaving for the next map, 33a94f10…, which maps/active names; it plays Ridge ($COPY/map-upload/home-hand/.local/share/godot/app_userdata/gdpyr/maps/ridge.map, af682abc) to the last
+[checks] PASS server, by hand: no round is in progress: Warmup, 1 peer(s) connected
+[checks] server, by hand: 27 of 27 facts hold
+[map] this server's maps are in $COPY/map-upload/home-hand/.local/share/godot/app_userdata/gdpyr/maps/; active names af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2
+[map] playing Ridge ($COPY/map-upload/home-hand/.local/share/godot/app_userdata/gdpyr/maps/ridge.map, af682abc) from $COPY/map-upload/home-hand/.local/share/godot/app_userdata/gdpyr/maps/ridge.map, sha-256 af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2
+[maps] this server takes maps from clients that hold its token, to $COPY/map-upload/home-hand/.local/share/godot/app_userdata/gdpyr/maps/cache/, and lets them name its next map; nothing here starts it again when it leaves for one
+[maps] peer 1237261365 offered a map: bad_proof
+[maps] peer 1237261365 offered a map: bad_proof
+[maps] peer 1237261365 offered a map: bad_proof
+[maps] peer 1237261365 offered a map: bad_proof
+[maps] peer 1237261365 offered a map: bad_proof
+[maps] peer 1237261365 offered a map: bad_proof
+[maps] peer 1237261365 offered a map: too_large (33a94f10…, 1,048,577 B)
+[maps] peer 1237261365 offered a map: too_large (33a94f10…, 0 B)
+[maps] peer 1237261365 offered a map: bad_proof
+[maps] peer 1237261365 offered a map: have_it (af682abc…, 26,861 B)
+[maps] peer 1237261365 named the next map: bad_proof
+[maps] peer 1237261365 named the next map: bad_proof
+[maps] peer 1237261365 named the next map: not_here
+[maps] peer 1237261365 named the next map: $COPY/map-upload/home-hand/.local/share/godot/app_userdata/gdpyr/maps/active names af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2; it is the map being played, and nothing restarts
+[maps] peer 1818091002 offered a map: bad_proof
+[maps] peer 1818091002 named the next map: bad_proof
+[maps] taking an upload from peer 1818091002: 26,626 B in 27 chunks, sha-256 9d19641312feaeaf136a162ae3ebbe67c891f359cf244d30d071ca14e67fe429
+[maps] refused the upload from peer 1818091002 after 0.47 s, 27 of 27 chunks: the bytes that arrived hash to ce640234…, not the 9d196413… the uploader named
+[maps] taking an upload from peer 1818091002: 26,626 B in 27 chunks, sha-256 9d19641312feaeaf136a162ae3ebbe67c891f359cf244d30d071ca14e67fe429
+[maps] peer 1818091002 offered a map: busy (33a94f10…, 27,053 B)
+[maps] refused the upload from peer 1818091002 after 10.03 s, 2 of 27 chunks: the map stopped arriving: 2 of 27 chunks, then nothing for 10 s
+[maps] taking an upload from peer 424494698: 27,053 B in 27 chunks, sha-256 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b
+[maps] peer 1161601413 offered a map: busy (33a94f10…, 27,053 B)
+[maps] kept the upload from peer 424494698 as $COPY/map-upload/home-hand/.local/share/godot/app_userdata/gdpyr/maps/cache/33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b.map: 'Valley', 27,053 B in 27 chunks, 0.55 s; it hashes to 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b, reads and validates (0 warnings)
+[maps] peer 1161601413 offered a map: have_it (33a94f10…, 27,053 B)
+[maps] peer 294923898 named the next map: $COPY/map-upload/home-hand/.local/share/godot/app_userdata/gdpyr/maps/active names 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b; this process exits 0 when the round in progress is over, and nothing here starts it again: it was run by hand (INVOCATION_ID is not set)
+[maps] no round is in progress: leaving for the next map, 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b; exit 0 in 1 s, and nothing here starts this server again
+[checks] PASS map-upload: server, by hand: the server exited 0; 0 expected
+[checks] PASS map-upload: server, by hand: the server's part ran to its end
+[checks] PASS map-upload: after it left, the home's maps/active holds 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b
+[checks] PASS map-upload: and it said that nothing there starts it again
+[checks] level upload check: publish-off; the maps are in $COPY/map-upload/home-editor/.local/share/godot/app_userdata/gdpyr/maps/
+[checks] PASS publish-off: the editor has valley.map open, saved: sha-256 33a94f10…
+[checks] PASS publish-off: published, 0.32 s: the offer uploads_off, the upload Refused, the next map -; Failed
+[checks] measured publish-off: the editor says: not published to 127.0.0.1:7795: the server takes no uploads: it was started with no --map-upload-token
+[checks] PASS publish-off: and the link is dropped: the editor is offline again, in its menu phase
+[checks] PASS publish-off: what it sent is the file as it was saved, 33a94f10…: nothing was saved again
+[checks] publish-off: 4 of 4 facts hold
+[editor] publishing 'Valley' to 127.0.0.1:7795: connecting…
+[editor] publishing $COPY/map-upload/home-editor/.local/share/godot/app_userdata/gdpyr/maps/valley.map (sha-256 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b, 27,053 B) to 127.0.0.1:7795, to be its next map
+[maps] offering 'Valley' to the server: 27,053 B in 27 chunks, sha-256 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b
+[maps] the server answered the offer of 'Valley': uploads_off
+[maps] 'Valley' was not published after 0.24 s: the server takes no uploads: it was started with no --map-upload-token
+[editor] not published to 127.0.0.1:7795: the server takes no uploads: it was started with no --map-upload-token
+[checks] PASS map-upload: publish-off: the client exited 0
+[checks] PASS map-upload: publish-off: the client's part ran to its end
+[checks] level upload check: stream-off; the maps are in $COPY/map-upload/home-stream/.local/share/godot/app_userdata/gdpyr/maps/
+[checks] PASS stream-off: connected to 127.0.0.1:7795; the server named its map af682abc… and sent a nonce of 16 B
+[checks] PASS stream-off: the map offered, proved by a token: uploads_off; uploads_off expected
+[checks] measured stream-off: and its 27 chunks sent all the same
+[checks] PASS stream-off: a next-map request, rightly proved, for the map the server now has: uploads_off; uploads_off expected
+[checks] measured stream-off: the editor would say: the server is told nothing: it was started with no --map-upload-token
+[checks] stream-off: 3 of 3 facts hold
+[maps] asking the server to play 33a94f10… next
+[maps] the server answered the next map, 33a94f10…: uploads_off
+[checks] PASS map-upload: stream-off: the client exited 0
+[checks] PASS map-upload: stream-off: the client's part ran to its end
+[checks] level upload check: server, no token; the maps are in $COPY/map-upload/home-off/.local/share/godot/app_userdata/gdpyr/maps/
+[rts] navigation baked: 2130 vertices
+[checks] PASS server, no token: the server plays Ridge ($COPY/map-upload/ridge.map, af682abc), from $COPY/map-upload/ridge.map
+[checks] PASS server, no token: which is the file it was given
+[checks] PASS server, no token: and the world was built from that file, read again field by field
+[checks] PASS server, no token: it takes no uploads: it was given no token
+[checks] measured server, no token: maps/active holds none; the cache holds none
+[rts] navigation re-baked around the structures in 2363 ms, 10.2 ms of it on the tick (1 this round)
+[checks] PASS server, no token: offers answered: 2
+[checks] PASS server, no token: next-map requests answered: 1
+[checks] PASS server, no token: chunks dropped, from peers whose offer was not taken: 27
+[checks] PASS server, no token: uploads kept: 0
+[checks] PASS server, no token: uploads taken and then refused: 0
+[checks] PASS server, no token: the last offer's answer: uploads_off
+[checks] PASS server, no token: the last next-map request's answer: uploads_off
+[checks] PASS server, no token: the cache holds, each file hashing to its name: none
+[checks] PASS server, no token: maps/active holds: none
+[checks] PASS server, no token: the map it leaves for: none
+[checks] PASS server, no token: an upload is being taken from: nobody
+[checks] server, no token: 15 of 15 facts hold
+[map] playing Ridge ($COPY/map-upload/ridge.map, af682abc) from $COPY/map-upload/ridge.map, sha-256 af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2
+[maps] peer 1761206770 offered a map: uploads_off
+[maps] peer 217124176 offered a map: uploads_off
+[maps] peer 217124176 named the next map: uploads_off
+[checks] PASS map-upload: server, no token: the server exited 0; 0 expected
+[checks] PASS map-upload: server, no token: the server's part ran to its end
+[checks] level upload check: publish-pinned; the maps are in $COPY/map-upload/home-editor/.local/share/godot/app_userdata/gdpyr/maps/
+[checks] PASS publish-pinned: the editor has valley.map open, saved: sha-256 33a94f10…
+[checks] PASS publish-pinned: published, 0.80 s: the offer ok, the upload Stored, the next map pinned; Done
+[checks] measured publish-pinned: the editor says: published 'Valley' to 127.0.0.1:7795: the server kept it; it does not play it next: the server was started with --map, and plays that map whenever it starts
+[checks] PASS publish-pinned: and the link is dropped: the editor is offline again, in its menu phase
+[checks] PASS publish-pinned: what it sent is the file as it was saved, 33a94f10…: nothing was saved again
+[checks] publish-pinned: 4 of 4 facts hold
+[editor] publishing 'Valley' to 127.0.0.1:7795: connecting…
+[editor] publishing $COPY/map-upload/home-editor/.local/share/godot/app_userdata/gdpyr/maps/valley.map (sha-256 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b, 27,053 B) to 127.0.0.1:7795, to be its next map
+[maps] offering 'Valley' to the server: 27,053 B in 27 chunks, sha-256 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b
+[maps] the server answered the offer of 'Valley': ok
+[maps] the server kept 'Valley': 27,053 B in 27 chunks, 0.68 s
+[maps] asking the server to play 33a94f10… next
+[maps] the server answered the next map, 33a94f10…: pinned
+[editor] published 'Valley' to 127.0.0.1:7795: the server kept it; it does not play it next: the server was started with --map, and plays that map whenever it starts
+[checks] PASS map-upload: publish-pinned: the client exited 0
+[checks] PASS map-upload: publish-pinned: the client's part ran to its end
+[checks] level upload check: server, --map and a token; the maps are in $COPY/map-upload/home-pinned/.local/share/godot/app_userdata/gdpyr/maps/
+[rts] navigation baked: 2130 vertices
+[checks] PASS server, --map and a token: the server plays Ridge ($COPY/map-upload/ridge.map, af682abc), from $COPY/map-upload/ridge.map
+[checks] PASS server, --map and a token: which is the file it was given
+[checks] PASS server, --map and a token: and the world was built from that file, read again field by field
+[checks] PASS server, --map and a token: it takes uploads: it was given a token
+[checks] measured server, --map and a token: maps/active holds none; the cache holds none
+[rts] navigation re-baked around the structures in 2247 ms, 5.7 ms of it on the tick (1 this round)
+[checks] PASS server, --map and a token: offers answered: 1
+[checks] PASS server, --map and a token: next-map requests answered: 1
+[checks] PASS server, --map and a token: uploads kept: 1
+[checks] PASS server, --map and a token: uploads taken and then refused: 0
+[checks] PASS server, --map and a token: the last next-map request's answer: pinned
+[checks] PASS server, --map and a token: the cache holds, each file hashing to its name: 33a94f10…
+[checks] PASS server, --map and a token: maps/active holds: none
+[checks] PASS server, --map and a token: the map it leaves for: none
+[checks] PASS server, --map and a token: leaving: no
+[checks] server, --map and a token: 13 of 13 facts hold
+[map] playing Ridge ($COPY/map-upload/ridge.map, af682abc) from $COPY/map-upload/ridge.map, sha-256 af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2
+[maps] this server takes maps from clients that hold its token, to $COPY/map-upload/home-pinned/.local/share/godot/app_userdata/gdpyr/maps/cache/, and lets them name its next map — which --map overrides: it plays that map whenever it starts
+[maps] taking an upload from peer 536073564: 27,053 B in 27 chunks, sha-256 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b
+[maps] kept the upload from peer 536073564 as $COPY/map-upload/home-pinned/.local/share/godot/app_userdata/gdpyr/maps/cache/33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b.map: 'Valley', 27,053 B in 27 chunks, 0.62 s; it hashes to 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b, reads and validates (0 warnings)
+[maps] peer 536073564 named the next map: pinned
+[checks] PASS map-upload: server, --map and a token: the server exited 0; 0 expected
+[checks] PASS map-upload: server, --map and a token: the server's part ran to its end
+[checks] PASS map-upload: deploy-map.sh --activate, for the server with a round
+[checks] level upload check: publish; the maps are in $COPY/map-upload/home-editor-2/.local/share/godot/app_userdata/gdpyr/maps/
+[checks] PASS publish: the editor has valley.map open, saved: sha-256 33a94f10…
+[checks] PASS publish: the server's round is live (round-live)
+[checks] PASS publish: published, 0.75 s: the offer ok, the upload Stored, the next map ok; Done
+[checks] measured publish: the editor says: published 'Valley' to 127.0.0.1:7795: the server kept it; the server changes to it when its round ends: everybody is dropped, and joins again
+[checks] PASS publish: and the link is dropped: the editor is offline again, in its menu phase
+[checks] PASS publish: what it sent is the file as it was saved, 33a94f10…: nothing was saved again
+[checks] PASS publish: published again, 0.13 s: the offer have_it, the upload HaveIt, the next map ok; Done
+[checks] measured publish: the editor says: published 'Valley' to 127.0.0.1:7795: the server has this map already; the server changes to it when its round ends: everybody is dropped, and joins again
+[checks] PASS publish: and the link is dropped: the editor is offline again, in its menu phase
+[checks] PASS publish: published by a wrong token, 0.12 s: the offer bad_proof, the upload Refused, the next map -; Failed
+[checks] measured publish: the editor says: not published to 127.0.0.1:7795: the server refused the token
+[checks] PASS publish: and the link is dropped: the editor is offline again, in its menu phase
+[checks] PASS publish: an address that is not one, and no token, begin nothing
+[checks] publish: 10 of 10 facts hold
+[editor] publishing 'Valley' to 127.0.0.1:7795: connecting…
+[editor] publishing $COPY/map-upload/home-editor-2/.local/share/godot/app_userdata/gdpyr/maps/valley.map (sha-256 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b, 27,053 B) to 127.0.0.1:7795, to be its next map
+[maps] offering 'Valley' to the server: 27,053 B in 27 chunks, sha-256 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b
+[maps] the server answered the offer of 'Valley': ok
+[maps] the server kept 'Valley': 27,053 B in 27 chunks, 0.55 s
+[maps] asking the server to play 33a94f10… next
+[maps] the server answered the next map, 33a94f10…: ok
+[editor] published 'Valley' to 127.0.0.1:7795: the server kept it; the server changes to it when its round ends: everybody is dropped, and joins again
+[editor] publishing 'Valley' to 127.0.0.1:7795: connecting…
+[editor] publishing $COPY/map-upload/home-editor-2/.local/share/godot/app_userdata/gdpyr/maps/valley.map (sha-256 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b, 27,053 B) to 127.0.0.1:7795, to be its next map
+[maps] offering 'Valley' to the server: 27,053 B in 27 chunks, sha-256 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b
+[maps] the server answered the offer of 'Valley': have_it
+[maps] the server has 'Valley' already (33a94f10…): nothing was sent
+[maps] asking the server to play 33a94f10… next
+[maps] the server answered the next map, 33a94f10…: ok
+[editor] published 'Valley' to 127.0.0.1:7795: the server has this map already; the server changes to it when its round ends: everybody is dropped, and joins again
+[editor] publishing 'Valley' to 127.0.0.1:7795: connecting…
+[editor] publishing $COPY/map-upload/home-editor-2/.local/share/godot/app_userdata/gdpyr/maps/valley.map (sha-256 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b, 27,053 B) to 127.0.0.1:7795, to be its next map
+[maps] offering 'Valley' to the server: 27,053 B in 27 chunks, sha-256 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b
+[maps] the server answered the offer of 'Valley': bad_proof
+[maps] 'Valley' was not published after 0.03 s: the server refused the token
+[editor] not published to 127.0.0.1:7795: the server refused the token
+[editor] not published: the server's address: '99999' is not a port in 1-65535
+[editor] not published: the server's upload token is needed: what it was started with, after --map-upload-token
+[checks] PASS map-upload: publish: the client exited 0
+[checks] PASS map-upload: publish: the client's part ran to its end
+[checks] level upload check: player; the maps are in $COPY/map-upload/home-player/.local/share/godot/app_userdata/gdpyr/maps/
+[checks] PASS player: in the round, on Ridge ($COPY/map-upload/home-player/.local/share/godot/app_userdata/gdpyr/maps/cache/af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2.map, af682abc)
+[checks] PASS player: the round was live, then over, and then the server dropped the link, 65.5 s after this client was in it
+[checks] player: 2 of 2 facts hold
+[maps] fetching 'Ridge' from the server: 26,861 B in 27 chunks, sha-256 af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2
+[maps] fetched 'Ridge': 26,861 B in 27 chunks, 0.60 s; it hashes to af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2, reads and validates (0 warnings)
+[maps] kept 'Ridge' as $COPY/map-upload/home-player/.local/share/godot/app_userdata/gdpyr/maps/cache/af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2.map
+[checks] PASS map-upload: player: the client exited 0
+[checks] PASS map-upload: player: the client's part ran to its end
+[checks] level upload check: server, supervised; the maps are in $COPY/map-upload/home-round/.local/share/godot/app_userdata/gdpyr/maps/
+[rts] navigation baked: 2130 vertices
+[checks] PASS server, supervised: the server's user://maps is $COPY/map-upload/home-round/.local/share/godot/app_userdata/gdpyr/maps/: where deploy-map.sh put the map
+[checks] PASS server, supervised: the server plays Ridge ($COPY/map-upload/home-round/.local/share/godot/app_userdata/gdpyr/maps/ridge.map, af682abc), from $COPY/map-upload/home-round/.local/share/godot/app_userdata/gdpyr/maps/ridge.map
+[checks] PASS server, supervised: which is the file it was given
+[checks] PASS server, supervised: and the world was built from that file, read again field by field
+[checks] PASS server, supervised: it takes uploads: it was given a token
+[checks] measured server, supervised: maps/active holds af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2; the cache holds none
+[checks] PASS server, supervised: no round yet: a round of 1 minute and an intermission of 5 s are set
+[checks] PASS server, supervised: the round is live, 1 peer(s) connected, 2 on the field
+[checks] PASS server, supervised: told its next map 0.9 s into the round: 33a94f10…, answered ok
+[checks] PASS server, supervised: the uploaded map is in the cache under its hash, and hashes to it: 33a94f10…
+[checks] PASS server, supervised: maps/active holds 33a94f10…
+[checks] PASS server, supervised: and it goes on playing af682abc…: the round is Live, 59 s left
+[rts] navigation re-baked around the structures in 2301 ms, 8.1 ms of it on the tick (1 this round)
+[checks] PASS server, supervised: the round was played out, 60.0 s of it (3543 ticks after it was told), and ended TimeExpired; it had not left
+[checks] PASS server, supervised: it leaves with the round over and not started again (Ended, TimeExpired), 5.00 s after it ended: the intermission's 5 s
+[checks] PASS server, supervised: with 1 peer(s) still connected: it did not wait for them to go
+[checks] PASS server, supervised: maps/active names 33a94f10…, and it played af682abc… to the last
+[checks] server, supervised: 15 of 15 facts hold
+[map] this server's maps are in $COPY/map-upload/home-round/.local/share/godot/app_userdata/gdpyr/maps/; active names af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2
+[map] playing Ridge ($COPY/map-upload/home-round/.local/share/godot/app_userdata/gdpyr/maps/ridge.map, af682abc) from $COPY/map-upload/home-round/.local/share/godot/app_userdata/gdpyr/maps/ridge.map, sha-256 af682abc8f1a6cf491891f3893729712ca0faa66016f49fa828b94d84c14def2
+[maps] this server takes maps from clients that hold its token, to $COPY/map-upload/home-round/.local/share/godot/app_userdata/gdpyr/maps/cache/, and lets them name its next map
+[maps] sending 'Ridge' to peer 51019695: 26,861 B in 27 chunks
+[maps] sent 'Ridge' to peer 51019695: 27 chunks, 26,861 B, in 0.42 s
+[maps] taking an upload from peer 85923619: 27,053 B in 27 chunks, sha-256 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b
+[maps] kept the upload from peer 85923619 as $COPY/map-upload/home-round/.local/share/godot/app_userdata/gdpyr/maps/cache/33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b.map: 'Valley', 27,053 B in 27 chunks, 0.53 s; it hashes to 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b, reads and validates (0 warnings)
+[maps] peer 85923619 named the next map: $COPY/map-upload/home-round/.local/share/godot/app_userdata/gdpyr/maps/active names 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b; this process exits 0 when the round in progress is over, for its supervisor to start it on that map
+[maps] peer 2144186259 offered a map: have_it (33a94f10…, 27,053 B)
+[maps] peer 2144186259 named the next map: $COPY/map-upload/home-round/.local/share/godot/app_userdata/gdpyr/maps/active names 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b; this process exits 0 when the round in progress is over, for its supervisor to start it on that map
+[maps] peer 1895350611 offered a map: bad_proof
+[maps] the round is over: leaving for the next map, 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b; exit 0 in 1 s
+[checks] PASS map-upload: server, supervised: the server exited 0; 0 expected
+[checks] PASS map-upload: server, supervised: the server's part ran to its end
+[match] round live | tickets 50 | points 1000 | baseline 120/min | 1 minutes
+[match] round over: TimeExpired | winner GroundForce | tickets 50 | deaths 0 | kits taken 0 | resupplied 0 players: 0 rounds, 0 grenades, 0 armour | next round in 5s
+[checks] level fetch check: fetch; the cache is $COPY/map-upload/home-rejoin/.local/share/godot/app_userdata/gdpyr/maps/cache/
+[checks] PASS fetch: before joining, the cache holds nothing (0 files)
+[checks] PASS fetch: connected, and the server named its map
+[checks] PASS fetch: the server named map 'Valley' by its hash 33a94f10…, 27,053 B, with no catalog id and a nonce of 16 B
+[checks] PASS fetch: in the game, 0.89 s after starting
+[checks] PASS fetch: it asked for the map 1 times; 1 expected
+[checks] PASS fetch: the fetch is complete: 27 of 27 chunks, Complete
+[checks] PASS fetch: the cache holds the map under its hash, and it hashes to it (33a94f10…)
+[checks] PASS fetch: and nothing else: 1 file(s) in the cache
+[checks] PASS fetch: this client plays Valley ($COPY/map-upload/home-rejoin/.local/share/godot/app_userdata/gdpyr/maps/cache/33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b.map, 33a94f10)
+[checks] PASS fetch: MapHost.tscn's LevelRoot built the world from the session's document
+[checks] PASS fetch: the document the world was built from is 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b.map read again, field by field and sample by sample
+[checks] PASS fetch: 496 of 500 rays straight down met the ground first, the worst 0.016 mm from the file's
+[checks] PASS fetch: the file's pieces are in the world: 4 spawn markers, 3 resource nodes
+[checks] PASS fetch: in the round: 2 on the roster, its own character among them (PlayerIdleState)
+[checks] fetch: 14 of 14 facts hold
+[checks] PASS map-upload: rejoin: a client that has not got the new map joined again: exit 0
+[checks] level upload check: server, started again; the maps are in $COPY/map-upload/home-round/.local/share/godot/app_userdata/gdpyr/maps/
+[rts] navigation baked: 1985 vertices
+[checks] PASS server, started again: the server's user://maps is $COPY/map-upload/home-round/.local/share/godot/app_userdata/gdpyr/maps/: where deploy-map.sh put the map
+[checks] PASS server, started again: the server plays Valley ($COPY/map-upload/home-round/.local/share/godot/app_userdata/gdpyr/maps/cache/33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b.map, 33a94f10), from $COPY/map-upload/home-round/.local/share/godot/app_userdata/gdpyr/maps/cache/33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b.map
+[checks] PASS server, started again: which is the cache's file for that hash, $COPY/map-upload/home-round/.local/share/godot/app_userdata/gdpyr/maps/cache/33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b.map
+[checks] PASS server, started again: and the world was built from that file, read again field by field
+[checks] PASS server, started again: it takes uploads: it was given a token
+[checks] measured server, started again: maps/active holds 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b; the cache holds 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b
+[rts] navigation re-baked around the structures in 2308 ms, 7.7 ms of it on the tick (1 this round)
+[checks] PASS server, started again: offers answered: 0
+[checks] PASS server, started again: next-map requests answered: 0
+[checks] PASS server, started again: uploads kept: 0
+[checks] PASS server, started again: the cache holds, each file hashing to its name: 33a94f10…
+[checks] PASS server, started again: maps/active holds: 33a94f10…
+[checks] PASS server, started again: the map it leaves for: none
+[checks] PASS server, started again: leaving: no
+[checks] server, started again: 12 of 12 facts hold
+[map] this server's maps are in $COPY/map-upload/home-round/.local/share/godot/app_userdata/gdpyr/maps/; active names 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b
+[map] playing Valley ($COPY/map-upload/home-round/.local/share/godot/app_userdata/gdpyr/maps/cache/33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b.map, 33a94f10) from $COPY/map-upload/home-round/.local/share/godot/app_userdata/gdpyr/maps/cache/33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b.map, sha-256 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b
+[maps] this server takes maps from clients that hold its token, to $COPY/map-upload/home-round/.local/share/godot/app_userdata/gdpyr/maps/cache/, and lets them name its next map
+[maps] sending 'Valley' to peer 827659810: 27,053 B in 27 chunks
+[maps] sent 'Valley' to peer 827659810: 27 chunks, 27,053 B, in 0.42 s
+[checks] PASS map-upload: server, started again: the server exited 0; 0 expected
+[checks] PASS map-upload: server, started again: the server's part ran to its end
+exit 0

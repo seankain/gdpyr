@@ -12,7 +12,7 @@ namespace Gdpyr.MapEditor;
 /// <summary>
 /// The editor's screen (docs/LEVEL_EDITOR.md §8.2), built in code as the menu and the HUDs
 /// are: a bar across the top — the map's name and whether it is saved, Validate, Test, Save,
-/// Save as, Export, Exit — the tools down the left, the terrain tool's settings on the right,
+/// Save as, Export, Publish, Exit — the tools down the left, the terrain tool's settings on the right,
 /// and under the view the cursor, the readout, the validator's count and what was last said.
 /// Before a map is open, the list of one's own maps and those to clone (§8.1). What each
 /// widget says is <see cref="MapEditorControls"/>'.
@@ -77,11 +77,19 @@ public partial class MapEditorRoot
 	private LineEdit _settingsAuthor;
 	private TextEdit _settingsDescription;
 	private FileDialog _exportDialog;
+	private ConfirmationDialog _publishDialog;
+	private LineEdit _publishAddressEdit;
+	private LineEdit _publishTokenEdit;
+	private CheckBox _publishNextBox;
+
+	/// <summary>The address last published to, offered again; the token never is.</summary>
+	private static string _lastPublishAddress = string.Empty;
 
 	/// <summary>The list is up, or a dialog: keys and clicks are theirs.</summary>
 	public bool Modal =>
 		(_listPanel?.Visible ?? false) || (_namePrompt?.Visible ?? false) || (_autosaveDialog?.Visible ?? false)
-		|| (_exitDialog?.Visible ?? false) || (_settingsDialog?.Visible ?? false) || (_exportDialog?.Visible ?? false);
+		|| (_exitDialog?.Visible ?? false) || (_settingsDialog?.Visible ?? false) || (_exportDialog?.Visible ?? false)
+		|| (_publishDialog?.Visible ?? false);
 
 	/// <summary>The issues the list shows, as the validator last found them.</summary>
 	public IReadOnlyList<MapIssue> ListedIssues => Editing == null ? Array.Empty<MapIssue>() : ShownReport.Issues;
@@ -134,6 +142,7 @@ public partial class MapEditorRoot
 		BarButton(row, "Save as…", "save under another name: a fork of this map", () =>
 			AskName("Save as", FileName + "-2", name => SaveAs(name, out _)));
 		BarButton(row, "Export…", "copy the saved file somewhere else", ShowExport);
+		BarButton(row, "Publish…", "send the saved map to a dedicated server that takes uploads (§9.5)", ShowPublish);
 		BarButton(row, "Exit", "back to the main menu", () => Exit());
 	}
 
@@ -903,6 +912,34 @@ public partial class MapEditorRoot
 		_exportDialog.FileSelected += path => Export(path, out _);
 		_exportDialog.VisibilityChanged += () => TextEntry(_exportDialog.Visible);
 		_layer.AddChild(_exportDialog);
+
+		_publishDialog = new ConfirmationDialog
+		{
+			Title = "Publish to server",
+			OkButtonText = "Publish",
+			MinSize = new Vector2I(520, 260),
+		};
+		var publish = new VBoxContainer();
+		publish.AddChild(new Label { Text = "The server's address" });
+		_publishAddressEdit = new LineEdit { PlaceholderText = "203.0.113.10:7777" };
+		publish.AddChild(_publishAddressEdit);
+		publish.AddChild(new Label { Text = "Its upload token: what it was started with, after --map-upload-token" });
+		_publishTokenEdit = new LineEdit { Secret = true };
+		_publishTokenEdit.TextSubmitted += _ => PublishConfirmed();
+		publish.AddChild(_publishTokenEdit);
+		_publishNextBox = new CheckBox { Text = "Make it the map the server plays next" };
+		publish.AddChild(_publishNextBox);
+		publish.AddChild(new Label
+		{
+			Text = "The saved file is sent as it is. A server that is asked to play it next changes when its"
+				+ " round ends: everybody on it is dropped, and joins again.",
+			AutowrapMode = TextServer.AutowrapMode.WordSmart,
+			CustomMinimumSize = new Vector2(480f, 0f),
+		});
+		_publishDialog.AddChild(publish);
+		_publishDialog.Confirmed += PublishConfirmed;
+		_publishDialog.VisibilityChanged += () => TextEntry(_publishDialog.Visible);
+		_layer.AddChild(_publishDialog);
 	}
 
 	private void AskName(string title, string initial, Action<string> then)
@@ -963,6 +1000,28 @@ public partial class MapEditorRoot
 
 		_exportDialog.CurrentFile = FileName + MapFile.Extension;
 		_exportDialog.PopupCentered();
+	}
+
+	private void ShowPublish()
+	{
+		if (Editing == null)
+		{
+			return;
+		}
+
+		_publishAddressEdit.Text = _lastPublishAddress;
+		_publishTokenEdit.Text = string.Empty;
+		_publishDialog.PopupCentered();
+		(_lastPublishAddress.Length == 0 ? _publishAddressEdit : _publishTokenEdit).GrabFocus();
+	}
+
+	private void PublishConfirmed()
+	{
+		_publishDialog.Hide();
+		_lastPublishAddress = _publishAddressEdit.Text.Trim();
+		string token = _publishTokenEdit.Text;
+		_publishTokenEdit.Text = string.Empty;
+		Publish(_lastPublishAddress, token, _publishNextBox.ButtonPressed, out _);
 	}
 
 	private void Leave(bool discard)

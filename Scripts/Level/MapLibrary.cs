@@ -34,6 +34,12 @@ public static class MapLibrary
 	public static string CacheRoot => ProjectSettings.GlobalizePath(CacheDirectory);
 
 	/// <summary>
+	/// <c>user://maps/active</c>, as a real path on this machine: the file that names, by its hash, the
+	/// map a dedicated server started with no <c>--map</c> plays (§9.5, LE8).
+	/// </summary>
+	public static string ActivePath => Path.Combine(UserRoot, MapChange.ActiveFileName);
+
+	/// <summary>
 	/// What a <c>--map</c> reference names (§9.5), read and validated: a catalog id, a
 	/// library name, 8 or more hex digits of a hash, or a path ending <c>.map</c>. A scene
 	/// map comes back with no document. False with every reason when it names nothing or
@@ -347,6 +353,124 @@ public static class MapLibrary
 			catch (Exception gone) when (gone is IOException or UnauthorizedAccessException)
 			{
 				// Nothing more to do: a .part is never read as a map.
+			}
+
+			error = $"{path}: {e.Message}";
+			return false;
+		}
+	}
+
+	/// <summary>
+	/// The hash <c>maps/active</c> names (§9.5). True with a null hash when there is no such file: the
+	/// catalog's default is played. False, with why, when there is one and it names no map: a file
+	/// somebody wrote is not passed over.
+	/// </summary>
+	public static bool TryReadActive(out string hash, out string error)
+	{
+		hash = null;
+		error = null;
+		string path = ActivePath;
+		try
+		{
+			var info = new FileInfo(path);
+			if (!info.Exists)
+			{
+				return true;
+			}
+
+			if (info.Length > MapChange.MaxActiveBytes)
+			{
+				error = $"{path} is {info.Length:N0} bytes: it holds a map's hash and nothing else";
+				return false;
+			}
+
+			if (!MapChange.TryParseActive(File.ReadAllText(path), out hash, out string unparsed))
+			{
+				error = $"{path} names no map: {unparsed}";
+				return false;
+			}
+
+			return true;
+		}
+		catch (Exception e) when (e is IOException or UnauthorizedAccessException or NotSupportedException
+			or ArgumentException)
+		{
+			error = $"{path}: {e.Message}";
+			return false;
+		}
+	}
+
+	/// <summary>
+	/// The map <c>maps/active</c> names, read and validated as every map is (§9.5): among the bundled
+	/// maps, the cache and one's own, by its hash. True with <paramref name="named"/> false when there
+	/// is no such file. False, with why, when the file names no map, a map this server has not got, or
+	/// one that does not play on this build: a server told to play a map it cannot does not play
+	/// another in its place.
+	/// </summary>
+	public static bool TryResolveActive(out bool named, out MapInfo map, out MapDocument document, out byte[] file,
+		out string error)
+	{
+		named = false;
+		map = default;
+		document = null;
+		file = null;
+		if (!TryReadActive(out string hash, out error))
+		{
+			return false;
+		}
+
+		if (hash == null)
+		{
+			return true;
+		}
+
+		named = true;
+		if (TryFindHash(hash, out map, out document, out file, out Source source, out string unplayable, out string note))
+		{
+			return true;
+		}
+
+		error = source == Source.None
+			? $"{ActivePath} names map {hash}, which this server has not got"
+				+ (note != null ? $" ({note})" : string.Empty)
+				+ $": copy it to {UserRoot} (scripts/deploy-map.sh), or delete that file to play the default"
+			: $"{ActivePath} names map {hash}, and it does not play on this build: {unplayable}";
+		return false;
+	}
+
+	/// <summary>
+	/// Names the map a server with no <c>--map</c> plays when it next starts (§9.5): its hash, written
+	/// to <c>maps/active</c> through a file beside it and a rename, so the name is only ever a whole
+	/// hash.
+	/// </summary>
+	public static bool TryWriteActive(string hash, out string error)
+	{
+		if (!Gdpyr.Sim.Level.MapTransfer.IsHash(hash))
+		{
+			error = $"'{hash}' is not a map's hash";
+			return false;
+		}
+
+		string path = ActivePath;
+		string part = path + MapChange.ActiveTempSuffix;
+		try
+		{
+			Directory.CreateDirectory(UserRoot);
+			File.WriteAllText(part, MapChange.ActiveText(hash));
+			File.Move(part, path, overwrite: true);
+			error = null;
+			return true;
+		}
+		catch (Exception e) when (e is IOException or UnauthorizedAccessException or NotSupportedException
+			or ArgumentException)
+		{
+			try
+			{
+				File.Delete(part);
+			}
+			catch (Exception gone) when (gone is IOException or UnauthorizedAccessException)
+			{
+				// Nothing more to do: the file beside it is not the one that is read.
 			}
 
 			error = $"{path}: {e.Message}";

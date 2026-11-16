@@ -48,6 +48,7 @@ public sealed class LaunchOptions
 		"             [--record <name>] | [--playdemo <name>]\n" +
 		"             [--spectate] [--ai-debug | --no-ai-debug]\n" +
 		"             [--practice] [--map <map>] | [--edit [name]]\n" +
+		"             [--map-upload-token <token>]\n" +
 		"  --server [port]         headless authority, no local player (default port 7777)\n" +
 		"  --client <host[:port]>  connect to a server\n" +
 		"  --listen [port]         authority plus a local player\n" +
@@ -70,6 +71,8 @@ public sealed class LaunchOptions
 		"  --practice              a round on your own, as the menu's Practice offline, with no menu\n" +
 		"  --map <map>             play this map, with --server, --listen or --practice: a catalog id, a map's\n" +
 		"                          name in user://maps, 8 or more hex digits of its hash, or a path ending .map\n" +
+		"  --map-upload-token <t>  with --server: take maps from clients that prove they hold this token, and let\n" +
+		"                          them name the next map; 16 characters or more. Off unless given\n" +
 		"  --edit [name]           the map editor, on one's own map of that name in user://maps, or a new one\n" +
 		"                          by that name; with no name, the editor's list of maps\n" +
 		"  (no flags)              the main menu: the servers on this network, or a round on your own\n" +
@@ -203,6 +206,15 @@ public sealed class LaunchOptions
 	public string MapReference { get; private init; }
 
 	/// <summary>
+	/// The secret a client proves it holds before this server takes a map from it, or lets it name
+	/// the next one (docs/LEVEL_EDITOR.md §9.5, LE-D18): <c>--map-upload-token</c>. Null, and the
+	/// server takes no map from anyone, unless it was given: the upload is write access to a box
+	/// with a public address, and the deploy unit never names it. Only for
+	/// <see cref="LaunchMode.Server"/>. Never printed.
+	/// </summary>
+	public string MapUploadToken { get; private init; }
+
+	/// <summary>
 	/// The map editor, from the command line (docs/LEVEL_EDITOR.md §8.1): <c>--edit</c>, with
 	/// no menu. The mode is <see cref="LaunchMode.Offline"/>; nothing is played.
 	/// </summary>
@@ -290,6 +302,11 @@ public sealed class LaunchOptions
 			mode += $" | map {MapReference}";
 		}
 
+		if (MapUploadToken != null)
+		{
+			mode += " | map uploads (token)";
+		}
+
 		if (Edit)
 		{
 			mode += EditName != null ? $" | editing {EditName}" : " | editing";
@@ -344,6 +361,7 @@ public sealed class LaunchOptions
 		bool? aiDebug = null;
 		bool practice = false;
 		string mapReference = null;
+		string mapUploadToken = null;
 		bool edit = false;
 		string editName = null;
 
@@ -613,6 +631,27 @@ public sealed class LaunchOptions
 					break;
 				}
 
+				case "--map-upload-token":
+				{
+					if (mapUploadToken != null)
+					{
+						return Failure("--map-upload-token given twice");
+					}
+
+					if (!TryTakeValue(args, ref i, out string value))
+					{
+						return Failure("--map-upload-token needs a token");
+					}
+
+					if (!Gdpyr.Sim.Level.MapProof.IsToken(value, out string error))
+					{
+						return Failure($"--map-upload-token: {error}");
+					}
+
+					mapUploadToken = value;
+					break;
+				}
+
 				case "--edit":
 				{
 					if (edit)
@@ -742,6 +781,14 @@ public sealed class LaunchOptions
 			}
 		}
 
+		if (mapUploadToken != null && mode != LaunchMode.Server)
+		{
+			// A map is taken, and the next one named, by the dedicated server: the process that
+			// can exit for its supervisor to start it on another map (docs/LEVEL_EDITOR.md §9.5).
+			// A listen host's map is picked in its menu, and leaving it is quitting its game.
+			return Failure("--map-upload-token needs --server: it is the dedicated server that takes a map");
+		}
+
 		if (spectate)
 		{
 			// A spectator is a person who is not playing; a headless authority and a demo
@@ -804,6 +851,7 @@ public sealed class LaunchOptions
 			AiDebug = aiDebug ?? !dedicatedServer,
 			Practice = practice,
 			MapReference = mapReference,
+			MapUploadToken = mapUploadToken,
 			Edit = edit,
 			EditName = editName,
 		};

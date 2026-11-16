@@ -1,0 +1,513 @@
+# LE8, docs/LEVEL_EDITOR.md §11. At f81e7ef: .NET SDK 8.0.134, four cores of a cloud VM.
+# dotnet test Tests/Gdpyr.Tests.csproj --filter <MapTransferTests, MapUploadTests, MapLaunchTests, MapEditorControlsTests> --logger "console;verbosity=normal":
+# its line for each test, sorted, and its total. Then dotnet test Tests/Gdpyr.Tests.csproj five times over: each run's total, and what failed in it.
+# Then dotnet test --filter MarksmanTests: its total. Then dotnet build Gdpyr.csproj: its last lines.
+
+  Passed Gdpyr.Tests.MapEditorControlsTests.ABrush_ShowsWhatItReads(kind: GradeLocked, fields: [Radius, Grade, Rate])
+  Passed Gdpyr.Tests.MapEditorControlsTests.ABrush_ShowsWhatItReads(kind: Level, fields: [Radius, Core, Strength])
+  Passed Gdpyr.Tests.MapEditorControlsTests.ABrush_ShowsWhatItReads(kind: Ramp, fields: [Radius])
+  Passed Gdpyr.Tests.MapEditorControlsTests.ABrush_ShowsWhatItReads(kind: Sculpt, fields: [Radius, Core, Rate])
+  Passed Gdpyr.Tests.MapEditorControlsTests.ABrush_ShowsWhatItReads(kind: Smooth, fields: [Radius, Core, Strength])
+  Passed Gdpyr.Tests.MapEditorControlsTests.AKeyNotInTheTable_DoesNothing(key: Key1, ctrl: True, shift: False)
+  Passed Gdpyr.Tests.MapEditorControlsTests.AKeyNotInTheTable_DoesNothing(key: R, ctrl: True, shift: False)
+  Passed Gdpyr.Tests.MapEditorControlsTests.AKeyNotInTheTable_DoesNothing(key: S, ctrl: False, shift: False)
+  Passed Gdpyr.Tests.MapEditorControlsTests.AKeyNotInTheTable_DoesNothing(key: W, ctrl: False, shift: False)
+  Passed Gdpyr.Tests.MapEditorControlsTests.AKeyNotInTheTable_DoesNothing(key: Y, ctrl: False, shift: False)
+  Passed Gdpyr.Tests.MapEditorControlsTests.AKeyNotInTheTable_DoesNothing(key: Z, ctrl: False, shift: False)
+  Passed Gdpyr.Tests.MapEditorControlsTests.APaletteEntry_CountsAgainstItsLimit
+  Passed Gdpyr.Tests.MapEditorControlsTests.AParameter_HasItsOwnRange
+  Passed Gdpyr.Tests.MapEditorControlsTests.APublish_GoesToAnAddressAsTheMenuParsesOne_WithATokenThatIsNotEmpty
+  Passed Gdpyr.Tests.MapEditorControlsTests.ARoadsGradeLimit_StepsAPercent_HeldToSixToFifteen_InTenthsOfAPercent
+  Passed Gdpyr.Tests.MapEditorControlsTests.ARoadsWidth_StepsThroughFourSixAndEight_HeldAtTheEnds
+  Passed Gdpyr.Tests.MapEditorControlsTests.ASectionsGhost_SaysWhereItGoes_ItsAnswer_ItsPiersAndItsLandings
+  Passed Gdpyr.Tests.MapEditorControlsTests.ASharesSteps_StayOnTwentieths
+  Passed Gdpyr.Tests.MapEditorControlsTests.ASlope_IsColouredAsTheOverlayColoursIt(degrees: 0, expected: Walkable)
+  Passed Gdpyr.Tests.MapEditorControlsTests.ASlope_IsColouredAsTheOverlayColoursIt(degrees: 34.9900017, expected: Walkable)
+  Passed Gdpyr.Tests.MapEditorControlsTests.ASlope_IsColouredAsTheOverlayColoursIt(degrees: 35, expected: Steep)
+  Passed Gdpyr.Tests.MapEditorControlsTests.ASlope_IsColouredAsTheOverlayColoursIt(degrees: 40, expected: Steep)
+  Passed Gdpyr.Tests.MapEditorControlsTests.ASlope_IsColouredAsTheOverlayColoursIt(degrees: 40.0099983, expected: TooSteep)
+  Passed Gdpyr.Tests.MapEditorControlsTests.ASlope_IsColouredAsTheOverlayColoursIt(degrees: 70, expected: TooSteep)
+  Passed Gdpyr.Tests.MapEditorControlsTests.AnAutosave_IsDueAMinuteAfterTheFirstChangeNotWritten
+  Passed Gdpyr.Tests.MapEditorControlsTests.EveryKey_IsBoundOnce_AndEveryActionButNone_HasOne
+  Passed Gdpyr.Tests.MapEditorControlsTests.EveryPreset_IsFoundAgain_AndAMovedSettingIsNone
+  Passed Gdpyr.Tests.MapEditorControlsTests.R_TurnsAPrefabToTheNext15DegreeStep
+  Passed Gdpyr.Tests.MapEditorControlsTests.Shift_IsTheCamerasSprint_AndLeavesAKeyWithoutAShiftOfItsOwnAsItIs
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheBandSliders_KeepNumbersAMapCanMean
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheBridgeTool_PlacesSpansAndRamps_AndNudgesAQuarterMetreInsideTheLimits
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheGhost_SaysWhatPlacingWouldDo
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Bracketleft, ctrl: False, shift: False, action: RadiusDown)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Bracketright, ctrl: False, shift: False, action: RadiusUp)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Comma, ctrl: False, shift: False, action: ShapeDown)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Delete, ctrl: False, shift: False, action: TakeUp)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Enter, ctrl: False, shift: False, action: Apply)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Equal, ctrl: False, shift: False, action: AmountUp)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Escape, ctrl: False, shift: False, action: Cancel)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: F5, ctrl: False, shift: False, action: Test)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: G, ctrl: False, shift: False, action: SnapToGrid)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Key1, ctrl: False, shift: False, action: TerrainTool)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Key2, ctrl: False, shift: False, action: PrefabsTool)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Key3, ctrl: False, shift: False, action: RoadsTool)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Key4, ctrl: False, shift: False, action: BridgesTool)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: KpEnter, ctrl: False, shift: False, action: Apply)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Minus, ctrl: False, shift: False, action: AmountDown)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: O, ctrl: False, shift: False, action: NextOverlay)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Pagedown, ctrl: False, shift: False, action: LowerSection)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Pageup, ctrl: False, shift: False, action: RaiseSection)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Period, ctrl: False, shift: False, action: ShapeUp)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: R, ctrl: False, shift: False, action: TurnLeft)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: R, ctrl: False, shift: True, action: TurnRight)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: S, ctrl: True, shift: False, action: Save)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: T, ctrl: False, shift: False, action: StraightDown)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Tab, ctrl: False, shift: False, action: TurnEndForEnd)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: U, ctrl: False, shift: False, action: ToggleSupports)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Y, ctrl: True, shift: False, action: Redo)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Z, ctrl: True, shift: False, action: Undo)
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_StepTheBrush_AndHoldItToItsRanges
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheOverlays_GoRound_InSection8_3sOrder
+  Passed Gdpyr.Tests.MapEditorControlsTests.ThePalette_HoldsEveryPrefabButTheBridgeSections_Once_ByKind
+  Passed Gdpyr.Tests.MapEditorControlsTests.ThePublishLine_IsAFetchsWithItsOwnWord
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheReadout_IsTheSteepestFaceUnderTheBrush
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheRoadBeingDrawn_SaysWhatToDo_ThenItsAnswer
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheSliders_AreTheBrushsOwnRanges
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheStatusLine_SaysWhereTheCursorIs
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheTestProcess_PlaysTheSavedFile_OnItsOwn
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheToolKeys_SelectTheirTools_AndEveryToolIsBuilt
+  Passed Gdpyr.Tests.MapEditorControlsTests.WhatAPublishCameTo_SaysWhetherTheServerKeptItOrHadIt_AndWhatItAnsweredTheNextMap
+  Passed Gdpyr.Tests.MapLaunchTests.ACatalogIdComesBeforeALibraryName
+  Passed Gdpyr.Tests.MapLaunchTests.AClientAndTheMenuHaveNoMapToGive
+  Passed Gdpyr.Tests.MapLaunchTests.ADedicatedServerTakesAMapWithNoModeFlag
+  Passed Gdpyr.Tests.MapLaunchTests.AHashPrefixIsEightToSixtyFourHexDigits(text: "", expected: False)
+  Passed Gdpyr.Tests.MapLaunchTests.AHashPrefixIsEightToSixtyFourHexDigits(text: "DEADBEEF00", expected: True)
+  Passed Gdpyr.Tests.MapLaunchTests.AHashPrefixIsEightToSixtyFourHexDigits(text: "deadbee", expected: False)
+  Passed Gdpyr.Tests.MapLaunchTests.AHashPrefixIsEightToSixtyFourHexDigits(text: "deadbeef", expected: True)
+  Passed Gdpyr.Tests.MapLaunchTests.AHashPrefixIsEightToSixtyFourHexDigits(text: "deadbeeg", expected: False)
+  Passed Gdpyr.Tests.MapLaunchTests.AHashPrefixIsEightToSixtyFourHexDigits(text: null, expected: False)
+  Passed Gdpyr.Tests.MapLaunchTests.AHashPrefixNamesTheOneMapItStartsAndNotTwo
+  Passed Gdpyr.Tests.MapLaunchTests.ALibraryNameComesBeforeAHash
+  Passed Gdpyr.Tests.MapLaunchTests.AMapThatIsNoReferenceIsRefusedOnTheCommandLine(text: "-hills")
+  Passed Gdpyr.Tests.MapLaunchTests.AMapThatIsNoReferenceIsRefusedOnTheCommandLine(text: "../hills")
+  Passed Gdpyr.Tests.MapLaunchTests.AMapThatIsNoReferenceIsRefusedOnTheCommandLine(text: "Hills")
+  Passed Gdpyr.Tests.MapLaunchTests.AMapThatIsNoReferenceIsRefusedOnTheCommandLine(text: "a b")
+  Passed Gdpyr.Tests.MapLaunchTests.AMapThatIsNoReferenceIsRefusedOnTheCommandLine(text: "hills.tscn")
+  Passed Gdpyr.Tests.MapLaunchTests.ANameIsAtMost48Characters
+  Passed Gdpyr.Tests.MapLaunchTests.ANameIsLowerCaseLettersDigitsUnderscoresAndHyphens(text: "  padded  ")
+  Passed Gdpyr.Tests.MapLaunchTests.ANameIsLowerCaseLettersDigitsUnderscoresAndHyphens(text: "0-9_z")
+  Passed Gdpyr.Tests.MapLaunchTests.ANameIsLowerCaseLettersDigitsUnderscoresAndHyphens(text: "a")
+  Passed Gdpyr.Tests.MapLaunchTests.ANameIsLowerCaseLettersDigitsUnderscoresAndHyphens(text: "hills")
+  Passed Gdpyr.Tests.MapLaunchTests.ANameIsLowerCaseLettersDigitsUnderscoresAndHyphens(text: "ridge_2")
+  Passed Gdpyr.Tests.MapLaunchTests.APathEndingDotMapIsAPathAndNothingElse
+  Passed Gdpyr.Tests.MapLaunchTests.AServerTakesNoUploads_UnlessItIsGivenAToken
+  Passed Gdpyr.Tests.MapLaunchTests.ATokenIsNeeded_Once_AndIsSixteenCharactersOrMoreWithNoSpace
+  Passed Gdpyr.Tests.MapLaunchTests.AWholeHashIsAPrefixAndOneDigitMoreIsNot
+  Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "   ", why: "needs a name")
+  Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "", why: "needs a name")
+  Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "-x", why: "start with '-'")
+  Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "../x", why: "'.'")
+  Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "C:x", why: "'C'")
+  Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "Hills", why: "'H'")
+  Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "a b", why: "' '")
+  Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "a/b", why: "'/'")
+  Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "a\0b", why: "\\u0000")
+  Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "a\\b", why: "'\\'")
+  Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "hills.map", why: "'.'")
+  Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "é", why: "'é'")
+  Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: null, why: "needs a name")
+  Passed Gdpyr.Tests.MapLaunchTests.MapIsTheAuthoritysToChoose(mode: "--listen")
+  Passed Gdpyr.Tests.MapLaunchTests.MapIsTheAuthoritysToChoose(mode: "--practice")
+  Passed Gdpyr.Tests.MapLaunchTests.MapIsTheAuthoritysToChoose(mode: "--server")
+  Passed Gdpyr.Tests.MapLaunchTests.MapNeedsAValue(args: ["--map", "--server"])
+  Passed Gdpyr.Tests.MapLaunchTests.MapNeedsAValue(args: ["--map"])
+  Passed Gdpyr.Tests.MapLaunchTests.MapTwiceIsRefused
+  Passed Gdpyr.Tests.MapLaunchTests.NoFlagsIsNotPractice
+  Passed Gdpyr.Tests.MapLaunchTests.NoMapIsTheCatalogsDefault
+  Passed Gdpyr.Tests.MapLaunchTests.OnlyTheDedicatedServerTakesAToken(mode: ["--client", "10.0.0.2"])
+  Passed Gdpyr.Tests.MapLaunchTests.OnlyTheDedicatedServerTakesAToken(mode: ["--edit"])
+  Passed Gdpyr.Tests.MapLaunchTests.OnlyTheDedicatedServerTakesAToken(mode: ["--listen"])
+  Passed Gdpyr.Tests.MapLaunchTests.OnlyTheDedicatedServerTakesAToken(mode: ["--playdemo", "a.demo"])
+  Passed Gdpyr.Tests.MapLaunchTests.OnlyTheDedicatedServerTakesAToken(mode: ["--practice"])
+  Passed Gdpyr.Tests.MapLaunchTests.OnlyTheDedicatedServerTakesAToken(mode: [])
+  Passed Gdpyr.Tests.MapLaunchTests.PracticeIsAnOfflineRoundWithNoMenu
+  Passed Gdpyr.Tests.MapLaunchTests.PracticeIsNotAnotherMode(mode: ["--client", "127.0.0.1"])
+  Passed Gdpyr.Tests.MapLaunchTests.PracticeIsNotAnotherMode(mode: ["--listen"])
+  Passed Gdpyr.Tests.MapLaunchTests.PracticeIsNotAnotherMode(mode: ["--server"])
+  Passed Gdpyr.Tests.MapLaunchTests.PracticeIsRefusedWhereNobodyCanPlay
+  Passed Gdpyr.Tests.MapLaunchTests.PracticeTakesTheRoundsOtherFlags
+  Passed Gdpyr.Tests.MapLaunchTests.TheSameHashTwiceIsOneMap
+  Passed Gdpyr.Tests.MapLaunchTests.TheToken_IsTheServers_AndIsNeverPrinted
+  Passed Gdpyr.Tests.MapLaunchTests.WhatNamesNothingSaysSo(text: "", why: "empty")
+  Passed Gdpyr.Tests.MapLaunchTests.WhatNamesNothingSaysSo(text: "Nowhere", why: "is not a map")
+  Passed Gdpyr.Tests.MapLaunchTests.WhatNamesNothingSaysSo(text: "a\tb.map", why: "control character")
+  Passed Gdpyr.Tests.MapLaunchTests.WhatNamesNothingSaysSo(text: "abababab", why: "no map is called")
+  Passed Gdpyr.Tests.MapLaunchTests.WhatNamesNothingSaysSo(text: "nowhere", why: "no map is called 'nowhere'")
+  Passed Gdpyr.Tests.MapTransferTests.AChunkOfTheWrongSize_IsRefused_ShortOrLong_InTheMiddleOrAtTheEnd
+  Passed Gdpyr.Tests.MapTransferTests.AChunkOutOfTurn_IsRefused_WhetherAheadOrRepeated
+  Passed Gdpyr.Tests.MapTransferTests.AChunkPastTheLength_IsRefused
+  Passed Gdpyr.Tests.MapTransferTests.AChunk_Is1024BytesBehindItsIndex_AndItsMessageIsOneDatagram
+  Passed Gdpyr.Tests.MapTransferTests.AFetchCutOffAtAnyChunk_NeverCompletes_AndIsRefusedWhenItStalls
+  Passed Gdpyr.Tests.MapTransferTests.AFile_IsCutIntoWholeChunksAndARemainder(length: 1, chunks: 1, last: 1)
+  Passed Gdpyr.Tests.MapTransferTests.AFile_IsCutIntoWholeChunksAndARemainder(length: 1024, chunks: 1, last: 1024)
+  Passed Gdpyr.Tests.MapTransferTests.AFile_IsCutIntoWholeChunksAndARemainder(length: 1025, chunks: 2, last: 1)
+  Passed Gdpyr.Tests.MapTransferTests.AFile_IsCutIntoWholeChunksAndARemainder(length: 2048, chunks: 2, last: 1024)
+  Passed Gdpyr.Tests.MapTransferTests.AFile_IsCutIntoWholeChunksAndARemainder(length: 27299, chunks: 27, last: 675)
+  Passed Gdpyr.Tests.MapTransferTests.AGeneratedMap_SentChunkByChunk_ArrivesAsTheSameBytesAndTheSameMap(seed: 1)
+  Passed Gdpyr.Tests.MapTransferTests.AGeneratedMap_SentChunkByChunk_ArrivesAsTheSameBytesAndTheSameMap(seed: 2)
+  Passed Gdpyr.Tests.MapTransferTests.AGeneratedMap_SentChunkByChunk_ArrivesAsTheSameBytesAndTheSameMap(seed: 3)
+  Passed Gdpyr.Tests.MapTransferTests.AHash_IsSixtyFourLowerCaseHexDigits
+  Passed Gdpyr.Tests.MapTransferTests.AMapThisBuildCannotPlay_IsRefused_WithTheValidatorsReason
+  Passed Gdpyr.Tests.MapTransferTests.AMessageThatIsNotAChunk_IsRefused(length: 0)
+  Passed Gdpyr.Tests.MapTransferTests.AMessageThatIsNotAChunk_IsRefused(length: 1029)
+  Passed Gdpyr.Tests.MapTransferTests.AMessageThatIsNotAChunk_IsRefused(length: 3)
+  Passed Gdpyr.Tests.MapTransferTests.AMessageThatIsNotAChunk_IsRefused(length: 4)
+  Passed Gdpyr.Tests.MapTransferTests.APacket_IsItsIndexLittleEndian_ThenThoseBytesOfTheFile
+  Passed Gdpyr.Tests.MapTransferTests.AProof_DoesNotPass_OnAnotherConnection_ForAnotherFile_ForAnotherOp_OrByAnotherToken
+  Passed Gdpyr.Tests.MapTransferTests.AProof_IsHmacSha256_OfTheNonceTheHashAndTheOp_KeyedByTheToken
+  Passed Gdpyr.Tests.MapTransferTests.ARefusal_IsFinal_AndAFetchThatIsDone_TakesNothingMore
+  Passed Gdpyr.Tests.MapTransferTests.AStreamThatStallsForTenSeconds_IsRefused_AndAChunkStartsTheClockAgain
+  Passed Gdpyr.Tests.MapTransferTests.AStreamWhoseBytesDoNotHashToWhatWasNamed_IsRefused_ByteByByte
+  Passed Gdpyr.Tests.MapTransferTests.AToken_IsSixteenCharactersOrMore_WithNoSpaceInIt(token: "", taken: False)
+  Passed Gdpyr.Tests.MapTransferTests.AToken_IsSixteenCharactersOrMore_WithNoSpaceInIt(token: "0123456789 abcdef", taken: False)
+  Passed Gdpyr.Tests.MapTransferTests.AToken_IsSixteenCharactersOrMore_WithNoSpaceInIt(token: "0123456789\tabcdef", taken: False)
+  Passed Gdpyr.Tests.MapTransferTests.AToken_IsSixteenCharactersOrMore_WithNoSpaceInIt(token: "0123456789abcde", taken: False)
+  Passed Gdpyr.Tests.MapTransferTests.AToken_IsSixteenCharactersOrMore_WithNoSpaceInIt(token: "0123456789abcdef", taken: True)
+  Passed Gdpyr.Tests.MapTransferTests.AToken_IsSixteenCharactersOrMore_WithNoSpaceInIt(token: "0123456789abcdef\n", taken: False)
+  Passed Gdpyr.Tests.MapTransferTests.AToken_IsSixteenCharactersOrMore_WithNoSpaceInIt(token: "correct-horse-battery-staple", taken: True)
+  Passed Gdpyr.Tests.MapTransferTests.AToken_IsSixteenCharactersOrMore_WithNoSpaceInIt(token: "hunter2", taken: False)
+  Passed Gdpyr.Tests.MapTransferTests.AToken_IsSixteenCharactersOrMore_WithNoSpaceInIt(token: null, taken: False)
+  Passed Gdpyr.Tests.MapTransferTests.BytesThatHashRightButAreNotAMap_AreRefused
+  Passed Gdpyr.Tests.MapTransferTests.TheRates_AreLE_D17s_AndSection10sTimes
+  Passed Gdpyr.Tests.MapTransferTests.TheReceiver_NeverThrows_OnNoise
+  Passed Gdpyr.Tests.MapTransferTests.TheReceiver_RefusesALengthNoMapCanBe(length: -1, because: "bytes long")
+  Passed Gdpyr.Tests.MapTransferTests.TheReceiver_RefusesALengthNoMapCanBe(length: 0, because: "bytes long")
+  Passed Gdpyr.Tests.MapTransferTests.TheReceiver_RefusesALengthNoMapCanBe(length: 1048577, because: "over the")
+  Passed Gdpyr.Tests.MapTransferTests.TheReceiver_RefusesANameThatIsNotAHash(hash: "")
+  Passed Gdpyr.Tests.MapTransferTests.TheReceiver_RefusesANameThatIsNotAHash(hash: "6D0AA3FF6EBE3487E53D4F4488318B2EBE47ADA2E27FB3AE56"···)
+  Passed Gdpyr.Tests.MapTransferTests.TheReceiver_RefusesANameThatIsNotAHash(hash: "hills")
+  Passed Gdpyr.Tests.MapTransferTests.TheReceiver_RefusesANameThatIsNotAHash(hash: null)
+  Passed Gdpyr.Tests.MapTransferTests.TheSender_RefusesAnEmptyFile
+  Passed Gdpyr.Tests.MapTransferTests.TheSender_SendsAChunkATickToAPeer_AndAtMostFourATick_ThePeersInTurn
+  Passed Gdpyr.Tests.MapTransferTests.TheSender_SendsOnlyTheMapItIsPlaying_OnlyToAPeerThatAsked_OnceAConnection
+  Passed Gdpyr.Tests.MapTransferTests.TheSender_SendsTheBytesItLoaded_NotWhatTheirArrayHoldsLater
+  Passed Gdpyr.Tests.MapTransferTests.TheStatusLine_IsSection9_3s
+  Passed Gdpyr.Tests.MapTransferTests.WhatNoProofCanBeMadeFrom_HasNone_AndAProofOfAnotherLengthIsNotOne
+  Passed Gdpyr.Tests.MapUploadTests.AChunkWithNoOfferTaken_IsDropped
+  Passed Gdpyr.Tests.MapUploadTests.ALengthNoMapCanBe_IsTooLarge(length: -1, expected: TooLarge)
+  Passed Gdpyr.Tests.MapUploadTests.ALengthNoMapCanBe_IsTooLarge(length: -2147483648, expected: TooLarge)
+  Passed Gdpyr.Tests.MapUploadTests.ALengthNoMapCanBe_IsTooLarge(length: 0, expected: TooLarge)
+  Passed Gdpyr.Tests.MapUploadTests.ALengthNoMapCanBe_IsTooLarge(length: 1, expected: Ok)
+  Passed Gdpyr.Tests.MapUploadTests.ALengthNoMapCanBe_IsTooLarge(length: 1048576, expected: Ok)
+  Passed Gdpyr.Tests.MapUploadTests.ALengthNoMapCanBe_IsTooLarge(length: 1048577, expected: TooLarge)
+  Passed Gdpyr.Tests.MapUploadTests.ALengthNoMapCanBe_IsTooLarge(length: 2147483647, expected: TooLarge)
+  Passed Gdpyr.Tests.MapUploadTests.ALinkThatDrops_EndsAnUploadNotYetOver
+  Passed Gdpyr.Tests.MapUploadTests.AMapTheServerHas_IsDoneWithNothingSent
+  Passed Gdpyr.Tests.MapUploadTests.AMapTheServerHas_IsNotSentAgain
+  Passed Gdpyr.Tests.MapUploadTests.AMap_OfferedTakenSentAndKept_ArrivesAsTheSameBytesAndTheSameMap(seed: 1)
+  Passed Gdpyr.Tests.MapUploadTests.AMap_OfferedTakenSentAndKept_ArrivesAsTheSameBytesAndTheSameMap(seed: 2)
+  Passed Gdpyr.Tests.MapUploadTests.AMap_OfferedTakenSentAndKept_ArrivesAsTheSameBytesAndTheSameMap(seed: 3)
+  Passed Gdpyr.Tests.MapUploadTests.ANextMapRequest_IsAnsweredInOrder_AndOnlyByItsOwnProof
+  Passed Gdpyr.Tests.MapUploadTests.ANextMapsAnswers_HaveTheirNamesAndNumbers_AndThreeOfThemAreTaken
+  Passed Gdpyr.Tests.MapUploadTests.APeerGone_TakesItsUploadWithIt_AndNobodyElses
+  Passed Gdpyr.Tests.MapUploadTests.AServerIsSupervised_UnderSystemd_OrWhenItIsToldSo(invocationId: "  ", supervised: null, expected: False)
+  Passed Gdpyr.Tests.MapUploadTests.AServerIsSupervised_UnderSystemd_OrWhenItIsToldSo(invocationId: "", supervised: " 1 ", expected: True)
+  Passed Gdpyr.Tests.MapUploadTests.AServerIsSupervised_UnderSystemd_OrWhenItIsToldSo(invocationId: "", supervised: "", expected: False)
+  Passed Gdpyr.Tests.MapUploadTests.AServerIsSupervised_UnderSystemd_OrWhenItIsToldSo(invocationId: "0b1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f", supervised: "0", expected: True)
+  Passed Gdpyr.Tests.MapUploadTests.AServerIsSupervised_UnderSystemd_OrWhenItIsToldSo(invocationId: "0b1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f", supervised: null, expected: True)
+  Passed Gdpyr.Tests.MapUploadTests.AServerIsSupervised_UnderSystemd_OrWhenItIsToldSo(invocationId: null, supervised: "0", expected: False)
+  Passed Gdpyr.Tests.MapUploadTests.AServerIsSupervised_UnderSystemd_OrWhenItIsToldSo(invocationId: null, supervised: "1", expected: True)
+  Passed Gdpyr.Tests.MapUploadTests.AServerIsSupervised_UnderSystemd_OrWhenItIsToldSo(invocationId: null, supervised: "11", expected: False)
+  Passed Gdpyr.Tests.MapUploadTests.AServerIsSupervised_UnderSystemd_OrWhenItIsToldSo(invocationId: null, supervised: "true", expected: False)
+  Passed Gdpyr.Tests.MapUploadTests.AServerIsSupervised_UnderSystemd_OrWhenItIsToldSo(invocationId: null, supervised: null, expected: False)
+  Passed Gdpyr.Tests.MapUploadTests.AServerThatSaysNothingForTenSeconds_WillNot
+  Passed Gdpyr.Tests.MapUploadTests.AServerToldItsNextMap_LeavesAtOnce_OnlyWhenNoRoundIsInProgress_OrNobodyIsConnected(named: False, roundInProgress: False, peers: 0, expected: False)
+  Passed Gdpyr.Tests.MapUploadTests.AServerToldItsNextMap_LeavesAtOnce_OnlyWhenNoRoundIsInProgress_OrNobodyIsConnected(named: False, roundInProgress: False, peers: 3, expected: False)
+  Passed Gdpyr.Tests.MapUploadTests.AServerToldItsNextMap_LeavesAtOnce_OnlyWhenNoRoundIsInProgress_OrNobodyIsConnected(named: False, roundInProgress: True, peers: 0, expected: False)
+  Passed Gdpyr.Tests.MapUploadTests.AServerToldItsNextMap_LeavesAtOnce_OnlyWhenNoRoundIsInProgress_OrNobodyIsConnected(named: False, roundInProgress: True, peers: 3, expected: False)
+  Passed Gdpyr.Tests.MapUploadTests.AServerToldItsNextMap_LeavesAtOnce_OnlyWhenNoRoundIsInProgress_OrNobodyIsConnected(named: True, roundInProgress: False, peers: 0, expected: True)
+  Passed Gdpyr.Tests.MapUploadTests.AServerToldItsNextMap_LeavesAtOnce_OnlyWhenNoRoundIsInProgress_OrNobodyIsConnected(named: True, roundInProgress: False, peers: 3, expected: True)
+  Passed Gdpyr.Tests.MapUploadTests.AServerToldItsNextMap_LeavesAtOnce_OnlyWhenNoRoundIsInProgress_OrNobodyIsConnected(named: True, roundInProgress: True, peers: -1, expected: True)
+  Passed Gdpyr.Tests.MapUploadTests.AServerToldItsNextMap_LeavesAtOnce_OnlyWhenNoRoundIsInProgress_OrNobodyIsConnected(named: True, roundInProgress: True, peers: 0, expected: True)
+  Passed Gdpyr.Tests.MapUploadTests.AServerToldItsNextMap_LeavesAtOnce_OnlyWhenNoRoundIsInProgress_OrNobodyIsConnected(named: True, roundInProgress: True, peers: 1, expected: False)
+  Passed Gdpyr.Tests.MapUploadTests.AServerToldItsNextMap_LeavesAtOnce_OnlyWhenNoRoundIsInProgress_OrNobodyIsConnected(named: True, roundInProgress: True, peers: 3, expected: False)
+  Passed Gdpyr.Tests.MapUploadTests.AServerWithNoToken_TakesNoMapFromAnyone_AndIsToldNothing(token: "")
+  Passed Gdpyr.Tests.MapUploadTests.AServerWithNoToken_TakesNoMapFromAnyone_AndIsToldNothing(token: null)
+  Passed Gdpyr.Tests.MapUploadTests.AServersOwnWords_AreShownAsOneLine_OfAtMost240Characters
+  Passed Gdpyr.Tests.MapUploadTests.AWrongToken_AndAReplayedProof_AreBadProof
+  Passed Gdpyr.Tests.MapUploadTests.AnAnswerThisBuildDoesNotKnow_IsARefusal(wire: -1)
+  Passed Gdpyr.Tests.MapUploadTests.AnAnswerThisBuildDoesNotKnow_IsARefusal(wire: 6)
+  Passed Gdpyr.Tests.MapUploadTests.AnAnswerThisBuildDoesNotKnow_IsARefusal(wire: 99)
+  Passed Gdpyr.Tests.MapUploadTests.AnOfferNotTaken_IsRefused_WithWhatTheAnswerMeans_AndNothingIsSent(answer: BadProof)
+  Passed Gdpyr.Tests.MapUploadTests.AnOfferNotTaken_IsRefused_WithWhatTheAnswerMeans_AndNothingIsSent(answer: Busy)
+  Passed Gdpyr.Tests.MapUploadTests.AnOfferNotTaken_IsRefused_WithWhatTheAnswerMeans_AndNothingIsSent(answer: TooLarge)
+  Passed Gdpyr.Tests.MapUploadTests.AnOfferNotTaken_IsRefused_WithWhatTheAnswerMeans_AndNothingIsSent(answer: UploadsOff)
+  Passed Gdpyr.Tests.MapUploadTests.AnOffer_IsAnsweredInOrder_TheProofBeforeAnythingElseIsSaid
+  Passed Gdpyr.Tests.MapUploadTests.AnOffersAnswers_AreSection9_5s_AndTheirNumbersAreTheWires
+  Passed Gdpyr.Tests.MapUploadTests.AnUploadThatStalls_IsRefusedAfterTenSeconds_AndTheNextOfferIsTaken
+  Passed Gdpyr.Tests.MapUploadTests.AnUpload_IsHashedReadAndValidated_AndARefusedOneKeepsNothing
+  Passed Gdpyr.Tests.MapUploadTests.ItTakesOneUploadAtATime_FromThePeerWhoseOfferItTook
+  Passed Gdpyr.Tests.MapUploadTests.MapsActive_HoldsAHash_AndNothingElse
+  Passed Gdpyr.Tests.MapUploadTests.OnlyTheFirstAnswerCounts
+  Passed Gdpyr.Tests.MapUploadTests.TheGate_NeverThrows_OnNoise
+  Passed Gdpyr.Tests.MapUploadTests.TheUploader_SendsNothingUntilItsOfferIsTaken_ThenAChunkAtATimeInOrder
+  Passed Gdpyr.Tests.MapUploadTests.TheUploader_SendsTheBytesItWasGiven_NotWhatTheirArrayHoldsLater
+  Passed Gdpyr.Tests.MapUploadTests.WhatTheServerSaysBecameOfIt_IsHeldToWhatWasSent
+
+  Passed Gdpyr.Tests.MapLaunchTests.AHashPrefixIsEightToSixtyFourHexDigits(text: "deadbee", expected: False) [10 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AServerIsSupervised_UnderSystemd_OrWhenItIsToldSo(invocationId: null, supervised: "11", expected: False) [12 ms]
+  Passed Gdpyr.Tests.MapTransferTests.AChunk_Is1024BytesBehindItsIndex_AndItsMessageIsOneDatagram [14 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.AHashPrefixIsEightToSixtyFourHexDigits(text: null, expected: False) [< 1 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AServerIsSupervised_UnderSystemd_OrWhenItIsToldSo(invocationId: "", supervised: "", expected: False) [< 1 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AServerIsSupervised_UnderSystemd_OrWhenItIsToldSo(invocationId: null, supervised: "1", expected: True) [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.AHashPrefixIsEightToSixtyFourHexDigits(text: "DEADBEEF00", expected: True) [< 1 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AServerIsSupervised_UnderSystemd_OrWhenItIsToldSo(invocationId: null, supervised: "true", expected: False) [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.AHashPrefixIsEightToSixtyFourHexDigits(text: "", expected: False) [< 1 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AServerIsSupervised_UnderSystemd_OrWhenItIsToldSo(invocationId: null, supervised: "0", expected: False) [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.AHashPrefixIsEightToSixtyFourHexDigits(text: "deadbeeg", expected: False) [< 1 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AServerIsSupervised_UnderSystemd_OrWhenItIsToldSo(invocationId: null, supervised: null, expected: False) [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.AHashPrefixIsEightToSixtyFourHexDigits(text: "deadbeef", expected: True) [< 1 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AServerIsSupervised_UnderSystemd_OrWhenItIsToldSo(invocationId: "0b1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f", supervised: "0", expected: True) [< 1 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AServerIsSupervised_UnderSystemd_OrWhenItIsToldSo(invocationId: "", supervised: " 1 ", expected: True) [< 1 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AServerIsSupervised_UnderSystemd_OrWhenItIsToldSo(invocationId: "  ", supervised: null, expected: False) [< 1 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AServerIsSupervised_UnderSystemd_OrWhenItIsToldSo(invocationId: "0b1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f", supervised: null, expected: True) [< 1 ms]
+  Passed Gdpyr.Tests.MapTransferTests.AFile_IsCutIntoWholeChunksAndARemainder(length: 1025, chunks: 2, last: 1) [< 1 ms]
+  Passed Gdpyr.Tests.MapTransferTests.AFile_IsCutIntoWholeChunksAndARemainder(length: 2048, chunks: 2, last: 1024) [< 1 ms]
+  Passed Gdpyr.Tests.MapTransferTests.AFile_IsCutIntoWholeChunksAndARemainder(length: 1024, chunks: 1, last: 1024) [< 1 ms]
+  Passed Gdpyr.Tests.MapTransferTests.AFile_IsCutIntoWholeChunksAndARemainder(length: 27299, chunks: 27, last: 675) [< 1 ms]
+  Passed Gdpyr.Tests.MapTransferTests.AFile_IsCutIntoWholeChunksAndARemainder(length: 1, chunks: 1, last: 1) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.ASlope_IsColouredAsTheOverlayColoursIt(degrees: 40, expected: Steep) [19 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.ASlope_IsColouredAsTheOverlayColoursIt(degrees: 0, expected: Walkable) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.ASlope_IsColouredAsTheOverlayColoursIt(degrees: 34.9900017, expected: Walkable) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.ASlope_IsColouredAsTheOverlayColoursIt(degrees: 35, expected: Steep) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.ASlope_IsColouredAsTheOverlayColoursIt(degrees: 40.0099983, expected: TooSteep) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.ASlope_IsColouredAsTheOverlayColoursIt(degrees: 70, expected: TooSteep) [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.ADedicatedServerTakesAMapWithNoModeFlag [9 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Key4, ctrl: False, shift: False, action: BridgesTool) [6 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Tab, ctrl: False, shift: False, action: TurnEndForEnd) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Delete, ctrl: False, shift: False, action: TakeUp) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Key3, ctrl: False, shift: False, action: RoadsTool) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: U, ctrl: False, shift: False, action: ToggleSupports) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: R, ctrl: False, shift: True, action: TurnRight) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Key1, ctrl: False, shift: False, action: TerrainTool) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: KpEnter, ctrl: False, shift: False, action: Apply) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Pagedown, ctrl: False, shift: False, action: LowerSection) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Y, ctrl: True, shift: False, action: Redo) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: R, ctrl: False, shift: False, action: TurnLeft) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: S, ctrl: True, shift: False, action: Save) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Pageup, ctrl: False, shift: False, action: RaiseSection) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Key2, ctrl: False, shift: False, action: PrefabsTool) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Comma, ctrl: False, shift: False, action: ShapeDown) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Bracketright, ctrl: False, shift: False, action: RadiusUp) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Enter, ctrl: False, shift: False, action: Apply) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: G, ctrl: False, shift: False, action: SnapToGrid) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Minus, ctrl: False, shift: False, action: AmountDown) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: F5, ctrl: False, shift: False, action: Test) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Equal, ctrl: False, shift: False, action: AmountUp) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Bracketleft, ctrl: False, shift: False, action: RadiusDown) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Z, ctrl: True, shift: False, action: Undo) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: T, ctrl: False, shift: False, action: StraightDown) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Period, ctrl: False, shift: False, action: ShapeUp) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: Escape, ctrl: False, shift: False, action: Cancel) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_AreSection8_2s(key: O, ctrl: False, shift: False, action: NextOverlay) [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.MapIsTheAuthoritysToChoose(mode: "--server") [10 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.MapIsTheAuthoritysToChoose(mode: "--listen") [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.MapIsTheAuthoritysToChoose(mode: "--practice") [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.AClientAndTheMenuHaveNoMapToGive [1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.OnlyTheDedicatedServerTakesAToken(mode: ["--edit"]) [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.OnlyTheDedicatedServerTakesAToken(mode: ["--client", "10.0.0.2"]) [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.OnlyTheDedicatedServerTakesAToken(mode: ["--playdemo", "a.demo"]) [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.OnlyTheDedicatedServerTakesAToken(mode: ["--practice"]) [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.OnlyTheDedicatedServerTakesAToken(mode: ["--listen"]) [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.OnlyTheDedicatedServerTakesAToken(mode: []) [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "hills.map", why: "'.'") [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "a b", why: "' '") [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "", why: "needs a name") [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "C:x", why: "'C'") [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "-x", why: "start with '-'") [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "a\\b", why: "'\\'") [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "   ", why: "needs a name") [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "a/b", why: "'/'") [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: null, why: "needs a name") [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "../x", why: "'.'") [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "a\0b", why: "\\u0000") [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheTestProcess_PlaysTheSavedFile_OnItsOwn [20 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.AKeyNotInTheTable_DoesNothing(key: R, ctrl: True, shift: False) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.AKeyNotInTheTable_DoesNothing(key: Z, ctrl: False, shift: False) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.AKeyNotInTheTable_DoesNothing(key: Key1, ctrl: True, shift: False) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.AKeyNotInTheTable_DoesNothing(key: W, ctrl: False, shift: False) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.AKeyNotInTheTable_DoesNothing(key: Y, ctrl: False, shift: False) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.AKeyNotInTheTable_DoesNothing(key: S, ctrl: False, shift: False) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheOverlays_GoRound_InSection8_3sOrder [6 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "é", why: "'é'") [18 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.EverythingElseIsNotAName(text: "Hills", why: "'H'") [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.PracticeIsNotAnotherMode(mode: ["--server"]) [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.PracticeIsNotAnotherMode(mode: ["--client", "127.0.0.1"]) [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.PracticeIsNotAnotherMode(mode: ["--listen"]) [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.PracticeTakesTheRoundsOtherFlags [6 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.WhatNamesNothingSaysSo(text: "", why: "empty") [3 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.WhatNamesNothingSaysSo(text: "nowhere", why: "no map is called 'nowhere'") [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.WhatNamesNothingSaysSo(text: "abababab", why: "no map is called") [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.WhatNamesNothingSaysSo(text: "a\tb.map", why: "control character") [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.WhatNamesNothingSaysSo(text: "Nowhere", why: "is not a map") [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.ANameIsLowerCaseLettersDigitsUnderscoresAndHyphens(text: "ridge_2") [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.ANameIsLowerCaseLettersDigitsUnderscoresAndHyphens(text: "  padded  ") [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.ANameIsLowerCaseLettersDigitsUnderscoresAndHyphens(text: "0-9_z") [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.ANameIsLowerCaseLettersDigitsUnderscoresAndHyphens(text: "a") [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.ANameIsLowerCaseLettersDigitsUnderscoresAndHyphens(text: "hills") [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.MapNeedsAValue(args: ["--map", "--server"]) [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.MapNeedsAValue(args: ["--map"]) [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.AMapThatIsNoReferenceIsRefusedOnTheCommandLine(text: "../hills") [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.AMapThatIsNoReferenceIsRefusedOnTheCommandLine(text: "Hills") [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.AMapThatIsNoReferenceIsRefusedOnTheCommandLine(text: "a b") [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.AMapThatIsNoReferenceIsRefusedOnTheCommandLine(text: "-hills") [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.AMapThatIsNoReferenceIsRefusedOnTheCommandLine(text: "hills.tscn") [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.ALibraryNameComesBeforeAHash [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.MapTwiceIsRefused [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.TheToken_IsTheServers_AndIsNeverPrinted [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.APathEndingDotMapIsAPathAndNothingElse [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.AHashPrefixNamesTheOneMapItStartsAndNotTwo [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.NoMapIsTheCatalogsDefault [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.TheSameHashTwiceIsOneMap [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.ABrush_ShowsWhatItReads(kind: GradeLocked, fields: [Radius, Grade, Rate]) [16 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.ABrush_ShowsWhatItReads(kind: Sculpt, fields: [Radius, Core, Rate]) [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.PracticeIsRefusedWhereNobodyCanPlay [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.ABrush_ShowsWhatItReads(kind: Level, fields: [Radius, Core, Strength]) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.ABrush_ShowsWhatItReads(kind: Ramp, fields: [Radius]) [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.ABrush_ShowsWhatItReads(kind: Smooth, fields: [Radius, Core, Strength]) [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.AWholeHashIsAPrefixAndOneDigitMoreIsNot [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.PracticeIsAnOfflineRoundWithNoMenu [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.ACatalogIdComesBeforeALibraryName [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.AServerTakesNoUploads_UnlessItIsGivenAToken [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.NoFlagsIsNotPractice [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.ANameIsAtMost48Characters [< 1 ms]
+  Passed Gdpyr.Tests.MapLaunchTests.ATokenIsNeeded_Once_AndIsSixteenCharactersOrMoreWithNoSpace [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheKeys_StepTheBrush_AndHoldItToItsRanges [11 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheStatusLine_SaysWhereTheCursorIs [2 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.Shift_IsTheCamerasSprint_AndLeavesAKeyWithoutAShiftOfItsOwnAsItIs [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheBandSliders_KeepNumbersAMapCanMean [9 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheReadout_IsTheSteepestFaceUnderTheBrush [1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.ARoadsGradeLimit_StepsAPercent_HeldToSixToFifteen_InTenthsOfAPercent [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.ASharesSteps_StayOnTwentieths [< 1 ms]
+  Passed Gdpyr.Tests.MapUploadTests.ALengthNoMapCanBe_IsTooLarge(length: 0, expected: TooLarge) [163 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.APaletteEntry_CountsAgainstItsLimit [86 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.ARoadsWidth_StepsThroughFourSixAndEight_HeldAtTheEnds [1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.WhatAPublishCameTo_SaysWhetherTheServerKeptItOrHadIt_AndWhatItAnsweredTheNextMap [< 1 ms]
+  Passed Gdpyr.Tests.MapUploadTests.ALengthNoMapCanBe_IsTooLarge(length: 1048577, expected: TooLarge) [20 ms]
+  Passed Gdpyr.Tests.MapUploadTests.ALengthNoMapCanBe_IsTooLarge(length: 1, expected: Ok) [10 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheRoadBeingDrawn_SaysWhatToDo_ThenItsAnswer [28 ms]
+  Passed Gdpyr.Tests.MapUploadTests.ALengthNoMapCanBe_IsTooLarge(length: 2147483647, expected: TooLarge) [10 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.ASectionsGhost_SaysWhereItGoes_ItsAnswer_ItsPiersAndItsLandings [9 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheSliders_AreTheBrushsOwnRanges [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.R_TurnsAPrefabToTheNext15DegreeStep [< 1 ms]
+  Passed Gdpyr.Tests.MapUploadTests.ALengthNoMapCanBe_IsTooLarge(length: 1048576, expected: Ok) [10 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.AnAutosave_IsDueAMinuteAfterTheFirstChangeNotWritten [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.AParameter_HasItsOwnRange [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheToolKeys_SelectTheirTools_AndEveryToolIsBuilt [4 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.EveryPreset_IsFoundAgain_AndAMovedSettingIsNone [< 1 ms]
+  Passed Gdpyr.Tests.MapUploadTests.ALengthNoMapCanBe_IsTooLarge(length: -1, expected: TooLarge) [10 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.EveryKey_IsBoundOnce_AndEveryActionButNone_HasOne [7 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheGhost_SaysWhatPlacingWouldDo [< 1 ms]
+  Passed Gdpyr.Tests.MapTransferTests.AGeneratedMap_SentChunkByChunk_ArrivesAsTheSameBytesAndTheSameMap(seed: 2) [237 ms]
+  Passed Gdpyr.Tests.MapUploadTests.ALengthNoMapCanBe_IsTooLarge(length: -2147483648, expected: TooLarge) [11 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.ThePalette_HoldsEveryPrefabButTheBridgeSections_Once_ByKind [10 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.APublish_GoesToAnAddressAsTheMenuParsesOne_WithATokenThatIsNotEmpty [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.ThePublishLine_IsAFetchsWithItsOwnWord [< 1 ms]
+  Passed Gdpyr.Tests.MapEditorControlsTests.TheBridgeTool_PlacesSpansAndRamps_AndNudgesAQuarterMetreInsideTheLimits [2 ms]
+  Passed Gdpyr.Tests.MapTransferTests.AGeneratedMap_SentChunkByChunk_ArrivesAsTheSameBytesAndTheSameMap(seed: 3) [84 ms]
+  Passed Gdpyr.Tests.MapTransferTests.AGeneratedMap_SentChunkByChunk_ArrivesAsTheSameBytesAndTheSameMap(seed: 1) [20 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AnUploadThatStalls_IsRefusedAfterTenSeconds_AndTheNextOfferIsTaken [106 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AServerToldItsNextMap_LeavesAtOnce_OnlyWhenNoRoundIsInProgress_OrNobodyIsConnected(named: False, roundInProgress: True, peers: 0, expected: False) [3 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AServerToldItsNextMap_LeavesAtOnce_OnlyWhenNoRoundIsInProgress_OrNobodyIsConnected(named: False, roundInProgress: False, peers: 0, expected: False) [< 1 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AServerToldItsNextMap_LeavesAtOnce_OnlyWhenNoRoundIsInProgress_OrNobodyIsConnected(named: True, roundInProgress: True, peers: 3, expected: False) [< 1 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AServerToldItsNextMap_LeavesAtOnce_OnlyWhenNoRoundIsInProgress_OrNobodyIsConnected(named: False, roundInProgress: False, peers: 3, expected: False) [< 1 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AServerToldItsNextMap_LeavesAtOnce_OnlyWhenNoRoundIsInProgress_OrNobodyIsConnected(named: True, roundInProgress: True, peers: 0, expected: True) [< 1 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AServerToldItsNextMap_LeavesAtOnce_OnlyWhenNoRoundIsInProgress_OrNobodyIsConnected(named: False, roundInProgress: True, peers: 3, expected: False) [< 1 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AServerToldItsNextMap_LeavesAtOnce_OnlyWhenNoRoundIsInProgress_OrNobodyIsConnected(named: True, roundInProgress: True, peers: -1, expected: True) [< 1 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AServerToldItsNextMap_LeavesAtOnce_OnlyWhenNoRoundIsInProgress_OrNobodyIsConnected(named: True, roundInProgress: True, peers: 1, expected: False) [< 1 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AServerToldItsNextMap_LeavesAtOnce_OnlyWhenNoRoundIsInProgress_OrNobodyIsConnected(named: True, roundInProgress: False, peers: 0, expected: True) [< 1 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AServerToldItsNextMap_LeavesAtOnce_OnlyWhenNoRoundIsInProgress_OrNobodyIsConnected(named: True, roundInProgress: False, peers: 3, expected: True) [< 1 ms]
+  Passed Gdpyr.Tests.MapTransferTests.AFetchCutOffAtAnyChunk_NeverCompletes_AndIsRefusedWhenItStalls [14 ms]
+  Passed Gdpyr.Tests.MapTransferTests.AToken_IsSixteenCharactersOrMore_WithNoSpaceInIt(token: "0123456789 abcdef", taken: False) [< 1 ms]
+  Passed Gdpyr.Tests.MapTransferTests.AToken_IsSixteenCharactersOrMore_WithNoSpaceInIt(token: "", taken: False) [< 1 ms]
+  Passed Gdpyr.Tests.MapTransferTests.AToken_IsSixteenCharactersOrMore_WithNoSpaceInIt(token: null, taken: False) [< 1 ms]
+  Passed Gdpyr.Tests.MapTransferTests.AToken_IsSixteenCharactersOrMore_WithNoSpaceInIt(token: "0123456789abcdef", taken: True) [< 1 ms]
+  Passed Gdpyr.Tests.MapTransferTests.AToken_IsSixteenCharactersOrMore_WithNoSpaceInIt(token: "hunter2", taken: False) [< 1 ms]
+  Passed Gdpyr.Tests.MapTransferTests.AToken_IsSixteenCharactersOrMore_WithNoSpaceInIt(token: "0123456789\tabcdef", taken: False) [< 1 ms]
+  Passed Gdpyr.Tests.MapTransferTests.AToken_IsSixteenCharactersOrMore_WithNoSpaceInIt(token: "correct-horse-battery-staple", taken: True) [< 1 ms]
+  Passed Gdpyr.Tests.MapTransferTests.AToken_IsSixteenCharactersOrMore_WithNoSpaceInIt(token: "0123456789abcdef\n", taken: False) [< 1 ms]
+  Passed Gdpyr.Tests.MapTransferTests.AToken_IsSixteenCharactersOrMore_WithNoSpaceInIt(token: "0123456789abcde", taken: False) [< 1 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AMapTheServerHas_IsDoneWithNothingSent [17 ms]
+  Passed Gdpyr.Tests.MapTransferTests.AMessageThatIsNotAChunk_IsRefused(length: 3) [12 ms]
+  Passed Gdpyr.Tests.MapTransferTests.AMessageThatIsNotAChunk_IsRefused(length: 0) [14 ms]
+  Passed Gdpyr.Tests.MapTransferTests.AMessageThatIsNotAChunk_IsRefused(length: 1029) [12 ms]
+  Passed Gdpyr.Tests.MapUploadTests.ANextMapRequest_IsAnsweredInOrder_AndOnlyByItsOwnProof [38 ms]
+  Passed Gdpyr.Tests.MapTransferTests.AMessageThatIsNotAChunk_IsRefused(length: 4) [12 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AChunkWithNoOfferTaken_IsDropped [9 ms]
+  Passed Gdpyr.Tests.MapTransferTests.TheReceiver_RefusesALengthNoMapCanBe(length: -1, because: "bytes long") [10 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AnAnswerThisBuildDoesNotKnow_IsARefusal(wire: 99) [10 ms]
+  Passed Gdpyr.Tests.MapTransferTests.TheReceiver_RefusesALengthNoMapCanBe(length: 1048577, because: "over the") [10 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AnAnswerThisBuildDoesNotKnow_IsARefusal(wire: 6) [16 ms]
+  Passed Gdpyr.Tests.MapTransferTests.TheReceiver_RefusesALengthNoMapCanBe(length: 0, because: "bytes long") [15 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AnAnswerThisBuildDoesNotKnow_IsARefusal(wire: -1) [16 ms]
+  Passed Gdpyr.Tests.MapTransferTests.AMapThisBuildCannotPlay_IsRefused_WithTheValidatorsReason [22 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AMap_OfferedTakenSentAndKept_ArrivesAsTheSameBytesAndTheSameMap(seed: 3) [20 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AMap_OfferedTakenSentAndKept_ArrivesAsTheSameBytesAndTheSameMap(seed: 1) [15 ms]
+  Passed Gdpyr.Tests.MapTransferTests.AProof_DoesNotPass_OnAnotherConnection_ForAnotherFile_ForAnotherOp_OrByAnotherToken [29 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AMap_OfferedTakenSentAndKept_ArrivesAsTheSameBytesAndTheSameMap(seed: 2) [14 ms]
+  Passed Gdpyr.Tests.MapTransferTests.TheSender_SendsTheBytesItLoaded_NotWhatTheirArrayHoldsLater [14 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AServerWithNoToken_TakesNoMapFromAnyone_AndIsToldNothing(token: "") [10 ms]
+  Passed Gdpyr.Tests.MapTransferTests.WhatNoProofCanBeMadeFrom_HasNone_AndAProofOfAnotherLengthIsNotOne [14 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AServerWithNoToken_TakesNoMapFromAnyone_AndIsToldNothing(token: null) [12 ms]
+  Passed Gdpyr.Tests.MapTransferTests.TheRates_AreLE_D17s_AndSection10sTimes [3 ms]
+  Passed Gdpyr.Tests.MapTransferTests.TheReceiver_RefusesANameThatIsNotAHash(hash: "hills") [< 1 ms]
+  Passed Gdpyr.Tests.MapTransferTests.TheReceiver_RefusesANameThatIsNotAHash(hash: "") [< 1 ms]
+  Passed Gdpyr.Tests.MapTransferTests.TheReceiver_RefusesANameThatIsNotAHash(hash: "6D0AA3FF6EBE3487E53D4F4488318B2EBE47ADA2E27FB3AE56"···) [< 1 ms]
+  Passed Gdpyr.Tests.MapTransferTests.TheReceiver_RefusesANameThatIsNotAHash(hash: null) [< 1 ms]
+  Passed Gdpyr.Tests.MapTransferTests.TheSender_RefusesAnEmptyFile [1 ms]
+  Passed Gdpyr.Tests.MapUploadTests.APeerGone_TakesItsUploadWithIt_AndNobodyElses [10 ms]
+  Passed Gdpyr.Tests.MapTransferTests.ARefusal_IsFinal_AndAFetchThatIsDone_TakesNothingMore [18 ms]
+  Passed Gdpyr.Tests.MapTransferTests.TheSender_SendsOnlyTheMapItIsPlaying_OnlyToAPeerThatAsked_OnceAConnection [32 ms]
+  Passed Gdpyr.Tests.MapUploadTests.TheGate_NeverThrows_OnNoise [63 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AnOfferNotTaken_IsRefused_WithWhatTheAnswerMeans_AndNothingIsSent(answer: BadProof) [10 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AnOfferNotTaken_IsRefused_WithWhatTheAnswerMeans_AndNothingIsSent(answer: UploadsOff) [9 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AnOfferNotTaken_IsRefused_WithWhatTheAnswerMeans_AndNothingIsSent(answer: TooLarge) [9 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AnOfferNotTaken_IsRefused_WithWhatTheAnswerMeans_AndNothingIsSent(answer: Busy) [9 ms]
+  Passed Gdpyr.Tests.MapTransferTests.TheReceiver_NeverThrows_OnNoise [77 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AnOffer_IsAnsweredInOrder_TheProofBeforeAnythingElseIsSaid [20 ms]
+  Passed Gdpyr.Tests.MapTransferTests.AStreamThatStallsForTenSeconds_IsRefused_AndAChunkStartsTheClockAgain [11 ms]
+  Passed Gdpyr.Tests.MapTransferTests.BytesThatHashRightButAreNotAMap_AreRefused [11 ms]
+  Passed Gdpyr.Tests.MapUploadTests.WhatTheServerSaysBecameOfIt_IsHeldToWhatWasSent [23 ms]
+  Passed Gdpyr.Tests.MapTransferTests.APacket_IsItsIndexLittleEndian_ThenThoseBytesOfTheFile [12 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AnUpload_IsHashedReadAndValidated_AndARefusedOneKeepsNothing [25 ms]
+  Passed Gdpyr.Tests.MapTransferTests.AStreamWhoseBytesDoNotHashToWhatWasNamed_IsRefused_ByteByByte [22 ms]
+  Passed Gdpyr.Tests.MapUploadTests.TheUploader_SendsNothingUntilItsOfferIsTaken_ThenAChunkAtATimeInOrder [9 ms]
+  Passed Gdpyr.Tests.MapTransferTests.AProof_IsHmacSha256_OfTheNonceTheHashAndTheOp_KeyedByTheToken [10 ms]
+  Passed Gdpyr.Tests.MapUploadTests.MapsActive_HoldsAHash_AndNothingElse [10 ms]
+  Passed Gdpyr.Tests.MapTransferTests.TheSender_SendsAChunkATickToAPeer_AndAtMostFourATick_ThePeersInTurn [11 ms]
+  Passed Gdpyr.Tests.MapTransferTests.AChunkOfTheWrongSize_IsRefused_ShortOrLong_InTheMiddleOrAtTheEnd [9 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AMapTheServerHas_IsNotSentAgain [21 ms]
+  Passed Gdpyr.Tests.MapTransferTests.AChunkPastTheLength_IsRefused [10 ms]
+  Passed Gdpyr.Tests.MapUploadTests.TheUploader_SendsTheBytesItWasGiven_NotWhatTheirArrayHoldsLater [10 ms]
+  Passed Gdpyr.Tests.MapUploadTests.ANextMapsAnswers_HaveTheirNamesAndNumbers_AndThreeOfThemAreTaken [3 ms]
+  Passed Gdpyr.Tests.MapTransferTests.AHash_IsSixtyFourLowerCaseHexDigits [11 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AServerThatSaysNothingForTenSeconds_WillNot [10 ms]
+  Passed Gdpyr.Tests.MapTransferTests.AChunkOutOfTurn_IsRefused_WhetherAheadOrRepeated [11 ms]
+  Passed Gdpyr.Tests.MapTransferTests.TheStatusLine_IsSection9_3s [< 1 ms]
+  Passed Gdpyr.Tests.MapUploadTests.OnlyTheFirstAnswerCounts [20 ms]
+  Passed Gdpyr.Tests.MapUploadTests.ItTakesOneUploadAtATime_FromThePeerWhoseOfferItTook [23 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AnOffersAnswers_AreSection9_5s_AndTheirNumbersAreTheWires [< 1 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AServersOwnWords_AreShownAsOneLine_OfAtMost240Characters [< 1 ms]
+  Passed Gdpyr.Tests.MapUploadTests.ALinkThatDrops_EndsAnUploadNotYetOver [29 ms]
+  Passed Gdpyr.Tests.MapUploadTests.AWrongToken_AndAReplayedProof_AreBadProof [20 ms]
+Total tests: 246
+     Passed: 246
+
+run 1: Failed Gdpyr.Tests.SquadBoardTests.OrdersAndDeaths_AllocateNothing [21 ms]; Failed! - Failed: 1, Passed: 3908, Skipped: 0, Total: 3909, Duration: 19 s - Gdpyr.Tests.dll (net8.0)
+run 2: Passed! - Failed: 0, Passed: 3909, Skipped: 0, Total: 3909, Duration: 18 s - Gdpyr.Tests.dll (net8.0)
+run 3: Failed Gdpyr.Tests.MarksmanTests.PeekingAndMovingOn_AllocatesNothingOnTheTick_WithThePooledFactory(pooled: True) [51 ms]; Failed! - Failed: 1, Passed: 3908, Skipped: 0, Total: 3909, Duration: 18 s - Gdpyr.Tests.dll (net8.0)
+run 4: Passed! - Failed: 0, Passed: 3909, Skipped: 0, Total: 3909, Duration: 18 s - Gdpyr.Tests.dll (net8.0)
+run 5: Passed! - Failed: 0, Passed: 3909, Skipped: 0, Total: 3909, Duration: 15 s - Gdpyr.Tests.dll (net8.0)
+MarksmanTests alone: Passed!  - Failed:     0, Passed:    38, Skipped:     0, Total:    38, Duration: 139 ms - Gdpyr.Tests.dll (net8.0)
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:12.07
