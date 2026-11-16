@@ -74,6 +74,23 @@
 #
 #   ./scripts/level-editor-checks.sh map-fetch
 #
+# LE8, the dedicated server, by tools/EngineChecks/LevelUploadChecks.cs (LE8_CHECK): three maps of
+# gdpyr-map generate (--seed UPLOAD_SEEDS: 7, 11 and 13 unless given), servers started one after
+# another on the same port, each under a HOME of its own, and clients each under theirs.
+# scripts/deploy-map.sh puts the first map in a home's user://maps and names it in maps/active
+# (GDPYR_LOCAL=1: no ssh, no unit), and a file that is not a map is not copied. A server run by hand
+# with --map-upload-token and no --map plays it, from where the script put it; a client builds a
+# request for each of §9.5's answers, a wrong token and a replayed proof among them; two clients
+# upload at once; and a next-map request sends the server away at once, with 0, saying nothing
+# starts it again. A server with no token takes nothing, the map's whole stream sent to it all the
+# same; one started with --map keeps an upload and will not be told its next map. Then a server
+# with its bots, a client in its round and GDPYR_SUPERVISED=1: the editor publishes a map and names
+# it next, by its own command, while the round is live; the server plays the round out and exits 0
+# when the intermission is over; started again by the same command it plays the new map, and a
+# client that has not got it fetches it (LE7's part, LE7_CHECK=fetch).
+#
+#   ./scripts/level-editor-checks.sh map-upload
+#
 # Each part runs on the plan's collider and, where the two could differ, on the heightmap
 # beside it. `frame` and the bake's times in `ground` are wall time: run them on a machine
 # doing nothing else. `net` runs in real time behind tools/EngineChecks/delay_relay.py
@@ -107,6 +124,8 @@ FETCH_SEED="${FETCH_SEED:-7}"
 FETCH_LOSS="${FETCH_LOSS:-0.1}"
 FETCH_DROPS="${FETCH_DROPS:-4}"
 DROP_RELAY_PORT="${DROP_RELAY_PORT:-7798}"
+UPLOAD_SEEDS="${UPLOAD_SEEDS:-7 11 13}"
+UPLOAD_TOKEN="${UPLOAD_TOKEN:-le8-check-token-0123456789}"
 if [ $# -eq 0 ]; then
 	MODES=(ground slopes)
 else
@@ -132,8 +151,8 @@ mkdir -p "$COPY/EngineChecks"
 cp "$PROJECT_DIR/tools/EngineChecks/LevelChecks.cs" "$PROJECT_DIR/tools/EngineChecks/LevelTerrain.cs" \
 	"$PROJECT_DIR/tools/EngineChecks/LevelMapChecks.cs" "$PROJECT_DIR/tools/EngineChecks/LevelEditorChecks.cs" \
 	"$PROJECT_DIR/tools/EngineChecks/LevelEditorChecks.Roads.cs" "$PROJECT_DIR/tools/EngineChecks/LevelFetchChecks.cs" \
-	"$COPY/EngineChecks/"
-sed -i 's#^GameConsole="\*res://Scripts/Ui/GameConsole.cs"#&\nLevelChecks="*res://EngineChecks/LevelChecks.cs"\nLevelMapChecks="*res://EngineChecks/LevelMapChecks.cs"\nLevelEditorChecks="*res://EngineChecks/LevelEditorChecks.cs"\nLevelFetchChecks="*res://EngineChecks/LevelFetchChecks.cs"#' \
+	"$PROJECT_DIR/tools/EngineChecks/LevelUploadChecks.cs" "$COPY/EngineChecks/"
+sed -i 's#^GameConsole="\*res://Scripts/Ui/GameConsole.cs"#&\nLevelChecks="*res://EngineChecks/LevelChecks.cs"\nLevelMapChecks="*res://EngineChecks/LevelMapChecks.cs"\nLevelEditorChecks="*res://EngineChecks/LevelEditorChecks.cs"\nLevelFetchChecks="*res://EngineChecks/LevelFetchChecks.cs"\nLevelUploadChecks="*res://EngineChecks/LevelUploadChecks.cs"#' \
 	"$COPY/project.godot"
 
 # §10's hills as a map file's samples would be, and the greybox with and without its slab.
@@ -731,6 +750,248 @@ for mode in "${MODES[@]}"; do
 			echo "[checks] FAIL map-fetch, playback without the map: exit $status, '$line'"
 			failed=1
 		fi
+		;;
+
+	map-upload)
+		ground slab
+		dir="$COPY/map-upload"
+		rm -rf "${dir:?}"
+		mkdir -p "$dir"
+		userdir() { echo "$1/.local/share/godot/app_userdata/gdpyr"; }
+
+		# Three maps: the one the servers play at first, the one that is published, one that never arrives whole.
+		# shellcheck disable=SC2086
+		set -- $UPLOAD_SEEDS
+		generated=1
+		for spec in "ridge:$1:Ridge" "valley:$2:Valley" "third:$3:Third"; do
+			IFS=: read -r file seed title <<< "$spec"
+			if ! (cd "$PROJECT_DIR" && dotnet run --project tools/Gdpyr.MapTool -c Release -- generate "$dir/$file.map" \
+				--seed "$seed" --name "$title") > "$COPY/map-upload-maptool-$file.log" 2>&1; then
+				cat "$COPY/map-upload-maptool-$file.log" >&2
+				generated=0
+			fi
+			sed 's/^/[map] /' "$COPY/map-upload-maptool-$file.log"
+		done
+		if [ "$generated" -ne 1 ]; then
+			echo "map-upload: the maps were not generated"
+			failed=1
+			continue
+		fi
+		ridge=$(sha256sum "$dir/ridge.map" | cut -d' ' -f1)
+		valley=$(sha256sum "$dir/valley.map" | cut -d' ' -f1)
+		valley_chunks=$(( ($(wc -c < "$dir/valley.map") + 1023) / 1024 ))
+
+		fact() {  # whether it holds, then what it is
+			if [ "$1" -eq 0 ]; then
+				echo "[checks] PASS map-upload: $2"
+			else
+				echo "[checks] FAIL map-upload: $2"
+				failed=1
+			fi
+		}
+
+		# deploy-map.sh, against a home on this machine: the map validated, copied, named in maps/active.
+		deploy() {  # the home, then the script's own arguments
+			local home="$1"
+			shift
+			GDPYR_LOCAL=1 GDPYR_MAP_DIR="$(userdir "$home")/maps" "$PROJECT_DIR/scripts/deploy-map.sh" "$@"
+		}
+
+		# A server: its name, its part, its home and its marks, a directory of its own, then its own
+		# arguments. What it is told is what the caller set for it; systemd's variable and the
+		# supervisor's are taken out of its environment, and the second put back when `supervised` is set.
+		server_start() {
+			local name="$1" role="$2" home="$3"
+			marks="$4"
+			shift 4
+			mkdir -p "$home" "$marks"
+			expect_n=0
+			env -u XDG_DATA_HOME -u INVOCATION_ID -u GDPYR_SUPERVISED ${supervised:+GDPYR_SUPERVISED=1} HOME="$home" \
+				LE8_CHECK="$role" LE8_LABEL="$name" LE8_DIR="$marks" LE8_TOKEN="$UPLOAD_TOKEN" \
+				LE8_RIDGE="$dir/ridge.map" LE8_VALLEY="$dir/valley.map" LE8_THIRD="$dir/third.map" \
+				LE8_MAPS="${maps:-}" LE8_PLAYS="${plays:-$ridge}" LE8_FROM="${from:-}" LE8_TAKES="${takes:-0}" \
+				timeout 900 "$GODOT" --headless --path "$COPY" -- --server "$GAME_PORT" --no-advertise "$@" \
+				> "$COPY/map-upload-$server_log.log" 2>&1 &
+			server=$!
+			for _ in $(seq 1 450); do
+				[ -e "$marks/server-up" ] && return 0
+				kill -0 "$server" 2>/dev/null || break
+				sleep 0.2
+			done
+			fact 1 "$name: the server did not come up"
+			return 1
+		}
+
+		# What a server's log holds, and how it ended: with the exit expected, and no fact failing.
+		server_end() {  # its name, the exit it should end with
+			local name="$1" expect="$2" status
+			wait "$server"
+			status=$?
+			report "$COPY/map-upload-$server_log.log"
+			grep -E '^\[map\]|\[maps\]|^gdpyr:' "$COPY/map-upload-$server_log.log" | sed 's/^WARNING: //'
+			[ "$status" -eq "$expect" ]
+			fact $? "$name: the server exited $status; $expect expected"
+			grep -q '^\[checks\] FAIL' "$COPY/map-upload-$server_log.log" && failed=1
+			grep -q "^\[checks\] $name: .* facts hold" "$COPY/map-upload-$server_log.log"
+			fact $? "$name: the server's part ran to its end"
+		}
+
+		# What the server is held to, now: answered by its seen-N.
+		expect() {
+			expect_n=$((expect_n + 1))
+			echo "$*" > "$marks/expect-$expect_n.part"
+			mv "$marks/expect-$expect_n.part" "$marks/expect-$expect_n"
+			for _ in $(seq 1 150); do
+				[ -e "$marks/seen-$expect_n" ] && return 0
+				sleep 0.2
+			done
+			fact 1 "the server did not answer what it was held to: $*"
+		}
+
+		# A client: its name, its part and its home, then its own arguments. What it is told is what
+		# the caller set for it.
+		client_start() {
+			local name="$1" role="$2" home="$3"
+			shift 3
+			mkdir -p "$home"
+			env -u XDG_DATA_HOME HOME="$home" LE8_CHECK="$role" LE8_LABEL="$name" LE8_DIR="$marks" LE8_PORT="$GAME_PORT" \
+				LE8_TOKEN="$UPLOAD_TOKEN" LE8_RIDGE="$dir/ridge.map" LE8_VALLEY="$dir/valley.map" LE8_THIRD="$dir/third.map" \
+				LE8_PLAYS="${plays:-$ridge}" LE8_EXPECT="${answer:-}" LE8_OFFER="${offer:-}" LE8_LEAVES="${leaves:-0}" \
+				LE8_STREAM="${stream:-0}" LE8_NEXT="${next:-0}" LE8_WAIT="${wait_for:-}" LE8_AGAIN="${again:-0}" \
+				timeout 400 "$GODOT" --headless --path "$COPY" --max-fps 60 -- "$@" > "$COPY/map-upload-$name.log" 2>&1 &
+			client=$!
+		}
+
+		client_end() {  # its name, its process
+			local name="$1" status
+			wait "$2"
+			status=$?
+			report "$COPY/map-upload-$name.log"
+			grep -E '\[maps\]|^\[editor\] (publishing|published|not published)|^gdpyr:' "$COPY/map-upload-$name.log" \
+				| sed 's/^WARNING: //;s/^ERROR: //'
+			[ "$status" -eq 0 ]
+			fact $? "$name: the client exited $status"
+			grep -q "^\[checks\] $name: .* facts hold" "$COPY/map-upload-$name.log"
+			fact $? "$name: the client's part ran to its end"
+		}
+
+		run_client() {
+			client_start "$@"
+			client_end "$1" "$client"
+		}
+
+		# An editor's home with the map to publish in it, as one's own.
+		editor_home() {
+			mkdir -p "$(userdir "$1")/maps"
+			cp "$dir/valley.map" "$(userdir "$1")/maps/valley.map"
+		}
+
+		# ---- deploy-map.sh ----------------------------------------------------------------------
+		home="$dir/home-hand"
+		deploy "$home" "$dir/ridge.map" --activate > "$COPY/map-upload-deploy.log" 2>&1
+		status=$?
+		sed 's/^/[deploy] /' "$COPY/map-upload-deploy.log"
+		[ "$status" -eq 0 ] && [ "$(sha256sum "$(userdir "$home")/maps/ridge.map" | cut -d' ' -f1)" = "$ridge" ] \
+			&& [ "$(cat "$(userdir "$home")/maps/active")" = "$ridge" ]
+		fact $? "deploy-map.sh --activate: exit $status; ridge.map is in the home's user://maps, hashing to $ridge, and maps/active holds that"
+
+		head -c 3000 /dev/urandom > "$dir/noise.map"
+		deploy "$home" "$dir/noise.map" --activate > "$COPY/map-upload-deploy-noise.log" 2>&1
+		status=$?
+		sed 's/^/[deploy] /' "$COPY/map-upload-deploy-noise.log"
+		[ "$status" -eq 1 ] && [ "$(cat "$(userdir "$home")/maps/active")" = "$ridge" ] \
+			&& [ "$(ls "$(userdir "$home")/maps" | tr '\n' ' ')" = "active ridge.map " ]
+		fact $? "deploy-map.sh on 3,000 bytes that are not a map: exit $status, nothing copied, maps/active as it was"
+
+		cp "$dir/valley.map" "$dir/Not A Name.map"
+		deploy "$home" "$dir/Not A Name.map" > "$COPY/map-upload-deploy-name.log" 2>&1
+		status=$?
+		[ "$status" -eq 2 ] && [ "$(ls "$(userdir "$home")/maps" | tr '\n' ' ')" = "active ridge.map " ]
+		fact $? "deploy-map.sh on a file whose name is not a map's: exit $status, nothing copied ($(head -n 1 "$COPY/map-upload-deploy-name.log"))"
+
+		# ---- a server run by hand, with a token -----------------------------------------------------
+		server_log=hand
+		maps="$(userdir "$home")/maps" plays="$ridge" from="$(userdir "$home")/maps/ridge.map" takes=1 supervised="" \
+			server_start "server, by hand" server "$home" "$dir/marks-hand" --no-bots --map-upload-token "$UPLOAD_TOKEN"
+		if [ $? -eq 0 ]; then
+			run_client answers answers "$dir/home-answers" --edit
+			expect "offers=14 nexts=5 dropped=3 kept=0 refused=2 last_offer=busy last_next=bad_proof cache=none active=$ridge next=none uploading=nobody"
+
+			client_start busy busy "$dir/home-busy" --edit
+			busy=$client
+			run_client slow slow "$dir/home-slow" --edit
+			client_end busy "$busy"
+			expect "offers=17 kept=1 refused=2 last_offer=have_it cache=$valley active=$ridge next=none uploading=nobody leaving=no"
+
+			answer=ok_stays_down leaves=1 run_client next-by-hand next "$dir/home-next" --edit
+		fi
+		server_end "server, by hand" 0
+		[ "$(cat "$(userdir "$home")/maps/active")" = "$valley" ]
+		fact $? "after it left, the home's maps/active holds $(cat "$(userdir "$home")/maps/active")"
+		grep -q 'nothing here starts this server again' "$COPY/map-upload-hand.log"
+		fact $? "and it said that nothing there starts it again"
+
+		# ---- a server with no token ------------------------------------------------------------------
+		home="$dir/home-off"
+		editor_home "$dir/home-editor"
+		server_log=off
+		maps="" plays="$ridge" from="$dir/ridge.map" takes=0 supervised="" \
+			server_start "server, no token" server "$home" "$dir/marks-off" --no-bots --map "$dir/ridge.map"
+		if [ $? -eq 0 ]; then
+			answer="uploads_off:-" next=1 run_client publish-off publish "$dir/home-editor" --edit valley
+			answer=uploads_off offer=uploads_off stream=1 run_client stream-off next "$dir/home-stream" --edit
+			expect "offers=2 nexts=1 dropped=$valley_chunks kept=0 refused=0 last_offer=uploads_off last_next=uploads_off cache=none active=none next=none uploading=nobody"
+			touch "$marks/stop"
+		fi
+		server_end "server, no token" 0
+
+		# ---- a server started with --map, and a token -----------------------------------------------
+		home="$dir/home-pinned"
+		server_log=pinned
+		maps="" plays="$ridge" from="$dir/ridge.map" takes=1 supervised="" \
+			server_start "server, --map and a token" server "$home" "$dir/marks-pinned" --no-bots --map "$dir/ridge.map" \
+			--map-upload-token "$UPLOAD_TOKEN"
+		if [ $? -eq 0 ]; then
+			answer="ok:pinned" next=1 run_client publish-pinned publish "$dir/home-editor" --edit valley
+			expect "offers=1 nexts=1 kept=1 refused=0 last_next=pinned cache=$valley active=none next=none leaving=no"
+			touch "$marks/stop"
+		fi
+		server_end "server, --map and a token" 0
+
+		# ---- a server with a round, supervised: told its next map, it plays the round out ----------
+		home="$dir/home-round"
+		deploy "$home" "$dir/ridge.map" --activate > "$COPY/map-upload-deploy-round.log" 2>&1
+		fact $? "deploy-map.sh --activate, for the server with a round"
+		editor_home "$dir/home-editor-2"
+		server_log=round
+		maps="$(userdir "$home")/maps" plays="$ridge" from="$(userdir "$home")/maps/ridge.map" takes=1 supervised=1 \
+			server_start "server, supervised" server-round "$home" "$dir/marks-round" --map-upload-token "$UPLOAD_TOKEN"
+		if [ $? -eq 0 ]; then
+			plays="$ridge" client_start player player "$dir/home-player" --client "127.0.0.1:$GAME_PORT"
+			player=$client
+			answer="ok:ok" next=1 again=1 wait_for=round-live run_client publish publish "$dir/home-editor-2" --edit valley
+			client_end player "$player"
+		fi
+		server_end "server, supervised" 0
+		grep -h '^\[match\] round' "$COPY/map-upload-round.log"
+
+		# Its supervisor's part: the same command again. It plays the new map, from its cache.
+		server_log=again
+		maps="$(userdir "$home")/maps" plays="$valley" from=cache takes=1 supervised=1 \
+			server_start "server, started again" server "$home" "$dir/marks-again" --map-upload-token "$UPLOAD_TOKEN"
+		if [ $? -eq 0 ]; then
+			# Everybody joins again: a client that has not got the map fetches it, as LE7's does.
+			mkdir -p "$dir/home-rejoin"
+			env -u XDG_DATA_HOME HOME="$dir/home-rejoin" LE7_CHECK=fetch LE7_DIR="$marks" LE7_HASH="$valley" timeout 300 \
+				"$GODOT" --headless --path "$COPY" --max-fps 60 -- --client "127.0.0.1:$GAME_PORT" > "$COPY/map-upload-rejoin.log" 2>&1
+			status=$?
+			report "$COPY/map-upload-rejoin.log"
+			[ "$status" -eq 0 ]
+			fact $? "rejoin: a client that has not got the new map joined again: exit $status"
+			expect "offers=0 nexts=0 kept=0 cache=$valley active=$valley next=none leaving=no"
+			touch "$marks/stop"
+		fi
+		server_end "server, started again" 0
 		;;
 
 	map-shot)

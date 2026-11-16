@@ -175,7 +175,7 @@ public partial class MapEditorRoot
 			if (Publishing != PublishState.Connecting && transfer.Upload is { ServerHasIt: true } had)
 			{
 				// The server has the map, whatever became of the link after.
-				EndPublish(!_publishNext, MapEditorControls.Published(_publishName, _publishAddress, had.State, null)
+				EndPublish(true, MapEditorControls.Published(_publishName, _publishAddress, had.State, null)
 					+ (_publishNext ? "; the link dropped before it said whether it plays it next" : string.Empty));
 				return;
 			}
@@ -244,7 +244,7 @@ public partial class MapEditorRoot
 
 				if (!transfer.RequestNextMap(upload.Hash, _publishToken, out string unasked))
 				{
-					EndPublish(false, MapEditorControls.Published(_publishName, _publishAddress, upload.State, null)
+					EndPublish(true, MapEditorControls.Published(_publishName, _publishAddress, upload.State, null)
 						+ $"; it was not asked to play it next: {unasked}");
 					return;
 				}
@@ -259,21 +259,25 @@ public partial class MapEditorRoot
 					_publishWait += delta;
 					if (_publishWait >= (float)MapTransfer.StallSeconds)
 					{
-						EndPublish(false, MapEditorControls.Published(_publishName, _publishAddress, PublishUpload ?? MapUploadState.Stored, null)
+						EndPublish(true, MapEditorControls.Published(_publishName, _publishAddress, PublishUpload ?? MapUploadState.Stored, null)
 							+ $"; it did not say whether it plays it next in {MapTransfer.StallSeconds:0} s");
 					}
 
 					return;
 				}
 
+				// Published either way: the server has the map. Whether it plays it next is what the line says.
 				PublishNextAnswer = wire;
-				EndPublish(MapAnswers.TryNext(wire, out MapNextAnswer next) && MapAnswers.Accepted(next),
-					MapEditorControls.Published(_publishName, _publishAddress, PublishUpload ?? MapUploadState.Stored, wire));
+				EndPublish(true, MapEditorControls.Published(_publishName, _publishAddress, PublishUpload ?? MapUploadState.Stored, wire));
 				break;
 		}
 	}
 
-	/// <summary>The publish is over: the link is dropped, as the menu drops one it will not play on, and the token let go of.</summary>
+	/// <summary>
+	/// The publish is over: the link is dropped, as the menu drops one it will not play on, and the
+	/// token let go of. It is <see cref="PublishState.Done"/> when the server has the map, whatever it
+	/// answered about playing it next, which the line says and <see cref="PublishNextAnswer"/> holds.
+	/// </summary>
 	private void EndPublish(bool ok, string message)
 	{
 		Publishing = ok ? PublishState.Done : PublishState.Failed;
@@ -282,14 +286,6 @@ public partial class MapEditorRoot
 		_publishToken = null;
 		DropPublishLink();
 		Say(PublishMessage);
-		if (ok)
-		{
-			GD.Print($"[editor] {PublishMessage}");
-		}
-		else
-		{
-			GD.PrintErr($"[editor] {PublishMessage}");
-		}
 	}
 
 	private static void DropPublishLink()

@@ -935,5 +935,8 @@ public class MapUploadTests
 		int peers, bool expected)
 	{
 		Assert.Equal(expected, MapChange.LeavesNow(named, roundInProgress, peers));
+
+		// Leaving, the link is kept up a second for what was said on it to arrive.
+		Assert.Equal(1.0, MapChange.LeaveGraceSeconds);
 	}
 }

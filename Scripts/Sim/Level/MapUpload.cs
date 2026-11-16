@@ -393,6 +393,7 @@ public sealed class MapUploader
 			return;
 		}
 
+		// Answered: what it waits for next, once the last chunk is gone, is waited for from then.
 		_quiet = 0;
 		if (!MapAnswers.TryOffer(wire, out MapOfferAnswer answer))
 		{
@@ -428,7 +429,6 @@ public sealed class MapUploader
 		if (Sent == Chunks)
 		{
 			State = MapUploadState.Sent;
-			_quiet = 0;
 		}
 
 		return packet;
@@ -516,6 +516,13 @@ public static class MapChange
 
 	/// <summary>The most a <c>maps/active</c> may hold: a hash, and whatever space an editor left round it.</summary>
 	public const int MaxActiveBytes = 256;
+
+	/// <summary>
+	/// How long a server that is leaving keeps its link up before it closes it and goes: long enough
+	/// for what it has said to arrive — the answer to the request that sent it away among it. Closing
+	/// a link drops what is queued on it.
+	/// </summary>
+	public const double LeaveGraceSeconds = 1.0;
 
 	/// <summary>
 	/// Whether something starts this process again when it exits, from its environment: systemd's

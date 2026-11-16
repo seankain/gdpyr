@@ -73,6 +73,10 @@ public partial class MapTransferService : Node
 	/// <summary>Whether something starts this process again when it exits (<see cref="MapChange.Supervised"/>).</summary>
 	private bool _supervised;
 
+	/// <summary>Server, leaving: real time left before the link is closed and the process goes.</summary>
+	private double _leaveIn;
+	private bool _gone;
+
 	/// <summary>Client: the map being fetched, or the last one fetched on this connection; null before.</summary>
 	public MapReceiver Fetch { get; private set; }
 
@@ -108,6 +112,21 @@ public partial class MapTransferService : Node
 
 	/// <summary>Client: the server's answer to that, as it came off the wire; null until it has answered.</summary>
 	public int? NextMapAnswer { get; private set; }
+
+	/// <summary>Client: every answer to an offer heard on this connection, and the last, as it came off the wire. For the checks.</summary>
+	public int OfferAnswersHeard { get; private set; }
+
+	public int? LastOfferAnswerHeard { get; private set; }
+
+	/// <summary>Client: every answer to a next-map request heard on this connection, and the last. For the checks.</summary>
+	public int NextAnswersHeard { get; private set; }
+
+	public int? LastNextAnswerHeard { get; private set; }
+
+	/// <summary>Client: every word on what became of an upload heard on this connection, and the last one's reason. For the checks.</summary>
+	public int StoredHeard { get; private set; }
+
+	public string LastStoredError { get; private set; }
 
 	/// <summary>Server: whether it takes uploads at all: it was started with <c>--map-upload-token</c>.</summary>
 	public bool TakesUploads => _gate.Enabled;
@@ -302,6 +321,24 @@ public partial class MapTransferService : Node
 				FinishUpload();
 			}
 		}
+
+		// Leaving for the next map: the link stays up for what was said on it to arrive, then goes.
+		if (Leaving && !_gone)
+		{
+			_leaveIn -= delta;
+			if (_leaveIn <= 0)
+			{
+				_gone = true;
+
+				// Closing it tells every client now, where a process that only went would leave them to time out.
+				if (Multiplayer.HasMultiplayerPeer())
+				{
+					Multiplayer.MultiplayerPeer.Close();
+				}
+
+				GetTree().Quit(0);
+			}
+		}
 	}
 
 	private void Finished(MapReceiver fetch)
@@ -460,6 +497,12 @@ public partial class MapTransferService : Node
 		UploadName = null;
 		NextMapAsked = null;
 		NextMapAnswer = null;
+		OfferAnswersHeard = 0;
+		LastOfferAnswerHeard = null;
+		NextAnswersHeard = 0;
+		LastNextAnswerHeard = null;
+		StoredHeard = 0;
+		LastStoredError = null;
 	}
 
 	/// <summary>Client: this tick's chunk of a map the server took the offer of.</summary>
@@ -502,6 +545,8 @@ public partial class MapTransferService : Node
 		}
 
 		net.Stats.RecordReceived(AnswerBytes);
+		OfferAnswersHeard++;
+		LastOfferAnswerHeard = answer;
 		if (Upload is not { State: MapUploadState.Offered } upload)
 		{
 			return;
@@ -528,6 +573,8 @@ public partial class MapTransferService : Node
 		}
 
 		net.Stats.RecordReceived(HashBytes + (error?.Length ?? 0));
+		StoredHeard++;
+		LastStoredError = error ?? string.Empty;
 		if (Upload is not { Done: false } upload)
 		{
 			return;
@@ -552,6 +599,8 @@ public partial class MapTransferService : Node
 		}
 
 		net.Stats.RecordReceived(HashBytes + AnswerBytes);
+		NextAnswersHeard++;
+		LastNextAnswerHeard = answer;
 		if (NextMapAsked == null || NextMapAnswer != null || !string.Equals(hash, NextMapAsked, System.StringComparison.Ordinal))
 		{
 			return;
@@ -742,8 +791,9 @@ public partial class MapTransferService : Node
 	}
 
 	/// <summary>
-	/// Leaves for the next map, if this server was told one (§9.5): every client is dropped, and the
-	/// process exits 0, at the end of this frame. The supervisor starts it again, and it plays what
+	/// Leaves for the next map, if this server was told one (§9.5): after
+	/// <see cref="MapChange.LeaveGraceSeconds"/>, for what it has said to arrive, every client is
+	/// dropped and the process exits 0. The supervisor starts it again, and it plays what
 	/// <c>maps/active</c> names. True when it is leaving: the round that would have started does not.
 	/// </summary>
 	public bool LeaveForNextMap(string why)
@@ -759,21 +809,10 @@ public partial class MapTransferService : Node
 		}
 
 		Leaving = true;
-		GD.Print($"[maps] {why}: leaving for the next map, {NextMap}; exit 0"
+		_leaveIn = MapChange.LeaveGraceSeconds;
+		GD.Print($"[maps] {why}: leaving for the next map, {NextMap}; exit 0 in {MapChange.LeaveGraceSeconds:0} s"
 			+ (_supervised ? string.Empty : ", and nothing here starts this server again"));
 		LeavingForNextMap?.Invoke();
-
-		// At the end of the frame, so that what this tick still sends has a link to go on; closing it
-		// tells every client now, where a process that only went would leave them to time out.
-		Callable.From(() =>
-		{
-			if (Multiplayer.HasMultiplayerPeer())
-			{
-				Multiplayer.MultiplayerPeer.Close();
-			}
-
-			GetTree().Quit(0);
-		}).CallDeferred();
 		return true;
 	}
 }

@@ -141,7 +141,7 @@ public enum PublishState : byte
 	/// <summary>The server has the map, and is asked to play it next.</summary>
 	AskingNext,
 
-	/// <summary>The server has the map; and, if it was asked to, plays it next.</summary>
+	/// <summary>The server has the map. Whether it plays it next, if it was asked to, is its answer's to say.</summary>
 	Done,
 
 	/// <summary>It did not come to that: the status line says why.</summary>
