@@ -173,13 +173,21 @@ public static class Program
 
 			// A scenario that names its map is checked against the map the server says it plays
 			// (docs/LEVEL_EDITOR.md §9.6): a claim about the hills played on the greybox is not one.
-			if (scenario.Map != null && connection.MapId != scenario.Map)
+			// A map that is not the catalog's has no id to say — one's own, which a scenario names as
+			// --map takes it, by its name in the library (§9.5) — and is held to its name instead.
+			bool playsIt = string.IsNullOrEmpty(connection.MapId)
+				? connection.MapName == scenario.Map
+				: connection.MapId == scenario.Map;
+			if (scenario.Map != null && !playsIt)
 			{
+				string plays = connection.MapId == null ? "(not said)"
+					: connection.MapId.Length > 0 ? connection.MapId
+					: connection.MapName;
 				return new ScenarioResult
 				{
 					Scenario = scenario,
 					BotAi = connection.BotAi,
-					Error = $"this server plays map '{connection.MapId ?? "(not said)"}', and the scenario names '{scenario.Map}'",
+					Error = $"this server plays map '{plays}', and the scenario names '{scenario.Map}'",
 				};
 			}
 
