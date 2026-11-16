@@ -1,0 +1,114 @@
+# LE8, docs/LEVEL_EDITOR.md §11. At 30662f1: .NET SDK 8.0.134, Godot 4.6.stable.mono.official.89cea1439, four cores of a cloud VM.
+# LE3_SECONDS=120 ./scripts/level-editor-checks.sh map-fetch map-server map-suite editor editor-roads: this is LE6's editor-roads part, after editor, with nothing beside it,
+# as it failed: tools/Gdpyr.Playtest, as LE7 left it, refuses the 4x4's scenario, which names one's own map. Run again with KEEP=1, its
+# output says why: "this server plays map '', and the scenario names 'le6-bridge'". f81e7ef mends it. The copy of the tree is written $COPY.
+
+[checks] level editor check: roads
+[checks] PASS roads: the editor is up
+[checks] PASS roads: a map that is a 12 m ridge with 40 % sides opened: opened le6-ridge.map, revision 1: 4 errors
+[checks] PASS roads: the road tool is selected: 3, and on the rail
+[checks] PASS roads: a road across the ridge, 6 m at 10 %: the preview is §6.6's answer, road of 2 points, 120.0 m: deepest cut 4.50 m, fill 4.50 m; Enter grades it
+[checks] PASS roads: a road across the ridge, 6 m at 10 %: Enter grades it as one step, in 28 ms: Ok
+[checks] PASS roads: a road across the ridge, 6 m at 10 %: at each of its 241 centreline samples, 120.0 m, the collider's ground climbs at most 10.16 % to the next, its limit 10 % and a stored step either end (11.56 %); the rays meet the document's ground to 0.008 mm
+[checks] measured roads: a road across the ridge, 6 m at 10 %: deepest cut 4.50 m, fill 4.50 m, E after 0.31 cm
+[checks] PASS roads: a road across the ridge, 6 m at 10 %: the ground is drawn with the roads' coverage, 847 samples of it, and nowhere else
+[checks] PASS roads: a road across the ridge, 6 m at 10 %: the validator finds it at its grade
+[checks] PASS roads: a road with two corners across it, 4 m at 15 %: the preview is §6.6's answer, road of 4 points, 151.2 m: deepest cut 3.65 m, fill 3.65 m; Enter grades it
+[checks] PASS roads: a road with two corners across it, 4 m at 15 %: Enter grades it as one step, in 60 ms: Ok
+[checks] PASS roads: a road with two corners across it, 4 m at 15 %: at each of its 304 centreline samples, 151.2 m, the collider's ground climbs at most 15.39 % to the next, its limit 15 % and a stored step either end (16.57 %); the rays meet the document's ground to 0.016 mm
+[checks] measured roads: a road with two corners across it, 4 m at 15 %: deepest cut 3.65 m, fill 3.65 m, E after 0.35 cm
+[checks] PASS roads: a road with two corners across it, 4 m at 15 %: the ground is drawn with the roads' coverage, 1603 samples of it, and nowhere else
+[checks] PASS roads: a road with two corners across it, 4 m at 15 %: the validator finds it at its grade
+[checks] PASS roads: a click on the first road takes its two points up to move
+[checks] PASS roads: its end moved and graded again: the road keeps its place in the file, and the old line's ground stays (7.50 m at its old middle)
+[checks] PASS roads: the new line climbs at most 10.14 % along it
+[checks] PASS roads: every road and its grading undone: no road, every sample the ridge's, none drawn as road, the collider the ground: every triangle of 225 chunks
+[checks] PASS roads: a map with a river 3 m deep, under its water at -5 m, from bank top to bank top 36 m, opened: opened le6-bridge.map, revision 1: 4 errors
+[checks] PASS roads: a round's 7 pieces placed with the prefab tool, either side of the river
+[checks] PASS roads: the first span floats at the west bank's top, on 2 piers, its west end landed: bridge_span floating at 0.00 m: ok, 2 piers, 1 end landed
+[checks] PASS roads: span 2: a click within 3 m of the last span's free end joins it there, on 1 pier: the ghost's answer and the placing's, bridge_span on section 7's end: ok, 1 pier
+[checks] PASS roads: span 3: a click within 3 m of the last span's free end joins it there, on 1 pier: the ghost's answer and the placing's, bridge_span on section 8's end: ok, 1 pier, 1 end landed
+[checks] PASS roads: a road from each end of the bridge, joined to the end's connector: Ok, Ok
+[checks] PASS roads: the roads meet the decks flush: the ground a quarter metre off each end at 0.000 and 0.000 m, the decks' top at 0 m
+[checks] PASS roads: a span floating 6 m over dry ground, on 2 piers, no end landed: bridge_span floating at 6.00 m: ok, 2 piers
+[checks] PASS roads: it passes the validator; its roads are at their grade, and its open ends are the floating span's two: 4 warnings
+[checks] PASS roads: 6 piers, each one's foot 0.50-0.51 m under the lowest ground beneath it, as the ground is after every landing and road
+[checks] PASS roads: the editor's world has the 4 sections and 6 piers: 4 and 6
+[checks] PASS roads: the deep check: 9 walks from the spawn line and two barracks' doors to three nodes either side of the river, none unreached: the bake goes over the bridge (212 vertices)
+[checks] PASS roads: saved as le6-bridge: saved le6-bridge.map, revision 2, 1,238 bytes, sha-256 f9bbe3c9…
+[checks] PASS roads: span 3 selected and taken up
+[checks] PASS roads: span 2 selected and taken up
+[checks] PASS roads: span 1 selected and taken up
+[checks] PASS roads: the three spans are gone; the floating span and the roads stay
+[checks] PASS roads: the deep check with the bridge gone: 9 walks, 5 unreached — every one across the river
+[checks] PASS roads: saved as le6-nobridge: saved le6-nobridge.map, revision 1, 1,167 bytes, sha-256 a4384cdb…
+[checks] roads: 36 of 36 facts hold
+[editor] road 0 graded: 120.0 m at 10 %, deepest cut 4.50 m, fill 4.50 m; a step over (55, 110)-(185, 130), 2751 samples, and roads
+[editor] road 1 graded: 151.2 m at 15 %, deepest cut 3.65 m, fill 3.65 m; a step over (50, 49)-(190, 106), 8178 samples, and roads
+[editor] road 0 graded: 123.7 m at 10 %, deepest cut 4.45 m, fill 4.45 m; a step over (53, 110)-(185, 157), 6384 samples, and roads
+[editor] placed bridge_span 7: bridge_span floating at 0.00 m: ok, 2 piers, 1 end landed
+[editor] placed bridge_span 8: bridge_span on section 7's end: ok, 1 pier
+[editor] placed bridge_span 9: bridge_span on section 8's end: ok, 1 pier, 1 end landed
+[editor] road 0 graded: 72.0 m at 10 %, deepest cut 0.00 m, fill 0.00 m; a step over (empty), 0 samples, and roads
+[editor] road 1 graded: 72.0 m at 10 %, deepest cut 0.00 m, fill 0.00 m; a step over (empty), 0 samples, and roads
+[editor] placed bridge_span 10: bridge_span floating at 6.00 m: ok, 2 piers
+[editor] deep check: baking the navigation mesh…
+[editor] deep check: baked 212 vertices in 374 ms, 9 walks asked: 4 warnings
+[editor] deep check: 212 vertices baked in 374 ms, 9 walks: 4 warnings
+[editor] saved le6-bridge.map, revision 2, 1,238 bytes, sha-256 f9bbe3c9…
+[editor] saved $COPY/editor-roads-home/.local/share/godot/app_userdata/gdpyr/maps/le6-bridge.map: revision 2, 1238 bytes, sha-256 f9bbe3c920faa34564c6c5c573a3e76782cfabfb1be0897c05f4bbf507dfa936, 4 warnings
+[editor] deep check: baking the navigation mesh…
+[editor] deep check: no walk from (-95, 0, 60) to (60, 0, 50): the path runs from (-95, 0.19999981, 59.999992) to (-10.800003, -5.6, 10.133331)
+[editor] deep check: no walk from (89, 0, 95) to (-60, 0, 50): the path runs from (89, 0.19999981, 95) to (11.533325, -5.7000003, 10.800003)
+[editor] deep check: no walk from (89, 0, 95) to (-60, 0, -50): the path runs from (89, 0.19999981, 95) to (9, -5.6, -7.7999954)
+[editor] deep check: no walk from (89, 0, -40) to (-60, 0, 50): the path runs from (89, 0.19999981, -40) to (11.533325, -5.7000003, 10.800003)
+[editor] deep check: no walk from (89, 0, -40) to (-60, 0, -50): the path runs from (89, 0.19999981, -40) to (9, -5.6, -7.7999954)
+[editor] deep check: baked 173 vertices in 492 ms, 9 walks asked: 9 warnings
+[editor] deep check: 173 vertices baked in 492 ms, 9 walks: 9 warnings
+[editor] saved le6-nobridge.map, revision 1, 1,167 bytes, sha-256 a4384cdb…
+[editor] saved $COPY/editor-roads-home/.local/share/godot/app_userdata/gdpyr/maps/le6-nobridge.map: revision 1, 1167 bytes, sha-256 a4384cdb32313ce196e161b440bf6eb9a5517855009d117dfbca1f54ce0401fe, 4 warnings
+[checks] PASS editor-roads, the editor's log: the log has no 'no nodes in group'
+[checks] PASS editor-roads, the editor's log: the log has no 'no NavigationRegion3D in group'
+[checks] PASS editor-roads, the editor's log: the log has no 'navigation bake produced no geometry'
+[checks] PASS editor-roads, the editor's log: the log has no 'is scaled or tilted'
+[checks] PASS editor-roads, the editor's log: the log has no 'are addressable on the wire'
+editor-roads: exit 0
+[checks] level editor check: bridge-round
+[rts] navigation baked: 212 vertices
+[checks] PASS bridge-round: the map with the bridge is the world, and its navigation mesh is baked: le6-bridge (user://maps/le6-bridge.map, f9bbe3c9)
+[checks] PASS bridge-round: the round built the file's 4 sections and 6 piers: built 1 spawn lines of 4 markers, 1 lockers, 0 kiosks, 2 barracks, 3 nodes, 0 anchors, 0 emplacements, 0 ammo cans, 0 cover boxes, 0 scenery, 4 bridge sections on 6 piers, the perimeter; 0 structures for the round to put up
+[checks] PASS bridge-round: every section stands where the file put it, turned by its yaw
+[checks] PASS bridge-round: 6 pier colliders: each one's top at its deck's underside to the millimetre, and its foot under the ground, 0.50 m under the lowest of it beneath it at the least
+[checks] PASS bridge-round: the floating span's deck is met by a ray down at 6.000 m, where the file put it
+[checks] PASS bridge-round: a rifleman ordered from x -40 to 40 across the river crosses it in 17.5 s, no lower over the river than 0.00 m: on the deck, whose top is 0 m
+[checks] PASS bridge-round: a dropship ordered onto the floating span's deck flies, and lands beside it on the ground: at (54.4, 0.06, -80.0), 5.6 m from the deck's middle, the ground there at 0.00 m
+[checks] PASS bridge-round: and after all that the floating span stays where it was put: its deck met at 6.000 m
+[checks] bridge-round: 8 of 8 facts hold
+[level] built 'le6-bridge' (le6-bridge (user://maps/le6-bridge.map, f9bbe3c9)) in 118 ms: terrain 241 x 241 samples, 225 shapes set in 71.5 ms, -8.00 … 0.00 m, water -5.00 m over 5927 samples, not drawn
+[level] built 1 spawn lines of 4 markers, 1 lockers, 0 kiosks, 2 barracks, 3 nodes, 0 anchors, 0 emplacements, 0 ammo cans, 0 cover boxes, 0 scenery, 4 bridge sections on 6 piers, the perimeter; 0 structures for the round to put up
+[checks] PASS bridge-round, its log: the log has no 'no nodes in group'
+[checks] PASS bridge-round, its log: the log has no 'no NavigationRegion3D in group'
+[checks] PASS bridge-round, its log: the log has no 'navigation bake produced no geometry'
+[checks] PASS bridge-round, its log: the log has no 'is scaled or tilted'
+[checks] PASS bridge-round, its log: the log has no 'are addressable on the wire'
+bridge-round: exit 0, its facts 8 of 8
+[checks] level editor check: bridge-gone
+[rts] navigation baked: 173 vertices
+[checks] PASS bridge-gone: the map with the bridge taken up is the world, one section left, and its navigation mesh is baked: le6-bridge (user://maps/le6-nobridge.map, a4384cdb)
+[checks] PASS bridge-gone: the rifleman ordered across does not arrive in 90 s: it got no further east than x -8.5, and stood at (-8.5, -5.79, -6.6), the river's west side
+[checks] bridge-gone: 2 of 2 facts hold
+[level] built 'le6-bridge' (le6-bridge (user://maps/le6-nobridge.map, a4384cdb)) in 179 ms: terrain 241 x 241 samples, 225 shapes set in 112.5 ms, -8.00 … 0.00 m, water -5.00 m over 5927 samples, not drawn
+[level] built 1 spawn lines of 4 markers, 1 lockers, 0 kiosks, 2 barracks, 3 nodes, 0 anchors, 0 emplacements, 0 ammo cans, 0 cover boxes, 0 scenery, 1 bridge sections on 2 piers, the perimeter; 0 structures for the round to put up
+[checks] PASS bridge-gone, its log: the log has no 'no nodes in group'
+[checks] PASS bridge-gone, its log: the log has no 'no NavigationRegion3D in group'
+[checks] PASS bridge-gone, its log: the log has no 'navigation bake produced no geometry'
+[checks] PASS bridge-gone, its log: the log has no 'is scaled or tilted'
+[checks] PASS bridge-gone, its log: the log has no 'are addressable on the wire'
+bridge-gone: exit 0, its facts 2 of 2
+[boot] gdpyr Server on port 7795 | bots 1 ground, 0 strategist | map le6-bridge | agent api 127.0.0.1:7901 | tick 60 Hz | dedicated server: False
+[level] built 'le6-bridge' (le6-bridge (user://maps/le6-bridge.map, f9bbe3c9)) in 137 ms: terrain 241 x 241 samples, 225 shapes set in 83.5 ms, -8.00 … 0.00 m, water -5.00 m over 5927 samples, not drawn
+[level] built 1 spawn lines of 4 markers, 1 lockers, 0 kiosks, 2 barracks, 3 nodes, 0 anchors, 0 emplacements, 0 ammo cans, 0 cover boxes, 0 scenery, 4 bridge sections on 6 piers, the perimeter; 0 structures for the round to put up
+le6 4x4 crosses the bridge: driven by its script along the road to the three spans over the river, it stops on the far bank, never a metre under the deck, and 2.5 m of its line (m/256) .. ERROR
+[checks] FAIL editor-roads: the 4x4's scenario on le6-bridge did not pass (output: $COPY/le6-4x4.txt)
+le6-4x4: exit 2
+exit 1

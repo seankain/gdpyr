@@ -2296,13 +2296,84 @@ draws (`--client` was driven, and logs them); a map from one's own library hoste
 fetched by a person joining from the menu, which no check clicks through; and the dedicated server's
 side — `deploy-map.sh`, the token, an upload, the next map — which is LE8's.
 
-### LE8 — The dedicated server (2 days)
+### LE8 — The dedicated server (2 days) — done
+
+What was asked of it:
 
 `scripts/deploy-map.sh`, `maps/active`, `--map-upload-token`, publish, `ClientSetNextMap`, the
 restart. Engine checks: each answer of §9.5 from a request built to get it; a wrong token and a
 replayed proof are `bad_proof`; an uploaded map is in the cache with its hash; a next-map request
 ends the process with 0 after the round and a restart plays the new map. **Left for a person:** the
 box in DEPLOYMENT.md, since nothing here has run under its unit.
+
+**Built at `347f1e2`**, with `278fec0` after it — the check, the mutations, and two things the check
+was written to: a server that leaves keeps its link up a second first, and a publish is done when
+the server has the map (below) — then `30662f1`, which changed only the check, and `f81e7ef`, which
+mended `tools/Gdpyr.Playtest` (below); on .NET SDK 8.0.134, Godot
+`4.6.stable.mono.official.89cea1439`, four cores of a cloud VM: `Scripts/Sim/Level/MapUpload.cs`, the
+answers, `MapUploadGate`, `MapUploader` and `MapChange`; `MapProof`, and the receiver's word for an
+uploader, in `MapTransfer.cs`; the six messages, the gate and the leaving in
+`Scripts/Net/MapTransferService.cs`; `Scripts/MapEditor/MapEditorRoot.Publish.cs`, its dialog in
+`.Ui` and its lines in `MapEditorControls`; `scripts/deploy-map.sh`; and the changes to
+`LaunchOptions` (`--map-upload-token`), `Bootstrap` and `MapLibrary` (`maps/active`),
+`NetworkManager` (an upload forgotten with its link), `CombatManager` (where the next round would
+start, a server told its next map goes) and `deploy/gdpyr-server.service` (why it names no token and
+no map). In `Tests/`, `MapUploadTests`, and LE8's cases in `MapTransferTests`, `MapLaunchTests` and
+`MapEditorControlsTests`. The checks are `scripts/level-editor-checks.sh`'s `map-upload` and
+`map-upload-export` parts over `tools/EngineChecks/LevelUploadChecks.cs`; and `le8_mutations.py`.
+
+| Asked | It came to | Where |
+|---|---|---|
+| `scripts/deploy-map.sh`, `maps/active` | against a home on this machine (`GDPYR_LOCAL=1`): `gdpyr-map validate`, then `ridge.map` — `generate --seed 7 --name Ridge`, 26,861 B, `af682abc…` — in the home's `user://maps`, hashing to it, and `maps/active` holding the hash; 3,000 bytes that are not a map, exit 1 and nothing copied; a file whose name is not a map's, exit 2. A `--server` with no `--map` under that home says `[map] this server's maps are in …` — the directory the script wrote to — and plays the map from the file the script put there, the world built from it. Its path to a box was run with `ssh`, `scp`, `sudo`, `systemctl` and `journalctl` stood in for by scripts that run the command here: the directory made and the files written as the unit's user, through a file beside each and a rename, the unit restarted and asked whether it is up; and with it not up, exit 1, saying so | `map-upload` |
+| `--map-upload-token`, publish; each answer of §9.5 from a request built to get it | a server run by hand with a token, and a client that builds each request, through the service's own messages: **`bad_proof`** for a wrong token — by the service's own upload — for the right token's proof for the other op, for another file, less its last byte, for no proof, for a hash in upper case, and for a length over 1 MiB by a wrong token; **`too_large`** for 1,048,577 B and for 0 B, rightly proved; **`have_it`** for the map the server plays, nothing sent; **`ok`** for a third map; **`busy`** for an offer made while that client's own upload was stopped at 2 of 27 chunks, and for a second client's while the first's was held at 13 of 27 — its service's tick turned off by the check; **`uploads_off`** from a server with no token, to the editor's Publish and to an offer rightly proved by a token it was not given. The client that builds them, 25 facts of 25; the server's, 27 of 27: 14 offers and 5 requests answered to it and nothing kept, 3 chunks dropped that came with no offer taken, and 17 offers once the two clients had been | `map-upload` |
+| A wrong token and a replayed proof are `bad_proof` | the first connection's proof, right there, sent on a second, which had been sent another nonce: `bad_proof`, for the upload and for the next map; the editor's Publish by a wrong token: `not published … the server refused the token`, the link dropped | `map-upload` |
+| An uploaded map is in the cache with its hash | `valley.map`, 27,053 B in 27 chunks, `33a94f10…`: kept 0.45–0.62 s after its offer was taken, as `cache/<hash>.map`, the one file there, hashing to its name; the second client's offer of it is then `have_it`. What is not kept: a stream with byte 13,313 changed, refused at its last chunk — `the bytes that arrived hash to ce640234…, not the 9d196413… the uploader named` — and one that stopped at 2 chunks, refused 10.0 s after the second; a server with no token sent the map's 27 chunks dropped all 27, and its cache and `maps/active` are not there | `map-upload` |
+| A next-map request ends the process with 0 after the round and a restart plays the new map | a server with its bots, `GDPYR_SUPERVISED=1`, a round a minute long and an intermission of 5 s — the game mode's numbers, set by the check — and a `--client` in the round. The editor, with `valley.map` its own, publishes it by `MapEditorRoot.Publish` 0.9 s into the round and names it next: `ok`, `ok`; `published 'Valley' to 127.0.0.1:7795: the server kept it; the server changes to it when its round ends: everybody is dropped, and joins again`. The server has it in its cache, `maps/active` names it, and it goes on playing Ridge: it does not leave while the round is live, 3,543 ticks of it; the round ends on the clock at 60.0 s; **5.00 s later, the intermission's, it leaves with the round not started again, a peer still connected, and exits 0**: 15 facts of 15. The client saw the round live, then over, then the link dropped. Started again by the same command, it plays Valley from its cache, the world built from that file, 12 of 12; and a client that has not got it fetches it and is in the round — LE7's part, 14 of 14 | `map-upload` |
+| A server run by hand stays down, and says so | asked to play the map it now has, with no round in progress: `ok_stays_down`, and the line the editor would give — `the server stops when its round ends, and nothing there starts it again` —; it drops the link 1.00 s after its answer and exits 0, having said `nothing here starts this server again`; `maps/active` in its home holds the map's hash. One started with `--map` and a token keeps an upload and answers `pinned`: `it does not play it next: the server was started with --map` | `map-upload` |
+| The same, the servers the stripped export | `map-upload-export`: the copy exported by the deploy path's own preset, 74,242,648 B with its pack, and every server `./gdpyr-server --headless`, `dedicated server: True`: the same 195 facts, 195 of 195 | `map-upload-export` |
+| LE7's, LE3's, LE4's and LE6's checks | `map-fetch`, 14, 14, 14, 5, 5 and four of 15 for the clients, 11 for the server, 8 for the demo; behind the relay that drops, 64 of 104 default-channel probes ahead of a chunk and 0 of 104 on the map's channel; `map-server` for 120 s, 24 of 24 and 20 of 20; `map-suite`, the four scenarios, PASS; `editor`, 132 of 132 and its test process 3 of 3; `editor-roads`, 36 of 36, 8 of 8, 2 of 2, and the 4x4's scenario: 401 facts and the five scenarios, and no failure, at `f81e7ef`. **At `30662f1` the 4x4's scenario was refused**, and so `editor-roads` failed: LE7 had the harness hold a scenario's map to the id the server's `welcome` names, a map of one's own has none, and LE6's scenario names one — `this server plays map '', and the scenario names 'le6-bridge'`. LE7's record did not run that part. `f81e7ef` holds a map with no id to its name | `map-fetch`, `map-server`, `map-suite`, `editor`, `editor-roads` |
+| `dotnet test` | 3,909: the 3,825 there were and 84; the four classes LE8 added to or changed, 246 of 246. Of nine whole runs with LE8's changes six passed whole and three failed one test each — `MarksmanTests.PeekingAndMovingOn_AllocatesNothingOnTheTick_WithThePooledFactory` twice, `SquadBoardTests.OrdersAndDeaths_AllocateNothing` once — tests that count what their thread allocates, as the one LE7's record names does; each passes alone, and the one run made here of the tree before LE8 failed another of them, `EscortTests.AssigningEscorts_AllocatesNothing` | `tests` |
+| Every LE8 rule's test fails when it is broken | 83 rules broken one at a time — the proof's nonce, hash, op, key, comparison and what it cannot be made from; a token's length and its spaces; the gate off, its proof, its order, its one upload and one peer, its stall, its letting go; the next map's answers in their order; the answers' names and numbers; the uploader's copy, its order, each answer, the server's word held to what was sent, its waits; `maps/active`'s text, a supervisor, when a server leaves and its second's grace; the flag; the editor's lines — each one edit to one file: **83 of 83**, the first time it was run, on `278fec0`'s tree, and again at `30662f1`. LE7's 41, in the file LE8 added to: 41 of 41, with one piece of its list brought along | `mutations` |
+
+The files are `docs/baselines/le8-<commit>-<name>.txt`, each saying in its first lines what was run
+and at which commit. `map-upload`, `map-upload-export`, the two mutation runs and LE7's rules ran at
+`30662f1`, one after another with nothing beside them; the earlier phases' parts and the tests at
+`f81e7ef`, the same way, and `editor-roads` as it failed at `30662f1` is
+`le8-30662f1-editor-roads-first.txt`. The game's code is `278fec0`'s throughout: `30662f1` changed
+only the check, and `f81e7ef` only the harness. `map-upload` had held every fact the first time it
+was run, on `278fec0`'s tree.
+
+**Decided here**, each in the section it changes:
+
+- **§6.10**: the proof is over the nonce's 16 bytes, the hash's 32 and one byte of op, keyed by the
+  token as UTF-8, and compared in constant time; a token is 16 to 256 characters with no space; a
+  server takes an upload through LE7's receiver, which names *the uploader* in what it refuses.
+- **§9.4**: the six messages' arguments, the answers' numbers, and their sizes; a server's reason is
+  shown as one clean line.
+- **§9.5**: `deploy-map.sh`'s name for the file, its variables and its `GDPYR_LOCAL`; `maps/active`
+  is a hash and nothing else, read by a dedicated server alone, and **fatal when it names a map the
+  server cannot play**; the token is `--server`'s alone; an offer's answers in their order, the
+  proof first; a next map's answers — `playing`, `not_here`, `pinned`, `ok_stays_down`,
+  `not_written` — and what a supervisor is; the round in progress is over when its intermission is;
+  a server leaves at once when no round is in progress or nobody is connected; a publish is done
+  when the server has the map.
+- **A server that leaves keeps its link up a second first.** As first written it closed the link at
+  the end of the tick it left on, and a server that left at once — no round in progress — dropped
+  its own answer to the request that sent it away: the answer is queued when the request is read
+  and sent at the next frame's poll, and closing a link empties its queue. It was seen in reading
+  the engine's frame and not in a run, so it was then run: in a copy with the link closed that way,
+  the client that asked got no answer **5 times of 5** (`le8-30662f1-leave-at-once.txt`); as built
+  it has had its answer in every run of the check, the link dropped 1.00–1.02 s after it.
+- **§13**: a token can be tried against a proof that was overheard.
+
+**Left for a person:** the box in DEPLOYMENT.md — `deploy-map.sh` over a real ssh, with a real sudo
+and the real unit: here its commands were stood in for, and nothing has run under systemd, so that
+the unit's `INVOCATION_ID` is seen and `Restart=always` starts the server on the new map is read,
+not run; the Publish dialog, which no check draws — its command was driven, headless; a publish
+across a real network, where a chunk can be lost — every process here was on one VM, over loopback;
+what a player sees when their server leaves for another map, which is a dropped link and no word of
+why (§14); and whether a second's grace is enough on a link that loses datagrams: it is one resend's
+time, not three.
 
 ### LE9 — Docs (alongside; 1 day to close)
 
@@ -2312,7 +2383,7 @@ directory, the token and the restart; the README the editor and the flags;
 IMPLEMENTATION_PLAN.md §5's "Multiple maps" cut, struck. This file's status becomes what was built
 and what each phase ran.
 
-**Total: 28½ days**, LE0's 1½, LE1's 3, LE2's 3, LE3's 4, LE4's 4, LE5's 3, LE6's 4 and LE7's 3 spent.
+**Total: 28½ days**, LE0's 1½, LE1's 3, LE2's 3, LE3's 4, LE4's 4, LE5's 3, LE6's 4, LE7's 3 and LE8's 2 spent.
 
 ---
 
@@ -2369,7 +2440,7 @@ and what each phase ran.
 | **The √2 on faces** leaves a speck the bake will not walk | a hole in the mesh at a pad's corner or a cone's foot | The skirt is 30°, which the √2 keeps under the 40° that is walkable (LE-D23); the slope overlay draws faces; the deep check catches a cut-off pad |
 | **A tick on hills runs out of time**: with a round of bots, 1 in 20 over 14–17 ms and 1 in 100 over 20–23 ms of a 16.7 ms tick, where the slab's worst 1 in 100 is under 10 ms | `level-editor-checks.sh frame`; a server that falls behind its ticks | Measured by LE0 on four cores of a cloud VM. The collider is the cheaper of the two and its chunks cost nothing; what terrain and hills add is not taken apart. LE3 bundled a gentler map, steepest face 33.3°, and on the same VM its tick is 4.6–5.5 ms on average and under 8.9–11.5 ms for 99 in 100, 1.7–2.1 times the greybox's (§10). The box is DEPLOYMENT.md's, and nothing here reached it: measuring it there is a person's |
 | **A ray through the ground** | a round or a sight line that a hill should have stopped | Found by LE0 in `HeightMapShape3D` and designed out (LE-D5); `level-editor-checks.sh ground` casts 10,000 at the collider, and holds it to none |
-| **A practice round's process crashes as it exits**, after a round of bots: `FATAL: Condition "csharp_lang && !csharp_lang->script_bindings.is_empty()"`, then `handle_crash` | an exit code of 134 or 6 after every fact of a check holds | Found by LE5's checks: LE3's `map-practice` for 120 s on the bundled map ended so 2 times of 2 at `c1a9b4b`, LE4's commit, before any of LE5's code, and so did `editor-prefabs`' test process after its round. LE3's 600 s runs ended with 0. LE5 first took it for a re-bake on its worker at the quit; a check that quit with one under way ended with 0 2 times of 2, and one that quit a tick after destroying the map's structures 3 times of 3, and that guess and its code are gone. A C# object is let go of after the runtime has gone, and which is not known. LE5's check reads its test process's facts from what that process writes. A person who quits after a round is where it would be seen |
+| **A practice round's process crashes as it exits**, after a round of bots: `FATAL: Condition "csharp_lang && !csharp_lang->script_bindings.is_empty()"`, then `handle_crash` | an exit code of 134 or 6 after every fact of a check holds | Found by LE5's checks: LE3's `map-practice` for 120 s on the bundled map ended so 2 times of 2 at `c1a9b4b`, LE4's commit, before any of LE5's code, and so did `editor-prefabs`' test process after its round. LE3's 600 s runs ended with 0. LE5 first took it for a re-bake on its worker at the quit; a check that quit with one under way ended with 0 2 times of 2, and one that quit a tick after destroying the map's structures 3 times of 3, and that guess and its code are gone. A C# object is let go of after the runtime has gone, and which is not known. LE5's check reads its test process's facts from what that process writes. A person who quits after a round is where it would be seen. LE8's server leaves for its next map by quitting after a round of bots, a minute long, and its exit is what its supervisor reads: it ended with 0 4 times of 4, the stripped export 2 of them, as did the client that had been in the round; `map-upload` holds it to 0 |
 | **A bridge's landing reshapes a river's banks**: a landing is a §6.3 pad, and its skirt cuts and fills a bank steeper than 30° back to it for up to its height over 0.58 round the bridge's end | a river narrower, or a bank walkable, where a bridge lands than the map's maker drew it | Found by LE6's own tests: three spans landed on 45° banks 8 m high filled them to 30° for 14 m round each end, the river's middle 3 m deep still. Landing is only for an end within 3 m of the ground, and an end joined to a road is not landed; the deep check shows what units can reach. Whether it reads right is a person's |
 | **The engine moves under the plan**: a later Godot mends the heightmap's walk, or changes what a capsule's contacts are | `level-editor-checks.sh ground` and `slopes` on the new version | The checks are kept for this: the heightmap's rays are measured beside the collider's every time, and the steepest face walked is a number in the output |
 

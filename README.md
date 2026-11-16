@@ -74,9 +74,10 @@ dedicated-server authoritative.
   editor's shell and terrain tool (LE4: **Map editor** on the menu, `--edit`, `Scenes/MapEditor/`),
   its prefab tool (LE5: a round's pieces, cover, structures that stand when a round starts, the
   deep check), its road and bridge tools (LE6: roads graded to a limit, bridge sections joined end
-  to end on piers), and a client fetching the map it lacks from its server (LE7: the host panel's own
-  maps, `user://maps/cache/`, demos that name their map), with the dedicated server's side not built
-  yet: a level editor in the game —
+  to end on piers), a client fetching the map it lacks from its server (LE7: the host panel's own
+  maps, `user://maps/cache/`, demos that name their map), and the dedicated server's side (LE8:
+  `scripts/deploy-map.sh`, `maps/active`, `--map-upload-token`, the editor's **Publish**, the next
+  map), with the other documents and the box still to do: a level editor in the game —
   terrain raised and lowered with brushes that set its grade and textured by height and slope,
   prefabs placed on ground levelled for them, roads and bridges — and maps as data files that are
   saved, cloned and exported, given to a dedicated server, and fetched by clients from the server
@@ -224,11 +225,12 @@ Two more watch rather than play ([`docs/AI_DEBUG.md`](docs/AI_DEBUG.md)):
 | `--spectate` | join as a spectator: no character, a free camera, and the AI debugger. Alone, an offline round of bots to watch |
 | `--ai-debug`, `--no-ai-debug` | whether this authority sends its bots' plans to spectators; on except in a dedicated-server export |
 
-Three more choose the map and play it on your own, or make one ([`docs/LEVEL_EDITOR.md`](docs/LEVEL_EDITOR.md) §8, §9.5):
+Four more choose the map and play it on your own, make one, or let a server be sent one ([`docs/LEVEL_EDITOR.md`](docs/LEVEL_EDITOR.md) §8, §9.5):
 
 | Flag | Effect |
 |---|---|
 | `--map <map>` | with `--server`, `--listen` or `--practice`: a catalog id (`greybox`, `hills`), a map's name in `user://maps`, 8 or more hex digits of a map file's SHA-256 (one's own, bundled or received), or a path ending `.map`. A map file that does not read or does not pass the validator is a launch error. A client that has not got the map fetches it from the server |
+| `--map-upload-token <token>` | with `--server`: take maps from clients that prove they hold this token — the editor's **Publish…** — to `user://maps/cache/`, and let them name the map it plays next. 16 characters or more; off unless given, and `deploy/gdpyr-server.service` does not give it |
 | `--practice` | the main menu's "Practice offline", with no menu |
 | `--edit [name]` | the main menu's **Map editor**, with no menu: one's own map `user://maps/<name>.map`, or a new one by that name; with no name, the editor's list of maps to open and to clone. Leaving it comes back to the menu |
 
@@ -251,6 +253,15 @@ another road's joins it. A click on a road takes its points up to move. The brid
 places spans and ramps: near a free end, drawn as a ring, a section joins it (`Tab` by its other end);
 elsewhere it floats at the last section's height (`PgUp` `PgDn`). With supports on (`U`) each end
 stands on a pier to the ground, and an end near the ground is landed.
+
+**A map on a dedicated server** (LE8, LEVEL_EDITOR.md §9.5). `./scripts/deploy-map.sh <file> [--activate]`
+validates a map, copies it to the box's `user://maps` over ssh, and with `--activate` writes its
+SHA-256 to `maps/active` and restarts the unit: a server started with no `--map` plays the map
+`maps/active` names, and one that names a map it cannot play does not start. A server started with
+`--map-upload-token` also takes a map from the editor's **Publish…** — an address, the token, and
+whether to make it the next map — hashed, read and validated before it is kept. Told its next map,
+the server plays its round out and exits 0 for its supervisor to start it on that map; everybody is
+dropped, and joins again. A server run by hand stays down, and says so.
 
 Two more record a round or watch one back ([`docs/DEMOS.md`](docs/DEMOS.md)):
 
@@ -629,6 +640,7 @@ dotnet build Gdpyr.csproj     # game assembly (needs no Godot install)
 dotnet test                   # Tests/Gdpyr.Tests.csproj
 ./scripts/export-server.sh    # headless Linux server -> build/server/
 ./scripts/deploy.sh           # rsync to EC2 + restart the systemd unit
+./scripts/deploy-map.sh f.map # a map to the box's user://maps; --activate to play it
 ```
 
 ## Training agents

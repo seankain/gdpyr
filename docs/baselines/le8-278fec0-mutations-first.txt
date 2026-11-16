@@ -1,0 +1,90 @@
+# LE8, docs/LEVEL_EDITOR.md §11. On 278fec0's tree, before it was committed: .NET SDK 8.0.134, four cores of a cloud VM.
+# python3 tools/level_editor_checks/le8_mutations.py, the first time it was run, as it printed: three at a time, a download beside it.
+
+PASS the tree as it stands: 246 of 246 tests of MapTransferTests, MapUploadTests, MapLaunchTests, MapEditorControlsTests
+PASS proof-no-op: a proof made over the nonce and the hash, and not the op -- 4 fail: MapTransferTests.AProof_DoesNotPass_OnAnotherConnection_ForAnotherFile_ForAnotherOp_OrByAnotherToken, MapTransferTests.AProof_IsHmacSha256_OfTheNonceTheHashAndTheOp_KeyedByTheToken, MapUploadTests.ANextMapRequest_IsAnsweredInOrder_AndOnlyByItsOwnProof, MapUploadTests.AWrongToken_AndAReplayedProof_AreBadProof
+PASS proof-no-nonce: a proof made over the hash and the op, and not the connection's nonce -- 4 fail: MapTransferTests.AProof_DoesNotPass_OnAnotherConnection_ForAnotherFile_ForAnotherOp_OrByAnotherToken, MapTransferTests.AProof_IsHmacSha256_OfTheNonceTheHashAndTheOp_KeyedByTheToken, MapUploadTests.ANextMapRequest_IsAnsweredInOrder_AndOnlyByItsOwnProof, MapUploadTests.AWrongToken_AndAReplayedProof_AreBadProof
+PASS proof-no-hash: a proof made over the nonce and the op, and not the map's hash -- 4 fail: MapTransferTests.AProof_DoesNotPass_OnAnotherConnection_ForAnotherFile_ForAnotherOp_OrByAnotherToken, MapTransferTests.AProof_IsHmacSha256_OfTheNonceTheHashAndTheOp_KeyedByTheToken, MapUploadTests.ANextMapRequest_IsAnsweredInOrder_AndOnlyByItsOwnProof, MapUploadTests.AWrongToken_AndAReplayedProof_AreBadProof
+PASS proof-no-key: a proof that is a hash of its message, keyed by nothing -- 6 fail: MapTransferTests.AProof_DoesNotPass_OnAnotherConnection_ForAnotherFile_ForAnotherOp_OrByAnotherToken, MapTransferTests.AProof_IsHmacSha256_OfTheNonceTheHashAndTheOp_KeyedByTheToken, MapUploadTests.AChunkWithNoOfferTaken_IsDropped, MapUploadTests.ANextMapRequest_IsAnsweredInOrder_AndOnlyByItsOwnProof, and 2 more
+PASS proof-prefix: a proof held to its first four bytes -- 1 fail: MapTransferTests.AProof_DoesNotPass_OnAnotherConnection_ForAnotherFile_ForAnotherOp_OrByAnotherToken
+PASS proof-empty-token: a proof made with no token, by an empty key -- 1 fail: MapTransferTests.WhatNoProofCanBeMadeFrom_HasNone_AndAProofOfAnotherLengthIsNotOne
+PASS proof-short-nonce: a proof made over a nonce shorter than a connection's -- 1 fail: MapTransferTests.WhatNoProofCanBeMadeFrom_HasNone_AndAProofOfAnotherLengthIsNotOne
+PASS token-short: a token of eight characters taken -- 2 fail: MapLaunchTests.ATokenIsNeeded_Once_AndIsSixteenCharactersOrMoreWithNoSpace, MapTransferTests.AToken_IsSixteenCharactersOrMore_WithNoSpaceInIt
+PASS token-long: a token of any length taken -- 1 fail: MapTransferTests.AToken_IsSixteenCharactersOrMore_WithNoSpaceInIt
+PASS token-space: a token with a space in it taken -- 2 fail: MapLaunchTests.ATokenIsNeeded_Once_AndIsSixteenCharactersOrMoreWithNoSpace, MapTransferTests.AToken_IsSixteenCharactersOrMore_WithNoSpaceInIt
+PASS receiver-uploader: an upload's refusal naming the host -- 1 fail: MapUploadTests.AnUpload_IsHashedReadAndValidated_AndARefusedOneKeepsNothing
+PASS gate-off: a server with no token answering as one with a token would -- 1 fail: MapUploadTests.AServerWithNoToken_TakesNoMapFromAnyone_AndIsToldNothing
+PASS gate-any-proof: an offer taken with any proof that is not empty -- 3 fail: MapUploadTests.AChunkWithNoOfferTaken_IsDropped, MapUploadTests.AWrongToken_AndAReplayedProof_AreBadProof, MapUploadTests.AnOffer_IsAnsweredInOrder_TheProofBeforeAnythingElseIsSaid
+PASS gate-proof-op: an offer taken with the proof for naming the next map -- 10 fail: MapUploadTests.ALengthNoMapCanBe_IsTooLarge, MapUploadTests.AMapTheServerHas_IsNotSentAgain, MapUploadTests.AMap_OfferedTakenSentAndKept_ArrivesAsTheSameBytesAndTheSameMap, MapUploadTests.ANextMapRequest_IsAnsweredInOrder_AndOnlyByItsOwnProof, and 6 more
+PASS gate-too-large: an offer of over 1 MiB taken -- 2 fail: MapUploadTests.ALengthNoMapCanBe_IsTooLarge, MapUploadTests.AnOffer_IsAnsweredInOrder_TheProofBeforeAnythingElseIsSaid
+PASS gate-empty: an offer of no bytes taken -- 1 fail: MapUploadTests.ALengthNoMapCanBe_IsTooLarge
+PASS gate-have-before-proof: a peer without the token told whether the server has a map -- 1 fail: MapUploadTests.AnOffer_IsAnsweredInOrder_TheProofBeforeAnythingElseIsSaid
+PASS gate-large-before-proof: a peer without the token told that its map is too long -- 1 fail: MapUploadTests.AnOffer_IsAnsweredInOrder_TheProofBeforeAnythingElseIsSaid
+PASS gate-busy-before-have: a map the server has answered busy while it takes another -- 1 fail: MapUploadTests.AnOffer_IsAnsweredInOrder_TheProofBeforeAnythingElseIsSaid
+PASS gate-have-never: a map the server has taken again -- 2 fail: MapUploadTests.AMapTheServerHas_IsNotSentAgain, MapUploadTests.AnOffer_IsAnsweredInOrder_TheProofBeforeAnythingElseIsSaid
+PASS gate-two-uploads: a second upload taken while the first is under way -- 3 fail: MapUploadTests.AnOffer_IsAnsweredInOrder_TheProofBeforeAnythingElseIsSaid, MapUploadTests.AnUploadThatStalls_IsRefusedAfterTenSeconds_AndTheNextOfferIsTaken, MapUploadTests.ItTakesOneUploadAtATime_FromThePeerWhoseOfferItTook
+PASS gate-any-peers-chunks: a chunk taken from a peer whose offer was not the one taken -- 1 fail: MapUploadTests.ItTakesOneUploadAtATime_FromThePeerWhoseOfferItTook
+PASS gate-chunks-after: a chunk taken once the upload is whole -- 2 fail: MapUploadTests.AnUploadThatStalls_IsRefusedAfterTenSeconds_AndTheNextOfferIsTaken, MapUploadTests.ItTakesOneUploadAtATime_FromThePeerWhoseOfferItTook
+PASS gate-no-stall: an upload that stops arriving never refused -- 1 fail: MapUploadTests.AnUploadThatStalls_IsRefusedAfterTenSeconds_AndTheNextOfferIsTaken
+PASS gate-release-keeps: an upload let go of, and its peer still the one uploading -- 4 fail: MapUploadTests.APeerGone_TakesItsUploadWithIt_AndNobodyElses, MapUploadTests.AnUploadThatStalls_IsRefusedAfterTenSeconds_AndTheNextOfferIsTaken, MapUploadTests.AnUpload_IsHashedReadAndValidated_AndARefusedOneKeepsNothing, MapUploadTests.ItTakesOneUploadAtATime_FromThePeerWhoseOfferItTook
+PASS gate-forget-any: any peer going taking the upload under way with it -- 1 fail: MapUploadTests.APeerGone_TakesItsUploadWithIt_AndNobodyElses
+PASS gate-forget-keeps: a peer gone, and its upload still being taken -- 1 fail: MapUploadTests.APeerGone_TakesItsUploadWithIt_AndNobodyElses
+PASS next-off: a server with no token told its next map -- 1 fail: MapUploadTests.AServerWithNoToken_TakesNoMapFromAnyone_AndIsToldNothing
+PASS next-any-proof: a next map named with any proof that is not empty -- 1 fail: MapUploadTests.ANextMapRequest_IsAnsweredInOrder_AndOnlyByItsOwnProof
+PASS next-proof-op: a next map named with an upload's proof -- 1 fail: MapUploadTests.ANextMapRequest_IsAnsweredInOrder_AndOnlyByItsOwnProof
+PASS next-pinned: a server started with --map told its next map -- 1 fail: MapUploadTests.ANextMapRequest_IsAnsweredInOrder_AndOnlyByItsOwnProof
+PASS next-not-here: a map the server has not got named its next -- 1 fail: MapUploadTests.ANextMapRequest_IsAnsweredInOrder_AndOnlyByItsOwnProof
+PASS next-playing: the map being played named next, and the server leaving for it -- 1 fail: MapUploadTests.ANextMapRequest_IsAnsweredInOrder_AndOnlyByItsOwnProof
+PASS next-stays-down: a server run by hand not saying that it stays down -- 1 fail: MapUploadTests.ANextMapRequest_IsAnsweredInOrder_AndOnlyByItsOwnProof
+PASS answer-name: an answer's name not §9.5's -- 1 fail: MapUploadTests.AnOffersAnswers_AreSection9_5s_AndTheirNumbersAreTheWires
+PASS answer-number: an answer's number on the wire moved -- 2 fail: MapUploadTests.AnAnswerThisBuildDoesNotKnow_IsARefusal, MapUploadTests.AnOffersAnswers_AreSection9_5s_AndTheirNumbersAreTheWires
+PASS answer-unknown: a number off the wire that is no answer taken for one -- 2 fail: MapUploadTests.AnAnswerThisBuildDoesNotKnow_IsARefusal, MapUploadTests.AnOffersAnswers_AreSection9_5s_AndTheirNumbersAreTheWires
+PASS next-answer-name: a next-map answer's name changed -- 1 fail: MapUploadTests.ANextMapsAnswers_HaveTheirNamesAndNumbers_AndThreeOfThemAreTaken
+PASS next-answer-unknown: a number off the wire that is no next-map answer taken for one -- 2 fail: MapEditorControlsTests.WhatAPublishCameTo_SaysWhetherTheServerKeptItOrHadIt_AndWhatItAnsweredTheNextMap, MapUploadTests.ANextMapsAnswers_HaveTheirNamesAndNumbers_AndThreeOfThemAreTaken
+PASS next-accepted: the map being played not counted as taken -- 2 fail: MapEditorControlsTests.WhatAPublishCameTo_SaysWhetherTheServerKeptItOrHadIt_AndWhatItAnsweredTheNextMap, MapUploadTests.ANextMapsAnswers_HaveTheirNamesAndNumbers_AndThreeOfThemAreTaken
+PASS stays-down-said: the line for a server that stays down not saying so -- 2 fail: MapEditorControlsTests.WhatAPublishCameTo_SaysWhetherTheServerKeptItOrHadIt_AndWhatItAnsweredTheNextMap, MapUploadTests.ANextMapsAnswers_HaveTheirNamesAndNumbers_AndThreeOfThemAreTaken
+PASS clean-control: a server's words shown with their control characters -- 3 fail: MapUploadTests.AServersOwnWords_AreShownAsOneLine_OfAtMost240Characters, MapUploadTests.MapsActive_HoldsAHash_AndNothingElse, MapUploadTests.WhatTheServerSaysBecameOfIt_IsHeldToWhatWasSent
+PASS clean-length: a server's words shown at any length -- 1 fail: MapUploadTests.AServersOwnWords_AreShownAsOneLine_OfAtMost240Characters
+PASS uploader-copy: the uploader sending from the array it was given, not a copy -- 1 fail: MapUploadTests.TheUploader_SendsTheBytesItWasGiven_NotWhatTheirArrayHoldsLater
+PASS uploader-unasked: chunks sent before the offer is answered -- 1 fail: MapUploadTests.TheUploader_SendsNothingUntilItsOfferIsTaken_ThenAChunkAtATimeInOrder
+PASS uploader-second-answer: a second answer changing what the first made of the upload -- 1 fail: MapUploadTests.OnlyTheFirstAnswerCounts
+PASS uploader-have-sends: a map the server has sent all the same -- 2 fail: MapUploadTests.ALinkThatDrops_EndsAnUploadNotYetOver, MapUploadTests.AMapTheServerHas_IsDoneWithNothingSent
+PASS uploader-refused-sends: a map sent to a server that refused the offer -- 3 fail: MapUploadTests.ALinkThatDrops_EndsAnUploadNotYetOver, MapUploadTests.AnOfferNotTaken_IsRefused_WithWhatTheAnswerMeans_AndNothingIsSent, MapUploadTests.OnlyTheFirstAnswerCounts
+PASS uploader-unknown-sends: a map sent on an answer this build does not know -- 1 fail: MapUploadTests.AnAnswerThisBuildDoesNotKnow_IsARefusal
+PASS uploader-order: the chunks sent from the last backwards -- 3 fail: MapUploadTests.AMap_OfferedTakenSentAndKept_ArrivesAsTheSameBytesAndTheSameMap, MapUploadTests.TheUploader_SendsNothingUntilItsOfferIsTaken_ThenAChunkAtATimeInOrder, MapUploadTests.TheUploader_SendsTheBytesItWasGiven_NotWhatTheirArrayHoldsLater
+PASS uploader-kept-early: the server's word that it kept the map taken before it was all sent -- 1 fail: MapUploadTests.WhatTheServerSaysBecameOfIt_IsHeldToWhatWasSent
+PASS uploader-kept-other: the server's word that it kept another map taken -- 1 fail: MapUploadTests.WhatTheServerSaysBecameOfIt_IsHeldToWhatWasSent
+PASS uploader-kept-reason: the server's reason for not keeping the map passed over -- 1 fail: MapUploadTests.WhatTheServerSaysBecameOfIt_IsHeldToWhatWasSent
+PASS uploader-kept-unoffered: the server's word on a map whose offer it has not answered taken -- 1 fail: MapUploadTests.WhatTheServerSaysBecameOfIt_IsHeldToWhatWasSent
+PASS uploader-waits: a server that never answers waited for without end -- 1 fail: MapUploadTests.AServerThatSaysNothingForTenSeconds_WillNot
+PASS uploader-clock-sending: the wait counted while the chunks are going -- 1 fail: MapUploadTests.AServerThatSaysNothingForTenSeconds_WillNot
+PASS uploader-clock-carried: the wait for the offer's answer counted again after the last chunk -- 1 fail: MapUploadTests.AServerThatSaysNothingForTenSeconds_WillNot
+PASS uploader-nan: time that is not a number, or is less than none, counted -- 1 fail: MapUploadTests.AServerThatSaysNothingForTenSeconds_WillNot
+PASS uploader-dropped: a link that drops leaving the upload as it was -- 1 fail: MapUploadTests.ALinkThatDrops_EndsAnUploadNotYetOver
+PASS uploader-dropped-done: a link that drops undoing an upload that was over -- 2 fail: MapUploadTests.ALinkThatDrops_EndsAnUploadNotYetOver, MapUploadTests.WhatTheServerSaysBecameOfIt_IsHeldToWhatWasSent
+PASS active-name: the file called something else -- 1 fail: MapUploadTests.MapsActive_HoldsAHash_AndNothingElse
+PASS active-text: the hash written with no line's end -- 1 fail: MapUploadTests.MapsActive_HoldsAHash_AndNothingElse
+PASS active-untrimmed: a hash with its line's end not read as one -- 1 fail: MapUploadTests.MapsActive_HoldsAHash_AndNothingElse
+PASS active-empty: an empty file said to hold something that is not a hash -- 1 fail: MapUploadTests.MapsActive_HoldsAHash_AndNothingElse
+PASS active-prefix: the start of a hash, or one in upper case, taken for the map's -- 1 fail: MapUploadTests.MapsActive_HoldsAHash_AndNothingElse
+PASS supervised-systemd: systemd's unit not taken for a supervisor -- 1 fail: MapUploadTests.AServerIsSupervised_UnderSystemd_OrWhenItIsToldSo
+PASS supervised-any: GDPYR_SUPERVISED=0 taken for a supervisor -- 1 fail: MapUploadTests.AServerIsSupervised_UnderSystemd_OrWhenItIsToldSo
+PASS leaves-mid-round: a server leaving at once, in the middle of a round somebody is in -- 1 fail: MapUploadTests.AServerToldItsNextMap_LeavesAtOnce_OnlyWhenNoRoundIsInProgress_OrNobodyIsConnected
+PASS leaves-unnamed: a server told nothing leaving between rounds -- 1 fail: MapUploadTests.AServerToldItsNextMap_LeavesAtOnce_OnlyWhenNoRoundIsInProgress_OrNobodyIsConnected
+PASS leaves-empty-round: a round nobody is in waited out -- 1 fail: MapUploadTests.AServerToldItsNextMap_LeavesAtOnce_OnlyWhenNoRoundIsInProgress_OrNobodyIsConnected
+PASS leaves-warmup: a server with people on it and no round waiting for one to end -- 1 fail: MapUploadTests.AServerToldItsNextMap_LeavesAtOnce_OnlyWhenNoRoundIsInProgress_OrNobodyIsConnected
+PASS leave-grace: the link closed the moment the server leaves -- 1 fail: MapUploadTests.AServerToldItsNextMap_LeavesAtOnce_OnlyWhenNoRoundIsInProgress_OrNobodyIsConnected
+PASS flag-any-mode: a listen host given a token -- 1 fail: MapLaunchTests.OnlyTheDedicatedServerTakesAToken
+PASS flag-unchecked: any token taken, however short -- 1 fail: MapLaunchTests.ATokenIsNeeded_Once_AndIsSixteenCharactersOrMoreWithNoSpace
+PASS flag-printed: the token printed with the options -- 1 fail: MapLaunchTests.TheToken_IsTheServers_AndIsNeverPrinted
+PASS flag-twice: a second token taking the first's place -- 1 fail: MapLaunchTests.ATokenIsNeeded_Once_AndIsSixteenCharactersOrMoreWithNoSpace
+PASS flag-dropped: the token parsed and not kept -- 1 fail: MapLaunchTests.TheToken_IsTheServers_AndIsNeverPrinted
+PASS publish-no-token: a publish begun with no token -- 1 fail: MapEditorControlsTests.APublish_GoesToAnAddressAsTheMenuParsesOne_WithATokenThatIsNotEmpty
+PASS publish-any-address: a publish begun to an address that is not one -- 1 fail: MapEditorControlsTests.APublish_GoesToAnAddressAsTheMenuParsesOne_WithATokenThatIsNotEmpty
+PASS publish-line: the status line without the chunks to go -- 1 fail: MapEditorControlsTests.ThePublishLine_IsAFetchsWithItsOwnWord
+PASS published-had: a map the server had said to have been kept -- 1 fail: MapEditorControlsTests.WhatAPublishCameTo_SaysWhetherTheServerKeptItOrHadIt_AndWhatItAnsweredTheNextMap
+PASS published-not-next: a refused next map not said to be refused -- 1 fail: MapEditorControlsTests.WhatAPublishCameTo_SaysWhetherTheServerKeptItOrHadIt_AndWhatItAnsweredTheNextMap
+PASS published-unknown: an answer this build does not know said nothing of -- 1 fail: MapEditorControlsTests.WhatAPublishCameTo_SaysWhetherTheServerKeptItOrHadIt_AndWhatItAnsweredTheNextMap
+
+83 of 83 broken rules were caught by a test
+exit 0

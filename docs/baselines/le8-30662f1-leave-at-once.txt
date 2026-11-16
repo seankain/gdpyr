@@ -1,0 +1,34 @@
+# LE8, docs/LEVEL_EDITOR.md §11. At 30662f1: .NET SDK 8.0.134, Godot 4.6.stable.mono.official.89cea1439, four cores of a cloud VM.
+# An experiment, in a copy of the tree changed in one place: MapTransferService.LeaveForNextMap closes the link and quits at the end of
+# the tick it leaves on (a deferred call), as it was first written, in place of keeping the link up for MapChange.LeaveGraceSeconds.
+# Its line still says "exit 0 in 1 s": only what it does was changed.
+# A server run by hand with a token and --no-bots, Ridge named in its maps/active and Valley beside it in its own maps (deploy-map.sh,
+# GDPYR_LOCAL=1), and one client (LE8_CHECK=next, LE8_EXPECT=ok_stays_down, LE8_LEAVES=1) that asks it to play Valley next. Five times,
+# each with a home of its own: what the server said, how it ended, and the client's two facts. As built, with the second's grace, the
+# same client's facts hold: le8-30662f1-map-upload.txt, next-by-hand.
+
+run 1
+  server: [maps] peer N named the next map: $HOME/.local/share/godot/app_userdata/gdpyr/maps/active names 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b; this process exits 0 when the round in progress is over, and nothing here starts it again: it was 
+  server: [maps] no round is in progress: leaving for the next map, 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b; exit 0 in 1 s, and nothing here starts this server again
+  client: [checks] FAIL next: a next-map request, rightly proved, for the map the server now has: no answer; ok_stays_down expected
+  client: [checks] FAIL next: the server dropped the link 0.00 s after its answer: no round was in its way
+run 2
+  server: [maps] peer N named the next map: $HOME/.local/share/godot/app_userdata/gdpyr/maps/active names 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b; this process exits 0 when the round in progress is over, and nothing here starts it again: it was 
+  server: [maps] no round is in progress: leaving for the next map, 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b; exit 0 in 1 s, and nothing here starts this server again
+  client: [checks] FAIL next: a next-map request, rightly proved, for the map the server now has: no answer; ok_stays_down expected
+  client: [checks] FAIL next: the server dropped the link 0.00 s after its answer: no round was in its way
+run 3
+  server: [maps] peer N named the next map: $HOME/.local/share/godot/app_userdata/gdpyr/maps/active names 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b; this process exits 0 when the round in progress is over, and nothing here starts it again: it was 
+  server: [maps] no round is in progress: leaving for the next map, 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b; exit 0 in 1 s, and nothing here starts this server again
+  client: [checks] FAIL next: a next-map request, rightly proved, for the map the server now has: no answer; ok_stays_down expected
+  client: [checks] FAIL next: the server dropped the link 0.00 s after its answer: no round was in its way
+run 4
+  server: [maps] peer N named the next map: $HOME/.local/share/godot/app_userdata/gdpyr/maps/active names 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b; this process exits 0 when the round in progress is over, and nothing here starts it again: it was 
+  server: [maps] no round is in progress: leaving for the next map, 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b; exit 0 in 1 s, and nothing here starts this server again
+  client: [checks] FAIL next: a next-map request, rightly proved, for the map the server now has: no answer; ok_stays_down expected
+  client: [checks] FAIL next: the server dropped the link 0.00 s after its answer: no round was in its way
+run 5
+  server: [maps] peer N named the next map: $HOME/.local/share/godot/app_userdata/gdpyr/maps/active names 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b; this process exits 0 when the round in progress is over, and nothing here starts it again: it was 
+  server: [maps] no round is in progress: leaving for the next map, 33a94f108df54c965647588c1d23caa7077cd30cd3454f42b4fd1ee644a5af7b; exit 0 in 1 s, and nothing here starts this server again
+  client: [checks] FAIL next: a next-map request, rightly proved, for the map the server now has: no answer; ok_stays_down expected
+  client: [checks] FAIL next: the server dropped the link 0.00 s after its answer: no round was in its way
