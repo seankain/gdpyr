@@ -78,7 +78,8 @@
 # gdpyr-map generate (--seed UPLOAD_SEEDS: 7, 11 and 13 unless given), servers started one after
 # another on the same port, each under a HOME of its own, and clients each under theirs.
 # scripts/deploy-map.sh puts the first map in a home's user://maps and names it in maps/active
-# (GDPYR_LOCAL=1: no ssh, no unit), and a file that is not a map is not copied. A server run by hand
+# (GDPYR_LOCAL=1: no ssh, no unit), and a file that is not a map is not copied; its path to a box is
+# run with ssh, scp, sudo and systemctl stood in for. A server run by hand
 # with --map-upload-token and no --map plays it, from where the script put it; a client builds a
 # request for each of §9.5's answers, a wrong token and a replayed proof among them; two clients
 # upload at once; and a next-map request sends the server away at once, with 0, saying nothing
@@ -90,6 +91,7 @@
 # client that has not got it fetches it (LE7's part, LE7_CHECK=fetch).
 #
 #   ./scripts/level-editor-checks.sh map-upload
+#   ./scripts/level-editor-checks.sh map-upload-export   # the same, the servers the stripped server export
 #
 # Each part runs on the plan's collider and, where the two could differ, on the heightmap
 # beside it. `frame` and the bake's times in `ground` are wall time: run them on a machine
@@ -752,9 +754,24 @@ for mode in "${MODES[@]}"; do
 		fi
 		;;
 
-	map-upload)
+	map-upload|map-upload-export)
 		ground slab
-		dir="$COPY/map-upload"
+		part="$mode"
+		server_cmd=("$GODOT" --headless --path "$COPY")
+		if [ "$mode" = "map-upload-export" ]; then
+			# The servers are the stripped export, by the deploy path's own preset: what the box runs.
+			mkdir -p "$COPY/build/server"
+			if ! "$GODOT" --headless --path "$COPY" --export-release "Linux Server" "$COPY/build/server/gdpyr-server" \
+				> "$COPY/$part-export.log" 2>&1 || [ ! -x "$COPY/build/server/gdpyr-server" ]; then
+				tail -n 20 "$COPY/$part-export.log" >&2
+				echo "$part: the stripped server did not export (are the export templates installed?)"
+				failed=1
+				continue
+			fi
+			ls -l "$COPY/build/server/gdpyr-server" | awk '{print "[export] gdpyr-server, pack embedded: " $5 " bytes"}'
+			server_cmd=("$COPY/build/server/gdpyr-server" --headless)
+		fi
+		dir="$COPY/$part"
 		rm -rf "${dir:?}"
 		mkdir -p "$dir"
 		userdir() { echo "$1/.local/share/godot/app_userdata/gdpyr"; }
@@ -766,14 +783,14 @@ for mode in "${MODES[@]}"; do
 		for spec in "ridge:$1:Ridge" "valley:$2:Valley" "third:$3:Third"; do
 			IFS=: read -r file seed title <<< "$spec"
 			if ! (cd "$PROJECT_DIR" && dotnet run --project tools/Gdpyr.MapTool -c Release -- generate "$dir/$file.map" \
-				--seed "$seed" --name "$title") > "$COPY/map-upload-maptool-$file.log" 2>&1; then
-				cat "$COPY/map-upload-maptool-$file.log" >&2
+				--seed "$seed" --name "$title") > "$COPY/$part-maptool-$file.log" 2>&1; then
+				cat "$COPY/$part-maptool-$file.log" >&2
 				generated=0
 			fi
-			sed 's/^/[map] /' "$COPY/map-upload-maptool-$file.log"
+			sed 's/^/[map] /' "$COPY/$part-maptool-$file.log"
 		done
 		if [ "$generated" -ne 1 ]; then
-			echo "map-upload: the maps were not generated"
+			echo "$part: the maps were not generated"
 			failed=1
 			continue
 		fi
@@ -783,9 +800,9 @@ for mode in "${MODES[@]}"; do
 
 		fact() {  # whether it holds, then what it is
 			if [ "$1" -eq 0 ]; then
-				echo "[checks] PASS map-upload: $2"
+				echo "[checks] PASS $part: $2"
 			else
-				echo "[checks] FAIL map-upload: $2"
+				echo "[checks] FAIL $part: $2"
 				failed=1
 			fi
 		}
@@ -810,8 +827,8 @@ for mode in "${MODES[@]}"; do
 				LE8_CHECK="$role" LE8_LABEL="$name" LE8_DIR="$marks" LE8_TOKEN="$UPLOAD_TOKEN" \
 				LE8_RIDGE="$dir/ridge.map" LE8_VALLEY="$dir/valley.map" LE8_THIRD="$dir/third.map" \
 				LE8_MAPS="${maps:-}" LE8_PLAYS="${plays:-$ridge}" LE8_FROM="${from:-}" LE8_TAKES="${takes:-0}" \
-				timeout 900 "$GODOT" --headless --path "$COPY" -- --server "$GAME_PORT" --no-advertise "$@" \
-				> "$COPY/map-upload-$server_log.log" 2>&1 &
+				timeout 900 "${server_cmd[@]}" -- --server "$GAME_PORT" --no-advertise "$@" \
+				> "$COPY/$part-$server_log.log" 2>&1 &
 			server=$!
 			for _ in $(seq 1 450); do
 				[ -e "$marks/server-up" ] && return 0
@@ -827,12 +844,12 @@ for mode in "${MODES[@]}"; do
 			local name="$1" expect="$2" status
 			wait "$server"
 			status=$?
-			report "$COPY/map-upload-$server_log.log"
-			grep -E '^\[map\]|\[maps\]|^gdpyr:' "$COPY/map-upload-$server_log.log" | sed 's/^WARNING: //'
+			report "$COPY/$part-$server_log.log"
+			grep -E '^\[map\]|\[maps\]|^gdpyr:' "$COPY/$part-$server_log.log" | sed 's/^WARNING: //'
 			[ "$status" -eq "$expect" ]
 			fact $? "$name: the server exited $status; $expect expected"
-			grep -q '^\[checks\] FAIL' "$COPY/map-upload-$server_log.log" && failed=1
-			grep -q "^\[checks\] $name: .* facts hold" "$COPY/map-upload-$server_log.log"
+			grep -q '^\[checks\] FAIL' "$COPY/$part-$server_log.log" && failed=1
+			grep -q "^\[checks\] $name: .* facts hold" "$COPY/$part-$server_log.log"
 			fact $? "$name: the server's part ran to its end"
 		}
 
@@ -858,7 +875,7 @@ for mode in "${MODES[@]}"; do
 				LE8_TOKEN="$UPLOAD_TOKEN" LE8_RIDGE="$dir/ridge.map" LE8_VALLEY="$dir/valley.map" LE8_THIRD="$dir/third.map" \
 				LE8_PLAYS="${plays:-$ridge}" LE8_EXPECT="${answer:-}" LE8_OFFER="${offer:-}" LE8_LEAVES="${leaves:-0}" \
 				LE8_STREAM="${stream:-0}" LE8_NEXT="${next:-0}" LE8_WAIT="${wait_for:-}" LE8_AGAIN="${again:-0}" \
-				timeout 400 "$GODOT" --headless --path "$COPY" --max-fps 60 -- "$@" > "$COPY/map-upload-$name.log" 2>&1 &
+				timeout 400 "$GODOT" --headless --path "$COPY" --max-fps 60 -- "$@" > "$COPY/$part-$name.log" 2>&1 &
 			client=$!
 		}
 
@@ -866,12 +883,12 @@ for mode in "${MODES[@]}"; do
 			local name="$1" status
 			wait "$2"
 			status=$?
-			report "$COPY/map-upload-$name.log"
-			grep -E '\[maps\]|^\[editor\] (publishing|published|not published)|^gdpyr:' "$COPY/map-upload-$name.log" \
+			report "$COPY/$part-$name.log"
+			grep -E '\[maps\]|^\[editor\] (publishing|published|not published)|^gdpyr:' "$COPY/$part-$name.log" \
 				| sed 's/^WARNING: //;s/^ERROR: //'
 			[ "$status" -eq 0 ]
 			fact $? "$name: the client exited $status"
-			grep -q "^\[checks\] $name: .* facts hold" "$COPY/map-upload-$name.log"
+			grep -q "^\[checks\] $name: .* facts hold" "$COPY/$part-$name.log"
 			fact $? "$name: the client's part ran to its end"
 		}
 
@@ -888,26 +905,61 @@ for mode in "${MODES[@]}"; do
 
 		# ---- deploy-map.sh ----------------------------------------------------------------------
 		home="$dir/home-hand"
-		deploy "$home" "$dir/ridge.map" --activate > "$COPY/map-upload-deploy.log" 2>&1
+		deploy "$home" "$dir/ridge.map" --activate > "$COPY/$part-deploy.log" 2>&1
 		status=$?
-		sed 's/^/[deploy] /' "$COPY/map-upload-deploy.log"
+		sed 's/^/[deploy] /' "$COPY/$part-deploy.log"
 		[ "$status" -eq 0 ] && [ "$(sha256sum "$(userdir "$home")/maps/ridge.map" | cut -d' ' -f1)" = "$ridge" ] \
 			&& [ "$(cat "$(userdir "$home")/maps/active")" = "$ridge" ]
 		fact $? "deploy-map.sh --activate: exit $status; ridge.map is in the home's user://maps, hashing to $ridge, and maps/active holds that"
 
 		head -c 3000 /dev/urandom > "$dir/noise.map"
-		deploy "$home" "$dir/noise.map" --activate > "$COPY/map-upload-deploy-noise.log" 2>&1
+		deploy "$home" "$dir/noise.map" --activate > "$COPY/$part-deploy-noise.log" 2>&1
 		status=$?
-		sed 's/^/[deploy] /' "$COPY/map-upload-deploy-noise.log"
+		sed 's/^/[deploy] /' "$COPY/$part-deploy-noise.log"
 		[ "$status" -eq 1 ] && [ "$(cat "$(userdir "$home")/maps/active")" = "$ridge" ] \
 			&& [ "$(ls "$(userdir "$home")/maps" | tr '\n' ' ')" = "active ridge.map " ]
 		fact $? "deploy-map.sh on 3,000 bytes that are not a map: exit $status, nothing copied, maps/active as it was"
 
 		cp "$dir/valley.map" "$dir/Not A Name.map"
-		deploy "$home" "$dir/Not A Name.map" > "$COPY/map-upload-deploy-name.log" 2>&1
+		deploy "$home" "$dir/Not A Name.map" > "$COPY/$part-deploy-name.log" 2>&1
 		status=$?
 		[ "$status" -eq 2 ] && [ "$(ls "$(userdir "$home")/maps" | tr '\n' ' ')" = "active ridge.map " ]
-		fact $? "deploy-map.sh on a file whose name is not a map's: exit $status, nothing copied ($(head -n 1 "$COPY/map-upload-deploy-name.log"))"
+		fact $? "deploy-map.sh on a file whose name is not a map's: exit $status, nothing copied ($(head -n 1 "$COPY/$part-deploy-name.log"))"
+
+		# deploy-map.sh's other path, to a box: ssh, scp, sudo, systemctl and journalctl stood in for by
+		# scripts that run the command on this machine and write down what they were asked. What is
+		# held is the script's own commands, and their quoting: nothing here is a box, or its unit.
+		shims="$dir/shims"
+		box="$dir/box/var/lib/gdpyr/.local/share/godot/app_userdata/gdpyr/maps"
+		mkdir -p "$shims"
+		printf '%s\n' '#!/usr/bin/env bash' 'echo "ssh ${!#}" >> "$SHIM_LOG"' 'exec bash -c "${!#}"' > "$shims/ssh"
+		printf '%s\n' '#!/usr/bin/env bash' 'echo "scp ${*: -2}" >> "$SHIM_LOG"' 'target="${!#}"' \
+			'exec cp "${@: -2:1}" "${target#*:}"' > "$shims/scp"
+		printf '%s\n' '#!/usr/bin/env bash' 'echo "sudo $*" >> "$SHIM_LOG"' '[ "$1" = "-u" ] && shift 2' \
+			'args=()' 'while [ $# -gt 0 ]; do case "$1" in -o|-g) shift ;; *) args+=("$1") ;; esac; shift; done' \
+			'exec "${args[@]}"' > "$shims/sudo"
+		printf '%s\n' '#!/usr/bin/env bash' 'echo "systemctl $*" >> "$SHIM_LOG"' \
+			'[ "$1" = "is-active" ] && [ -e "$SHIM_DOWN" ] && exit 3' 'exit 0' > "$shims/systemctl"
+		printf '%s\n' '#!/usr/bin/env bash' 'echo "[map] the unit'"'"'s log, stood in for"' > "$shims/journalctl"
+		chmod +x "$shims"/*
+		PATH="$shims:$PATH" SHIM_LOG="$dir/shims.log" SHIM_DOWN="$dir/unit-down" GDPYR_HOST=ubuntu@box.example \
+			GDPYR_SSH_KEY="$dir/no-key.pem" GDPYR_MAP_DIR="$box" "$PROJECT_DIR/scripts/deploy-map.sh" "$dir/ridge.map" --activate \
+			> "$COPY/$part-deploy-box.log" 2>&1
+		status=$?
+		sed 's/^/[deploy] /' "$COPY/$part-deploy-box.log"
+		[ "$status" -eq 0 ] && [ "$(sha256sum "$box/ridge.map" | cut -d' ' -f1)" = "$ridge" ] && [ "$(cat "$box/active")" = "$ridge" ] \
+			&& [ "$(ls "$box" | tr '\n' ' ')" = "active ridge.map " ] \
+			&& grep -q '^sudo -u gdpyr mkdir -p' "$dir/shims.log" && grep -q '^sudo install -m 644 -o gdpyr -g gdpyr' "$dir/shims.log" \
+			&& grep -q '^sudo systemctl restart gdpyr-server' "$dir/shims.log" && grep -q '^systemctl is-active --quiet gdpyr-server' "$dir/shims.log"
+		fact $? "deploy-map.sh --activate to a box, its commands stood in for: exit $status; the map and maps/active are in the unit's directory, made and written as its user, and the unit was restarted and asked whether it is up"
+
+		touch "$dir/unit-down"
+		PATH="$shims:$PATH" SHIM_LOG="$dir/shims.log" SHIM_DOWN="$dir/unit-down" GDPYR_HOST=ubuntu@box.example \
+			GDPYR_SSH_KEY="$dir/no-key.pem" GDPYR_MAP_DIR="$box" "$PROJECT_DIR/scripts/deploy-map.sh" "$dir/ridge.map" --activate \
+			> "$COPY/$part-deploy-box-down.log" 2>&1
+		status=$?
+		[ "$status" -eq 1 ] && grep -q 'is not running after the map was activated' "$COPY/$part-deploy-box-down.log"
+		fact $? "and with the unit not up after the restart: exit $status, saying so"
 
 		# ---- a server run by hand, with a token -----------------------------------------------------
 		server_log=hand
@@ -928,7 +980,7 @@ for mode in "${MODES[@]}"; do
 		server_end "server, by hand" 0
 		[ "$(cat "$(userdir "$home")/maps/active")" = "$valley" ]
 		fact $? "after it left, the home's maps/active holds $(cat "$(userdir "$home")/maps/active")"
-		grep -q 'nothing here starts this server again' "$COPY/map-upload-hand.log"
+		grep -q 'nothing here starts this server again' "$COPY/$part-hand.log"
 		fact $? "and it said that nothing there starts it again"
 
 		# ---- a server with no token ------------------------------------------------------------------
@@ -960,7 +1012,7 @@ for mode in "${MODES[@]}"; do
 
 		# ---- a server with a round, supervised: told its next map, it plays the round out ----------
 		home="$dir/home-round"
-		deploy "$home" "$dir/ridge.map" --activate > "$COPY/map-upload-deploy-round.log" 2>&1
+		deploy "$home" "$dir/ridge.map" --activate > "$COPY/$part-deploy-round.log" 2>&1
 		fact $? "deploy-map.sh --activate, for the server with a round"
 		editor_home "$dir/home-editor-2"
 		server_log=round
@@ -973,7 +1025,7 @@ for mode in "${MODES[@]}"; do
 			client_end player "$player"
 		fi
 		server_end "server, supervised" 0
-		grep -h '^\[match\] round' "$COPY/map-upload-round.log"
+		grep -h '^\[match\] round' "$COPY/$part-round.log"
 
 		# Its supervisor's part: the same command again. It plays the new map, from its cache.
 		server_log=again
@@ -983,9 +1035,9 @@ for mode in "${MODES[@]}"; do
 			# Everybody joins again: a client that has not got the map fetches it, as LE7's does.
 			mkdir -p "$dir/home-rejoin"
 			env -u XDG_DATA_HOME HOME="$dir/home-rejoin" LE7_CHECK=fetch LE7_DIR="$marks" LE7_HASH="$valley" timeout 300 \
-				"$GODOT" --headless --path "$COPY" --max-fps 60 -- --client "127.0.0.1:$GAME_PORT" > "$COPY/map-upload-rejoin.log" 2>&1
+				"$GODOT" --headless --path "$COPY" --max-fps 60 -- --client "127.0.0.1:$GAME_PORT" > "$COPY/$part-rejoin.log" 2>&1
 			status=$?
-			report "$COPY/map-upload-rejoin.log"
+			report "$COPY/$part-rejoin.log"
 			[ "$status" -eq 0 ]
 			fact $? "rejoin: a client that has not got the new map joined again: exit $status"
 			expect "offers=0 nexts=0 kept=0 cache=$valley active=$valley next=none leaving=no"
