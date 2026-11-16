@@ -1,19 +1,34 @@
 # gdpyr — Level editor: terrain, prefabs, roads and bridges, and maps that travel
 
-**Status: a plan, with LE0–LE8 done: its ground is measured; the ground's rules, the map in
-memory, its file and its validator are written and tested, engine-free; a tool makes, reads and
-checks map files; a map is played from its file — `--map`, one bundled map, a server and its
-clients, the stripped export; and the game has an editor — the menu's **Map editor** and `--edit`,
-the terrain tool, undo, save and autosave, validate and test, the prefab tool: a round's pieces,
-cover, scenery and structures that stand when a round starts, the buildable overlay and the deep
-check; and the road and bridge tools: roads graded to their limit, sections joined end to end on
-piers, ends landed; and a client fetches the map it lacks from its server, keeps it in its cache,
-and plays it — the host panel lists one's own maps, and demos and the agent's `welcome` name the
-map; and a dedicated server takes a map as a file — `scripts/deploy-map.sh`, and `maps/active`,
-which a server with no `--map` plays — or, started with `--map-upload-token`, from the editor's
-**Publish**, and is told its next map: it plays its round out, exits 0, and plays that map when it
-is started again. What is left is LE9's, the other documents; and the box, which nothing here has
-run on.**
+**Status: built, LE0–LE9.** The game has a level editor — **Map editor** on the main menu, or
+`--edit` — with a terrain tool, a prefab tool, and road and bridge tools; undo, save and autosave;
+validate, the deep check and test. A map it makes is a `.map` file: played from its file (`--map`,
+`--practice`, one bundled map), listed in the host panel, fetched by a client from the server it
+joins and kept in its cache, named in a demo and in the agent's `welcome`, and given to a dedicated
+server — by `scripts/deploy-map.sh` and `maps/active`, or by the editor's **Publish** to one started
+with `--map-upload-token` — which plays its round out and is started again on it. MAPS.md, LAN.md,
+NETCODE.md, DEMOS.md, AGENT_API.md, DEPLOYMENT.md, the README and IMPLEMENTATION_PLAN.md say so
+(LE9). What is left is a person's: the box in DEPLOYMENT.md and its systemd unit, which nothing here
+has run on; two machines, since every process here was on one; and everything drawn, which has been
+driven headless and pictured, and looked at by nobody (each phase's *Left for a person*, §11).**
+
+What each phase ran, on .NET SDK 8.0.134 and, from LE0 on, Godot `4.6.stable.mono.official.89cea1439`,
+four cores of a cloud VM; each phase's record in §11 has the rest, and its output is in
+`docs/baselines/`:
+
+| Phase | At | `dotnet test` | Rules broken, each failing a test | Engine checks (`scripts/level-editor-checks.sh`) |
+|---|---|---|---|---|
+| LE0, the baseline and the spike | `67fec82` | 3,247 | — | the colliders, the bake, slopes, prediction over an 80 ms relay, the 4x4, the builders, the frame, the suite on the slab, a heightmap and triangles |
+| LE1, the ground's rules | `744b906` | 3,369 | 75 of 75 | — |
+| LE2, the document, the file, the validator | `ceaaec9` | 3,506 | 99 of 99 | — (`gdpyr-map`) |
+| LE3, the world from a file | `fa37670` | 3,592 | 31 of 31 | `ground`, `slopes`, `map-practice`, `map-server`, `map-export`, `map-suite`, `map-frame`, `map-basin`, `map-shot` |
+| LE4, the editor's shell and terrain | `98c6125` | 3,693 | 61 of 61 | `editor`, `editor-shot` |
+| LE5, prefabs | `e03c74b`, `bd8361e` | 3,721 | 30 of 30 | `editor-prefabs`, `editor-shot` |
+| LE6, roads and bridges | `f5a2934`, `99e64ea`, `61e64f1` | 3,783 | 48 of 48 | `editor-roads`, `editor-shot` |
+| LE7, fetching a map | `cde6c99`, `b45e724`, `3182617` | 3,825 | 41 of 41 | `map-fetch` |
+| LE8, the dedicated server | `347f1e2`, `278fec0`, `30662f1`, `f81e7ef` | 3,909 | 83 of 83 | `map-upload`, `map-upload-export`, and LE3's, LE4's, LE6's and LE7's again |
+| LE9, the docs | `f8828dc`'s tree | — | — | — : docs only |
+
 Written against `cd0c558`. The
 facts in §2 were read in this repository's source at that commit, and those in §3 in Godot's source
 at tag `4.6-stable`. The arithmetic in §10 was run: `python3
@@ -2375,7 +2390,9 @@ what a player sees when their server leaves for another map, which is a dropped 
 why (§14); and whether a second's grace is enough on a link that loses datagrams: it is one resend's
 time, not three.
 
-### LE9 — Docs (alongside; 1 day to close)
+### LE9 — Docs (alongside; 1 day to close) — done
+
+What was asked of it:
 
 MAPS.md gains data maps; LAN.md §3.4 the picker and the fetch; NETCODE.md §7 the messages and a
 section of its own; DEMOS.md version 6; AGENT_API.md `welcome` and `"map"`; DEPLOYMENT.md the map
@@ -2383,7 +2400,49 @@ directory, the token and the restart; the README the editor and the flags;
 IMPLEMENTATION_PLAN.md §5's "Multiple maps" cut, struck. This file's status becomes what was built
 and what each phase ran.
 
-**Total: 28½ days**, LE0's 1½, LE1's 3, LE2's 3, LE3's 4, LE4's 4, LE5's 3, LE6's 4, LE7's 3 and LE8's 2 spent.
+**Done on `f8828dc`'s tree.** Docs only: no source, scene, script or scenario changed. What was
+written was read off the code — `MapCatalog`, `NetworkManager.ServerMap`, `MainMenu`'s map states,
+`MapTransferService`'s eight messages and its log lines, `MapTransfer`'s constants, `DemoFormat`,
+`DemoHeader` and `DemoPlayback.TryFindMap`, `AgentServerOps`' `welcome`, `GdpyrConnection`,
+`gdpyr_env`, the harness's `Scenario` and `Program`, `Bootstrap`'s start-up, `MapLibrary`,
+`scripts/deploy-map.sh`, `deploy/gdpyr-server.service`, `tools/Gdpyr.MapTool`,
+`MapEditorControls` and the editor's bar — or off §11's records and `docs/baselines/`, and not
+measured again.
+
+| Asked | Written | Where |
+|---|---|---|
+| MAPS.md gains data maps | the status and scope name both kinds; §1's `Id` row and its bullets say a data map is found by its hash, needs no entry, and is listed after the catalog's as `Name — name, yours`. **§6, data maps**: what a file is and that it is its hash; where one comes from (the editor, the generator, a server); where it lives (§9.1's four places); what it must hold, §6.9's errors and warnings in §3.1's terms; the three ways it differs from a scene — 40° walkable, nodes named by their order, structures standing at a round's start; checking one with `gdpyr-map validate` and `info`, in the editor and in the engine; and bundling one, with `BundledMapTests` | MAPS.md |
+| LAN.md §3.4 the picker and the fetch | the picker's row; what `ServerMap` carries; a scene map found by its id, a data map by its hash and fetched — the status line, a chunk a tick, the cache, the refusals and `--client`'s exit; the catalog paragraph for both kinds. §5: a fetched map still names its pieces by the build's catalog | LAN.md |
+| NETCODE.md §7 the messages and a section of its own | §7's table gains `ServerMap` and the seven on channel 1, with LE8's sizes, and a paragraph says why a channel of their own. **§12, maps on the wire**: naming, fetching, the sender's and receiver's rules; §12.1, channel 1 and what LE7 measured; §12.2, the upload and next-map messages and their answers' numbers and order; §12.3, the proof and the token; §12.4, what a fetch costs | NETCODE.md |
+| DEMOS.md version 6 | §2.1, the header's map as `map:<hash>`; §4.3, `--playdemo` opening in the menu; §5.1, playback finding the map the header names, and a second demo refused on another map; §6's version note | DEMOS.md |
+| AGENT_API.md `welcome` and `"map"` | §7.1's `welcome` row gains `map`, and who reads it; §9.1, a scenario's `"map"`, what it may name, how the `welcome` is held to it, and the two that use it; §10, the parser's tests | AGENT_API.md |
+| DEPLOYMENT.md the map directory, the token and the restart | §1: maps need no inbound rule. **§3.1, the map it plays**: `deploy-map.sh` and what it does on the box, the directory under the unit's `HOME`, `maps/active` and the start-up lines (LE8's), a bad one fatal, the way back to a scene map; publishing, which the unit does not do and why; the next map, the round played out, exit 0 and `Restart=always` | DEPLOYMENT.md |
+| The README the editor and the flags | the flags, the editor's paragraphs and **A map on a dedicated server** were written by LE4–LE8 and are left; the document index's lines for MAPS.md and this file say what is built; a table of the editor's keys, from `MapEditorControls`, and its bar | README.md |
+| IMPLEMENTATION_PLAN.md §5's cut, struck | §5's "Multiple maps" struck, as V7 and the builders struck theirs, saying what lifted it and what still holds; M13's heading and what each phase built | IMPLEMENTATION_PLAN.md |
+| This file's status | what was built and what is left, and a table of what each phase ran | above |
+
+**Found here**, in reading the code against the documents:
+
+- **`ClientRequestMap` is about 80 B, not §9.4's ~40 B**: its hash goes as its 64 characters, as LE8
+  found of its own six messages. §9.4's first table is the plan's guess and is left; NETCODE.md §7
+  has the sizes as built.
+- **A second bundled map changes a test**: `BundledMapTests.ThereIsOne` holds that there is exactly
+  one. MAPS.md §6.5 says so.
+- **A scenario's `"map"` is a map's name, not only a catalog id**: the parser takes any name a
+  library map could have, which is how LE6's scenario names its own map; it is
+  `ScenarioTests.EveryCheckedInScenarioPlaysAMapThisBuildHas` that holds the checked-in files to the
+  catalog. AGENT_API.md §9.1 says both. The parser's error still calls it "a catalog id".
+- **The README's editor keys** were spread over three paragraphs; the table is `MapEditorControls`'
+  bindings, the overlays in `MapEditorControls.Next`'s order.
+
+**Not run:** `dotnet test`, the builds and every engine check — no code changed, and there is no
+.NET SDK or Godot in this container. **Left alone:** what LE3–LE8 wrote into the README — the four
+flags, the editor's paragraphs, **A map on a dedicated server** and `deploy-map.sh` under Building —
+which reads true against the code; and COVER.md, EFFECTS.md and GROUND_VEHICLES.md, which a data map
+does not change: its cover boxes are MAPS.md §3.2's, and its 4x4 the road vehicle LE-D24 says.
+
+**Total: 28½ days**, all of them spent: LE0's 1½, LE1's 3, LE2's 3, LE3's 4, LE4's 4, LE5's 3, LE6's
+4, LE7's 3, LE8's 2 and LE9's 1.
 
 ---
 
@@ -2422,6 +2481,7 @@ and what each phase ran.
 | Each of §9.5's answers is what a request built to get it gets; an uploaded map is in the cache under its hash | `MapUploadTests`; `map-upload` | LE8, done |
 | A server told its next map plays its round out, exits 0, and plays that map when it is started again | `MapUploadTests`, `MapLaunchTests`; `map-upload`, and `map-upload-export` on the stripped export | LE8, done |
 | Each of LE8's tests fails when its rule is broken | `le8_mutations.py`, 83 rules | LE8, done |
+| The other documents say what was built | read against the code and §11's records: MAPS.md, LAN.md, NETCODE.md, DEMOS.md, AGENT_API.md, DEPLOYMENT.md, the README, IMPLEMENTATION_PLAN.md | LE9, done |
 
 ## 13. Risks
 

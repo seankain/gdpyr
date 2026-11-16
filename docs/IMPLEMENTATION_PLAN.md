@@ -674,7 +674,7 @@ with clients behind a relay standing in for `tc netem`, and the suite at 50 of 5
 fail being GV0's own. Nothing drawn — the vehicles, the chase camera, the kiosk's panel, a wreck —
 has been looked at by a person, and none of it has run on a dedicated server over a real link.
 
-### M13 — A level editor, and maps as data (~28 days) *planned; LE0, its baseline and spike, measured; LE1, the ground's rules, built and tested; no editor yet*
+### M13 — A level editor, and maps as data (~28 days) *built: LE0–LE9; the engine checks pass in Godot, the box and the checks by a person are outstanding*
 
 An editor in the game. Terrain is a 241 × 241 heightfield over the 240 m field, raised and lowered
 with brushes whose grade and radius are set, and textured by height and slope: water, sand, mud,
@@ -685,15 +685,28 @@ on piers. A map made this way is a data file, not a scene: saved, cloned and exp
 editor, named on the wire by its hash, fetched by a client from the server it joins, and given to a
 dedicated server as a file. The design, decisions (LE-D1–LE-D25) and phases (LE0–LE9) are
 [`LEVEL_EDITOR.md`](LEVEL_EDITOR.md); LE0–LE3 with LE7, about 14 days, is data maps played and
-fetched with no editor yet. LE0 measured the plan's ground in the engine
-(`scripts/level-editor-checks.sh`, `docs/baselines/le0-67fec82-*.txt`) and changed it in four
-places: the collider is triangle meshes and not a heightmap, which let rays through; walkable is
-40° and not 45°; the 4x4 is a road vehicle on such a map until its hull pitches with its chassis;
-and a correction is applied from 2 cm. LE1 wrote the terrain's rules — the heightfield, the
-brushes, levelling ground to a shape and the texture bands — engine-free, as `Scripts/Sim/Level/`,
-with 122 tests and a script that breaks each rule in turn to show that a test fails
-(`tools/level_editor_checks/le1_mutations.py`); nothing calls them yet. It lifts §5's "Multiple
-maps" cut, which [`MAPS.md`](MAPS.md)'s template and the host panel's picker began to.
+fetched with no editor yet. It lifts §5's "Multiple maps" cut, which [`MAPS.md`](MAPS.md)'s template
+and the host panel's picker began to.
+
+Built: the plan's ground measured in the engine, which changed it in four places — the collider is
+triangle meshes and not a heightmap, which let rays through; walkable is 40° and not 45°; the 4x4 is
+a road vehicle on such a map until its hull pitches with its chassis; and a correction is applied
+from 2 cm (LE0); the terrain's rules engine-free, as `Scripts/Sim/Level/` (LE1); the map file, its
+validator, undo and `tools/Gdpyr.MapTool` (LE2); a map played from its file — `--map`, `--practice`,
+`Scenes/Maps/MapHost.tscn`, one bundled map, `hills` (LE3); the editor's shell and terrain tool —
+**Map editor** on the menu and `--edit`, save, autosave, validate and test (LE4); its prefab tool,
+structures that stand when a round starts, the buildable overlay and the deep check (LE5); its road
+and bridge tools (LE6); a client fetching the map it lacks from its server on a transfer channel of
+its own, the host panel's own maps, demo version 6 and the agent's `welcome` map (LE7); a dedicated
+server given a map by `scripts/deploy-map.sh` and `maps/active`, or by the editor's **Publish** to a
+server started with `--map-upload-token`, and told its next map, which it plays after a restart
+(LE8); and the other documents — MAPS.md §6, LAN.md §3.4, NETCODE.md §7 and §12, DEMOS.md,
+AGENT_API.md, DEPLOYMENT.md §3.1 and the README (LE9). Each phase in LEVEL_EDITOR.md §11 says what it
+ran: `dotnet test` at 3,909, a script per phase that breaks each of its rules in turn to show a test
+fails, and `scripts/level-editor-checks.sh`'s engine checks, on Godot 4.6 .NET, on four cores of a
+cloud VM, every process on one machine. Nothing has run on the box or under its systemd unit, on two
+machines, or been looked at by a person: the editor's screen, the menu's line while a map arrives,
+and a player dropped when their server leaves for another map.
 
 **Total: ~29–37 engineering days to end of M8.**
 
@@ -712,7 +725,7 @@ maps" cut, which [`MAPS.md`](MAPS.md)'s template and the host panel's picker beg
 | Matchmaking, and any server list that is not a broadcast | Direct IP over Tailscale, and — since the main menu — LAN discovery on top of it: each server answers a broadcast query on UDP 7780–7783 with its name, port and roster ([`LAN.md`](LAN.md) §4). That is ~200 lines, one datagram each way, no registry and no service to run, and it covers the case the cut was really about: a room of people who should not have to be told an IP. It reaches the broadcast domain and stops there. Anything further away is still typed in, and matchmaking is still M9's problem. |
 | Animation, audio, VFX beyond placeholders | Greybox. |
 | Anti-cheat beyond server authority | Server authority is free and sufficient here. |
-| Multiple maps | One map, iterated on. Map layout is a top-3 fun variable — iterate the one map instead of building three. |
+| ~~**Multiple maps**~~ | One map, iterated on. Map layout is a top-3 fun variable — iterate the one map instead of building three. **Lifted by M13** ([`LEVEL_EDITOR.md`](LEVEL_EDITOR.md), [`MAPS.md`](MAPS.md)): the host panel picks from the catalog's maps — the greybox and the bundled `hills` — and one's own, made in the game's map editor, which clients fetch as they join. What the cut was about still holds in part: no second map has been playtested by people, and the greybox is still the default every scenario but two plays. |
 
 ---
 

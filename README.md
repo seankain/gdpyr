@@ -66,22 +66,18 @@ dedicated-server authoritative.
 - [`docs/LAN.md`](docs/LAN.md) — hosting a room of machines from a checkout, with a dev build
 - [`docs/MAPS.md`](docs/MAPS.md) — making a map: the template scene new maps inherit from
   (`Scenes/Maps/MapBase.tscn`), what a map scene must hold, and the catalog entry that puts it in
-  the host panel's map picker
-- [`docs/LEVEL_EDITOR.md`](docs/LEVEL_EDITOR.md) — a plan, its ground measured in the engine (LE0,
-  `scripts/level-editor-checks.sh`), the ground's rules, the map file and its validator written and
-  tested engine-free (LE1, LE2, `Scripts/Sim/Level/`, `tools/Gdpyr.MapTool`), a map played from
-  its file (LE3: `--map`, `Scenes/Maps/MapHost.tscn`, `Scripts/Level/`, one bundled map), the
-  editor's shell and terrain tool (LE4: **Map editor** on the menu, `--edit`, `Scenes/MapEditor/`),
-  its prefab tool (LE5: a round's pieces, cover, structures that stand when a round starts, the
-  deep check), its road and bridge tools (LE6: roads graded to a limit, bridge sections joined end
-  to end on piers), a client fetching the map it lacks from its server (LE7: the host panel's own
-  maps, `user://maps/cache/`, demos that name their map), and the dedicated server's side (LE8:
-  `scripts/deploy-map.sh`, `maps/active`, `--map-upload-token`, the editor's **Publish**, the next
-  map), with the other documents and the box still to do: a level editor in the game —
-  terrain raised and lowered with brushes that set its grade and textured by height and slope,
-  prefabs placed on ground levelled for them, roads and bridges — and maps as data files that are
-  saved, cloned and exported, given to a dedicated server, and fetched by clients from the server
-  they join
+  the host panel's map picker; and data maps, the `.map` files the map editor makes — what one must
+  hold, where they live, how to check one and how to bundle one with the build
+- [`docs/LEVEL_EDITOR.md`](docs/LEVEL_EDITOR.md) — a level editor in the game, and maps as data;
+  LE0–LE9, all built: terrain raised and lowered with brushes that set its grade and textured by
+  height and slope, prefabs placed on ground levelled for them, roads and bridges (**Map editor** on
+  the menu, `--edit`, `Scenes/MapEditor/`); maps as `.map` files, saved, cloned and exported,
+  validated, played (`--map`, `Scenes/Maps/MapHost.tscn`, one bundled map), fetched by a client from
+  the server it joins (`user://maps/cache/`), and given to a dedicated server
+  (`scripts/deploy-map.sh`, `maps/active`, `--map-upload-token` and the editor's **Publish**, the next
+  map); the engine-free rules in `Scripts/Sim/Level/` with a script for each phase that breaks each
+  rule to show a test fails, and the engine checks in `scripts/level-editor-checks.sh`; and what is
+  left for a person — the box, two machines, and everything drawn looked at
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — AWS EC2 dedicated-server runbook
 
 ## Layout
@@ -253,6 +249,23 @@ another road's joins it. A click on a road takes its points up to move. The brid
 places spans and ramps: near a free end, drawn as a ring, a section joins it (`Tab` by its other end);
 elsewhere it floats at the last section's height (`PgUp` `PgDn`). With supports on (`U`) each end
 stands on a pier to the ground, and an end near the ground is landed.
+
+| Key | In the map editor |
+|---|---|
+| `1` `2` `3` `4` | terrain, prefabs, roads, bridges |
+| left / right button | terrain: raise / lower the ground; prefabs and bridges: place or select / drop the selection; roads: the next point / drop what is drawn |
+| `[` `]` · `-` `=` · `,` `.` | brush radius or road width · rate, strength or grade limit · core or grade |
+| `R`, `Shift+R` · `G` | turn a prefab or floating section 15° · snap to the metre grid |
+| `Tab` · `PgUp` `PgDn` · `U` | turn a bridge section end for end · raise or lower it · its supports on or off |
+| `Enter` · `Del` · `Esc` | grade the road drawn · take up what is selected · drop it |
+| `O` · `T` | next overlay — none, bands, slope, buildable, contours · look straight down |
+| `Ctrl+Z` `Ctrl+Y` · `Ctrl+S` · `F5` | undo, redo · save · test |
+| `WASD`, `Space`/`E`, `Q`, `Shift`, middle button | fly, up, down, faster, look |
+
+The bar across the top: the map's name (its name, author and description), **Maps**, **Validate**,
+**Test**, **Save**, **Save as…** — a fork with a new identity — **Export…**, **Publish…** and
+**Exit**. A map saves with errors in it, and is listed in the host panel, hosted and sent only
+without them.
 
 **A map on a dedicated server** (LE8, LEVEL_EDITOR.md §9.5). `./scripts/deploy-map.sh <file> [--activate]`
 validates a map, copies it to the box's `user://maps` over ssh, and with `--activate` writes its
