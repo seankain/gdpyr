@@ -81,7 +81,7 @@ Facts this plan stands on, each read in the source at `6699b03`.
 |---|---|---|
 | GV-D1 | **A system of their own, not `Unit`.** A crew vehicle is a `CharacterBody3D` (`CrewVehicle`) in its own registry (`CrewVehicleManager`). | Units are never predicted, never fogged (NETCODE.md §6.2), count towards the strategist's defeat (`LiveUnitCount`), and take orders and plans. Each is wrong for a vehicle a player drives. |
 | GV-D2 | **Seats.** 4x4: driver (enclosed), gunner at the mounted gun (exposed), passenger in the bed (exposed). Helicopter: pilot (enclosed), passenger in the left door (exposed). Drivers and pilots do not fire. | The request. A driver's mouse belongs to the camera, a pilot's to the heading. |
-| GV-D3 | **Movement: a kinematic body with a sprung chassis, engine-free.** The 4x4's step is a pure function of its state, the input frame and four wheel-ray contacts; four spring-dampers set its ride height, pitch and roll. The collider stays upright; the attitude is drawn on the mesh and applied to the seats and the hull's hit boxes. No `RigidBody3D` or `VehicleBody3D`. | The springs are the request, and a pure step is what a replay re-runs and what xUnit tests (§5.1). A rigid body cannot be stepped alone for a replay, and the solver's state is not the same on two peers (IMPLEMENTATION_PLAN.md §2). The dropship already keeps its tilt off the body (VEHICLES.md §8.4). |
+| GV-D3 | **Movement: a kinematic body with a sprung chassis, engine-free.** The 4x4's step is a pure function of its state, the input frame and four wheel-ray contacts; four spring-dampers set its ride height, pitch and roll. The body stays upright; the attitude is drawn on the mesh and applied to the seats and the hull's hit boxes, and the 4x4's collider shape takes it on the upright body. No `RigidBody3D` or `VehicleBody3D`. *Changed for hills: the collider stayed upright, and level it beached on a 10° slope off its wheels (LEVEL_EDITOR.md LE-D24, §5.1 here).* | The springs are the request, and a pure step is what a replay re-runs and what xUnit tests (§5.1). A rigid body cannot be stepped alone for a replay, and the solver's state is not the same on two peers (IMPLEMENTATION_PLAN.md §2). The dropship already keeps its tilt off the body (VEHICLES.md §8.4). |
 | GV-D4 | **The driver's client predicts its vehicle** as it predicts its character: the same input ring, a second ledger, a replay through the same step. Everybody else interpolates it. Getting in, getting out and changing seat are not predicted. | Unpredicted, steering would answer a round trip plus the 100 ms interpolation delay late — about 200 ms at 100 ms RTT. The drone accepts a round trip (CONTROL_POINTS.md §4.4); a truck that steers that late does not feel like one. NETCODE.md §10.2's rule for transitions stands. |
 | GV-D5 | **Controls, with no new key and no new input bit.** Tap `E` beside a vehicle: the free seat whose door is nearest. Seated: tap `E` gets out, hold `E` moves to the next free seat. 4x4: `W`/`S` throttle, brake and reverse; `A`/`D` steer; `Space` handbrake; the mouse looks, and the camera follows the truck. Helicopter: `W`/`S`/`A`/`D` move, `Space`/`Ctrl` climb and descend, and the mouse turns it towards where the pilot looks. | The frame stays twelve bytes and every recorded frame keeps its meaning; U, T and G keep one action each. Steering by looking is the drone's, which players already know. |
 | GV-D6 | **Passengers fire their own primary and pistol** — sights, reload and swap too; not the hammer, a grenade or a drone. Each seat has a fire arc, outside which the trigger does nothing. A round fired from a seat never hits that vehicle or anybody in it. | The request. The arc keeps a passenger from shooting through the cab; the exclusion keeps a round at the arc's edge off its own hull. Grenades and the hammer from a moving seat are rules of their own (§15). |
@@ -140,15 +140,25 @@ and drone rules are.
 
 **State** (`FourByFourState`): position, velocity, yaw and yaw rate, the chassis's pitch and roll and
 their rates, steering angle, ticks airborne. **Inputs**: traits (from `Vehicles/four_by_four.tres`),
-the frame, and four `WheelContact` {hit, distance}, one per wheel: the engine half casts each straight
-down from its hardpoint on the upright body, `rest + travel + wheel radius` long, through one cached
-query.
+the frame, and four `WheelContact` {hit, distance, normal}, one per wheel: the engine half casts each
+straight down past its hardpoint on the upright body, through one cached query, from `reach` above it
+to `rest + travel + wheel radius + reach` below, `reach` being the most the attitude stop moves a corner,
+(half the wheelbase + half the track) × sin 35° = 1.35 m. A distance is negative where the ground is
+above the hardpoint. The rays are vertical from a level plane, so on a slope the downhill pair's
+hardpoints stand half the wheelbase × the grade higher off the ground and the uphill pair's lower: cast
+only `rest + travel + wheel radius` down from the hardpoint, the downhill rays missed from about 13°
+and the uphill ones started under the ground from about 25°.
 
 `FourByFourSim.Step(ref state, in traits, in InputFrame, ReadOnlySpan<WheelContact>, dt)`:
 
 1. **Springs.** A corner's height includes the chassis's attitude. Compression is the rest length
    less the spring's length, clamped to the travel, with a bump stop ten times as stiff in the last
-   5 cm. Force is stiffness × compression less damping × the corner's vertical speed, and never pulls.
+   5 cm. Force is stiffness × compression less damping × the corner's vertical speed over the
+   ground's under its wheel — the gradient of the face its ray hit, held to 35°, along the velocity
+   (`GroundRise`) — and never pulls. Damped on its own vertical speed, as it first was, a truck
+   climbing steadily was damped as though its springs were lengthening: it sagged onto its bump stops
+   as it gathered speed uphill, and on a steep grade the rear damper cancelled the spring and nothing
+   held the pitch, which ran to its stop.
    The sum against gravity is the heave; the moments, plus load transfer from this tick's
    longitudinal and lateral acceleration at the centre of mass's height, are the pitch and roll.
    Defaults: 1.6 Hz and a damping ratio of 0.3 — the chassis overshoots by about 37 % and is inside
@@ -164,13 +174,36 @@ query.
 4. It returns the velocity the engine half gives `MoveAndSlide`; `AfterMove` takes back where the
    body went and how fast it is moving.
 
+**The collider** is the bevelled box of §5.8 turned on the upright body by the chassis's pitch and
+roll, about the body's origin as the mesh and the hull's boxes are, before each move (`CrewVehicle.
+TiltCollider`), on the authority, on the driver's replay and on a puppet alike. Level, its floor has
+0.25 m under it and 2.15 m of it ahead of and behind the middle, so it met an even slope from 7°;
+from rest it beached on 10°, fewer than two wheels down, and so with no traction, and the throttle
+did nothing at any acceleration (4, 8 and 16 m/s² were tried: the same 10° stopped it). Turned with
+the chassis it clears an even slope by 0.09 m or more to 25°. The chassis rests on a slope at the pitch
+whose sine is the grade (the rays are vertical), a little steeper than the slope; that reaches the 35°
+stop at 29.8°, which is this model's ceiling.
+
+**On slopes**, measured by `scripts/level-editor-checks.sh slopes` (LEVEL_EDITOR.md §10.1's check) and
+by a run that starts the truck at rest 3 m up the slope, on the triangle-mesh terrain: from rest, over
+the top of every grade to 20.0°, fewer than two wheels down 11 ticks at most, 20° in 3.1 s from the
+foot; 24.9° in 3.1–4.2 s and 30.0° in 7–15 s, its nose at the 35° stop. Held on its handbrake it stays
+put on 4.9°, 10°, 15° and 20°, where it slid 5.6, 24 and 20 m on its hull. At 18 m/s onto 10° and
+15° it is under two wheels down for 6 and 7 ticks, where it rode up on its hull for 156 and 104;
+onto faces of 30° to 70° at that speed it still rides up on its hull, as before.
+
 Tests: dropped 0.3 m onto flat contacts the chassis overshoots at least once and settles within
 1.5 s — springy, and stable; with no input on flat ground its energy above rest never exceeds 101 %
 of its start and is under 1 % of it after 10 s; full throttle raises speed monotonically to
 18 ± 0.4 m/s with the nose up and a quarter holds 4.5 ± 0.2 m/s, braking puts the nose down, a turn rolls the body outward; no turn asks for
 more than grip; the handbrake slides; attitude stays within ±35° over 10,000 random inputs and
 contacts; with no contacts it falls at g and the throttle changes nothing; the same inputs give
-bit-identical states over 1,000 runs; position stays inside the wire's ±327.67 m.
+bit-identical states over 1,000 runs; position stays inside the wire's ±327.67 m. On a plane of 10°,
+20° and 25° it climbs flat out with all four wheels down and off their bump stops, its pitch within 3°
+of the grade's; on 0°, 15° and 30° every wheel's ray finds the ground; the ground's rise is the
+face's gradient along the velocity, none on the level, held to the stop's on the side of a step.
+`CrewVehicleResourceTests`: the file's collider, turned with the chassis, clears an even slope by
+5 cm to 25°, and level it meets one of 7°.
 
 ### 5.2 The helicopter — `Scripts/Sim/Helicopter.cs`, `Tests/HelicopterTests.cs`
 
@@ -938,6 +971,16 @@ Measured by the `physics` check:
 | A player or a rifleman on a 4x4's line, at 5 and 15 m/s | in the hull by one tick's travel (0.08, 0.25 m) after the truck moves; 0.000–0.003 m after its own `MoveAndSlide`; carried ahead of the truck; the truck's speed untouched |
 | The same 0.8 m off the line | 0.000–0.007 m after its own move, once 0.067 m (a player at 15 m/s, against the bevel); pushed 0.5–0.7 m aside, off the bevel |
 | A player or a rifleman walking into a parked 4x4's side for 2.5 s | stops at the hull — 1.45 m and 1.35 m from its centre line, its half-width plus their radius — the truck unmoved |
+
+*Since the collider took the chassis's attitude and the dampers the ground's rise (§5.1), the same
+check holds its 66 facts and reads: over the bumps at 5 m/s pitch −9.1° to +9.2°, the collider
+touching on 4 ticks; at 12 m/s −0.2° to +13.4°, fewer than two wheels down on 44 ticks, the collider
+touching on 2 — the bumps' faces are 17°, and a damper on the spring's own rate pushes back harder on
+a face met at speed than one on the body's vertical speed did; off the ramp at 12 m/s −10.8° to
++12.8°, 25 ticks in the air, settled 1.5 s after the drop; at 5 m/s 33 ticks in the air, the collider
+touching on 3, slowest 4.8 m/s, settled 3.2 s after. The rest is as the table says. The `game` check
+holds its 37 facts with the same numbers, and `net` its 21 for the driver, run alone: over the strip
+0 replays, largest correction 0.3 cm.*
 
 Measured by the `game` check: from rest, four seconds of `W` reach 16.0 m/s and 32.1 m, the seated
 body carried the same 32.1 m with the truck's velocity and its hitbox in the cab; `D` and `Space`

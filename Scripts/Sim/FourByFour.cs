@@ -5,26 +5,47 @@ namespace Gdpyr.Sim;
 
 /// <summary>
 /// What one wheel's ray found (docs/GROUND_VEHICLES.md §5.1): the engine half casts
-/// each straight down from its hardpoint on the upright body,
-/// <see cref="FourByFourTraits.RayLengthMeters"/> long, and reports whether it hit and
-/// how far down.
+/// each straight down past its hardpoint on the upright body, from
+/// <see cref="FourByFourTraits.RayLiftMeters"/> above it to
+/// <see cref="FourByFourTraits.RayLengthMeters"/> below, and reports whether it hit, how
+/// far down, and which way the ground it hit faces.
 /// </summary>
 public readonly struct WheelContact
 {
 	public readonly bool Hit;
 
-	/// <summary>From the hardpoint on the upright body down to what the ray hit [m].</summary>
+	/// <summary>
+	/// From the hardpoint on the upright body down to what the ray hit [m]: negative where
+	/// the ground stands above the hardpoint, as it does under the uphill pair on a steep slope.
+	/// </summary>
 	public readonly float Distance;
 
+	/// <summary>
+	/// The ground's unit normal where the ray hit: what the slope under the wheel is read
+	/// from (<see cref="FourByFourSim.GroundRise"/>). Straight up for a contact given none,
+	/// or one facing down or sideways.
+	/// </summary>
+	public readonly Vector3 Normal;
+
 	public WheelContact(bool hit, float distance)
+		: this(hit, distance, Vector3.Up)
+	{
+	}
+
+	public WheelContact(bool hit, float distance, Vector3 normal)
 	{
 		Hit = hit && float.IsFinite(distance);
-		Distance = Hit ? MathF.Max(distance, 0f) : 0f;
+		Distance = Hit ? distance : 0f;
+		Vector3 n = normal.Normalized();
+		bool usable = Hit && float.IsFinite(n.X) && float.IsFinite(n.Y) && float.IsFinite(n.Z) && n.Y > 1e-3f;
+		Normal = usable ? n : Vector3.Up;
 	}
 
 	public static WheelContact Miss => default;
 
 	public static WheelContact At(float distance) => new(true, distance);
+
+	public static WheelContact At(float distance, Vector3 normal) => new(true, distance, normal);
 }
 
 /// <summary>
@@ -161,8 +182,31 @@ public readonly struct FourByFourTraits
 		steerLimitAtTop: Mathf.DegToRad(9f),
 		airborneRateDamping: 2f);
 
-	/// <summary>How far down each wheel's ray reaches: a spring at full length, its travel and the wheel [m].</summary>
-	public float RayLengthMeters => SpringRestMeters + SpringTravelMeters + WheelRadiusMeters;
+	/// <summary>
+	/// The most the chassis's attitude, at its ±<see cref="FourByFourSim.MaxAttitudeRadians"/>
+	/// stop, moves a corner above or below its hardpoint [m]: what a wheel's ray reaches
+	/// past the spring's own range, up and down (<see cref="FourByFourSim.CornerLift"/>).
+	/// </summary>
+	public float AttitudeReachMeters =>
+		((WheelbaseMeters * 0.5f) + HalfTrackMeters) * MathF.Sin(FourByFourSim.MaxAttitudeRadians);
+
+	/// <summary>
+	/// How far below its hardpoint each wheel's ray reaches: a spring at full length, its
+	/// travel and the wheel, and <see cref="AttitudeReachMeters"/> [m]. The rays are cast
+	/// straight down from the upright body, so on a slope the downhill pair's hardpoints
+	/// stand half the wheelbase × the grade higher off the ground than on the level; without
+	/// the last term their rays miss from about 13° and the truck is left on its uphill pair.
+	/// A hit too far down for the spring is a wheel off the ground, as a miss is.
+	/// </summary>
+	public float RayLengthMeters => SpringRestMeters + SpringTravelMeters + WheelRadiusMeters + AttitudeReachMeters;
+
+	/// <summary>
+	/// How far above its hardpoint each wheel's ray starts: <see cref="AttitudeReachMeters"/>
+	/// [m]. The uphill pair's hardpoints stand half the wheelbase × the grade lower to the
+	/// ground than on the level, and from about 25° below it, where a ray started at the
+	/// hardpoint would start under the ground and find nothing.
+	/// </summary>
+	public float RayLiftMeters => AttitudeReachMeters;
 
 	/// <summary>The chassis's angular natural frequency [rad/s].</summary>
 	public float Omega => MathF.Tau * SpringFrequencyHz;
@@ -249,10 +293,10 @@ public struct FourByFourState
 /// <list type="number">
 /// <item><b>Springs.</b> A corner's spring length comes from its wheel's contact and
 /// the chassis's attitude; its force is stiffness × compression, ten times as stiff in
-/// the last <see cref="BumpStopMeters"/>, less damping × the corner's vertical speed,
-/// and never pulls. The sum against gravity heaves the chassis; their moments, and the
-/// load moved by this tick's acceleration at the centre of mass's height, pitch and
-/// roll it.</item>
+/// the last <see cref="BumpStopMeters"/>, less damping × the corner's vertical speed
+/// over the ground's under its wheel (<see cref="GroundRise"/>), and never pulls. The
+/// sum against gravity heaves the chassis; their moments, and the load moved by this
+/// tick's acceleration at the centre of mass's height, pitch and roll it.</item>
 /// <item><b>Traction</b>, with two wheels or more down: the throttle sets a speed and
 /// the engine pulls towards it; the brakes, reverse and coasting; the steering, whose
 /// lock falls with speed; a yaw rate from the steering, cut to what grip allows; grip
@@ -292,7 +336,8 @@ public static class FourByFourSim
 
 	/// <summary>
 	/// A spring's push, per kilogram of truck [m/s²], at <paramref name="compression"/>
-	/// (clamped to its travel) with its corner rising at <paramref name="cornerSpeed"/>:
+	/// (clamped to its travel) with its corner rising at <paramref name="cornerSpeed"/>
+	/// faster than the ground under its wheel — the rate the spring is lengthening at:
 	/// stiffness × compression, plus <see cref="BumpStopStiffnessScale"/> − 1 times that
 	/// again past the start of the bump stop, less damping × the corner's speed. Never
 	/// negative: a spring pushes, and a wheel lifting off the ground lets go.
@@ -304,6 +349,36 @@ public static class FourByFourSim
 		float bump = MathF.Max(c - (traits.SpringTravelMeters - BumpStopMeters), 0f);
 		float force = (k * c) + ((BumpStopStiffnessScale - 1f) * k * bump) - (traits.CornerDamping * cornerSpeed);
 		return MathF.Max(force, 0f);
+	}
+
+	/// <summary>
+	/// How fast the ground under a wheel rises as the truck moves over it at
+	/// <paramref name="velocity"/> [m/s]: the gradient of the face its ray hit, along the
+	/// horizontal velocity; zero on the level and with no contact. The damper acts on the
+	/// corner's speed over this, not on its speed alone: a truck climbing a slope steadily
+	/// is not lengthening its springs, and one damped as if it were sags onto its bump stops
+	/// and loses the push that holds its pitch. A face steeper than the attitude stop's is
+	/// read as that steep, so the edge of a step is not a slope of any grade.
+	/// </summary>
+	public static float GroundRise(in WheelContact contact, Vector3 velocity)
+	{
+		if (!contact.Hit)
+		{
+			return 0f;
+		}
+
+		Vector3 n = contact.Normal;
+		float gx = -n.X / n.Y;
+		float gz = -n.Z / n.Y;
+		float grade = MathF.Sqrt((gx * gx) + (gz * gz));
+		float max = MathF.Tan(MaxAttitudeRadians);
+		if (grade > max)
+		{
+			gx *= max / grade;
+			gz *= max / grade;
+		}
+
+		return (gx * velocity.X) + (gz * velocity.Z);
 	}
 
 	/// <summary>
@@ -374,10 +449,12 @@ public static class FourByFourSim
 			Vector3 local = HardpointLocal(traits, wheel);
 
 			// How the corner's height moves with pitch and with roll: the lever each
-			// spring has on them, and with the rates the corner's own vertical speed.
+			// spring has on them, and with the rates the corner's own vertical speed, over
+			// the ground's under its wheel.
 			float liftPerPitch = (-local.X * sinRoll * sinPitch) - (local.Z * cosPitch);
 			float liftPerRoll = local.X * cosRoll * cosPitch;
-			float cornerSpeed = state.Velocity.Y + (liftPerPitch * state.PitchRate) + (liftPerRoll * state.RollRate);
+			float cornerSpeed = state.Velocity.Y + (liftPerPitch * state.PitchRate) + (liftPerRoll * state.RollRate)
+				- GroundRise(contact, state.Velocity);
 
 			float force = SpringForce(traits, compression, cornerSpeed);
 			heave += force;

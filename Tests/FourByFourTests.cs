@@ -384,6 +384,121 @@ public class FourByFourTests
 		Assert.True(FourByFourSim.ParkedFrame(5).Held(InputButtons.Jump));
 	}
 
+	// ---- slopes ----------------------------------------------------------------------------
+
+	/// <summary>
+	/// What four rays straight down onto a plane rising <paramref name="grade"/> towards −Z
+	/// find — the ground under a truck heading uphill at yaw 0 — through z = 0 at y = 0:
+	/// the engine half's rays, from <see cref="FourByFourTraits.RayLiftMeters"/> above each
+	/// hardpoint to <see cref="FourByFourTraits.RayLengthMeters"/> below, with the plane's normal.
+	/// </summary>
+	private static WheelContact[] Slope(in FourByFourState state, float grade)
+	{
+		var wheels = new WheelContact[FourByFourSim.Wheels];
+		Vector3 normal = new Vector3(0f, 1f, grade).Normalized();
+		for (int i = 0; i < wheels.Length; i++)
+		{
+			Vector3 hardpoint = FourByFourSim.Hardpoint(state, Traits, i);
+			float distance = hardpoint.Y + (grade * hardpoint.Z);
+			wheels[i] = distance >= -Traits.RayLiftMeters && distance <= Traits.RayLengthMeters
+				? WheelContact.At(distance, normal)
+				: WheelContact.Miss;
+		}
+
+		return wheels;
+	}
+
+	/// <summary>The spring compressions the step will see for these contacts.</summary>
+	private static float[] Compressions(in FourByFourState state, ReadOnlySpan<WheelContact> wheels)
+	{
+		var compressions = new float[FourByFourSim.Wheels];
+		for (int i = 0; i < compressions.Length; i++)
+		{
+			compressions[i] = FourByFourSim.Compression(Traits, i, wheels[i], state.Pitch, state.Roll);
+		}
+
+		return compressions;
+	}
+
+	[Fact]
+	public void TheGroundsRise_IsItsGradeAlongTheVelocity_NoneOnTheLevel_AndHeldToTheAttitudeStop()
+	{
+		float grade = MathF.Tan(Mathf.DegToRad(20f));
+		WheelContact slope = WheelContact.At(0.7f, new Vector3(0f, 1f, grade).Normalized());
+		var uphill = new Vector3(0f, 0f, -10f);
+
+		Assert.Equal(0f, FourByFourSim.GroundRise(WheelContact.At(0.7f), uphill));
+		Assert.Equal(0f, FourByFourSim.GroundRise(WheelContact.Miss, uphill));
+		Assert.Equal(10f * grade, FourByFourSim.GroundRise(slope, uphill), 4);
+		Assert.Equal(-10f * grade, FourByFourSim.GroundRise(slope, -uphill), 4);
+		Assert.Equal(0f, FourByFourSim.GroundRise(slope, new Vector3(10f, 0f, 0f)), 4);
+
+		// The side of a step, which a ray down only grazes, is read as the stop's grade.
+		WheelContact wall = WheelContact.At(0.7f, new Vector3(0f, 0.01f, 1f));
+		Assert.Equal(10f * MathF.Tan(FourByFourSim.MaxAttitudeRadians), FourByFourSim.GroundRise(wall, uphill), 3);
+
+		// A normal facing down or sideways, or none at all, is the level.
+		Assert.Equal(Vector3.Up, WheelContact.At(0.7f, new Vector3(0f, -1f, 0f)).Normal);
+		Assert.Equal(Vector3.Up, WheelContact.At(0.7f, new Vector3(float.NaN, 1f, 0f)).Normal);
+	}
+
+	[Theory]
+	[InlineData(10f)]
+	[InlineData(20f)]
+	[InlineData(25f)]
+	public void ClimbingASteadySlopeFlatOut_ItsFourWheelsStayDown_OffTheirBumpStops(float degrees)
+	{
+		// A truck climbing steadily is not lengthening its springs: damped on its own vertical
+		// speed rather than on its speed over the ground, it sagged onto its bump stops as it
+		// gathered speed uphill (at 12 m/s up 20°, 0.36 m of a 0.25 m travel).
+		float grade = MathF.Tan(Mathf.DegToRad(degrees));
+		const float z = 30f;
+		FourByFourState state = FourByFourState.At(new Vector3(0f, (-grade * z) + Traits.RideHeightMeters, z), 0f);
+		state.Pitch = MathF.Asin(grade);
+		for (int i = 0; i < 120; i++)
+		{
+			Tick(ref state, Drive(0f, handbrake: true, tick: (uint)i), Slope(state, grade));
+		}
+
+		float bumpStop = Traits.SpringTravelMeters - FourByFourSim.BumpStopMeters;
+		for (int i = 0; i < 180; i++)
+		{
+			WheelContact[] wheels = Slope(state, grade);
+			float[] compressions = Compressions(state, wheels);
+			for (int w = 0; w < compressions.Length; w++)
+			{
+				Assert.True(compressions[w] > 0f, $"wheel {w} off the ground at tick {i}: {compressions[w]:0.000} m");
+				Assert.True(compressions[w] < bumpStop, $"wheel {w} on its bump stop at tick {i}: {compressions[w]:0.000} m");
+			}
+
+			Tick(ref state, Drive(1f, tick: (uint)(120 + i)), wheels);
+			Assert.False(state.Airborne);
+		}
+
+		Assert.True(Speed(state) > 10f, $"{Speed(state):0.0} m/s after 3 s");
+		Assert.InRange(state.Pitch, MathF.Asin(grade) - Mathf.DegToRad(3f), MathF.Asin(grade) + Mathf.DegToRad(3f));
+	}
+
+	[Theory]
+	[InlineData(0f)]
+	[InlineData(15f)]
+	[InlineData(30f)]
+	public void OnASlope_EveryWheelsRayFindsTheGround_UphillPairAndDownhill(float degrees)
+	{
+		// Cast from the hardpoint to a spring's reach, the downhill pair's rays missed from
+		// about 13° and the uphill pair's started under the ground from about 25°.
+		float grade = MathF.Tan(Mathf.DegToRad(degrees));
+		FourByFourState state = FourByFourState.At(new Vector3(0f, Traits.RideHeightMeters, 0f), 0f);
+		state.Pitch = MathF.Min(MathF.Asin(MathF.Min(grade, 1f)), FourByFourSim.MaxAttitudeRadians);
+		WheelContact[] wheels = Slope(state, grade);
+		float[] compressions = Compressions(state, wheels);
+		for (int w = 0; w < wheels.Length; w++)
+		{
+			Assert.True(wheels[w].Hit, $"wheel {w}'s ray missed");
+			Assert.True(compressions[w] > 0f, $"wheel {w} off the ground: {compressions[w]:0.000} m");
+		}
+	}
+
 	// ---- bounds -----------------------------------------------------------------------------
 
 	[Fact]
