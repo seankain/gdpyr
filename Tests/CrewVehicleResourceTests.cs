@@ -276,6 +276,42 @@ public class CrewVehicleResourceTests
 		}
 	}
 
+	[Fact]
+	public void The4x4sCollider_TurnedWithItsChassis_ClearsASlopeTo25Degrees_WhereLevelItMetOneFrom7()
+	{
+		// At rest on an even slope, the four springs are equal at the pitch whose sine is the
+		// grade (FourByFourSim.Compression) and the hardpoints' plane is at its ride height over
+		// the ground under its middle. The collider turned about that origin by that pitch
+		// clears the slope; left level (LE-D24) its floor met it a few metres from the middle.
+		FourByFourTraits traits = CrewVehicleFiles.FourByFourTraits();
+		float[] centre = CrewVehicleFiles.Tuple(FourByFour, "ColliderCentre", "Vector3");
+		float[] half = CrewVehicleFiles.Tuple(FourByFour, "ColliderHalfExtents", "Vector3");
+		Vector3[] points = CrewLayout.BevelledBox(new Vector3(centre[0], centre[1], centre[2]),
+			new Vector3(half[0], half[1], half[2]), F(FourByFour, "ColliderBevelMeters"));
+
+		float Clearance(float degrees, bool turned)
+		{
+			float grade = MathF.Tan(Mathf.DegToRad(degrees));
+			Basis basis = CrewPose.Rotation(0f, turned ? MathF.Asin(grade) : 0f, 0f);
+			float least = float.MaxValue;
+			foreach (Vector3 point in points)
+			{
+				// Facing −Z, the ground rising ahead: under a point at z it is −ride − z × grade.
+				Vector3 p = basis * point;
+				least = MathF.Min(least, p.Y - (-traits.RideHeightMeters - (p.Z * grade)));
+			}
+
+			return least;
+		}
+
+		Assert.True(Clearance(7f, turned: false) < 0f, "level, the collider is meant to meet a 7° slope");
+		for (int degrees = 0; degrees <= 25; degrees++)
+		{
+			float clearance = Clearance(degrees, turned: true);
+			Assert.True(clearance > 0.05f, $"turned, the collider is {clearance:0.000} m over a {degrees}° slope");
+		}
+	}
+
 	// ---- the files and the definition agree -------------------------------------------------
 
 	[Fact]

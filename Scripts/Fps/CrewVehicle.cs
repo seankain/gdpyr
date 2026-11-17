@@ -17,9 +17,11 @@ namespace Gdpyr.Fps;
 /// vehicles and nothing else (GV-D8). It casts its own rays — four wheel rays for the
 /// 4x4, one down for the helicopter — hands what they found to the pure step, moves
 /// itself by the velocity the step returns and gives the step back where it went. The
-/// collider stays upright and turns only with the heading (GV-D3): the sprung chassis's
+/// body stays upright and turns only with the heading (GV-D3): the sprung chassis's
 /// pitch and roll, or the helicopter's tilt, are drawn on the mesh and applied to the
-/// seats and the hull's boxes through <see cref="Pose"/>.
+/// seats and the hull's boxes through <see cref="Pose"/>. The 4x4's collider shape takes
+/// the chassis's pitch and roll on the upright body (GV-D3, LE-D24), so that on a slope its
+/// floor lies along the ground rather than level into it.
 ///
 /// It never ticks itself: <see cref="CrewVehicleManager"/> steps it, on the server's
 /// tick, with its driver's frame or a parked one. Its presentation — greybox boxes in
@@ -48,6 +50,7 @@ public partial class CrewVehicle : CharacterBody3D
 	private const float WheelWidthMeters = 0.3f;
 
 	private readonly WheelContact[] _wheels = new WheelContact[FourByFourSim.Wheels];
+	private CollisionShape3D _collider;
 	private readonly Godot.Collections.Array<Rid> _exclude = new();
 	private PhysicsRayQueryParameters3D _ray;
 
@@ -211,11 +214,13 @@ public partial class CrewVehicle : CharacterBody3D
 		CollisionMask = CollisionLayers.VehicleMask;
 
 		Vector3[] points = Definition.ToColliderPoints();
-		AddChild(new CollisionShape3D
+		_collider = new CollisionShape3D
 		{
 			Name = "Collider",
 			Shape = new ConvexPolygonShape3D { Points = points },
-		});
+		};
+		AddChild(_collider);
+		TiltCollider();
 
 		FlatRadius = 0f;
 		for (int i = 0; i < points.Length; i++)
@@ -260,7 +265,7 @@ public partial class CrewVehicle : CharacterBody3D
 		FourByFourTraits traits = DriveTraits;
 		for (int wheel = 0; wheel < FourByFourSim.Wheels; wheel++)
 		{
-			_wheels[wheel] = CastWheel(space, FourByFourSim.Hardpoint(Drive, traits, wheel), traits.RayLengthMeters);
+			_wheels[wheel] = CastWheel(space, FourByFourSim.Hardpoint(Drive, traits, wheel), traits);
 		}
 
 		Vector3 driveVelocity = FourByFourSim.Step(ref Drive, traits, frame, _wheels, dt);
@@ -282,7 +287,7 @@ public partial class CrewVehicle : CharacterBody3D
 	/// </summary>
 	private void Move(Vector3 position, float yaw, Vector3 velocity, out Vector3 after, out Vector3 afterVelocity)
 	{
-		GlobalTransform = new Transform3D(new Basis(Vector3.Up, yaw), position);
+		PlaceBody(position, yaw);
 		Velocity = velocity;
 		MoveAndSlide();
 		after = GlobalPosition;
@@ -290,13 +295,46 @@ public partial class CrewVehicle : CharacterBody3D
 		Velocity = afterVelocity;
 	}
 
-	/// <summary>One wheel's ray, straight down from its hardpoint on the upright body (§5.1).</summary>
-	private WheelContact CastWheel(PhysicsDirectSpaceState3D space, Vector3 from, float length)
+	/// <summary>
+	/// The upright body at <paramref name="position"/>, turned to <paramref name="yaw"/>, and
+	/// the 4x4's collider on it at the chassis's pitch and roll (<see cref="TiltCollider"/>).
+	/// </summary>
+	private void PlaceBody(Vector3 position, float yaw)
 	{
-		_ray.From = from;
-		_ray.To = from + (Vector3.Down * length);
+		GlobalTransform = new Transform3D(new Basis(Vector3.Up, yaw), position);
+		TiltCollider();
+	}
+
+	/// <summary>
+	/// The 4x4's collider shape turned on the upright body by the chassis's pitch and roll,
+	/// about the body's origin as the mesh and the hull's boxes are (LE-D24). Level, its floor
+	/// has 0.25 m under it and meets any slope past about 7° a few metres from the middle,
+	/// which beaches it off its wheels; turned with the chassis, it lies along the ground.
+	/// The wheel rays are still cast from the upright body. The helicopter's stays upright.
+	/// </summary>
+	private void TiltCollider()
+	{
+		if (_collider == null || Kind != CrewVehicleKind.FourByFour)
+		{
+			return;
+		}
+
+		_collider.Transform = new Transform3D(CrewPose.Rotation(0f, Drive.Pitch, Drive.Roll), Vector3.Zero);
+	}
+
+	/// <summary>
+	/// One wheel's ray, straight down past its hardpoint on the upright body (§5.1): from
+	/// <see cref="FourByFourTraits.RayLiftMeters"/> above it to
+	/// <see cref="FourByFourTraits.RayLengthMeters"/> below.
+	/// </summary>
+	private WheelContact CastWheel(PhysicsDirectSpaceState3D space, Vector3 hardpoint, in FourByFourTraits traits)
+	{
+		_ray.From = hardpoint + (Vector3.Up * traits.RayLiftMeters);
+		_ray.To = hardpoint + (Vector3.Down * traits.RayLengthMeters);
 		Godot.Collections.Dictionary hit = space.IntersectRay(_ray);
-		return hit.Count == 0 ? WheelContact.Miss : WheelContact.At(from.Y - hit["position"].AsVector3().Y);
+		return hit.Count == 0
+			? WheelContact.Miss
+			: WheelContact.At(hardpoint.Y - hit["position"].AsVector3().Y, hit["normal"].AsVector3());
 	}
 
 	/// <summary>The helicopter's skids above the ground under them (§5.2); NaN when there is none within reach.</summary>
@@ -429,15 +467,16 @@ public partial class CrewVehicle : CharacterBody3D
 		}
 
 		CrewPose pose = Pose;
-		GlobalTransform = new Transform3D(new Basis(Vector3.Up, pose.Yaw), pose.Position);
+		PlaceBody(pose.Position, pose.Yaw);
 		Velocity = SimVelocity;
 	}
 
 	/// <summary>
 	/// Client, a puppet: placed at <paramref name="pose"/>, the records interpolated at the
-	/// render clock (§8.1), its body upright and turned to its heading so the local player
-	/// meets it there. The wheels are put on the ground by rays cast here — or the
-	/// helicopter's height measured — for the eye and the HUD alone.
+	/// render clock (§8.1), its body upright and turned to its heading, and a 4x4's collider
+	/// tilted with its chassis, so the local player meets it there. The wheels are put on
+	/// the ground by rays cast here — or the helicopter's height measured — for the eye and
+	/// the HUD alone.
 	/// </summary>
 	public void PlaceAt(in CrewPose pose)
 	{
@@ -456,7 +495,7 @@ public partial class CrewVehicle : CharacterBody3D
 			Drive.Roll = pose.Roll;
 		}
 
-		GlobalTransform = new Transform3D(new Basis(Vector3.Up, pose.Yaw), pose.Position);
+		PlaceBody(pose.Position, pose.Yaw);
 
 		PhysicsDirectSpaceState3D space = GetWorld3D()?.DirectSpaceState;
 		if (space == null || _ray == null)
@@ -473,7 +512,7 @@ public partial class CrewVehicle : CharacterBody3D
 		FourByFourTraits traits = DriveTraits;
 		for (int wheel = 0; wheel < FourByFourSim.Wheels; wheel++)
 		{
-			_wheels[wheel] = CastWheel(space, FourByFourSim.Hardpoint(Drive, traits, wheel), traits.RayLengthMeters);
+			_wheels[wheel] = CastWheel(space, FourByFourSim.Hardpoint(Drive, traits, wheel), traits);
 		}
 	}
 
