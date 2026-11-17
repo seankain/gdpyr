@@ -311,8 +311,8 @@ on the ground, and you find that out from the HUD rather than from a second menu
 leaves the field and the camera moves above the map.
 
 The HUD keeps text to a minimum: three short lines top left (points, units and clock; what the
-barracks is building; the nodes) and, bottom right, a **command card** for whatever is selected,
-each button with its key printed on it:
+barracks is building; the nodes), a **map** in the bottom-right corner, and beside it a **command
+card** for whatever is selected, each button with its key printed on it:
 
 | selected | the card |
 |---|---|
@@ -325,13 +325,30 @@ each button with its key printed on it:
 Every card up for units ends its status line with their ammunition: `ammo 24/30` for one, the share
 left (and how many are out) for several.
 
+The **map** is the field from straight above, north (−Z) up, shaded from the world's own heights
+(one ray straight down per 1.5 m cell against the world layer, taken over the first second, so
+nothing that moves is in the picture). On it, every frame: the side's units on foot as dots,
+vehicles as squares, aircraft as diamonds, the selection in white, barracks, finished structures by
+their footprints, sites as amber outlines, and the outline of the ground the camera sees.
+
+| on the map | |
+|---|---|
+| left-click | the camera goes straight over that point, looking straight down, at the height it was |
+| left-drag | the camera follows the pointer across the map |
+| middle button (`rts_map_zoom`) | zoom the map in about the pointer — ×2, ×4 — and from ×4 back out to the whole field |
+| mouse wheel | zoom the map in and out about the pointer; the camera is not zoomed |
+
+Zoomed in, the map follows the camera when it is flown off the square shown. A right-click on the map
+does nothing: the map stops it reaching the world behind. `./scripts/minimap-checks.sh` (a Godot 4.6
+.NET binary on `PATH` or in `$GODOT`) checks all of it in the game; `SHOTS=dir` saves screenshots.
+
 Every key below works whether or not the card is up. `K`, or the **Keys** button bottom left, opens
 and folds away the full key list:
 
 | | |
 |---|---|
 | WASD, or the screen edge | pan |
-| Q / E, mouse wheel | rotate, zoom |
+| Q / E, mouse wheel | rotate, zoom (over the map: zoom the map) |
 | left-drag, left-click, `F` | box select, single select, select all |
 | right-click | order the selection (or, with nothing selected, move the barracks rally point — onto a node you hold, and the barracks' units come out there) |
 | `X` `C` `B` `Z` | attack-move · patrol · defend · stop, applied by the next right-click |

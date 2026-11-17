@@ -70,6 +70,7 @@ public static class StrategistCards
 		+ "    RMB a site or a damaged structure to finish or mend it\n"
 		+ "units out of a fight for 3 s heal inside the barracks ring and a supply truck's ring\n"
 		+ "    and are filled back up with rounds there at once; out of them, ammo runs out\n"
+		+ "map (bottom right): LMB click or drag looks straight down there · MMB or wheel over it zoom in/out\n"
 		+ "K hide this list · F1 ground force · F2 strategist";
 
 	/// <summary>

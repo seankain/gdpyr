@@ -30,6 +30,11 @@
          are worth answering without standing a match up. The HUD that draws it —
          Scripts/Ui/StrategistHud.cs — is left out. -->
     <Compile Include="../Scripts/Ui/StrategistCards.cs" />
+    <!-- The strategist's map, the half without a window: which square of the field it
+         shows, where a point is on it and what a click on it is, how it zooms and follows,
+         and how the ground under it is coloured. The control that draws it -
+         Scripts/Ui/Minimap.cs - is left out. -->
+    <Compile Include="../Scripts/Ui/MinimapView.cs" />
     <!-- The map editor's screen, the half without a window (docs/LEVEL_EDITOR.md §8.2):
          which key does what, which settings a brush shows and what a key steps them by,
          what the status line says and what the test process is started with. The
