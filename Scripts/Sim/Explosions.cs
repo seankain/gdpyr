@@ -28,6 +28,12 @@ public enum ExplosionKind : byte
 
 	/// <summary>A vehicle destroyed: a large fireball, debris, and a burning, smoking wreck site.</summary>
 	Vehicle = 5,
+
+	/// <summary>
+	/// A smoke grenade going off (docs/OUTPOST.md §4.3): a pop, then a screen of thick grey
+	/// smoke that stands for as long as its cloud blocks sight (<see cref="SmokeRules"/>).
+	/// </summary>
+	Smoke = 6,
 }
 
 /// <summary>
@@ -212,6 +218,22 @@ public static class Explosions
 		ScorchRadius = 1.5f, ScorchSeconds = 8f,
 	};
 
+	/// <summary>
+	/// A smoke grenade: a small pop and then the screen — every puff let out over the first
+	/// two seconds, each as wide as the cloud and lasting as long as it does, rising slowly.
+	/// Drawn to the cloud's numbers (<see cref="SmokeRules"/>), which is what blocks sight; the
+	/// drawing is the half a person sees, the cloud the half the server's rays meet.
+	/// </summary>
+	private static readonly ExplosionProfile SmokeProfile = new()
+	{
+		FireballRadius = 0.25f, FireballSeconds = 0.08f,
+		FlashEnergy = 0.6f, FlashRange = 3f, FlashSeconds = 0.08f,
+		SmokePuffs = 16, SmokeRadius = SmokeRules.RadiusMeters, SmokeSeconds = SmokeRules.Seconds,
+		SmokeEmitSeconds = SmokeRules.BloomSeconds, SmokeRiseSpeed = 0.08f,
+		SmokeColor = new Color(0.72f, 0.72f, 0.7f),
+		ReachSeconds = 0.3f,
+	};
+
 	private static readonly ExplosionProfile VehicleProfile = new()
 	{
 		FireballRadius = 3f, FireballSeconds = 0.6f,
@@ -228,7 +250,7 @@ public static class Explosions
 	public static readonly ExplosionKind[] Drawn =
 	{
 		ExplosionKind.HandGrenade, ExplosionKind.LauncherGrenade, ExplosionKind.Shell, ExplosionKind.Drone,
-		ExplosionKind.Vehicle,
+		ExplosionKind.Vehicle, ExplosionKind.Smoke,
 	};
 
 	/// <summary>
@@ -242,6 +264,7 @@ public static class Explosions
 		ExplosionKind.Shell => "shell",
 		ExplosionKind.Drone => "drone",
 		ExplosionKind.Vehicle => "vehicle",
+		ExplosionKind.Smoke => "smoke",
 		_ => string.Empty,
 	};
 
@@ -269,6 +292,7 @@ public static class Explosions
 		ExplosionKind.Shell => ShellProfile,
 		ExplosionKind.Drone => DroneProfile,
 		ExplosionKind.Vehicle => VehicleProfile,
+		ExplosionKind.Smoke => SmokeProfile,
 		_ => default,
 	};
 

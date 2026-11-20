@@ -4,7 +4,7 @@ using Godot;
 namespace Gdpyr.Sim;
 
 /// <summary>
-/// The three things a builder can put up, as the ids the structure catalog is
+/// The four things a builder can put up, as the ids the structure catalog is
 /// indexed by (<c>StructureCatalog</c>). Written down here rather than only in the
 /// catalog because the computer strategist's plan is engine-free and has to name
 /// them, and because a structure's kind is one byte on the wire: appending is
@@ -21,7 +21,13 @@ public static class StructureKinds
 	/// <summary>A marksman on a platform. Sees further than anything else the strategist owns.</summary>
 	public const byte SniperTower = 2;
 
-	public const int Count = 3;
+	/// <summary>
+	/// A forward post with a mast and a drone pad (docs/OUTPOST.md): no gun, short eyes,
+	/// and two units to train — the scout drone and the operative. Rifles chip at it.
+	/// </summary>
+	public const byte Outpost = 3;
+
+	public const int Count = 4;
 
 	public static bool IsValid(byte kind) => kind < Count;
 }

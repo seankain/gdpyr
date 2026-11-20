@@ -156,7 +156,7 @@ public class MuzzleTests
 			weapons++;
 		}
 
-		Assert.Equal(17, weapons);
+		Assert.Equal(21, weapons);
 	}
 
 	// ---- how far from the camera (§2) ----------------------------------------------------

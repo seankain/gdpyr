@@ -46,7 +46,7 @@ public class VehicleControlsTests
 		// Every unit on the card has its key printed beside it, in the same order.
 		string hud = File.ReadAllText(Repo("Scripts/Ui/StrategistHud.cs"));
 		Assert.Contains("UnitCatalog.HeavyGunner, UnitCatalog.Dropship,", hud);
-		Assert.Contains("{ \"1\", \"2\", \"3\", \"4\", \"8\", \"9\", \"0\", \"T\" }", hud);
+		Assert.Contains("{ \"1\", \"2\", \"3\", \"4\", \"8\", \"9\", \"0\", \"T\", \"-\", \"=\" }", hud);
 	}
 
 	private static string Repo(string relative)

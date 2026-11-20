@@ -60,6 +60,16 @@ public enum OrderKind : byte
 	/// was told, which nothing steers by.
 	/// </summary>
 	Unload = 8,
+
+	/// <summary>
+	/// A scout drone's one attack (docs/OUTPOST.md §3.3): fly at <see cref="UnitOrder.Target"/>
+	/// — or at the player <see cref="UnitOrder.TargetOwnerId"/> names, while the drone can
+	/// see them — and go off there. Only ever given by the strategist: no planner, no
+	/// reflex and no other order makes a drone explode. Through the generic order
+	/// message, and given only to the units of an order that carry a charge
+	/// (<c>UnitDefinition.StrikeWeaponId</c>); the rest of a mixed selection keep theirs.
+	/// </summary>
+	Strike = 9,
 }
 
 /// <summary>
@@ -80,7 +90,7 @@ public struct UnitOrder
 	/// <summary>
 	/// What to shoot at, as an <see cref="OwnerId"/>: a peer, a unit, or
 	/// <see cref="OwnerId.None"/> for "whatever you find". Only meaningful for
-	/// <see cref="OrderKind.Attack"/> — and for <see cref="OrderKind.Build"/>, where it
+	/// <see cref="OrderKind.Attack"/> and <see cref="OrderKind.Strike"/> — and for <see cref="OrderKind.Build"/>, where it
 	/// names the structure to work on rather than anything to shoot.
 	/// </summary>
 	public int TargetOwnerId;
@@ -105,7 +115,12 @@ public struct UnitOrder
 	/// which checks what the generic one cannot — that the unit is a builder and the
 	/// structure is the sender's. Nor are <see cref="OrderKind.Embark"/> and
 	/// <see cref="OrderKind.Unload"/>, which name a vehicle and have requests of their own.
+	/// <see cref="OrderKind.Strike"/> is, and the server gives it only to the units of the
+	/// order that can carry it out.
 	/// </summary>
 	public static bool IsIssuable(byte kind) =>
-		kind is >= (byte)OrderKind.Move and <= (byte)OrderKind.Stop;
+		kind is >= (byte)OrderKind.Move and <= (byte)OrderKind.Stop or (byte)OrderKind.Strike;
+
+	/// <summary>Whether an order names a target as well as a place: an attack, and a drone's strike.</summary>
+	public static bool NamesTarget(OrderKind kind) => kind is OrderKind.Attack or OrderKind.Strike;
 }

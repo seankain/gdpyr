@@ -63,6 +63,12 @@ dedicated-server authoritative.
   for your own shots from the viewmodel's barrel, and for anyone else's only within a few metres
   of the camera, each part to its own reach; the placeholders, what they cost, and the console's
   `muzzle`
+- [`docs/OUTPOST.md`](docs/OUTPOST.md) — the outpost, a builder's fourth structure, and the two units
+  it trains: the scout drone, which hovers 12 m up, reveals the ground force to the strategist, patrols,
+  and goes off once on the strategist's explicit strike order; and the operative, fast and soft, who
+  closes from cover to cover, smokes open ground, waits for its side's riflemen, tanks and heavy gunners
+  to cover a bound — or calls for it — and kills with a suppressed pistol or a knife; the smoke that
+  stops sight lines; what was checked headless, in scenarios and on screen, and what is left
 - [`docs/LAN.md`](docs/LAN.md) — hosting a room of machines from a checkout, with a dev build
 - [`docs/MAPS.md`](docs/MAPS.md) — making a map: the template scene new maps inherit from
   (`Scenes/Maps/MapBase.tscn`), what a map scene must hold, and the catalog entry that puts it in
@@ -116,9 +122,10 @@ Scenes/         Main menu, greybox map, player, humanoid body, weapon, pause men
 Scenes/Maps/    The template new maps inherit from (docs/MAPS.md)
 Scenes/MapEditor/ The map editor's scene (docs/LEVEL_EDITOR.md §8)
 Scenes/Environment/ Map pieces: the barracks, the pillbox, the vehicle test strip
-Units/          UnitDefinition resources: three fighting tiers, the builder, the supply truck, and the
-                sniper and heavy gunner a sniper tower and a pillbox train
-Structures/     StructureDefinition resources: pillbox, sandbag wall, sniper tower
+Units/          UnitDefinition resources: three fighting tiers, the builder, the supply truck, the
+                sniper and heavy gunner a sniper tower and a pillbox train, the dropship, and the
+                scout drone and operative an outpost trains
+Structures/     StructureDefinition resources: pillbox, sandbag wall, sniper tower, outpost
 Tests/          xUnit over the engine-free sources — `dotnet test`, no Godot needed
 Tests/Scenarios/ Playtest scenario files: data, and authoring one needs no Godot install
 ThirdParty/     Vendored source: FluidHTN at a pinned commit (docs/HTN_BOTS.md §3.8); and assets: the
@@ -318,9 +325,10 @@ card** for whatever is selected, each button with its key printed on it:
 |---|---|
 | the barracks | a button per unit it trains, the queue, **Cancel last**; right-click the ground sets its rally point |
 | a finished sniper tower or pillbox | its one unit, its queue, **Cancel last** |
-| nothing but builders | a button per structure — **Pillbox (5)**, **Sandbag wall (6)**, **Sniper tower (7)** — with its price; the armed one stays lit until it is placed, or pressed again; and the orders |
+| a finished outpost | its two units — **Scout Drone (-)**, **Operative (=)** — its queue, **Cancel last** |
+| nothing but builders | a button per structure — **Pillbox (5)**, **Sandbag wall (6)**, **Sniper tower (7)**, **Outpost (O)** — with its price; the armed one stays lit until it is placed, or pressed again; and the orders |
 | a technical or a dropship, among anything | who is aboard of how many seats, the orders, **Unload (U)**, and **Tactics (H)** if units on foot are selected too |
-| any other units | the orders — **Attack-move (X)**, **Patrol (C)**, **Defend (B)**, **Stop (Z)**, the armed one lit — and **Tactics (H)** for units that have tactics |
+| any other units | the orders — **Attack-move (X)**, **Patrol (C)**, **Defend (B)**, **Stop (Z)**, the armed one lit — **Strike (J)** while scout drones are selected, and **Tactics (H)** for units that have tactics |
 
 Every card up for units ends its status line with their ammunition: `ammo 24/30` for one, the share
 left (and how many are out) for several.
@@ -353,8 +361,10 @@ and folds away the full key list:
 | right-click | order the selection (or, with nothing selected, move the barracks rally point — onto a node you hold, and the barracks' units come out there) |
 | `X` `C` `B` `Z` | attack-move · patrol · defend · stop, applied by the next right-click |
 | `1` `2` `3` `4` `8`, Backspace | queue an infantryman, a technical, a tank, a builder or a supply truck; cancel the last one |
-| `5` `6` `7` | with builders selected: put a pillbox, a sandbag wall or a sniper tower where the next right-click lands |
+| `5` `6` `7` `O` | with builders selected: put a pillbox, a sandbag wall, a sniper tower or an outpost where the next right-click lands |
 | `9` `0` | queue a sniper at a sniper tower, a heavy gunner at a pillbox (the selected one, else the one with the shortest queue) |
+| `-` `=` | queue a scout drone, an operative, at an outpost (the selected one, else the one with the shortest queue) |
+| `J` | with scout drones selected: the next right-click sends them to dive on that point — or on the enemy player clicked — and go off there. Pressed again, it puts the strike away; nothing else ever sets a drone off |
 | `T` | queue a dropship at the barracks |
 | right-click a technical or a dropship, with units selected | they walk to it and get in, nearest first, up to its seats (four, or eight); the vehicle becomes the selection and waits for them — a dropship in the air comes down to be boarded |
 | `U` | every selected vehicle with anybody aboard lets them out round it, where it is; a dropship lands first |
@@ -372,7 +382,8 @@ force is standing on that pad; the production line says `· out at the held node
 computer strategist does the same with a quiet node towards the ground force once its home garrison
 is full, and keeps the squads it is forming there.
 
-**Builders** put up three structures ([`docs/NETCODE.md`](docs/NETCODE.md) §10.5). A **pillbox**
+**Builders** put up four structures ([`docs/NETCODE.md`](docs/NETCODE.md) §10.5) — the fourth, the
+outpost, is below. A **pillbox**
 (150 points) is a concrete box with a gun in it that bullets do nothing to; a **sandbag wall** (25) is
 waist-high cover and nothing else; a **sniper tower** (125) puts a marksman eight metres up who sees
 and shoots to 90 m, and is as bullet-proof as the pillbox. A structure faces the way the camera
@@ -390,6 +401,24 @@ foot, shooting as far as it sees, 70 m, two hits to a kill, on a body softer tha
 fire suppressively — a gunner that loses sight of a target keeps firing for four seconds at the
 place it last saw it, so a player who ducks behind a wall finds the wall still being shot at when they
 look up. Neither comes out of a barracks. A knocked-down structure refunds what was still on its queue.
+
+**Outposts train scout drones and operatives** ([`docs/OUTPOST.md`](docs/OUTPOST.md)). An
+**outpost** (125 points, `O`) is a squat hut with a drone pad and a mast: no gun, eyes to 35 m, and
+rifles chip at it as at sandbags. Click it for its card. A **scout drone** (75, `-`) takes off from its
+door and hovers 12 m up — over wherever it was last sent, never landing — and sees 60 m from there over
+every low wall: every ground-force player it sees, the strategist sees, and the side's units hunt by
+what it saw. Patrol it with `C`. It is unarmed and soft (60 health), and it carries one charge that goes
+off **only** on the strategist's strike: select it, press `J` (or the card's **Strike**) and right-click
+a point or an enemy — it dives at 18 m/s, follows a named player while it can see them, and goes off on
+arrival, on an enemy coming within 2 m, or on flying into something, killing within about 2.5 m. An
+**operative** (80, `=`) is fast (7 m/s) and soft (60 health), with a suppressed pistol and a knife and
+three smoke grenades, and with tactics on it goes after the ground-force player its order names, the one
+it sees, or the nearest the side remembers: from cover to cover nearer them, crouched between bounds,
+waiting for the side's riflemen, tanks or heavy gunners to fire on them — it calls for that fire, and
+those with nothing of their own to shoot answer, firing on where it is after — and over open ground
+they watch it throws smoke first and runs through the screen. It holds its fire until it is close, and
+while it is unseen — behind its smoke or at their back — it goes for the knife, which kills outright.
+Smoke stops sight for everybody for eighteen seconds: units, gun posts, bots and the strategist's fog.
 
 **Cover** ([`docs/COVER.md`](docs/COVER.md)): the map has 18 low walls, 1.2 m high, that a
 standing body fires over and a crouched one hides behind, and 8 blocks nothing sees through. A

@@ -39,6 +39,10 @@ public static class WeaponCatalog
 		"res://Weapons/vehicle_gun/vehicle_gun.tres", // 14 — the 4x4's mounted gun
 		"res://Weapons/ram/ram.tres",           // 15 — a crew vehicle running a unit over
 		"res://Weapons/mortar_launcher/mortar_launcher.tres", // 16 — the ground force's carried mortar
+		"res://Weapons/knife/knife.tres",       // 17 — the operative's knife, melee
+		"res://Weapons/suppressed_pistol/suppressed_pistol.tres", // 18 — the operative's pistol
+		"res://Weapons/smoke_grenade/smoke_grenade.tres", // 19 — smoke grenade, thrown
+		"res://Weapons/scout_charge/scout_charge.tres",   // 20 — the scout drone's charge
 	};
 
 	public const byte Hammer = 0;
@@ -131,6 +135,32 @@ public static class WeaponCatalog
 	/// is the one number that differs from the barracks': three of them destroy a tank.
 	/// </summary>
 	public const byte MortarLauncher = 16;
+
+	/// <summary>
+	/// The operative's knife (docs/OUTPOST.md §4.4): an instant swing with no round, as the
+	/// hammer is, that kills a full-health player outright. Not carried by any player.
+	/// </summary>
+	public const byte Knife = 17;
+
+	/// <summary>
+	/// The operative's suppressed pistol (docs/OUTPOST.md §4.4): a subsonic 9 mm round with no
+	/// crack, a cough heard a few tens of metres off, and no flash to speak of.
+	/// </summary>
+	public const byte SuppressedPistol = 18;
+
+	/// <summary>
+	/// The smoke grenade (docs/OUTPOST.md §4.3): thrown like the hand grenade, on a short
+	/// fuse, and harmless — where it goes off a cloud stands that sight lines do not pass
+	/// (<see cref="Sim.SmokeField"/>).
+	/// </summary>
+	public const byte SmokeGrenade = 19;
+
+	/// <summary>
+	/// The scout drone's charge (docs/OUTPOST.md §3.3): never fired. Its round is what the
+	/// drone's blast does when the strategist orders it to strike, under the armour rule
+	/// every other explosive is.
+	/// </summary>
+	public const byte ScoutCharge = 20;
 
 	/// <summary>
 	/// No primary (docs/LOADOUT.md L-D1): the large slot's id when a kit carries none.

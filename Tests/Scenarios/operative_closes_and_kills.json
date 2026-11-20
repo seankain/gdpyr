@@ -1,0 +1,27 @@
+{
+  "name": "an operative bounds from wall to wall towards a player it sees, smokes the open ground at the end, and kills them up close",
+  "seeds": [3, 9],
+  "duration_ticks": 1800,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 0 },
+
+  "seats": [
+    { "id": "mark", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json" }
+  ],
+
+  "spawns": [
+    { "structure": "sandbag_wall", "team": "strategist", "at": [-60, 0.5, 22], "yaw": 3.14159 },
+    { "structure": "sandbag_wall", "team": "strategist", "at": [-58, 0.5, 33], "yaw": 3.14159 },
+    { "unit": "operative", "id": "op", "team": "strategist", "at": [-60, 0.5, 8], "order": "none" },
+    { "peer": "mark", "at": [-60, 1, 50], "look": [0, 0] }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.operative[phase=1,act=0].count", "op": ">=", "value": 2 },
+    { "metric": "events.operative[act=1].count", "op": ">=", "value": 1 },
+    { "metric": "events.kill[attacker<0].count", "op": ">=", "value": 1 },
+    { "metric": "observation.mark.self.alive.min", "op": "==", "value": 0 },
+    { "metric": "events.unit_lost.count", "op": "==", "value": 0 }
+  ]
+}

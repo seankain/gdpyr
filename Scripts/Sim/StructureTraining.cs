@@ -37,6 +37,36 @@ public static class StructureTraining
 	public const float RallyMeters = 6f;
 
 	/// <summary>
+	/// Which kind a train request at a structure gets (docs/OUTPOST.md §2): the kind it named,
+	/// when the structure trains it; for a structure that trains one kind, that kind whatever
+	/// was named — a request that names nothing, or names something else, has only one
+	/// answer. A structure that trains two refuses a request that does not name one of them.
+	/// <paramref name="requested"/> is a catalog id, or negative for none; anything past a
+	/// byte is nothing a client could honestly mean.
+	/// </summary>
+	public static bool TryChoose(byte first, byte second, int kinds, int requested, out byte kind)
+	{
+		kind = first;
+		if (kinds <= 0)
+		{
+			return false;
+		}
+
+		if (kinds == 1)
+		{
+			return true;
+		}
+
+		if (requested == first || requested == second)
+		{
+			kind = (byte)requested;
+			return true;
+		}
+
+		return false;
+	}
+
+	/// <summary>
 	/// The door of <paramref name="footprint"/>: just outside the wall nearest
 	/// <paramref name="home"/>, unless one of <paramref name="others"/> is on it, in
 	/// which case the next side round — left of home, right of home, then away from

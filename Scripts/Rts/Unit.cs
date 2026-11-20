@@ -180,6 +180,30 @@ public partial class Unit : CharacterBody3D, IHumanoidPoseSource
 	/// <summary>Server-side: the tick its weapon last fired a round; 0 for never. What a drill's base of fire is judged firing by.</summary>
 	public uint LastShotTick;
 
+	// ---- the outpost's units (docs/OUTPOST.md) -------------------------------------
+
+	/// <summary>Server: an operative's smoke grenades, thrown over open ground it has to cross (§4.3).</summary>
+	public GrenadeState Smokes;
+
+	/// <summary>Server: where an operative is in closing on its quarry (§4.2).</summary>
+	public OperativeState Operative;
+
+	/// <summary>Server: what an operative last found out about its quarry and the ground, refreshed at its scan rate.</summary>
+	public OperativeSituation OperativeSense;
+
+	/// <summary>Server: the tick an operative next looks again.</summary>
+	public uint OperativeScanTick;
+
+	/// <summary>
+	/// Server: a rifleman, tank or heavy gunner answering an operative's call for covering
+	/// fire (§4.5) — where it fires, until when.
+	/// </summary>
+	public bool HasCoverCall;
+
+	public Vector3 CoverCallPoint;
+
+	public uint CoverCallUntil;
+
 	/// <summary>
 	/// Whether it uses the tactics of docs/TACTICS.md §5 on its own (§5.9): the side's
 	/// default for new units when it is made, and the strategist's to change. Its
@@ -379,6 +403,7 @@ public partial class Unit : CharacterBody3D, IHumanoidPoseSource
 		byte weaponId = Definition?.WeaponDefinitionId ?? WeaponCatalog.Rifle;
 		Weapon = WeaponState.Ready(weaponId, WeaponCatalog.StatsFor(weaponId));
 		Grenades = GrenadeState.Full(Definition?.Grenades ?? 0);
+		Smokes = GrenadeState.Full(Definition?.SmokeGrenades ?? 0);
 		Rounds = FullRounds;
 
 		CollisionLayer = CollisionLayers.Units;
@@ -483,6 +508,25 @@ public partial class Unit : CharacterBody3D, IHumanoidPoseSource
 
 		Velocity = velocity;
 		MoveAndSlide();
+	}
+
+	/// <summary>
+	/// One tick of a scout drone's strike (docs/OUTPOST.md §3.3): straight along
+	/// <paramref name="velocity"/>, floating, against the world only. True when the move ran
+	/// into something — a wall, a roof, the ground — which sets the charge off.
+	/// </summary>
+	public bool FlyStrike(Vector3 velocity)
+	{
+		if (!IsSimulated)
+		{
+			return false;
+		}
+
+		MotionMode = MotionModeEnum.Floating;
+		CollisionMask = CollisionLayers.World;
+		Velocity = velocity;
+		MoveAndSlide();
+		return GetSlideCollisionCount() > 0;
 	}
 
 	/// <summary>
@@ -816,7 +860,14 @@ public partial class Unit : CharacterBody3D, IHumanoidPoseSource
 			// The collider stays the capsule the hitbox is; only what is drawn differs.
 			if (!Bootstrap.IsDedicatedServer)
 			{
-				BuildAirframe(height, radius);
+				if (Definition?.Hovers == true)
+				{
+					BuildQuadcopter(height, radius);
+				}
+				else
+				{
+					BuildAirframe(height, radius);
+				}
 			}
 
 			return;
@@ -898,6 +949,50 @@ public partial class Unit : CharacterBody3D, IHumanoidPoseSource
 			rotor.AddChild(Part("BladeA", new BoxMesh { Size = new Vector3(blade, 0.05f, 0.22f) }, Vector3.Zero,
 				darkMaterial));
 			rotor.AddChild(Part("BladeB", new BoxMesh { Size = new Vector3(0.22f, 0.05f, blade) }, Vector3.Zero,
+				darkMaterial));
+			airframe.AddChild(rotor);
+			_rotors[i] = rotor;
+		}
+	}
+
+	/// <summary>
+	/// A scout drone as drawn (docs/OUTPOST.md §3.1): a flat body, four arms in an X, a rotor
+	/// at the end of each and a camera under the nose — inside the small capsule it is hit as.
+	/// Its rotors are the ones <see cref="_Process"/> turns while it is off the ground.
+	/// </summary>
+	private void BuildQuadcopter(float height, float radius)
+	{
+		Color color = Definition?.Color ?? new Color(0.28f, 0.32f, 0.36f);
+		var bodyMaterial = new StandardMaterial3D { AlbedoColor = color };
+		var darkMaterial = new StandardMaterial3D { AlbedoColor = color.Darkened(0.6f) };
+		var lens = new StandardMaterial3D
+		{
+			AlbedoColor = new Color(0.9f, 0.2f, 0.15f),
+			ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+		};
+
+		var airframe = new Node3D { Name = "Airframe" };
+		AddChild(airframe);
+
+		float middle = height * 0.5f;
+		float span = radius * 2.6f;
+		airframe.AddChild(Part("Body", new BoxMesh { Size = new Vector3(radius * 0.9f, height * 0.3f, radius * 1.3f) },
+			new Vector3(0f, middle, 0f), bodyMaterial));
+		airframe.AddChild(Part("Camera", new SphereMesh { Radius = radius * 0.22f, Height = radius * 0.44f },
+			new Vector3(0f, middle - (height * 0.18f), -radius * 0.55f), lens));
+
+		_rotors = new Node3D[4];
+		for (int i = 0; i < _rotors.Length; i++)
+		{
+			float x = (i % 2 == 0 ? -1f : 1f) * span * 0.5f;
+			float z = (i < 2 ? -1f : 1f) * span * 0.5f;
+			var arm = Part($"Arm{i}", new BoxMesh { Size = new Vector3(0.04f, 0.04f, span * 0.72f) },
+				new Vector3(x * 0.5f, middle, z * 0.5f), darkMaterial);
+			arm.Rotation = new Vector3(0f, Mathf.Atan2(x, z), 0f);
+			airframe.AddChild(arm);
+
+			var rotor = new Node3D { Name = $"Rotor{i}", Position = new Vector3(x, middle + (height * 0.2f), z) };
+			rotor.AddChild(Part("Blade", new BoxMesh { Size = new Vector3(radius * 1.4f, 0.015f, 0.06f) }, Vector3.Zero,
 				darkMaterial));
 			airframe.AddChild(rotor);
 			_rotors[i] = rotor;

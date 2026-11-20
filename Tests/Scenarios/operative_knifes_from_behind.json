@@ -1,0 +1,25 @@
+{
+  "name": "an operative closes on a player looking the other way without a shot, and knifes them",
+  "seeds": [3, 9],
+  "duration_ticks": 1200,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 0 },
+
+  "seats": [
+    { "id": "mark", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json" }
+  ],
+
+  "spawns": [
+    { "structure": "sandbag_wall", "team": "strategist", "at": [-60, 0.5, 22], "yaw": 3.14159 },
+    { "unit": "operative", "id": "op", "team": "strategist", "at": [-60, 0.5, 8], "order": "none" },
+    { "peer": "mark", "at": [-60, 1, 50], "look": [3.14159, 0] }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.operative[act=3].count", "op": ">=", "value": 1 },
+    { "metric": "events.damage[amount<100].count", "op": "==", "value": 0 },
+    { "metric": "observation.mark.self.alive.min", "op": "==", "value": 0 },
+    { "metric": "events.unit_lost.count", "op": "==", "value": 0 }
+  ]
+}

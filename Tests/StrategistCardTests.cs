@@ -128,6 +128,7 @@ public class StrategistCardTests
 			[StructureKinds.Pillbox] = "rts_place_pillbox",
 			[StructureKinds.SandbagWall] = "rts_place_sandbags",
 			[StructureKinds.SniperTower] = "rts_place_tower",
+			[StructureKinds.Outpost] = "rts_place_outpost",
 		};
 		for (int i = 0; i < StrategistCards.Structures.Length; i++)
 		{

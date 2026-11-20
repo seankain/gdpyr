@@ -618,8 +618,9 @@ A list of commands, applied in order, rate-limited by §7.3:
 ]}}
 ```
 
-`cmd` is one of `order` (kind: move/attack/patrol/defend/stop), `build`, `cancel`, `rally`, `noop`
-and `construct`. `construct` sends builders to put a structure up ([`NETCODE.md`](NETCODE.md) §10.5)
+`cmd` is one of `order` (kind: move/attack/patrol/defend/stop/strike), `build`, `cancel`, `rally`, `noop`
+and `construct`. An order of kind `strike` is given only to the units it names that carry a charge —
+the scout drone — and the rest keep the order they had ([`OUTPOST.md`](OUTPOST.md) §3.3). `construct` sends builders to put a structure up ([`NETCODE.md`](NETCODE.md) §10.5)
 and lands in the same `UnitManager.ServerConstruct` a human strategist's `ClientConstruct` does, so it
 is charged, placed and refused by the same rules:
 
@@ -628,15 +629,17 @@ is charged, placed and refused by the same rules:
 ```
 
 `structure` is one of the names `welcome` publishes under `strategist_action.structures` —
-`pillbox`, `sandbag_wall`, `sniper_tower` — or its index; `yaw` is the way its front faces, in
+`pillbox`, `sandbag_wall`, `sniper_tower`, `outpost` — or its index; `yaw` is the way its front faces, in
 radians, and the server finds the ground under `target` itself.
 
-`build`, `cancel` and `rally` with a `slot` mean the finished sniper tower or pillbox in that
+`build`, `cancel` and `rally` with a `slot` mean the finished sniper tower, pillbox or outpost in that
 structure slot instead of a barracks ([`NETCODE.md`](NETCODE.md) §10.8): a sniper tower trains
-snipers and a pillbox heavy gunners, so `tier` is ignored. They land in `UnitManager.ServerTrain`,
+snipers and a pillbox heavy gunners, so `tier` is ignored there; an outpost trains two, and `tier`
+says which — 8 a scout drone, 9 an operative — and anything else is refused
+([`OUTPOST.md`](OUTPOST.md) §2). They land in `UnitManager.ServerTrain`,
 `ServerCancelTrain` and `ServerSetTrainingRally`, the same checks a human strategist's
 `ClientTrain` gets. A slot is the number `structure_placed` reported. A `build` at a barracks asking
-for one of the two (`tier` 5 or 6) is refused: neither comes out of a barracks.
+for one of the four (`tier` 5, 6, 8 or 9) is refused: none comes out of a barracks.
 
 ```json
 {"cmd":"build","slot":3}
@@ -782,6 +785,9 @@ from position deltas and gets it slightly wrong.
 | `vehicle_damaged` | attacker, vehicle, weapon, dealt, health — what a crew vehicle's hull took after its armour ([`GROUND_VEHICLES.md`](GROUND_VEHICLES.md) GV-D9), and what it has left. A hit its armour took all of is no record |
 | `vehicle_destroyed` | attacker, vehicle, weapon, x, z — a crew vehicle destroyed: its crew's `vehicle_exited` come first on the same tick, each dealt 50 as an explosive in the attacker's name (a `damage`), or killed outright from a helicopter more than 4 m up |
 | `vehicle_rammed` | vehicle, unit, killer, speed, x, z — a crew vehicle ran one of the strategist's units on foot over at `speed` m/s or more where it touched, towards the unit ([`GROUND_VEHICLES.md`](GROUND_VEHICLES.md) GV-D17); `killer` the peer credited, 0 for nobody. The unit's `damage`, `kill` and `unit_lost` name weapon 15, the ram |
+| `unit_strike` | unit, end, killed, x, z — a scout drone went off on the strategist's `strike` ([`OUTPOST.md`](OUTPOST.md) §3.3): `end` 1 it reached its aim, 2 an enemy came within 2 m, 3 it flew into something, 4 its eight seconds ran out; `killed` 1 when a player died of it. Its `unit_lost` follows, in its own name |
+| `operative` | unit, phase, act, x, z — an operative moving on its quarry ([`OUTPOST.md`](OUTPOST.md) §4.2): `phase` 1 bound, 2 hold, 3 smoke, 4 dash, 5 close; `act` 0 went into the phase, 1 threw smoke, 2 stabbed, 3 stabbed and killed |
+| `covering_fire` | unit, tier, x, z — a rifleman, tank or heavy gunner took up an operative's call for covering fire, and the point it fires at ([`OUTPOST.md`](OUTPOST.md) §4.5) |
 
 **A vehicle destroyed with passengers aboard** is several `unit_lost` records on one tick, all
 naming the killer: on the ground each passenger is thrown out (a `unit_disembarked`) and dealt half
@@ -894,7 +900,7 @@ reason, and `htn_locker_runner_kit` and `tactics_sniper_overwatch` 5,160. A scri
 bot: it moves at its own kit's speed, which a scenario that moves one states with `kit`.
 
 A spawn names exactly one of a `peer` (a seat to place), a `unit` (`infantry`, `technical`,
-`tank`, `builder`, `supply_truck`, `sniper`, `heavy_gunner` or `dropship`) or a `structure` (`pillbox`, `sandbag_wall`, `sniper_tower`, with a `yaw`). A
+`tank`, `builder`, `supply_truck`, `sniper`, `heavy_gunner`, `dropship`, `scout_drone` or `operative`) or a `structure` (`pillbox`, `sandbag_wall`, `sniper_tower`, `outpost`, with a `yaw`). A
 structure is put up finished and free, and the server refuses one that does not fit where it was put
 rather than guessing — a pillbox inside a wall is a typo in the scenario, not a test.
 
@@ -981,10 +987,12 @@ bundled data map.
 ```
 
 `cmd` is `embark` (with a `vehicle` label), `unload`, `order` (with a `kind` of `move`, `attack`,
-`patrol`, `defend` or `stop`, and a `target` `[x, z]` unless it is `stop`), `autonomy` (units and a
-`mode` of `on` or `off`), `autonomy_default` (a `mode`, and no units) or `construct` (builders, a
-`structure` of `pillbox`, `sandbag_wall` or `sniper_tower`, a `target` `[x, z]` and a `yaw` in
-radians, sent as §7.4's `construct`). A step's commands are
+`patrol`, `defend`, `stop` or `strike`, and a `target` `[x, z]` unless it is `stop`), `autonomy` (units and a
+`mode` of `on` or `off`), `autonomy_default` (a `mode`, and no units), `construct` (builders, a
+`structure` of `pillbox`, `sandbag_wall`, `sniper_tower` or `outpost`, a `target` `[x, z]` and a `yaw` in
+radians, sent as §7.4's `construct`) or `train` (a structure `slot` — a scenario's structures take
+slots in the order they are listed, from 0 — and a `unit` of `sniper`, `heavy_gunner`, `scout_drone`
+or `operative`, sent as §7.4's `build` with a `slot`; no units). A step's commands are
 sent once, through `act` (§7.4), on the step's first tick — each pass of a repeating script enters
 its steps again — and apply on the server's next tick; a step with no commands holds. In the warm-up
 the seat sends one empty command list, which takes it from its bot — a seat that has never acted
@@ -1169,7 +1177,8 @@ The same rule the rest of the codebase follows: the interesting part is engine-f
 | The strategist vector's `autonomy`, the last of a unit's 15 floats, and 1,156 floats in all (`gdpyr-agent-obs-3`); the client and the server name one schema version | `Tests/AgentObservationTests.cs`, `Tests/AgentInteropTests.cs` | TACTICS T8 |
 | The ground vector's kit block, the last five of 150 floats (`gdpyr-agent-obs-4`): appended, the kit normalized, the primary's reserve whatever is in the hands and no pouches empty, no vest apart from a spent one, the load's cap and floor, named in JSON beside the extras; the .NET client, the Python client and the server name one schema version | `Tests/AgentObservationTests.cs`, `Tests/AgentInteropTests.cs` | LOADOUT L8 |
 | A scenario's `map`, and each malformed one as a sentence; every checked-in scenario's map is one the catalog has | `Tests/ScenarioTests.cs` | LEVEL_EDITOR LE3 |
-| The seven `vehicle_*` kinds appended as 23–29, `vehicle_rammed` the last; a vehicle's kind named `type`, since every record has a `kind` | `Tests/AgentEventTests.cs` | GROUND_VEHICLES GV4 |
+| The seven `vehicle_*` kinds appended as 23–29; a vehicle's kind named `type`, since every record has a `kind` | `Tests/AgentEventTests.cs` | GROUND_VEHICLES GV4 |
+| `unit_strike`, `operative` and `covering_fire` appended as 30–32, `covering_fire` the last; `outpost` the fourth structure name, `strike` the sixth order name | `Tests/OutpostTests.cs`, `Tests/AgentEventTests.cs` | OUTPOST |
 | The `vehicle` and `list_vehicles` ops: a vehicle spawn and a seat placement, and each malformed one as a sentence; a ground step's `vehicle` and `look_at`; the `first` aggregate; the harness's kinds, seats, health and refusals against the files and `KioskRules`; `list_vehicles` as the server writes it and the client reads it; the state hash over a vehicle; a unit aboard a crew vehicle and a strategist command naming one refused | `Tests/CrewVehicleAgentTests.cs`, `Tests/ScenarioTests.cs` | GROUND_VEHICLES GV7 |
 
 One test is not engine-free and is worth the exception: the **divergence probe** of §3 — two seeded

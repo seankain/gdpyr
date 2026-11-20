@@ -383,7 +383,7 @@ public class AgentEventTests
 			Assert.Equal(expected[i].Default, Gdpyr.Playtest.EpisodeMetrics.DefaultFieldOf(expected[i].Name));
 		}
 
-		Assert.Equal(AgentEventKind.VehicleRammed, AgentEventSchema.Last);
+		Assert.Equal(AgentEventKind.CoveringFire, AgentEventSchema.Last);
 	}
 
 	[Fact]

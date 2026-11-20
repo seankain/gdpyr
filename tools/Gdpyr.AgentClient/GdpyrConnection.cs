@@ -96,6 +96,13 @@ public sealed class GdpyrCommand
 	public int Barracks;
 	public int Tier;
 
+	/// <summary>
+	/// For a build, cancel or rally at a structure rather than a barracks: its structure
+	/// slot (docs/NETCODE.md §10.8); -1 for a barracks. At an outpost <see cref="Tier"/> names
+	/// which of its two units (docs/OUTPOST.md §2).
+	/// </summary>
+	public int Slot = -1;
+
 	/// <summary>For an embark: the vehicle the units are to get into, by id.</summary>
 	public int Vehicle;
 
@@ -112,6 +119,9 @@ public sealed class GdpyrCommand
 		new() { Cmd = "build", Barracks = barracks, Tier = tier };
 
 	public static GdpyrCommand Cancel(int barracks) => new() { Cmd = "cancel", Barracks = barracks };
+
+	/// <summary>One <paramref name="tier"/> on the queue of the structure in <paramref name="slot"/>: a tower, a pillbox or an outpost.</summary>
+	public static GdpyrCommand Train(int slot, int tier) => new() { Cmd = "build", Slot = slot, Tier = tier };
 
 	public static GdpyrCommand Rally(int barracks, float x, float z) =>
 		new() { Cmd = "rally", Barracks = barracks, Target = new[] { x, z } };
@@ -784,6 +794,11 @@ public sealed class GdpyrConnection : IDisposable
 		{
 			writer.WriteString("structure", command.Structure);
 			writer.WriteNumber("yaw", command.Yaw);
+		}
+
+		if (command.Slot >= 0)
+		{
+			writer.WriteNumber("slot", command.Slot);
 		}
 
 		writer.WriteNumber("barracks", command.Barracks);

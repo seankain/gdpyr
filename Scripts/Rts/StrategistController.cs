@@ -255,6 +255,10 @@ public partial class StrategistController : Node3D
 		else if (@event.IsActionPressed("rts_build_dropship")) { QueueUnit(UnitCatalog.Dropship); }
 		else if (@event.IsActionPressed("rts_build_sniper")) { Train(UnitCatalog.Sniper); }
 		else if (@event.IsActionPressed("rts_build_gunner")) { Train(UnitCatalog.HeavyGunner); }
+		else if (@event.IsActionPressed("rts_build_scout_drone")) { Train(UnitCatalog.ScoutDrone); }
+		else if (@event.IsActionPressed("rts_build_operative")) { Train(UnitCatalog.Operative); }
+		else if (@event.IsActionPressed("rts_place_outpost")) { ArmPlacement(StructureKinds.Outpost); }
+		else if (@event.IsActionPressed("rts_order_strike")) { ArmStrike(); }
 		else if (@event.IsActionPressed("rts_place_pillbox")) { ArmPlacement(StructureKinds.Pillbox); }
 		else if (@event.IsActionPressed("rts_place_sandbags")) { ArmPlacement(StructureKinds.SandbagWall); }
 		else if (@event.IsActionPressed("rts_place_tower")) { ArmPlacement(StructureKinds.SniperTower); }
@@ -839,7 +843,8 @@ public partial class StrategistController : Node3D
 		PlayerCombat enemy = PickEnemyPlayer(Cursor, out Vector3 lastKnown);
 		if (enemy != null)
 		{
-			kind = OrderKind.Attack;
+			// A strike on an enemy is a strike at them, not an attack (docs/OUTPOST.md §3.3).
+			kind = kind == OrderKind.Strike ? OrderKind.Strike : OrderKind.Attack;
 			targetOwnerId = OwnerId.ForPeer(enemy.PeerId);
 
 			// Where they were last seen, not where they are: the order carries the
@@ -965,9 +970,9 @@ public partial class StrategistController : Node3D
 			return;
 		}
 
-		if (SelectedStructure is { } selected && IsTrainer(selected, team) && selected.TrainsUnit == definitionId)
+		if (SelectedStructure is { } selected && IsTrainer(selected, team) && selected.CanTrain(definitionId))
 		{
-			units.RequestTrain(selected.Slot);
+			units.RequestTrain(selected.Slot, definitionId);
 			return;
 		}
 
@@ -975,7 +980,7 @@ public partial class StrategistController : Node3D
 		for (int i = 0; i < SimConfig.MaxStructures; i++)
 		{
 			Structure structure = units.StructureAt(i);
-			if (IsTrainer(structure, team) && structure.TrainsUnit == definitionId
+			if (IsTrainer(structure, team) && structure.CanTrain(definitionId)
 				&& (best == null || structure.TrainingQueued < best.TrainingQueued))
 			{
 				best = structure;
@@ -984,7 +989,7 @@ public partial class StrategistController : Node3D
 
 		if (best != null)
 		{
-			units.RequestTrain(best.Slot);
+			units.RequestTrain(best.Slot, definitionId);
 		}
 	}
 
@@ -1022,6 +1027,28 @@ public partial class StrategistController : Node3D
 	{
 		_pendingOrder = kind;
 		_placing = NotPlacing;
+	}
+
+	/// <summary>
+	/// <c>J</c> and the card's strike (docs/OUTPOST.md §3.3): arms a strike for the next
+	/// right-click while a scout drone is selected, and puts it away pressed again. Nothing
+	/// with no drone selected — a strike given to riflemen would be refused anyway.
+	/// </summary>
+	private void ArmStrike()
+	{
+		PruneSelection();
+		bool drones = false;
+		for (int i = 0; i < _selected.Count && !drones; i++)
+		{
+			drones = _selected[i].Definition is { CanStrike: true };
+		}
+
+		if (!drones && _pendingOrder != OrderKind.Strike)
+		{
+			return;
+		}
+
+		Arm(StrategistCards.ArmFromCard(_pendingOrder, OrderKind.Strike));
 	}
 
 	/// <summary><c>Z</c> and the card's stop: puts any structure away and clears the selection's orders.</summary>
@@ -1422,6 +1449,11 @@ public partial class StrategistController : Node3D
 			if (_selected[i] != null && UnitCatalog.CanConstruct(_selected[i].DefinitionId))
 			{
 				summary.Builders++;
+			}
+
+			if (_selected[i] is { Definition.CanStrike: true })
+			{
+				summary.Strikers++;
 			}
 
 			if (HasTactics(_selected[i]))

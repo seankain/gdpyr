@@ -113,6 +113,14 @@ public partial class ProjectileDefinition : Resource
 	[Export]
 	public ExplosionKind Explosion;
 
+	/// <summary>
+	/// Whether it lets out a smoke cloud where its fuse runs out (docs/OUTPOST.md §4.3):
+	/// the smoke grenade. The cloud's size and how long it stands are
+	/// <see cref="SmokeRules"/>'s, one rule for every peer and the tests.
+	/// </summary>
+	[Export]
+	public bool MakesSmoke;
+
 	[ExportCategory("Sound")]
 
 	/// <summary>
@@ -143,5 +151,6 @@ public partial class ProjectileDefinition : Resource
 		Fused,
 		VehicleDamageScale,
 		StructureDamageScale,
-		VehicleImpactDamage);
+		VehicleImpactDamage,
+		MakesSmoke);
 }

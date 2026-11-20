@@ -34,6 +34,12 @@ public enum ShotKind : byte
 
 	/// <summary>An 81 mm mortar: the barracks' and the ground force's carried one.</summary>
 	Mortar = 8,
+
+	/// <summary>
+	/// The operative's suppressed pistol (docs/OUTPOST.md §4.4): a cough with no crack,
+	/// heard a few tens of metres off where a pistol is heard across the field.
+	/// </summary>
+	SuppressedPistol = 9,
 }
 
 /// <summary>
@@ -170,7 +176,7 @@ public static class WeaponSounds
 	public static readonly ShotKind[] Shots =
 	{
 		ShotKind.Pistol, ShotKind.Rifle, ShotKind.Dmr, ShotKind.MachineGun, ShotKind.HeavyMachineGun,
-		ShotKind.Launcher, ShotKind.Cannon, ShotKind.Mortar,
+		ShotKind.Launcher, ShotKind.Cannon, ShotKind.Mortar, ShotKind.SuppressedPistol,
 	};
 
 	/// <summary>Every kind of flyby there is something to play for.</summary>
@@ -185,6 +191,20 @@ public static class WeaponSounds
 		BoomGain = 0.5f, BoomHz = 140f, BoomDrop = 0.6f, BoomSeconds = 0.05f,
 		TailGain = 0.25f, TailDelaySeconds = 0.02f, TailSeconds = 0.12f, TailCutoffHz = 1800f,
 		UnitSizeMeters = 12f, MaxDistanceMeters = 250f, VolumeDb = -4f, PitchJitter = 0.04f,
+	};
+
+	/// <summary>
+	/// A pistol through a can: no crack to speak of, a dull thump and a short tail, and a
+	/// fraction of a pistol's reach — still further than a round is heard going by, which
+	/// every shot is.
+	/// </summary>
+	private static readonly SoundVoice SuppressedPistolVoice = new()
+	{
+		Seconds = 0.25f,
+		CrackGain = 0.12f, CrackSeconds = 0.006f, CrackCutoffHz = 2500f,
+		BoomGain = 0.45f, BoomHz = 180f, BoomDrop = 0.5f, BoomSeconds = 0.04f,
+		TailGain = 0.08f, TailDelaySeconds = 0.01f, TailSeconds = 0.05f, TailCutoffHz = 1200f,
+		UnitSizeMeters = 3f, MaxDistanceMeters = 90f, VolumeDb = -14f, PitchJitter = 0.05f,
 	};
 
 	private static readonly SoundVoice RifleVoice = new()
@@ -289,6 +309,7 @@ public static class WeaponSounds
 		ShotKind.Launcher => LauncherVoice,
 		ShotKind.Cannon => CannonVoice,
 		ShotKind.Mortar => MortarVoice,
+		ShotKind.SuppressedPistol => SuppressedPistolVoice,
 		_ => default,
 	};
 
@@ -312,6 +333,7 @@ public static class WeaponSounds
 		ShotKind.Launcher => "launcher",
 		ShotKind.Cannon => "cannon",
 		ShotKind.Mortar => "mortar",
+		ShotKind.SuppressedPistol => "suppressed_pistol",
 		_ => string.Empty,
 	};
 

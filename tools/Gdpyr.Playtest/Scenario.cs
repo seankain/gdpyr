@@ -72,16 +72,23 @@ public struct ScriptStep
 public sealed class ScriptCommand
 {
 	/// <summary>The names the step type knows.</summary>
-	public static readonly string[] Names = { "embark", "unload", "order", "autonomy", "autonomy_default", "construct" };
+	public static readonly string[] Names =
+		{ "embark", "unload", "order", "autonomy", "autonomy_default", "construct", "train" };
 
 	/// <summary>The modes an <c>autonomy</c> or <c>autonomy_default</c> command names (docs/TACTICS.md §5.9).</summary>
 	public static readonly string[] Modes = { "on", "off" };
 
 	/// <summary>The order kinds an <c>order</c> may name, as the control plane spells them.</summary>
-	public static readonly string[] OrderKinds = { "move", "attack", "patrol", "defend", "stop" };
+	public static readonly string[] OrderKinds = { "move", "attack", "patrol", "defend", "stop", "strike" };
 
 	/// <summary>The structures a <c>construct</c> may name, as <c>welcome</c> publishes them (docs/AGENT_API.md §7.4).</summary>
-	public static readonly string[] Structures = { "pillbox", "sandbag_wall", "sniper_tower" };
+	public static readonly string[] Structures = { "pillbox", "sandbag_wall", "sniper_tower", "outpost" };
+
+	/// <summary>The units a <c>train</c> may name at a structure, as a spawn names them (docs/OUTPOST.md §2).</summary>
+	public static readonly string[] Trained = { "sniper", "heavy_gunner", "scout_drone", "operative" };
+
+	/// <summary>The catalog id of each of <see cref="Trained"/>.</summary>
+	public static readonly int[] TrainedIds = { 5, 6, 8, 9 };
 
 	public string Cmd = "order";
 
@@ -105,6 +112,15 @@ public sealed class ScriptCommand
 
 	/// <summary>For <c>autonomy</c> and <c>autonomy_default</c>: one of <see cref="Modes"/>.</summary>
 	public string Mode;
+
+	/// <summary>
+	/// For a <c>train</c>: the structure slot to train at — structures a scenario places
+	/// take slots in the order they are listed, from 0 — and the unit, one of <see cref="Trained"/>.
+	/// </summary>
+	public int Slot = -1;
+
+	/// <inheritdoc cref="Slot"/>
+	public string Unit;
 }
 
 /// <summary>
@@ -961,6 +977,8 @@ public sealed class Scenario
 				Mode = Text(element, "mode", null),
 				Structure = Text(element, "structure", null),
 				Yaw = (float)Number(element, "yaw", 0.0),
+				Slot = (int)Number(element, "slot", -1.0),
+				Unit = Text(element, "unit", null),
 			};
 
 			if (Array.IndexOf(ScriptCommand.Names, command.Cmd) < 0)
@@ -968,6 +986,19 @@ public sealed class Scenario
 				throw new ScenarioException(
 					$"'{scenario.Name}': a step's command is one of {string.Join(", ", ScriptCommand.Names)},"
 					+ $" not '{command.Cmd ?? "nothing"}'");
+			}
+
+			if (command.Cmd == "train")
+			{
+				if (command.Slot < 0 || Array.IndexOf(ScriptCommand.Trained, command.Unit) < 0)
+				{
+					throw new ScenarioException(
+						$"'{scenario.Name}': a 'train' command names a structure 'slot' and a 'unit', one of"
+						+ $" {string.Join(", ", ScriptCommand.Trained)}");
+				}
+
+				read.Add(command);
+				continue;
 			}
 
 			// The side's default for new units names no units; everything else does.

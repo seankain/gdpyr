@@ -1,0 +1,30 @@
+[gd_resource type="Resource" script_class="UnitDefinition" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Rts/UnitDefinition.cs" id="1_unitdef"]
+
+[resource]
+script = ExtResource("1_unitdef")
+Name = &"operative"
+Cost = 80
+BuildSeconds = 6.0
+TrainedInBarracks = false
+MaxHealth = 60.0
+RegenPerSecond = 4.0
+MoveSpeed = 7.0
+HeightMeters = 1.8
+RadiusMeters = 0.4
+EyeHeightMeters = 1.5
+CrouchHeightMeters = 1.0
+CrouchEyeHeightMeters = 0.85
+SensorRadiusMeters = 45.0
+EngageRangeMeters = 22.0
+LeashRadiusMeters = 25.0
+ArrivalRadiusMeters = 1.0
+WeaponId = 18
+AccuracyConeDegrees = 1.2
+MaxRounds = 72
+Grenades = 0
+SmokeGrenades = 3
+MeleeWeaponId = 17
+Doctrine = 4
+Color = Color(0.16, 0.17, 0.2, 1)

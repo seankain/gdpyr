@@ -149,6 +149,9 @@ public sealed class EpisodeMetrics
 		"vehicle_damaged" => "dealt",
 		"vehicle_destroyed" => "weapon",
 		"vehicle_rammed" => "speed",
+		"unit_strike" => "killed",
+		"operative" => "phase",
+		"covering_fire" => "tier",
 		_ => null,
 	};
 
@@ -332,7 +335,7 @@ public sealed class EpisodeMetrics
 		"squad_task", "contact_spotted", "node_contested", "unit_embarked", "unit_disembarked", "dropship_landed",
 		"grenade_thrown", "unit_task", "squad_drill", "kit", "resupply",
 		"vehicle_requested", "vehicle_spawned", "vehicle_entered", "vehicle_exited", "vehicle_damaged",
-		"vehicle_destroyed", "vehicle_rammed",
+		"vehicle_destroyed", "vehicle_rammed", "unit_strike", "operative", "covering_fire",
 	};
 
 	/// <summary>
@@ -372,6 +375,9 @@ public sealed class EpisodeMetrics
 		["vehicle_damaged"] = new[] { "attacker", "vehicle", "weapon", "dealt", "health" },
 		["vehicle_destroyed"] = new[] { "attacker", "vehicle", "weapon", "x", "z" },
 		["vehicle_rammed"] = new[] { "vehicle", "unit", "killer", "speed", "x", "z" },
+		["unit_strike"] = new[] { "unit", "end", "killed", "x", "z" },
+		["operative"] = new[] { "unit", "phase", "act", "x", "z" },
+		["covering_fire"] = new[] { "unit", "tier", "x", "z" },
 	};
 
 	/// <summary>

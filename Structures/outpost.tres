@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="StructureDefinition" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Rts/StructureDefinition.cs" id="1_structdef"]
+
+[resource]
+script = ExtResource("1_structdef")
+Name = &"outpost"
+Cost = 125
+BuildSeconds = 12.0
+MaxHealth = 450.0
+BulletDamageScale = 0.3
+BodySize = Vector3(3.2, 2.4, 3.2)
+TopSize = Vector3(0, 0, 0)
+TopElevationMeters = 0.0
+SensorRadiusMeters = 35.0
+EyeHeightMeters = 1.7
+WeaponId = -1
+TrainsUnitId = 8
+AlsoTrainsUnitId = 9
+Color = Color(0.36, 0.42, 0.4, 1)

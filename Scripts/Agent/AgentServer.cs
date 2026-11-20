@@ -400,10 +400,11 @@ public sealed partial class AgentServer : IDisposable
 						command.TargetOwnerId);
 					break;
 
-				// A slot names a sniper tower or a pillbox instead of a barracks
-				// (docs/NETCODE.md §10.8).
+				// A slot names a sniper tower, a pillbox or an outpost instead of a barracks
+				// (docs/NETCODE.md §10.8); the tier picks which of an outpost's two
+				// (docs/OUTPOST.md §2), and is ignored by the others.
 				case AgentCommandKind.Build when command.AtStructure:
-					units.ServerTrain(seat.PeerId, command.Slot);
+					units.ServerTrain(seat.PeerId, command.Slot, command.Tier);
 					break;
 
 				case AgentCommandKind.Build:

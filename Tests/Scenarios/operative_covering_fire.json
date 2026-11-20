@@ -1,0 +1,30 @@
+{
+  "name": "a scout drone finds a player crouched behind a wall that no one on the ground can see; an operative hunts them from cover, calls for covering fire, a rifleman fires over the wall, and the operative runs under it without smoke",
+  "seeds": [3, 9],
+  "duration_ticks": 1500,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 0 },
+
+  "seats": [
+    { "id": "mark", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/crouch_still.json" }
+  ],
+
+  "spawns": [
+    { "structure": "sandbag_wall", "team": "strategist", "at": [-60, 0.5, 22], "yaw": 3.14159 },
+    { "structure": "sandbag_wall", "team": "strategist", "at": [-60, 0.5, 48.6], "yaw": 3.14159 },
+    { "unit": "infantry", "id": "support", "team": "strategist", "at": [-50, 0.5, 20], "order": "none" },
+    { "unit": "scout_drone", "id": "eye", "team": "strategist", "at": [-60, 1, 36], "order": "none" },
+    { "unit": "operative", "id": "op", "team": "strategist", "at": [-60, 0.5, 8], "order": "none" },
+    { "peer": "mark", "at": [-60, 1, 50], "look": [0, 0] }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.contact_spotted[observer=8].count", "op": ">=", "value": 1 },
+    { "metric": "events.covering_fire[tier=0].count", "op": ">=", "value": 1 },
+    { "metric": "events.operative[phase=4,act=0].count", "op": ">=", "value": 1 },
+    { "metric": "events.operative[act=1].count", "op": "==", "value": 0 },
+    { "metric": "observation.mark.self.alive.min", "op": "==", "value": 0 },
+    { "metric": "events.unit_lost.count", "op": "==", "value": 0 }
+  ]
+}

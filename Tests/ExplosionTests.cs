@@ -114,7 +114,9 @@ public class ExplosionTests
 
 		foreach (ExplosionKind kind in Explosions.Drawn)
 		{
-			if (kind == ExplosionKind.Vehicle)
+			// A smoke grenade's screen is meant to stand longer than a wreck's column: it is
+			// the cloud sight lines are stopped by for as long (docs/OUTPOST.md §4.3).
+			if (kind is ExplosionKind.Vehicle or ExplosionKind.Smoke)
 			{
 				continue;
 			}
@@ -472,6 +474,14 @@ public class ExplosionTests
 			bool explodes = Value(file, "ExplosionRadiusMeters") > 0f && Value(file, "ExplosionDamage") != 0f;
 			int named = file.TryGetValue("Explosion", out string value) ? int.Parse(value, CultureInfo.InvariantCulture) : 0;
 
+			// A smoke grenade goes off without a blast, and is drawn as its cloud (docs/OUTPOST.md §4.3).
+			if (file.TryGetValue("MakesSmoke", out string smoke) && smoke == "true")
+			{
+				Assert.False(explodes, name);
+				Assert.Equal(ExplosionKind.Smoke, (ExplosionKind)named);
+				continue;
+			}
+
 			Assert.True(explodes == (named != 0), $"{name}: explodes {explodes}, names {named}");
 			if (named != 0)
 			{
@@ -481,7 +491,7 @@ public class ExplosionTests
 			}
 		}
 
-		Assert.Equal(6, explosive);
+		Assert.Equal(7, explosive);
 	}
 
 	private static float Value(Dictionary<string, string> file, string key) =>

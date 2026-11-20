@@ -76,9 +76,10 @@ public struct AgentCommand
 	public int Barracks;
 
 	/// <summary>
-	/// True when a build, cancel or rally means the sniper tower or pillbox in
-	/// <see cref="Slot"/> rather than a barracks (docs/NETCODE.md §10.8). A structure
-	/// trains one kind of unit, so a build at one ignores <see cref="Tier"/>.
+	/// True when a build, cancel or rally means the sniper tower, pillbox or outpost in
+	/// <see cref="Slot"/> rather than a barracks (docs/NETCODE.md §10.8). A tower and a
+	/// pillbox train one kind of unit, so a build at one ignores <see cref="Tier"/>; an
+	/// outpost trains two, and <see cref="Tier"/> names which (docs/OUTPOST.md §2).
 	/// </summary>
 	public bool AtStructure;
 
