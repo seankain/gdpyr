@@ -1,0 +1,31 @@
+{
+  "name": "an outpost trains a scout drone and an operative from one queue, and the drone takes to the air out of the door",
+  "seeds": [1],
+  "duration_ticks": 1200,
+  "warmup_ticks": 60,
+  "roster": { "ground": 0, "strategists": 1 },
+
+  "seats": [
+    { "id": "chair", "team": "strategist", "policy": "strategist", "step_mul": 6,
+      "script": { "repeat": false, "steps": [
+        { "ticks": 60, "commands": [
+          { "cmd": "train", "slot": 0, "unit": "scout_drone" },
+          { "cmd": "train", "slot": 0, "unit": "operative" },
+          { "cmd": "train", "slot": 0, "unit": "sniper" }
+        ] },
+        { "ticks": 1080, "commands": [] }
+      ] } }
+  ],
+
+  "spawns": [
+    { "structure": "outpost", "team": "strategist", "at": [-40, 0.5, 60], "yaw": 0 }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.unit_built[tier=8,barracks=-1].count", "op": "==", "value": 1 },
+    { "metric": "events.unit_built[tier=9,barracks=-1].count", "op": "==", "value": 1 },
+    { "metric": "events.unit_built[tier=5].count", "op": "==", "value": 0 },
+    { "metric": "events.unit_lost.count", "op": "==", "value": 0 }
+  ]
+}

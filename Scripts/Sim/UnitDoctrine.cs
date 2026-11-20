@@ -19,4 +19,11 @@ public enum UnitDoctrine : byte
 
 	/// <summary>Fights from range out of concealment: hides, pops out to fire, and moves on (§5.3).</summary>
 	Marksman = 3,
+
+	/// <summary>
+	/// Closes on its target from cover to cover, smokes the open ground it has to cross,
+	/// waits for its own side's fire to cover a bound, and kills up close with a
+	/// suppressed pistol or a knife (docs/OUTPOST.md §4, <see cref="OperativeSim"/>).
+	/// </summary>
+	Operative = 4,
 }

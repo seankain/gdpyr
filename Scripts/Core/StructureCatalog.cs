@@ -22,6 +22,7 @@ public static class StructureCatalog
 		"res://Structures/pillbox.tres",      // 0 — StructureKinds.Pillbox
 		"res://Structures/sandbag_wall.tres", // 1 — StructureKinds.SandbagWall
 		"res://Structures/sniper_tower.tres", // 2 — StructureKinds.SniperTower
+		"res://Structures/outpost.tres",      // 3 — StructureKinds.Outpost
 	};
 
 	public static StructureDefinition[] Definitions { get; private set; } =

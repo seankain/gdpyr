@@ -23,5 +23,6 @@ WeaponId = 6
 AccuracyConeDegrees = 1.2
 MaxRounds = 30
 Grenades = 0
+GivesCoveringFire = true
 Doctrine = 0
 Color = Color(0.45, 0.16, 0.14, 1)

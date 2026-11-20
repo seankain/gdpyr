@@ -1,0 +1,22 @@
+[checks] outpost check: listen
+[checks] PASS listen: the listen host's player is the strategist, with a controller
+[checks] PASS listen: an outpost stands finished on the floor (slot 0, Ok)
+[checks] PASS listen: the outpost is drawn with its mast's dish
+[checks] PASS listen: it trains the scout drone and the operative, and nothing else
+[checks] measured listen: the outpost's card offers: Scout Drone (-) 75 pts | Operative (=) 80 pts
+[checks] PASS listen: clicked on, its card offers the scout drone on - and the operative on =
+[checks] measured listen: saved SHOTS/outpost-1-card.png
+[checks] PASS listen: - and = queue a scout drone and an operative there (2 queued, head 8)
+[checks] PASS listen: both come out of its door
+[checks] measured listen: the drone at 12.00 m, Cruising, at (41.60, 0.10)
+[checks] PASS listen: the scout drone climbs to its 12 m and stays up there with nowhere to go
+[checks] PASS listen: the scout drone is drawn as a quadcopter (4 rotors)
+[checks] PASS listen: the operative is drawn as a body, as anything on foot is
+[checks] measured listen: saved SHOTS/outpost-2-trained.png
+[checks] PASS listen: a smoke grenade thrown on the field goes off into one cloud
+[checks] measured listen: the cloud went down at (46.00, 0.50, 25.87)
+[checks] PASS listen: and the client draws it
+[checks] PASS listen: a sight line through the cloud is stopped by it
+[checks] PASS listen: and one ten metres beside it is not
+[checks] measured listen: saved SHOTS/outpost-3-smoke.png
+[checks] listen: 14 of 14 facts hold

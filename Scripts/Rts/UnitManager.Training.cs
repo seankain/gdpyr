@@ -22,16 +22,22 @@ namespace Gdpyr.Rts;
 /// strategist paid for units, and gets either the units or the points back.
 ///
 /// What a client is told is one more reliable message, sent at the structure report
-/// rate while a queue is moving: how many are queued and how far the head is. What
-/// the head is needs no saying — a structure trains one kind of unit.
+/// rate while a queue is moving: how many are queued, what the head is and how far
+/// along — what the head is matters for the outpost, which trains two kinds from one
+/// queue (docs/OUTPOST.md §2). A train request names the kind it wants; one that names
+/// none, or a kind the structure does not train, means the first it trains when it
+/// trains only one, and is refused at an outpost.
 /// </summary>
 public partial class UnitManager
 {
 	/// <summary>Bytes counted for one training-state RPC, for the bandwidth HUD.</summary>
-	private const int TrainingStateBytes = 6;
+	private const int TrainingStateBytes = 7;
 
 	/// <summary>Bytes counted for a train or cancel request; a rally request carries a point as well.</summary>
 	private const int TrainRequestBytes = 5;
+
+	/// <summary>A train request that names no kind: whatever the structure trains, when it trains one.</summary>
+	public const int AnyTrainedUnit = -1;
 
 	private const int TrainingRallyBytes = 17;
 
@@ -41,6 +47,7 @@ public partial class UnitManager
 	private readonly Footprint[] _otherFootprints = new Footprint[SimConfig.MaxStructures];
 	private readonly byte[] _sentQueued = new byte[SimConfig.MaxStructures];
 	private readonly byte[] _sentTraining = new byte[SimConfig.MaxStructures];
+	private readonly byte[] _sentHead = new byte[SimConfig.MaxStructures];
 
 	/// <summary>Units on every structure's training queue. Server-side, and paid for, as a barracks' are.</summary>
 	private int QueuedInStructures
@@ -61,18 +68,21 @@ public partial class UnitManager
 
 	// ---- requests ---------------------------------------------------------------
 
-	/// <summary>Asks the server to put one of what the structure in <paramref name="slot"/> trains on its queue.</summary>
-	public void RequestTrain(int slot)
+	/// <summary>
+	/// Asks the server to put a <paramref name="unitId"/> on the queue of the structure in
+	/// <paramref name="slot"/>; <see cref="AnyTrainedUnit"/> for whatever it trains.
+	/// </summary>
+	public void RequestTrain(int slot, int unitId = AnyTrainedUnit)
 	{
 		NetworkManager net = NetworkManager.Instance;
 		if (net != null && net.IsClient)
 		{
-			RpcId(1, MethodName.ClientTrain, slot);
-			net.Stats.RecordSent(TrainRequestBytes);
+			RpcId(1, MethodName.ClientTrain, slot, unitId);
+			net.Stats.RecordSent(TrainRequestBytes + 1);
 			return;
 		}
 
-		ApplyTrain(net?.LocalPeerId ?? 1, slot);
+		ApplyTrain(net?.LocalPeerId ?? 1, slot, unitId);
 	}
 
 	/// <summary>Asks the server to take the last unit off a structure's queue and refund it.</summary>
@@ -106,11 +116,11 @@ public partial class UnitManager
 	/// <summary>Client -> server, reliable: a queued unit is paid for, so it is a decision and not a sample.</summary>
 	[Rpc(MultiplayerApi.RpcMode.AnyPeer, CallLocal = false,
 		TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-	private void ClientTrain(int slot)
+	private void ClientTrain(int slot, int unitId)
 	{
 		if (NetworkManager.Instance is { IsServer: true })
 		{
-			ApplyTrain(Multiplayer.GetRemoteSenderId(), slot);
+			ApplyTrain(Multiplayer.GetRemoteSenderId(), slot, unitId);
 		}
 	}
 
@@ -139,8 +149,8 @@ public partial class UnitManager
 	/// a strategist policy (docs/AGENT_API.md §7.4) — through the same checks a
 	/// person's request gets. True when it was charged for and queued.
 	/// </summary>
-	public bool ServerTrain(int peerId, int slot) =>
-		NetworkManager.Instance is not { IsClient: true } && ApplyTrain(peerId, slot);
+	public bool ServerTrain(int peerId, int slot, int unitId = AnyTrainedUnit) =>
+		NetworkManager.Instance is not { IsClient: true } && ApplyTrain(peerId, slot, unitId);
 
 	/// <summary>Server-side: the parity half of <see cref="RequestCancelTrain"/>.</summary>
 	public void ServerCancelTrain(int peerId, int slot)
@@ -160,18 +170,20 @@ public partial class UnitManager
 		}
 	}
 
-	private bool ApplyTrain(int senderPeerId, int slot)
+	private bool ApplyTrain(int senderPeerId, int slot, int unitId)
 	{
 		Structure structure = ValidateTrainer(senderPeerId, slot);
-		UnitDefinition definition = structure != null ? UnitCatalog.Definition(structure.TrainsUnit) : null;
 		ResourceLedger ledger = CombatManager.Instance?.Match.Strategist;
-		if (definition == null || ledger == null)
+		if (structure == null || ledger == null
+			|| !StructureTraining.TryChoose(structure.TrainsUnit, structure.TrainedKinds > 1
+				? structure.TrainedUnit(1) : structure.TrainsUnit, structure.TrainedKinds, unitId, out byte kind)
+			|| UnitCatalog.Definition(kind) is not { } definition)
 		{
 			RejectedOrders++;
 			return false;
 		}
 
-		return structure.Queue.TryEnqueue(structure.TrainsUnit, definition.Cost, definition.BuildTicks, ledger);
+		return structure.Queue.TryEnqueue(kind, definition.Cost, definition.BuildTicks, ledger);
 	}
 
 	private void ApplyCancelTrain(int senderPeerId, int slot) =>
@@ -201,6 +213,7 @@ public partial class UnitManager
 		Structure structure = StructureAt(slot);
 		return team == Team.Strategist && structure != null && !structure.IsDestroyed && structure.IsBuilt
 			&& structure.Team == team && structure.Trains && UnitCatalog.IsBuildable(structure.TrainsUnit)
+			&& (structure.TrainedKinds < 2 || UnitCatalog.IsBuildable(structure.TrainedUnit(1)))
 				? structure
 				: null;
 	}
@@ -320,18 +333,20 @@ public partial class UnitManager
 			}
 
 			byte queued = (byte)Mathf.Min(structure.Queue.Count, byte.MaxValue);
+			byte head = structure.Queue.Head;
 			byte progress = ProgressByte(structure.Queue.Progress(tick));
-			if (queued == _sentQueued[slot] && progress == _sentTraining[slot])
+			if (queued == _sentQueued[slot] && progress == _sentTraining[slot] && head == _sentHead[slot])
 			{
 				continue;
 			}
 
 			_sentQueued[slot] = queued;
 			_sentTraining[slot] = progress;
+			_sentHead[slot] = head;
 
 			if (peers > 0)
 			{
-				Rpc(MethodName.ServerTrainingState, slot, queued, progress);
+				Rpc(MethodName.ServerTrainingState, slot, queued, head, progress);
 				NetworkManager.Instance?.Stats.RecordSent(TrainingStateBytes * peers);
 			}
 		}
@@ -346,14 +361,15 @@ public partial class UnitManager
 			if (structure is { Trains: true } && structure.Queue.Count > 0)
 			{
 				RpcId(peerId, MethodName.ServerTrainingState, slot,
-					(byte)Mathf.Min(structure.Queue.Count, byte.MaxValue), ProgressByte(structure.Queue.Progress(tick)));
+					(byte)Mathf.Min(structure.Queue.Count, byte.MaxValue), structure.Queue.Head,
+					ProgressByte(structure.Queue.Progress(tick)));
 			}
 		}
 	}
 
 	[Rpc(MultiplayerApi.RpcMode.Authority, CallLocal = false,
 		TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
-	private void ServerTrainingState(int slot, byte queued, byte progress)
+	private void ServerTrainingState(int slot, byte queued, byte head, byte progress)
 	{
 		NetworkManager net = NetworkManager.Instance;
 		if (net == null || !net.IsClient)
@@ -362,7 +378,7 @@ public partial class UnitManager
 		}
 
 		net.Stats.RecordReceived(TrainingStateBytes);
-		StructureAt(slot)?.ApplyRemoteTraining(queued, progress);
+		StructureAt(slot)?.ApplyRemoteTraining(queued, head, progress);
 	}
 
 	private static byte ProgressByte(float progress) =>

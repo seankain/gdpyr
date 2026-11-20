@@ -24,5 +24,6 @@ WeaponId = 11
 AccuracyConeDegrees = 3.0
 MaxRounds = 600
 SuppressSeconds = 4.0
+GivesCoveringFire = true
 Doctrine = 2
 Color = Color(0.55, 0.2, 0.5, 1)

@@ -789,6 +789,7 @@ public sealed partial class AgentServer
 		"patrol" => OrderKind.Patrol,
 		"defend" => OrderKind.Defend,
 		"stop" => OrderKind.Stop,
+		"strike" => OrderKind.Strike,
 		_ => OrderKind.Move,
 	};
 
@@ -1590,6 +1591,8 @@ public sealed partial class AgentServer
 		"sniper" or "5" => UnitCatalog.Sniper,
 		"heavy_gunner" or "6" => UnitCatalog.HeavyGunner,
 		"dropship" or "7" => UnitCatalog.Dropship,
+		"scout_drone" or "8" => UnitCatalog.ScoutDrone,
+		"operative" or "9" => UnitCatalog.Operative,
 		_ => UnitCatalog.Infantry,
 	};
 

@@ -12,7 +12,7 @@ public enum StrategistCardMode : byte
 	/// <summary>A barracks clicked on: its queue, a button per unit it trains.</summary>
 	Barracks = 1,
 
-	/// <summary>A finished sniper tower or pillbox clicked on: its queue, one button.</summary>
+	/// <summary>A finished sniper tower, pillbox or outpost clicked on: its queue, a button per unit it trains.</summary>
 	Structure = 2,
 
 	/// <summary>Nothing but builders selected: a button per structure they put up, and the orders.</summary>
@@ -49,10 +49,18 @@ public static class StrategistCards
 	public static readonly string[] OrderKeys = { "X", "C", "B", "Z" };
 
 	/// <summary>The structures on the builder card, in the order their keys are.</summary>
-	public static readonly byte[] Structures = { StructureKinds.Pillbox, StructureKinds.SandbagWall, StructureKinds.SniperTower };
+	public static readonly byte[] Structures =
+		{ StructureKinds.Pillbox, StructureKinds.SandbagWall, StructureKinds.SniperTower, StructureKinds.Outpost };
 
 	/// <summary>The key for each of <see cref="Structures"/>, printed on its button: the input map's <c>rts_place_*</c>.</summary>
-	public static readonly string[] StructureKeys = { "5", "6", "7" };
+	public static readonly string[] StructureKeys = { "5", "6", "7", "O" };
+
+	/// <summary>
+	/// The key that arms a strike for the next right-click (docs/OUTPOST.md §3.3): the input
+	/// map's <c>rts_order_strike</c>. On the card only while scout drones are selected, and
+	/// given only to them.
+	/// </summary>
+	public const string StrikeKey = "J";
 
 	/// <summary>
 	/// Every key the strategist has, for the list <c>K</c> shows and hides. Folded away
@@ -66,7 +74,9 @@ public static class StrategistCards
 		+ "barracks: 1 infantry · 2 technical · 3 tank · 4 builder · 8 supply truck · T dropship · Backspace cancel\n"
 		+ "    RMB the ground with nothing selected moves the rally point\n"
 		+ "towers and pillboxes: 9 sniper at a sniper tower · 0 heavy gunner at a pillbox\n"
-		+ "builders: 5 pillbox · 6 sandbags · 7 sniper tower, then RMB places it (turn the view to turn it)\n"
+		+ "outposts: - scout drone · = operative\n"
+		+ "    scout drones: J then RMB strikes there or the enemy clicked — the drone goes off, once\n"
+		+ "builders: 5 pillbox · 6 sandbags · 7 sniper tower · O outpost, then RMB places it (turn the view to turn it)\n"
 		+ "    RMB a site or a damaged structure to finish or mend it\n"
 		+ "units out of a fight for 3 s heal inside the barracks ring and a supply truck's ring\n"
 		+ "    and are filled back up with rounds there at once; out of them, ammo runs out\n"
@@ -124,6 +134,7 @@ public static class StrategistCards
 		OrderKind.Patrol => "patrol",
 		OrderKind.Defend => "defend",
 		OrderKind.Stop => "stop",
+		OrderKind.Strike => "strike",
 		_ => "move",
 	};
 
@@ -134,6 +145,8 @@ public static class StrategistCards
 		OrderKind.Patrol => "patrol: the next right-click has them walk between here and there until told otherwise",
 		OrderKind.Defend => "defend: the next right-click has them hold that point and engage anything that comes near",
 		OrderKind.Stop => "stop: they drop their order and hold where they are",
+		OrderKind.Strike => "strike: the next right-click sends the selected scout drones to dive on that point, or on"
+			+ " the enemy clicked, and go off there — once; nothing else ever sets one off",
 		_ => "move",
 	};
 
@@ -183,6 +196,7 @@ public static class StrategistCards
 			StrategistCardMode.Builders when pending == OrderKind.Move => "right-click: move · on a site: build or mend it",
 			StrategistCardMode.Vehicles when pending == OrderKind.Move => "right-click: drive there",
 			StrategistCardMode.None => string.Empty,
+			_ when pending == OrderKind.Strike => "right-click: strike there · on an enemy: strike them",
 			_ => $"right-click: {NameOf(pending)}",
 		};
 	}

@@ -5,8 +5,8 @@ using Godot;
 namespace Gdpyr.Rts;
 
 /// <summary>
-/// A pillbox, a sandbag wall or a sniper tower a builder has put up, or is putting
-/// up (docs/NETCODE.md §10.5).
+/// A pillbox, a sandbag wall, a sniper tower or an outpost a builder has put up, or is
+/// putting up (docs/NETCODE.md §10.5, docs/OUTPOST.md).
 ///
 /// Server-authoritative like a unit, but not a unit: it cannot be ordered or moved,
 /// and it counts for nothing in the strategist's defeat condition — a pillbox holds
@@ -164,13 +164,28 @@ public partial class Structure : Node3D, IGunPost
 
 	int IGunPost.ScanStagger => Slot;
 
-	// ---- training, for the two that train a unit (docs/NETCODE.md §10.8) --------
+	// ---- training, for the three that train a unit (docs/NETCODE.md §10.8) ------
 
-	/// <summary>True for a structure with a training queue: the sniper tower and the pillbox.</summary>
+	/// <summary>True for a structure with a training queue: the sniper tower, the pillbox and the outpost.</summary>
 	public bool Trains => Definition?.Trains ?? false;
 
-	/// <summary>What it trains, as a <c>UnitCatalog</c> id. Meaningful only when <see cref="Trains"/>.</summary>
+	/// <summary>What it trains, as a <c>UnitCatalog</c> id — the first, for the outpost. Meaningful only when <see cref="Trains"/>.</summary>
 	public byte TrainsUnit => Definition?.TrainsUnit ?? 0;
+
+	/// <summary>How many kinds it trains: one, or the outpost's two (docs/OUTPOST.md §2).</summary>
+	public int TrainedKinds => Definition?.TrainedKinds ?? 0;
+
+	/// <summary>The <paramref name="index"/>-th kind it trains, of <see cref="TrainedKinds"/>.</summary>
+	public byte TrainedUnit(int index) => Definition?.TrainedUnit(index) ?? 0;
+
+	/// <summary>Whether it trains <paramref name="unitId"/>.</summary>
+	public bool CanTrain(byte unitId) => Definition?.CanTrain(unitId) ?? false;
+
+	/// <summary>
+	/// What is at the head of its queue: the server's own, a client's from the last report.
+	/// Only worth saying for a structure that trains two kinds.
+	/// </summary>
+	public byte TrainingHead => IsSimulated ? Queue.Head : _replicatedHead;
 
 	/// <summary>
 	/// Server: its training queue, which owns the money as a barracks' does. Empty and
@@ -192,6 +207,7 @@ public partial class Structure : Node3D, IGunPost
 
 	private int _replicatedQueued;
 	private float _replicatedTraining;
+	private byte _replicatedHead;
 
 	private float _replicatedProgress;
 	private Node3D _model;
@@ -339,10 +355,11 @@ public partial class Structure : Node3D, IGunPost
 		RefreshModel();
 	}
 
-	/// <summary>Takes the server's word for what is on its training queue and how far the head is.</summary>
-	public void ApplyRemoteTraining(byte queued, byte progress)
+	/// <summary>Takes the server's word for what is on its training queue, what the head is and how far along.</summary>
+	public void ApplyRemoteTraining(byte queued, byte head, byte progress)
 	{
 		_replicatedQueued = queued;
+		_replicatedHead = head;
 		_replicatedTraining = progress / (float)byte.MaxValue;
 	}
 
@@ -499,6 +516,10 @@ public partial class Structure : Node3D, IGunPost
 				BuildTower();
 				break;
 
+			case StructureKinds.Outpost:
+				BuildOutpost();
+				break;
+
 			default:
 				BuildPillbox();
 				break;
@@ -550,6 +571,46 @@ public partial class Structure : Node3D, IGunPost
 		}
 
 		BuildGun(Definition?.MuzzleHeightMeters ?? 8.6f, barrelLength: 1.1f, marksman: true);
+	}
+
+	/// <summary>
+	/// The outpost (docs/OUTPOST.md §2): a squat hut with a dark band of windows, a pad on
+	/// its roof for the drones, and a mast with a dish beside it — all inside the one box it
+	/// is hit and collided as, bar the mast, which is too thin to stop anything.
+	/// </summary>
+	private void BuildOutpost()
+	{
+		AddMesh(_model, Shape.Body, null);
+
+		StructureBox body = Shape.Body;
+		Vector3 h = body.HalfExtents;
+		float top = body.Center.Y + h.Y;
+		var dark = new StandardMaterial3D { AlbedoColor = new Color(0.08f, 0.08f, 0.09f) };
+
+		// Windows: a band round the walls at eye height.
+		float eye = Definition?.EyeHeightMeters ?? 1.7f;
+		AddMesh(_model, new StructureBox(new Vector3(0f, eye, 0f), new Vector3(h.X + 0.02f, 0.1f, h.Z + 0.02f)), dark);
+
+		// The pad: a dark square on the roof with a pale cross on it.
+		AddMesh(_model, new StructureBox(new Vector3(0f, top + 0.03f, 0f), new Vector3(h.X * 0.7f, 0.03f, h.Z * 0.7f)), dark);
+		var paint = new StandardMaterial3D { AlbedoColor = new Color(0.85f, 0.85f, 0.8f) };
+		AddMesh(_model, new StructureBox(new Vector3(0f, top + 0.065f, 0f), new Vector3(h.X * 0.5f, 0.01f, 0.08f)), paint);
+		AddMesh(_model, new StructureBox(new Vector3(0f, top + 0.065f, 0f), new Vector3(0.08f, 0.01f, h.Z * 0.5f)), paint);
+
+		// The mast at one corner, and a dish half way up it.
+		const float MastHeight = 4.5f;
+		var mast = new StructureBox(new Vector3(h.X - 0.2f, top + (MastHeight * 0.5f), -h.Z + 0.2f),
+			new Vector3(0.05f, MastHeight * 0.5f, 0.05f));
+		AddMesh(_model, mast, dark);
+		_model.AddChild(new MeshInstance3D
+		{
+			Name = "Dish",
+			Position = new Vector3(h.X - 0.2f, top + (MastHeight * 0.6f), -h.Z + 0.45f),
+			Rotation = new Vector3(Mathf.Pi * 0.5f, 0f, 0f),
+			Mesh = new CylinderMesh { TopRadius = 0.35f, BottomRadius = 0.05f, Height = 0.2f, RadialSegments = 12 },
+			MaterialOverride = paint,
+			CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+		});
 	}
 
 	/// <summary>A traverse and an elevation pivot with a barrel on it, as a barracks gun has.</summary>

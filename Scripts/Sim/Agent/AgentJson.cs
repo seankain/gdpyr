@@ -203,10 +203,14 @@ public static class AgentJson
 	/// The structures a <c>construct</c> command may name, in structure-catalog order
 	/// (docs/NETCODE.md §10.5). A command may also name one by its index.
 	/// </summary>
-	public static readonly string[] StructureNames = { "pillbox", "sandbag_wall", "sniper_tower" };
+	public static readonly string[] StructureNames = { "pillbox", "sandbag_wall", "sniper_tower", "outpost" };
 
-	/// <summary>Every order kind a command may name. <c>stop</c> is a command and never a stored state.</summary>
-	public static readonly string[] OrderNames = { "move", "attack", "patrol", "defend", "stop" };
+	/// <summary>
+	/// Every order kind a command may name. <c>stop</c> is a command and never a stored state;
+	/// <c>strike</c> is given only to the units of the command that carry a charge — the
+	/// scout drone (docs/OUTPOST.md §3.3).
+	/// </summary>
+	public static readonly string[] OrderNames = { "move", "attack", "patrol", "defend", "stop", "strike" };
 
 	/// <summary>
 	/// The crew vehicles by <see cref="CrewVehicleKind"/>, as the <c>vehicle</c> op, a

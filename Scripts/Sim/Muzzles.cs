@@ -309,6 +309,21 @@ public static class Muzzles
 		HandHeld = true, HoldReach = 0.5f, HoldDrop = 0.12f, HoldSide = 0f,
 	};
 
+	/// <summary>
+	/// The suppressed pistol: the can swallows nearly all of the flame, so a glimmer for
+	/// two frames and a wisp, and the pistol's case out of the side.
+	/// </summary>
+	private static readonly MuzzleProfile SuppressedPistolProfile = new()
+	{
+		FlashLength = 0.03f, FlashWidth = 0.03f, FlashSeconds = 2f / 60f, LightEnergy = 0.15f, LightRange = 1f,
+		FlashColor = Flame,
+		SmokePuffs = 1, SmokeRadius = 0.03f, SmokeSeconds = 0.5f, SmokeRiseSpeed = 0.2f, SmokeForwardSpeed = 0.4f,
+		SmokeAlpha = 0.2f, SmokeColor = PaleSmoke,
+		CasingLength = 0.019f, CasingDiameter = 0.0099f, CasingColor = Brass, PortBackMeters = 0.08f,
+		EjectSpeed = 2.2f, EjectUpSpeed = 1.6f, EjectBackSpeed = 0.3f, CasingSeconds = 3f,
+		HandHeld = true, HoldReach = 0.6f, HoldDrop = 0.12f, HoldSide = 0f,
+	};
+
 	private static readonly MuzzleProfile RifleProfile = new()
 	{
 		FlashLength = 0.22f, FlashWidth = 0.12f, FlashSeconds = 0.05f, LightEnergy = 2f, LightRange = 4f,
@@ -391,6 +406,7 @@ public static class Muzzles
 		ShotKind.Launcher => LauncherProfile,
 		ShotKind.Cannon => CannonProfile,
 		ShotKind.Mortar => MortarProfile,
+		ShotKind.SuppressedPistol => SuppressedPistolProfile,
 		_ => default,
 	};
 

@@ -280,7 +280,9 @@ public static class GroundSensor
 		}
 
 		PhysicsRayQueryParameters3D query = PhysicsRayQueryParameters3D.Create(from, to, CollisionLayers.World);
-		return space.IntersectRay(query).Count == 0;
+
+		// Smoke stops a bot's eyes as it stops a person's (docs/OUTPOST.md §4.3).
+		return space.IntersectRay(query).Count == 0 && CombatManager.Instance?.Smoke.Blocks(from, to) != true;
 	}
 
 	/// <summary>

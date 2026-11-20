@@ -297,6 +297,14 @@ public partial class UnitManager : Node
 		EnsureStarted(server: true);
 		EnsureAutonomy();
 
+		// The smoke's clock first: every sight line of the tick asks the same field
+		// (docs/OUTPOST.md §4.3). And the calls for covering fire that have run out.
+		CombatManager.Instance?.Smoke.Step(tick);
+		for (int i = 0; i < _coveringFire.Length; i++)
+		{
+			_coveringFire[i].Expire(tick);
+		}
+
 		ServerBuild(tick);
 		ResolveAi();
 
@@ -519,6 +527,13 @@ public partial class UnitManager : Node
 			return;
 		}
 
+		// A drone flying the strategist's strike does nothing else (docs/OUTPOST.md §3.3).
+		if (unit.Order.Kind == OrderKind.Strike)
+		{
+			ServerStrike(unit, tick);
+			return;
+		}
+
 		UnitContext plan = PlanOf(unit);
 
 		if (tick >= unit.NextScanTick)
@@ -530,6 +545,10 @@ public partial class UnitManager : Node
 			{
 				AcquireTarget(unit, tick);
 			}
+
+			// With nothing of its own to shoot, a call for covering fire to answer
+			// (docs/OUTPOST.md §4.5).
+			SenseCoveringFire(unit, tick);
 
 			if (plan != null)
 			{
@@ -561,6 +580,18 @@ public partial class UnitManager : Node
 			hasTarget = Suppress(unit, tick, ref targetPoint, ref targetVelocity, ref targetDistance);
 		}
 
+		// An operative closing on a quarry runs its own tactics this tick, not its plan's
+		// (docs/OUTPOST.md §4.2); one with no quarry is a unit like any other.
+		OperativeDecision operative = default;
+		if (IsOperative(unit))
+		{
+			operative = StepOperative(unit, tick, hasTarget);
+			if (operative.Hunting)
+			{
+				plan = null;
+			}
+		}
+
 		// Under micro-autonomy, a unit with nothing to shoot fires back at where fire came
 		// from when its plan says to (docs/TACTICS.md §5.1) — last tick's plan, as the
 		// squad focus is: a place, so nobody's focus and nothing to throw a grenade at.
@@ -568,6 +599,13 @@ public partial class UnitManager : Node
 		if (!hasTarget && plan is { Intent.FireAt: true })
 		{
 			firingAtPlace = hasTarget = FireAtPlace(unit, plan.Intent.FirePoint, ref targetPoint, ref targetVelocity,
+				ref targetDistance);
+		}
+
+		// Else, at an operative's call, on its quarry (docs/OUTPOST.md §4.5): a place too.
+		if (!hasTarget && unit.HasCoverCall && tick <= unit.CoverCallUntil)
+		{
+			firingAtPlace = hasTarget = FireAtPlace(unit, unit.CoverCallPoint, ref targetPoint, ref targetVelocity,
 				ref targetDistance);
 		}
 
@@ -586,7 +624,14 @@ public partial class UnitManager : Node
 		bool hasDestination;
 		bool holdsWhileEngaging;
 		bool followsOrder = true;
-		if (plan != null)
+		if (operative.Hunting)
+		{
+			destination = operative.Point;
+			hasDestination = operative.Moves;
+			holdsWhileEngaging = !operative.Moves;
+			followsOrder = false;
+		}
+		else if (plan != null)
 		{
 			destination = Planned(unit, plan, tick, hasTarget, firingAtPlace, targetPoint, out hasDestination,
 				out holdsWhileEngaging, out followsOrder);
@@ -600,7 +645,8 @@ public partial class UnitManager : Node
 
 		// Crouched or standing, as its plan says this tick (docs/TACTICS.md §5.8): legacy
 		// plans nothing, and stands.
-		unit.TakePosture(plan is { Intent.Crouch: true } ? UnitPosture.Crouched : UnitPosture.Standing);
+		unit.TakePosture(operative.Hunting ? operative.Crouch ? UnitPosture.Crouched : UnitPosture.Standing
+			: plan is { Intent.Crouch: true } ? UnitPosture.Crouched : UnitPosture.Standing);
 
 		// A builder with a site to work on works on it whenever it is in reach, and
 		// stands still to do it (docs/NETCODE.md §10.5). The structure counts it. One
@@ -653,7 +699,7 @@ public partial class UnitManager : Node
 
 		// A marksman holding its fire leaves a target beyond its hold-fire range alone
 		// (docs/TACTICS.md §5.3): it still sees it, and stands to it, but does not shoot.
-		bool holdFire = HoldsFire(plan, hasTarget, targetDistance);
+		bool holdFire = operative.Hunting ? operative.HoldFire : HoldsFire(plan, hasTarget, targetDistance);
 		ServerFire(unit, tick, hasTarget && !holdFire, targetPoint, targetVelocity, plan is { Intent.Reload: true });
 		ServerThrow(unit, tick, hasTarget && !firingAtPlace && !holdFire, targetPoint, targetVelocity);
 		if (plan is { Intent.ThrowAt: true })
@@ -766,6 +812,12 @@ public partial class UnitManager : Node
 		if (unit.SpendRound())
 		{
 			_ammoRevision++;
+		}
+
+		// Fire an operative can move under (docs/OUTPOST.md §4.5).
+		if (unit.Definition is { GivesCoveringFire: true })
+		{
+			_coveringFire[(int)unit.Team].NoteShot(targetPoint, tick);
 		}
 
 		Vector3 muzzle = unit.EyePosition;
@@ -1800,6 +1852,7 @@ public partial class UnitManager : Node
 		UnitsLost++;
 		unit.DespawnTick = tick + CorpseTicks;
 		ResetPlan(unit);
+		_coveringFire[(int)unit.Team].Withdraw(unit.UnitId);
 		Squads.Leave(unit.UnitId);
 
 		// A dead unit is never aboard (docs/VEHICLES.md §5.1). Nothing reaches a rider
@@ -2012,6 +2065,13 @@ public partial class UnitManager : Node
 				continue;
 			}
 
+			// A strike is given only to the units of the order that carry a charge
+			// (docs/OUTPOST.md §3.3): the rest of a mixed selection keep the order they had.
+			if (ordered == OrderKind.Strike && unit.Definition is not { CanStrike: true })
+			{
+				continue;
+			}
+
 			UnitOrder order = ordered == OrderKind.Stop
 				? UnitOrder.Hold(unit.GlobalPosition)
 				: new UnitOrder
@@ -2021,7 +2081,7 @@ public partial class UnitManager : Node
 					// A patrol runs between where the unit was told and where it stood
 					// when it was told; a defend order anchors on the point itself.
 					Anchor = ordered == OrderKind.Defend ? target : unit.GlobalPosition,
-					TargetOwnerId = ordered == OrderKind.Attack ? targetOwnerId : OwnerId.None,
+					TargetOwnerId = UnitOrder.NamesTarget(ordered) ? targetOwnerId : OwnerId.None,
 					Returning = false,
 				};
 			unit.OrderIssuer = senderPeerId;
@@ -2674,6 +2734,7 @@ public partial class UnitManager : Node
 		_supplyCount = 0;
 		ResetFire();
 		ResetGrenades();
+		ResetOperatives();
 		ResetAutonomy();
 		ResetAmmo();
 		ResetDrills();
@@ -2845,6 +2906,11 @@ public partial class UnitManager : Node
 		mesh.GeometrySourceGroupName = "navmesh";
 	}
 
+	/// <summary>
+	/// Whether a unit at <paramref name="from"/> sees <paramref name="to"/>: no world collider
+	/// between, and no smoke (docs/OUTPOST.md §4.3) — a cloud is asked only once the ray says
+	/// the line is clear, which on the field is the rarer answer.
+	/// </summary>
 	private bool HasLineOfSight(Vector3 from, Vector3 to)
 	{
 		PhysicsDirectSpaceState3D space = GetTree()?.Root?.World3D?.DirectSpaceState;
@@ -2854,6 +2920,6 @@ public partial class UnitManager : Node
 		}
 
 		var query = PhysicsRayQueryParameters3D.Create(from, to, CollisionLayers.World);
-		return space.IntersectRay(query).Count == 0;
+		return space.IntersectRay(query).Count == 0 && CombatManager.Instance?.Smoke.Blocks(from, to) != true;
 	}
 }

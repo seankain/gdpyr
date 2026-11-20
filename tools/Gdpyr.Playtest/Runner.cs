@@ -490,6 +490,8 @@ public sealed class Runner
 				"autonomy_default" => GdpyrCommand.AutonomyDefault(command.Mode),
 				"construct" => GdpyrCommand.Construct(Ids(command.Units), command.Structure, command.Target[0],
 					command.Target[1], command.Yaw),
+				"train" => GdpyrCommand.Train(command.Slot,
+					ScriptCommand.TrainedIds[Array.IndexOf(ScriptCommand.Trained, command.Unit)]),
 				_ => GdpyrCommand.Order(command.Kind, Ids(command.Units),
 					command.Target.Length > 0 ? command.Target[0] : 0f,
 					command.Target.Length > 1 ? command.Target[1] : 0f),

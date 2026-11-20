@@ -51,6 +51,9 @@ public class CrewVehicleResourceTests
 			"res://Weapons/grenade/grenade.tres", "res://Weapons/drone/drone.tres",
 			"res://Weapons/vehicle_gun/vehicle_gun.tres", "res://Weapons/ram/ram.tres",
 			"res://Weapons/mortar_launcher/mortar_launcher.tres",
+			// docs/OUTPOST.md: appended after the mortar launcher.
+			"res://Weapons/knife/knife.tres", "res://Weapons/suppressed_pistol/suppressed_pistol.tres",
+			"res://Weapons/smoke_grenade/smoke_grenade.tres", "res://Weapons/scout_charge/scout_charge.tres",
 		};
 
 		for (int id = 0; id < expected.Length; id++)

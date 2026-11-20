@@ -31,6 +31,8 @@ public static class UnitCatalog
 		"res://Units/sniper.tres",       // 5 — sniper, trained by a sniper tower
 		"res://Units/heavy_gunner.tres", // 6 — heavy gunner, trained by a pillbox
 		"res://Units/dropship.tres",     // 7 — dropship, not a tier
+		"res://Units/scout_drone.tres",  // 8 — scout drone, trained by an outpost
+		"res://Units/operative.tres",    // 9 — operative, trained by an outpost
 	};
 
 	public const byte Infantry = 0;
@@ -84,6 +86,21 @@ public static class UnitCatalog
 	/// builder's reason, and so no computer strategist ever buys one (V-D9).
 	/// </summary>
 	public const byte Dropship = 7;
+
+	/// <summary>
+	/// The outpost's hovering drone (docs/OUTPOST.md §3): no gun, far eyes from twelve
+	/// metres up — what it sees the strategist sees — patrols like anything else, and
+	/// carries one charge that goes off only on the strategist's strike order. Trained only
+	/// by a finished outpost.
+	/// </summary>
+	public const byte ScoutDrone = 8;
+
+	/// <summary>
+	/// The outpost's close-quarters killer (docs/OUTPOST.md §4): fast, soft, a suppressed
+	/// pistol and a knife, and tactics of its own (<see cref="UnitDoctrine.Operative"/>).
+	/// Trained only by a finished outpost.
+	/// </summary>
+	public const byte Operative = 9;
 
 	/// <summary>The three fighting tiers in order, which is the order the strategist's build keys are in.</summary>
 	public static readonly byte[] Tiers = { Infantry, Technical, Tank };

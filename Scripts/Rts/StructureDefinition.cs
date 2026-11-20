@@ -109,11 +109,34 @@ public partial class StructureDefinition : Resource
 	[Export]
 	public int TrainsUnitId = -1;
 
+	/// <summary>
+	/// A second unit it trains from the same queue, or -1 for none (docs/OUTPOST.md §2): the
+	/// outpost trains the scout drone and the operative. Meaningful only when
+	/// <see cref="TrainsUnitId"/> names one.
+	/// </summary>
+	[Export]
+	public int AlsoTrainsUnitId = -1;
+
 	/// <summary>True for a structure with a training queue.</summary>
 	public bool Trains => TrainsUnitId >= 0 && TrainsUnitId < SimConfig.MaxUnitDefinitions;
 
-	/// <summary>What it trains, as a catalog id. Meaningful only when <see cref="Trains"/>.</summary>
+	/// <summary>What it trains, as a catalog id — the first, when it trains two. Meaningful only when <see cref="Trains"/>.</summary>
 	public byte TrainsUnit => (byte)Mathf.Clamp(TrainsUnitId, 0, SimConfig.MaxUnitDefinitions - 1);
+
+	/// <summary>True for a structure that trains a second kind as well.</summary>
+	public bool TrainsSecond => Trains && AlsoTrainsUnitId >= 0 && AlsoTrainsUnitId < SimConfig.MaxUnitDefinitions
+		&& AlsoTrainsUnitId != TrainsUnitId;
+
+	/// <summary>How many kinds it trains: none, one or two.</summary>
+	public int TrainedKinds => !Trains ? 0 : TrainsSecond ? 2 : 1;
+
+	/// <summary>The <paramref name="index"/>-th kind it trains, of <see cref="TrainedKinds"/>.</summary>
+	public byte TrainedUnit(int index) =>
+		index == 1 && TrainsSecond ? (byte)AlsoTrainsUnitId : TrainsUnit;
+
+	/// <summary>Whether it trains <paramref name="unitId"/>.</summary>
+	public bool CanTrain(byte unitId) =>
+		Trains && (unitId == TrainsUnit || (TrainsSecond && unitId == (byte)AlsoTrainsUnitId));
 
 	[ExportCategory("Presentation")]
 

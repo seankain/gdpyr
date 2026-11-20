@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="ProjectileDefinition" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Fps/ProjectileDefinition.cs" id="1_projdef"]
+
+[resource]
+script = ExtResource("1_projdef")
+Name = &"smoke_grenade"
+MassGrams = 450.0
+RadiusMillimeters = 32.0
+DragCoefficient = 0.47
+MuzzleVelocity = 18.0
+LifetimeSeconds = 2.0
+Damage = 0.0
+ExplosionRadiusMeters = 0.0
+ExplosionDamage = 0.0
+SweepRadiusMeters = 0.05
+Fused = true
+TracerColor = Color(0.62, 0.62, 0.6, 1)
+TracerLengthMeters = 0.12
+TracerRadiusMeters = 0.06
+Explosion = 6
+MakesSmoke = true

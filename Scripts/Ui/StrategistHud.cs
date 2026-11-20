@@ -73,6 +73,9 @@ public partial class StrategistHud : CanvasLayer
 		/// <summary>Of those, the ones with none left.</summary>
 		public int OutOfRounds;
 
+		/// <summary>Units in the selection that carry a charge and can be ordered to strike: scout drones (docs/OUTPOST.md §3.3).</summary>
+		public int Strikers;
+
 		public string Notice;
 	}
 
@@ -97,11 +100,11 @@ public partial class StrategistHud : CanvasLayer
 	private static readonly byte[] CardUnits =
 	{
 		UnitCatalog.Infantry, UnitCatalog.Technical, UnitCatalog.Tank, UnitCatalog.Builder, UnitCatalog.SupplyTruck,
-		UnitCatalog.Sniper, UnitCatalog.HeavyGunner, UnitCatalog.Dropship,
+		UnitCatalog.Sniper, UnitCatalog.HeavyGunner, UnitCatalog.Dropship, UnitCatalog.ScoutDrone, UnitCatalog.Operative,
 	};
 
 	/// <summary>The key that queues each of <see cref="CardUnits"/>, printed on its button.</summary>
-	private static readonly string[] CardKeys = { "1", "2", "3", "4", "8", "9", "0", "T" };
+	private static readonly string[] CardKeys = { "1", "2", "3", "4", "8", "9", "0", "T", "-", "=" };
 
 	private static readonly Color CardBorderColor = new(0.35f, 0.45f, 0.55f, 0.9f);
 
@@ -132,6 +135,7 @@ public partial class StrategistHud : CanvasLayer
 	private readonly Button[] _structureButtons = new Button[StrategistCards.Structures.Length];
 	private Control _orderRow;
 	private readonly Button[] _orderButtons = new Button[StrategistCards.Orders.Length];
+	private Button _cardStrike;
 	private Button _cardCancel;
 	private Button _cardUnload;
 	private Button _cardTactics;
@@ -256,11 +260,12 @@ public partial class StrategistHud : CanvasLayer
 		switch (mode)
 		{
 			case StrategistCardMode.Structure:
-				RefreshTraining(match, NameOf(structure), structure.TrainingQueued, structure.TrainsUnit,
-					structure.TrainingProgress(tick), only: structure.TrainsUnit);
+				RefreshTraining(match, NameOf(structure), structure.TrainingQueued,
+					structure.TrainedKinds > 1 ? structure.TrainingHead : structure.TrainsUnit,
+					structure.TrainingProgress(tick), structure);
 				break;
 			case StrategistCardMode.Barracks:
-				RefreshTraining(match, "barracks", status.Queued, status.Head, status.Progress, only: -1);
+				RefreshTraining(match, "barracks", status.Queued, status.Head, status.Progress, null);
 				break;
 			case StrategistCardMode.Builders:
 				RefreshBuilders(match, units, selection, placing);
@@ -276,6 +281,7 @@ public partial class StrategistHud : CanvasLayer
 		if (StrategistCards.HasOrders(mode))
 		{
 			RefreshOrders(pendingOrder);
+			_cardStrike.SetPressedNoSignal(pendingOrder == OrderKind.Strike);
 		}
 
 		PlaceCard();
@@ -323,6 +329,7 @@ public partial class StrategistHud : CanvasLayer
 		_cardCancel.Visible = training;
 		_structureRow.Visible = mode == StrategistCardMode.Builders;
 		_orderRow.Visible = orders;
+		_cardStrike.Visible = orders && selection.Strikers > 0;
 		_cardUnload.Visible = mode == StrategistCardMode.Vehicles;
 		_cardTactics.Visible = orders && selection.Tactical > 0;
 	}
@@ -373,7 +380,10 @@ public partial class StrategistHud : CanvasLayer
 			+ $" {definition.MaxHealth:0} health";
 		text += definition.IsBulletProof ? ", bullet-proof" : string.Empty;
 		text += definition.IsArmed ? $"; a gun that reaches {definition.RangeMeters:0} m" : "; cover, and nothing else";
-		text += definition.Trains ? $"; trains {Display(UnitCatalog.NameOf(definition.TrainsUnit))}s" : string.Empty;
+		text += definition.TrainsSecond
+			? $"; trains {Display(UnitCatalog.NameOf(definition.TrainsUnit))}s"
+				+ $" and {Display(UnitCatalog.NameOf(definition.TrainedUnit(1)))}s"
+			: definition.Trains ? $"; trains {Display(UnitCatalog.NameOf(definition.TrainsUnit))}s" : string.Empty;
 		return text;
 	}
 
@@ -445,12 +455,13 @@ public partial class StrategistHud : CanvasLayer
 
 	/// <summary>
 	/// The barracks or structure card: what is training, and which buttons can be
-	/// pressed. It offers what a barracks trains when <paramref name="only"/> is
-	/// negative, and that one unit when it is a structure's. A button the strategist
-	/// cannot afford is greyed out rather than hidden, so the card always shows the
-	/// whole menu and the price of each thing on it.
+	/// pressed. It offers what a barracks trains when <paramref name="structure"/> is
+	/// null, and what the structure trains — one unit, or the outpost's two — when it is
+	/// not. A button the strategist cannot afford is greyed out rather than hidden, so the
+	/// card always shows the whole menu and the price of each thing on it.
 	/// </summary>
-	private void RefreshTraining(MatchState match, string title, int queued, byte head, float progress, int only)
+	private void RefreshTraining(MatchState match, string title, int queued, byte head, float progress,
+		Structure structure)
 	{
 		_cardStatus.Text = queued > 0
 			? $"{title}: training {Display(UnitCatalog.NameOf(head))} {Mathf.RoundToInt(progress * 100f)}%"
@@ -465,7 +476,7 @@ public partial class StrategistHud : CanvasLayer
 			int cost = UnitCatalog.CostOf(id);
 			Button button = _cardButtons[i];
 
-			button.Visible = only >= 0 ? id == only : UnitCatalog.IsTrainedInBarracks(id);
+			button.Visible = structure != null ? structure.CanTrain(id) : UnitCatalog.IsTrainedInBarracks(id);
 			if (!button.Visible)
 			{
 				continue;
@@ -484,7 +495,14 @@ public partial class StrategistHud : CanvasLayer
 						? $"; keeps firing for {definition.SuppressSeconds:0.#} s where a target went to ground"
 						: string.Empty)
 					+ (UnitCatalog.SeatsOf(id) > 0 ? $"; seats {UnitCatalog.SeatsOf(id)}" : string.Empty)
-					+ (definition.IsAircraft ? "; flies, unarmed, lands to load and unload" : string.Empty)
+					+ (definition.IsAircraft && definition.Hovers
+						? $"; hovers {definition.CruiseAltitudeMeters:0} m up and sees {definition.SensorRadiusMeters:0} m;"
+							+ " no gun — J then right-click strikes, once"
+						: definition.IsAircraft ? "; flies, unarmed, lands to load and unload" : string.Empty)
+					+ (definition.Doctrine == UnitDoctrine.Operative
+						? "; fast and soft: closes from cover to cover under smoke and covering fire, for a"
+							+ " suppressed pistol or a knife"
+						: string.Empty)
 				: string.Empty;
 			button.Disabled = full || !UnitCatalog.IsBuildable(id) || match.StrategistPoints < cost;
 		}
@@ -691,6 +709,13 @@ public partial class StrategistHud : CanvasLayer
 			button.Pressed += () => OrderPressed?.Invoke(kind);
 			_orderButtons[i] = button;
 		}
+
+		// The scout drone's strike (docs/OUTPOST.md §3.3): beside the orders, only while one is selected.
+		_cardStrike = NewCardButton(_orderRow, new Vector2(0f, 32f), toggle: true);
+		_cardStrike.Text = $"{Sentence(StrategistCards.NameOf(OrderKind.Strike))} ({StrategistCards.StrikeKey})";
+		_cardStrike.TooltipText = StrategistCards.DescribeOrder(OrderKind.Strike);
+		_cardStrike.Visible = false;
+		_cardStrike.Pressed += () => OrderPressed?.Invoke(OrderKind.Strike);
 
 		var footer = new HBoxContainer();
 		footer.AddThemeConstantOverride("separation", 12);

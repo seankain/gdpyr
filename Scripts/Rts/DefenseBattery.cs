@@ -452,7 +452,8 @@ public sealed class DefenseBattery
 			return true;
 		}
 
+		// A gun post sees through smoke no better than anybody (docs/OUTPOST.md §4.3).
 		var query = PhysicsRayQueryParameters3D.Create(from, to, CollisionLayers.World);
-		return space.IntersectRay(query).Count == 0;
+		return space.IntersectRay(query).Count == 0 && CombatManager.Instance?.Smoke.Blocks(from, to) != true;
 	}
 }

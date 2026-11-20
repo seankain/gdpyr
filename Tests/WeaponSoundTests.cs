@@ -296,6 +296,10 @@ public class WeaponSoundTests
 	[InlineData(14, ShotKind.HeavyMachineGun)] // the 4x4's gun
 	[InlineData(15, ShotKind.None)]           // ram
 	[InlineData(16, ShotKind.Mortar)]         // the carried mortar
+	[InlineData(17, ShotKind.None)]           // the operative's knife
+	[InlineData(18, ShotKind.SuppressedPistol)] // the operative's pistol
+	[InlineData(19, ShotKind.None)]           // smoke grenade
+	[InlineData(20, ShotKind.None)]           // the scout drone's charge
 	public void EachWeapon_NamesItsShot(int id, ShotKind kind)
 	{
 		Assert.Equal(kind, (ShotKind)IntOrZero(WeaponFile(id), "Shot"));
@@ -312,6 +316,9 @@ public class WeaponSoundTests
 	[InlineData("mortar_81_launcher", FlybyKind.Shell)]
 	[InlineData("hand_grenade", FlybyKind.None)]
 	[InlineData("fpv_drone", FlybyKind.None)]
+	[InlineData("pistol_9mm_subsonic", FlybyKind.Bullet)] // no crack, still a whiz
+	[InlineData("smoke_grenade", FlybyKind.None)]
+	[InlineData("scout_charge", FlybyKind.None)]
 	public void EachRound_NamesItsFlyby(string round, FlybyKind kind)
 	{
 		Dictionary<string, string> file = TrainedUnitResourceTests.Resource($"Weapons/projectiles/{round}.tres");
@@ -326,7 +333,7 @@ public class WeaponSoundTests
 		string[] decided =
 		{
 			"pistol_9mm", "rifle_556", "dmr_762", "hmg_127", "grenade_40mm", "cannon_76", "mortar_81",
-			"mortar_81_launcher", "hand_grenade", "fpv_drone",
+			"mortar_81_launcher", "hand_grenade", "fpv_drone", "pistol_9mm_subsonic", "smoke_grenade", "scout_charge",
 		};
 
 		string[] files = Directory.GetFiles(directory, "*.tres").Select(Path.GetFileNameWithoutExtension).ToArray();
@@ -360,7 +367,7 @@ public class WeaponSoundTests
 			weapons++;
 		}
 
-		Assert.Equal(17, weapons);
+		Assert.Equal(21, weapons);
 	}
 
 	// ---- helpers --------------------------------------------------------------------------

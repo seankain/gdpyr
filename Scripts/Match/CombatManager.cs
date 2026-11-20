@@ -1134,6 +1134,13 @@ public partial class CombatManager : Node
 	private void Detonate(in ProjectileSegment segment, in ProjectileStats stats, Team ownerTeam, Vector3 point,
 		uint tick)
 	{
+		// A smoke grenade lets out a cloud and hurts nobody (docs/OUTPOST.md §4.3).
+		if (stats.MakesSmoke)
+		{
+			LetOutSmoke(segment, point, tick);
+			return;
+		}
+
 		_projectiles.Kill(segment.Id);
 		HitsResolved++;
 
@@ -1880,6 +1887,11 @@ public partial class CombatManager : Node
 		_sounds?.Clear();
 		_muzzles?.Clear();
 		Visibility.Clear();
+		Smoke.Clear();
+		DroneStrikes = 0;
+		DroneStrikeKills = 0;
+		Stabs = 0;
+		StabKills = 0;
 		Economy.Reset();
 		ResetDrones();
 		SendNodeState(0);
@@ -2470,7 +2482,7 @@ public partial class CombatManager : Node
 	private void ApplySpawn(in ProjectileSpawn spawn, float renderTick)
 	{
 		// Before anything can return: an adopted prediction goes off as much as any other round.
-		if (WeaponCatalog.RoundFor(spawn.DefinitionId).IsExplosive)
+		if (WeaponCatalog.RoundFor(spawn.DefinitionId).GoesOff)
 		{
 			_explosiveRounds.Note(spawn.Id, spawn.DefinitionId);
 		}
@@ -3225,10 +3237,15 @@ public partial class CombatManager : Node
 	/// engine dependency (<see cref="VisibilityService"/>), and the same query a
 	/// unit's own target acquisition makes.
 	/// </summary>
+	/// <summary>
+	/// Whether the line is clear of the world and of smoke (docs/OUTPOST.md §4.3): the fog's
+	/// test, so a ground-force player inside a cloud, or behind one, is hidden from the
+	/// strategist's sensors as one behind a wall is.
+	/// </summary>
 	private bool HasLineOfSight(Vector3 from, Vector3 to)
 	{
 		WorldHitFraction(from, to, out _, out bool blocked);
-		return !blocked;
+		return !blocked && !Smoke.Blocks(from, to);
 	}
 
 	// ---- local presentation ------------------------------------------------

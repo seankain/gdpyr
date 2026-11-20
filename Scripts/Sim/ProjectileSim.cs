@@ -56,12 +56,20 @@ public readonly struct ProjectileStats
 	/// </summary>
 	public readonly float VehicleImpactDamage;
 
+	/// <summary>
+	/// True for a round that lets out a cloud where it goes off — the smoke grenade
+	/// (docs/OUTPOST.md §4.3, <see cref="SmokeRules"/>). It does no harm: what it does is
+	/// stop sight lines through the cloud for <see cref="SmokeRules.Seconds"/>.
+	/// </summary>
+	public readonly bool MakesSmoke;
+
 	public ProjectileStats(in ProjectileParams physics, float muzzleVelocity, float damage,
 		float explosionRadiusMeters = 0f, float explosionDamage = 0f,
 		float lifetimeSeconds = SimConfig.MaxProjectileLifetimeSeconds, float sweepRadiusMeters = 0f,
 		bool fused = false, float vehicleDamageScale = 1f, float structureDamageScale = 1f,
-		float vehicleImpactDamage = 0f)
+		float vehicleImpactDamage = 0f, bool makesSmoke = false)
 	{
+		MakesSmoke = makesSmoke;
 		Physics = physics;
 		MuzzleVelocity = MathF.Max(muzzleVelocity, 0f);
 		Damage = damage;
@@ -79,6 +87,9 @@ public readonly struct ProjectileStats
 	public float DirectDamageAgainstCrewVehicle => VehicleImpactDamage > 0f ? VehicleImpactDamage : Damage;
 
 	public bool IsExplosive => ExplosionRadiusMeters > 0f && ExplosionDamage != 0f;
+
+	/// <summary>Whether its going off is something to draw: a blast, or a smoke grenade's cloud.</summary>
+	public bool GoesOff => IsExplosive || MakesSmoke;
 
 	/// <summary>
 	/// Blast damage at a distance from the detonation, falling off linearly. Linear

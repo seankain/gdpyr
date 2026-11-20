@@ -33,9 +33,11 @@ public partial class ExplosionEffects : Node3D
 	/// <summary>
 	/// How many of each kind can play at once, by kind; past it the oldest is cut short.
 	/// A grenade's whole effect is two seconds, so ten covers a hard fight; a wreck burns
-	/// for eight, and six at once is a bad round for the strategist.
+	/// for eight, and six at once is a bad round for the strategist; a smoke screen stands
+	/// for eighteen, and eight is three operatives' worth (docs/OUTPOST.md §4.3). One entry
+	/// per <see cref="ExplosionKind"/>, in its order: a kind past the end is never drawn.
 	/// </summary>
-	private static readonly int[] Capacities = { 0, 10, 10, 10, 4, 6 };
+	private static readonly int[] Capacities = { 0, 10, 10, 10, 4, 6, 8 };
 
 	public static ExplosionEffects Instance { get; private set; }
 

@@ -88,7 +88,11 @@ public partial class UnitManager
 	private void SteerAircraft(Unit unit, Vector3 destination, bool hasDestination, uint tick)
 	{
 		Vector3 at = unit.GlobalPosition;
-		bool wantsAir = hasDestination && AircraftDistance(unit, destination) > unit.Traits.ArrivalRadiusMeters;
+
+		// A drone that hovers wants the air whether or not it has anywhere to go
+		// (docs/OUTPOST.md §3.1): with nowhere, it holds its cruise over where it is.
+		bool wantsAir = unit.Definition?.Hovers == true
+			|| (hasDestination && AircraftDistance(unit, destination) > unit.Traits.ArrivalRadiusMeters);
 		if (wantsAir)
 		{
 			unit.HasLandingSpot = false;

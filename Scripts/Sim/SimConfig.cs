@@ -215,9 +215,11 @@ public static class SimConfig
 
 	/// <summary>
 	/// Unit definitions addressable by one byte on the wire. As with weapons, the
-	/// catalog's order is a protocol constant.
+	/// catalog's order is a protocol constant. Sixteen since the outpost's scout drone
+	/// and operative took the catalog past eight (docs/OUTPOST.md): every table sized by
+	/// this is per kind, and the byte on the wire was always a whole byte.
 	/// </summary>
-	public const int MaxUnitDefinitions = 8;
+	public const int MaxUnitDefinitions = 16;
 
 	/// <summary>
 	/// Unit snapshot rate. Units are never predicted and interpolated on arrival,

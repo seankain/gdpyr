@@ -112,6 +112,25 @@ public enum AgentEventKind : byte
 	/// <c>damage</c>, <c>kill</c> and <c>unit_lost</c> name weapon 15, the ram.
 	/// </summary>
 	VehicleRammed = 29,
+
+	/// <summary>
+	/// A scout drone went off on the strategist's strike order (docs/OUTPOST.md §3.3): which,
+	/// why it went off by <see cref="StrikeEnd"/>, 1 when the blast killed a player, and where.
+	/// </summary>
+	UnitStrike = 30,
+
+	/// <summary>
+	/// An operative moved on its quarry (docs/OUTPOST.md §4.2): the phase it went into by
+	/// <see cref="OperativePhase"/>, and what it did — 0 went into the phase, 1 threw smoke, 2
+	/// stabbed, 3 stabbed and killed.
+	/// </summary>
+	Operative = 31,
+
+	/// <summary>
+	/// A rifleman, tank or heavy gunner took up an operative's call for covering fire
+	/// (docs/OUTPOST.md §4.5), and where it was firing.
+	/// </summary>
+	CoveringFire = 32,
 }
 
 /// <summary>
@@ -243,6 +262,15 @@ public static class AgentEventSchema
 		new[] { "attacker", "vehicle", "weapon", "x", "z", "" },                               // VehicleDestroyed
 		// killer: the peer credited, 0 for nobody; speed: the hull's into the unit [m/s].
 		new[] { "vehicle", "unit", "killer", "speed", "x", "z" },                              // VehicleRammed
+		// The drone; why it went off, by StrikeEnd — 1 arrived, 2 an enemy came near, 3 it
+		// flew into something, 4 its time ran out; 1 when a player died of it; where.
+		new[] { "unit", "end", "killed", "x", "z", "" },                                       // UnitStrike
+		// The operative; the phase by OperativePhase — 1 bound, 2 hold, 3 smoke, 4 dash, 5
+		// close; what it did — 0 went into the phase, 1 threw smoke, 2 stabbed, 3 stabbed and
+		// killed; and where it was.
+		new[] { "unit", "phase", "act", "x", "z", "" },                                        // Operative
+		// The unit answering, its catalog id, and the point it is firing at.
+		new[] { "unit", "tier", "", "x", "z", "" },                                            // CoveringFire
 	};
 
 	private static readonly string[] Kinds =
@@ -252,7 +280,7 @@ public static class AgentEventSchema
 		"squad_task", "contact_spotted", "node_contested", "unit_embarked", "unit_disembarked", "dropship_landed",
 		"grenade_thrown", "unit_task", "squad_drill", "kit", "resupply",
 		"vehicle_requested", "vehicle_spawned", "vehicle_entered", "vehicle_exited", "vehicle_damaged",
-		"vehicle_destroyed", "vehicle_rammed",
+		"vehicle_destroyed", "vehicle_rammed", "unit_strike", "operative", "covering_fire",
 	};
 
 	/// <summary>The highest kind there is. Everything from 0 to this has a name and a slate of fields.</summary>

@@ -1,0 +1,38 @@
+{
+  "name": "a scout drone sees over a sandbag wall a rifleman cannot see past, and strikes the player crouched behind it only when ordered to",
+  "seeds": [4, 12],
+  "duration_ticks": 1560,
+  "warmup_ticks": 60,
+  "roster": { "ground": 1, "strategists": 1 },
+
+  "seats": [
+    { "id": "covered", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/crouch_still.json" },
+    { "id": "chair", "team": "strategist", "policy": "strategist", "step_mul": 6,
+      "script": { "repeat": false, "steps": [
+        { "ticks": 900, "commands": [
+          { "cmd": "order", "kind": "move", "units": ["drone"], "target": [-60, 36] }
+        ] },
+        { "ticks": 600, "commands": [
+          { "cmd": "order", "kind": "strike", "units": ["drone", "rifle"], "target": [-60, 50] }
+        ] }
+      ] } }
+  ],
+
+  "spawns": [
+    { "structure": "sandbag_wall", "team": "strategist", "at": [-60, 0.5, 48.6], "yaw": 3.14159 },
+    { "unit": "infantry", "id": "rifle", "team": "strategist", "at": [-60, 0.5, 20], "order": "none" },
+    { "unit": "scout_drone", "id": "drone", "team": "strategist", "at": [-60, 1, 10], "order": "none" },
+    { "peer": "covered", "at": [-60, 1, 50], "look": [0, 0] }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.contact_spotted[observer=8].count", "op": ">=", "value": 1 },
+    { "metric": "events.contact_spotted[observer=0].count", "op": "==", "value": 0 },
+    { "metric": "events.unit_strike.count", "op": "==", "value": 1 },
+    { "metric": "events.unit_strike[killed=1].count", "op": "==", "value": 1 },
+    { "metric": "events.unit_lost[tier=8].count", "op": "==", "value": 1 },
+    { "metric": "events.unit_lost[tier=0].count", "op": "==", "value": 0 },
+    { "metric": "observation.covered.self.alive.min", "op": "==", "value": 0 }
+  ]
+}

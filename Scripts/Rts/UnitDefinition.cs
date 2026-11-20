@@ -150,6 +150,15 @@ public partial class UnitDefinition : Resource
 	/// <summary>True for a unit that flies.</summary>
 	public bool IsAircraft => CruiseAltitudeMeters > 0f;
 
+	/// <summary>
+	/// An aircraft that never lands (docs/OUTPOST.md §3.1): the scout drone. It takes off
+	/// as soon as it is out of the door and holds its cruise altitude over wherever it was
+	/// last sent, hovering, rather than coming down when it has nowhere to go. Meaningless
+	/// for a unit that does not fly.
+	/// </summary>
+	[Export]
+	public bool Hovers;
+
 	[ExportCategory("Senses and weapons")]
 
 	/// <summary>
@@ -226,6 +235,48 @@ public partial class UnitDefinition : Resource
 	/// </summary>
 	[Export]
 	public int Grenades = GrenadeSim.Carried;
+
+	/// <summary>
+	/// Smoke grenades it carries for its life (docs/OUTPOST.md §4.3): the operative's, thrown
+	/// over open ground it has to cross. None for everything else, which is what a file that
+	/// says nothing gets. Separate from <see cref="Grenades"/>, which kill.
+	/// </summary>
+	[Export]
+	public int SmokeGrenades;
+
+	/// <summary>
+	/// The catalog weapon it stabs with when its quarry is within that weapon's reach, or -1
+	/// for none (docs/OUTPOST.md §4.4): the operative's knife. An instant swing, as a
+	/// player's melee is, besides the gun in <see cref="WeaponId"/>.
+	/// </summary>
+	[Export]
+	public int MeleeWeaponId = -1;
+
+	/// <summary>True for a unit that carries a knife.</summary>
+	public bool HasMelee => MeleeWeaponId >= 0 && MeleeWeaponId < SimConfig.MaxWeaponDefinitions;
+
+	public byte MeleeWeaponDefinitionId => (byte)Mathf.Clamp(MeleeWeaponId, 0, SimConfig.MaxWeaponDefinitions - 1);
+
+	/// <summary>
+	/// The catalog round it carries as a charge, or -1 for none (docs/OUTPOST.md §3.3): the
+	/// scout drone's. It goes off only on the strategist's <see cref="OrderKind.Strike"/>,
+	/// and takes the drone with it.
+	/// </summary>
+	[Export]
+	public int StrikeWeaponId = -1;
+
+	/// <summary>True for a unit that can be ordered to strike.</summary>
+	public bool CanStrike => StrikeWeaponId >= 0 && StrikeWeaponId < SimConfig.MaxWeaponDefinitions;
+
+	public byte StrikeWeaponDefinitionId => (byte)Mathf.Clamp(StrikeWeaponId, 0, SimConfig.MaxWeaponDefinitions - 1);
+
+	/// <summary>
+	/// Whether it answers an operative's call for covering fire, and counts as covering
+	/// fire when it shoots near an operative's quarry (docs/OUTPOST.md §4.5): the rifleman,
+	/// the tank and the heavy gunner.
+	/// </summary>
+	[Export]
+	public bool GivesCoveringFire;
 
 	/// <summary>
 	/// Whether it can put up structures (docs/NETCODE.md §10.5). The builder's one

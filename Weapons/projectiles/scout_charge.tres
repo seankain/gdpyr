@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="ProjectileDefinition" format=3]
+
+[ext_resource type="Script" path="res://Scripts/Fps/ProjectileDefinition.cs" id="1_projdef"]
+
+[resource]
+script = ExtResource("1_projdef")
+Name = &"scout_charge"
+MassGrams = 600.0
+RadiusMillimeters = 60.0
+DragCoefficient = 1.0
+MuzzleVelocity = 18.0
+LifetimeSeconds = 8.0
+Damage = 0.0
+ExplosionRadiusMeters = 6.0
+ExplosionDamage = 170.0
+SweepRadiusMeters = 0.25
+VehicleDamageScale = 0.5
+StructureDamageScale = 0.5
+TracerColor = Color(0.95, 0.75, 0.2, 1)
+TracerLengthMeters = 0.3
+TracerRadiusMeters = 0.12
+Explosion = 4
