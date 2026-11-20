@@ -313,7 +313,18 @@ up over it, the operative beside it) and `outpost-3-smoke.png` (the cloud in the
 
 ### 6.4 The checked-in scenario suite
 
-Recorded in the commit that lands this document.
+All 64 checked-in scenarios, run in four shards on separate ports (they run in real time, so shards
+are four times as fast; the harness's output, concatenated, is `docs/baselines/outpost-scenarios.txt`):
+**55 pass, 8 fail, and 1 stops with an error.** The five of §6.2 pass. The eight that fail are the eight
+[`GROUND_VEHICLES.md`](GROUND_VEHICLES.md) GV0 lists as failing before any of this —
+`locker_launcher_vs_tank`, `locker_resupply`, `locker_resupply_under_fire`, `htn_locker_runner_kit`,
+`htn_strategist_digs_in`, `tactics_move_to_node`, `technical_wreck_ejects` and the noisy
+`htn_squad_retreats`. `htn_commander_trains` errors before its clock starts — "no sniper_tower at
+(120, −80): the ground is too steep", the slope rule of LEVEL_EDITOR.md LE-D21 refusing the scenario's
+tower — and does exactly that on the untouched base commit `cf4636a`, as does `htn_locker_runner_kit`'s
+seed 3. Since that scenario is the only one of the computer strategist training at a pillbox and a
+tower, a copy with the tower moved to (100, −70) was run on this tree: it passes, with 3 heavy gunners
+and 2 snipers trained. Neither scenario is changed here.
 
 ## 7. Not done, and left for a person
 
