@@ -1,5 +1,4 @@
 # Normalize EOL for all files that Git considers text files.
 * text=auto eol=lf
-
 # A map file is bytes that are hashed (docs/LEVEL_EDITOR.md LE-D15): never converted.
 *.map binary

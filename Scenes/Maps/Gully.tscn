@@ -1,0 +1,128 @@
+[gd_scene format=3 uid="uid://xkib3bg12flv"]
+
+[ext_resource type="Script" uid="uid://dworldroot01" path="res://Scripts/Core/WorldRoot.cs" id="1_8jm1r"]
+[ext_resource type="Texture2D" uid="uid://cvehtbt52ps22" path="res://ThirdParty/wasteland_clouds_puresky_8k.hdr" id="2_hqqso"]
+[ext_resource type="Shader" uid="uid://c8dfw2ja1ryyd" path="res://Levels/materials/River.gdshader" id="3_x5n7d"]
+[ext_resource type="Script" uid="uid://bfgfdambv5h2p" path="res://Scripts/Tools/WaterGenerator.cs" id="4_ex5in"]
+[ext_resource type="Script" uid="uid://d1v3u2uki6be7" path="res://Scripts/Fps/WeaponLocker.cs" id="5_kvmkk"]
+[ext_resource type="PackedScene" uid="uid://dblvn46rbxvkb" path="res://Scenes/Environment/Barracks.tscn" id="6_bnapj"]
+[ext_resource type="Script" uid="uid://cxvwabhyxemfo" path="res://Scripts/Rts/ResourceNode.cs" id="7_b2ou4"]
+[ext_resource type="PackedScene" uid="uid://bc54wonqgl4in" path="res://Scenes/Environment/Gully.tscn" id="8_s26th"]
+
+[sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_7cc7q"]
+panorama = ExtResource("2_hqqso")
+
+[sub_resource type="Sky" id="Sky_sky"]
+sky_material = SubResource("PanoramaSkyMaterial_7cc7q")
+
+[sub_resource type="Environment" id="Environment_world"]
+background_mode = 2
+sky = SubResource("Sky_sky")
+
+[sub_resource type="BoxMesh" id="BoxMesh_ground"]
+size = Vector3(240, 1, 240)
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_xmdeh"]
+render_priority = 0
+shader = ExtResource("3_x5n7d")
+shader_parameter/water_color = Color(0, 0, 0, 1)
+shader_parameter/use_vertex_waves = false
+shader_parameter/wave_height = 1.20000001788144
+shader_parameter/wave_speed = 0.999999977648
+shader_parameter/wave_scale = 50.0
+shader_parameter/double_sided = false
+shader_parameter/surface_bottom = Color(0.29, 0.53, 0.67, 0.65)
+shader_parameter/depth_distance = 0.5
+shader_parameter/water_color_ratio = 0.60000000894072
+shader_parameter/beers_law = 3.0
+shader_parameter/normal_scale = 0.5
+shader_parameter/roughness_scale = 0.2
+shader_parameter/use_river_flow = false
+shader_parameter/flow_speed = 1.0000000149012
+shader_parameter/flow_direction_multiplier = 1.0
+shader_parameter/uv1_scale = Vector2(20, 50)
+shader_parameter/uv1_offset = Vector2(50, 100)
+shader_parameter/debug_tangent = false
+shader_parameter/use_foam = true
+shader_parameter/debug_foam = false
+shader_parameter/foam_uv_scale = 0.06100000289749999
+shader_parameter/foam_scale = 24.0
+shader_parameter/foam_speed = 0.40000000596048
+shader_parameter/foam_falloff_distance = 0.4
+shader_parameter/foam_edge_distance = 0.2
+shader_parameter/foam_edge_bias = 0.1
+shader_parameter/foam_color = Color(0.8, 0.8, 0.8, 1)
+shader_parameter/camera_near = 0.05
+shader_parameter/camera_far = 200.0
+
+[sub_resource type="Curve3D" id="Curve3D_et2sl"]
+_data = {
+"points": PackedVector3Array(0, 0, 0, 0, 0, 0, -7.7907715, 0, 219.89743, 0, 0, 0, 0, 0, 0, -19.46019, 0, 90.729515, 0, 0, 0, 0, 0, 0, -16.74125, 0, 159.3097, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -29.275),
+"tilts": PackedFloat32Array(0, 0, 0, 0, 0)
+}
+point_count = 5
+
+[sub_resource type="NavigationMesh" id="NavigationMesh_map"]
+
+[node name="MapBase" type="Node3D" unique_id=2085247266]
+script = ExtResource("1_8jm1r")
+
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=522486645]
+transform = Transform3D(0.819152, -0.469846, 0.32899, 0, 0.573576, 0.819152, -0.573576, -0.67101, 0.469846, 0, 30, 0)
+shadow_enabled = true
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=2026204438]
+environment = SubResource("Environment_world")
+
+[node name="Geometry" type="Node3D" parent="." unique_id=1206005255 groups=["navmesh"]]
+
+[node name="Ground" type="StaticBody3D" parent="Geometry" unique_id=7741536]
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Geometry/Ground" unique_id=1604561433]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 7.5690384, 0)
+visible = false
+mesh = SubResource("BoxMesh_ground")
+surface_material_override/0 = SubResource("ShaderMaterial_xmdeh")
+
+[node name="Cover" type="Node3D" parent="Geometry" unique_id=1615128101]
+
+[node name="Path3D" type="Path3D" parent="Geometry" unique_id=1828716571]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.4026623, 0, -109.72317)
+curve = SubResource("Curve3D_et2sl")
+debug_custom_color = Color(0.8173157, 2.623126e-06, 1.0588765e-06, 1)
+script = ExtResource("4_ex5in")
+
+[node name="NavigationRegion3D" type="NavigationRegion3D" parent="." unique_id=462659835 groups=["navigation_region"]]
+navigation_mesh = SubResource("NavigationMesh_map")
+
+[node name="PlayerSpawns" type="Node3D" parent="." unique_id=1682082418]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -90, 75.28356, 66.595604)
+
+[node name="Spawn1" type="Marker3D" parent="PlayerSpawns" unique_id=1967788798 groups=["player_spawn"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6, 1, 0)
+
+[node name="Spawn2" type="Marker3D" parent="PlayerSpawns" unique_id=1857349572 groups=["player_spawn"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 1, 0)
+
+[node name="Spawn3" type="Marker3D" parent="PlayerSpawns" unique_id=171335240 groups=["player_spawn"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 1, 0)
+
+[node name="Spawn4" type="Marker3D" parent="PlayerSpawns" unique_id=1685667699 groups=["player_spawn"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 1, 0)
+
+[node name="WeaponLocker1" type="Node3D" parent="." unique_id=491049562 groups=["weapon_locker"]]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -90, 75.28356, 96)
+script = ExtResource("5_kvmkk")
+
+[node name="Barracks1" parent="." unique_id=1392093851 instance=ExtResource("6_bnapj")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 69.44207, 69.872246, 42.87622)
+
+[node name="ResourceNode1" type="Node3D" parent="." unique_id=1103279471 groups=["resource_node"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 65.22269, 70.71206, -16.869823)
+script = ExtResource("7_b2ou4")
+
+[node name="StrategistAnchor" type="Marker3D" parent="." unique_id=273331545 groups=["strategist_anchor"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 45, 75.28356, -45)
+
+[node name="StaticBody3D" parent="." unique_id=536665162 instance=ExtResource("8_s26th")]
+transform = Transform3D(100, 0, 0, 0, 100, 0, 0, 0, 100, 0, 0, 0)
