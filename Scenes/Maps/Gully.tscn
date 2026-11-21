@@ -3,11 +3,13 @@
 [ext_resource type="Script" uid="uid://dworldroot01" path="res://Scripts/Core/WorldRoot.cs" id="1_8jm1r"]
 [ext_resource type="Texture2D" uid="uid://cvehtbt52ps22" path="res://ThirdParty/wasteland_clouds_puresky_8k.hdr" id="2_hqqso"]
 [ext_resource type="Shader" uid="uid://c8dfw2ja1ryyd" path="res://Levels/materials/River.gdshader" id="3_x5n7d"]
-[ext_resource type="Script" uid="uid://bfgfdambv5h2p" path="res://Scripts/Tools/WaterGenerator.cs" id="4_ex5in"]
+[ext_resource type="Script" uid="uid://bfgfdambv5h2p" path="res://Scripts/Tools/WaterSurfaceGenerator.cs" id="4_ex5in"]
 [ext_resource type="Script" uid="uid://d1v3u2uki6be7" path="res://Scripts/Fps/WeaponLocker.cs" id="5_kvmkk"]
 [ext_resource type="PackedScene" uid="uid://dblvn46rbxvkb" path="res://Scenes/Environment/Barracks.tscn" id="6_bnapj"]
 [ext_resource type="Script" uid="uid://cxvwabhyxemfo" path="res://Scripts/Rts/ResourceNode.cs" id="7_b2ou4"]
 [ext_resource type="PackedScene" uid="uid://bc54wonqgl4in" path="res://Scenes/Environment/Gully.tscn" id="8_s26th"]
+[ext_resource type="Material" uid="uid://b41znuitt85ms" path="res://Levels/materials/RiverWater.tres" id="9_river"]
+[ext_resource type="PackedScene" uid="uid://biba1s2ay4xe6" path="res://Models/Environment/GullyBridge.glb" id="10_bridge"]
 
 [sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_7cc7q"]
 panorama = ExtResource("2_hqqso")
@@ -52,15 +54,13 @@ shader_parameter/foam_falloff_distance = 0.4
 shader_parameter/foam_edge_distance = 0.2
 shader_parameter/foam_edge_bias = 0.1
 shader_parameter/foam_color = Color(0.8, 0.8, 0.8, 1)
-shader_parameter/camera_near = 0.05
-shader_parameter/camera_far = 200.0
 
 [sub_resource type="Curve3D" id="Curve3D_et2sl"]
 _data = {
-"points": PackedVector3Array(0, 0, 0, 0, 0, 0, -7.7907715, 0, 219.89743, 0, 0, 0, 0, 0, 0, -19.46019, 0, 90.729515, 0, 0, 0, 0, 0, 0, -16.74125, 0, 159.3097, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -29.275),
-"tilts": PackedFloat32Array(0, 0, 0, 0, 0)
+"points": PackedVector3Array(0, 0, 0, 0, 0, -6.667, -1.75, 0, 100, 1.653, 0, 6.667, -1.653, 0, -6.667, -6.95, 0, 80, 0.908, 0, 6.667, -0.908, 0, -6.667, -11.667, 0, 60, 0.492, 0, 6.667, -0.492, 0, -6.667, -12.4, 0, 40, 1.128, 0, 6.667, -1.128, 0, -6.667, -14.617, 0, 20, 1.85, 0, 6.667, -1.85, 0, -6.667, -19.167, 0, 0, 0.422, 0, 6.667, -0.422, 0, -6.667, -25.717, 0, -20, -3.692, 0, 6.667, 3.692, 0, -6.667, -21.7, 0, -40, -4.242, 0, 6.667, 4.242, 0, -6.667, -3.567, 0, -60, -1.469, 0, 6.667, 1.469, 0, -6.667, 3.75, 0, -80, 0, 0, 6.667, 0, 0, 0, 5.25, 0, -100),
+"tilts": PackedFloat32Array(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 }
-point_count = 5
+point_count = 11
 
 [sub_resource type="NavigationMesh" id="NavigationMesh_map"]
 
@@ -86,11 +86,21 @@ surface_material_override/0 = SubResource("ShaderMaterial_xmdeh")
 
 [node name="Cover" type="Node3D" parent="Geometry" unique_id=1615128101]
 
-[node name="Path3D" type="Path3D" parent="Geometry" unique_id=1828716571]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.4026623, 0, -109.72317)
+[node name="River" type="Path3D" parent="Geometry" unique_id=1828716571]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
 curve = SubResource("Curve3D_et2sl")
 debug_custom_color = Color(0.8173157, 2.623126e-06, 1.0588765e-06, 1)
+
+[node name="WaterSurface" type="Node" parent="Geometry/River" unique_id=782488343 node_paths=PackedStringArray("Path")]
 script = ExtResource("4_ex5in")
+RiverMaterial = ExtResource("9_river")
+Path = NodePath("..")
+Width = 24.0
+Steps = 40
+WidthSubdivisions = 2
+
+[node name="Bridge" parent="Geometry" unique_id=1319136569 instance=ExtResource("10_bridge")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 70.15, 30)
 
 [node name="NavigationRegion3D" type="NavigationRegion3D" parent="." unique_id=462659835 groups=["navigation_region"]]
 navigation_mesh = SubResource("NavigationMesh_map")

@@ -1,0 +1,58 @@
+[gd_resource type="ShaderMaterial" load_steps=6 format=3 uid="uid://b41znuitt85ms"]
+
+[ext_resource type="Shader" uid="uid://c8dfw2ja1ryyd" path="res://Levels/materials/River.gdshader" id="1_river"]
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_ripples"]
+noise_type = 3
+frequency = 0.02
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_ripples"]
+noise = SubResource("FastNoiseLite_ripples")
+seamless = true
+as_normal_map = true
+seamless_blend_skirt = 1.0
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_foam"]
+noise_type = 3
+frequency = 0.02
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_foam"]
+width = 256
+height = 256
+noise = SubResource("FastNoiseLite_foam")
+seamless = true
+normalize = false
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_river")
+shader_parameter/water_color = Color(0.11, 0.25, 0.26, 1)
+shader_parameter/water_noise_1 = SubResource("NoiseTexture2D_ripples")
+shader_parameter/water_noise_2 = SubResource("NoiseTexture2D_ripples")
+shader_parameter/use_vertex_waves = false
+shader_parameter/wave_height = 0.2
+shader_parameter/wave_speed = 0.05
+shader_parameter/wave_scale = 10.0
+shader_parameter/double_sided = true
+shader_parameter/surface_bottom = Color(0.045, 0.125, 0.17, 0.65)
+shader_parameter/depth_distance = 2.0
+shader_parameter/water_color_ratio = 0.35
+shader_parameter/beers_law = 2.0
+shader_parameter/normal_scale = 0.6
+shader_parameter/roughness_scale = 0.1
+shader_parameter/use_river_flow = true
+shader_parameter/flow_speed = 0.25
+shader_parameter/flow_direction_multiplier = -1.0
+shader_parameter/uv1_scale = Vector2(20, 2)
+shader_parameter/uv1_offset = Vector2(0, 0)
+shader_parameter/debug_tangent = false
+shader_parameter/use_foam = true
+shader_parameter/debug_foam = false
+shader_parameter/foam_texture = SubResource("NoiseTexture2D_foam")
+shader_parameter/foam_uv_scale = 0.05
+shader_parameter/foam_scale = 6.0
+shader_parameter/foam_speed = 0.2
+shader_parameter/foam_falloff_distance = 0.6
+shader_parameter/foam_edge_distance = 0.2
+shader_parameter/foam_edge_bias = 0.2
+shader_parameter/foam_color = Color(0.8, 0.8, 0.8, 1)
