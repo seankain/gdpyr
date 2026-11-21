@@ -162,6 +162,8 @@ The template has only the anchor of these. Everything else is added in the map.
 | **Ammunition cans** | `Scripts/Fps/AmmoCan.cs` (group `ammo_can`) | At most 12 (`SimConfig.MaxAmmoCans`). Sorted by name. |
 | **Vehicle kiosk** | `Scripts/Fps/VehicleKiosk.cs` (group `vehicle_kiosk`) | Only the first by name hands out vehicles. It must be upright and unscaled, like the locker. Its `Marker3D` children **`Pad4x4`** and **`PadHelicopter`** are where each kind is put, facing the marker's −Z. A kind with no pad is not handed out ([`GROUND_VEHICLES.md`](GROUND_VEHICLES.md) §6.6). |
 | **Bunker, set pieces** | e.g. `Scenes/Environment/Pillbox.tscn`, `VehicleTestStrip.tscn` | Scenery. A collider in `navmesh` is walked round. |
+| **Imported structures** | a `.glb` instanced under `Geometry` | A Blender object named `…-col` imports as a mesh with a trimesh `StaticBody3D` on layer 1, so it is walked on, baked into the navigation mesh and stops bullets; one without the suffix is only drawn. Example: `Models/Environment/GullyBridge.glb`, built by `tools/blender/gully_bridge.py`, whose materials its `.import` maps to `Levels/materials/BridgeGreybox.tres` and `BridgeCable.tres`. |
+| **River** | `Scripts/Tools/WaterSurfaceGenerator.cs` on a `Node` under a `Path3D` | Drawn only: no collider, and nothing in the simulation reads it. The ribbon is built from the path's curve when the scene loads, and again in the editor whenever the curve or the path moves; the path's Y is the water level. Material `Levels/materials/RiverWater.tres` (`River.gdshader`). Make it wider than the wet bed, so its edges end inside the banks. |
 
 ---
 

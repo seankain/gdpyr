@@ -47,18 +47,22 @@ uniform float foam_edge_distance : hint_range(0.0, 1.0, 0.1) = 0.2;
 uniform float foam_edge_bias : hint_range(0.0, 1.0, 0.1) = 0.1;
 uniform vec3 foam_color : source_color = vec3(0.8, 0.8, 0.8);
 
-group_uniforms camera;
-uniform float camera_near = 0.05;
-uniform float camera_far = 200.0;
-
 varying vec4 world_uv;
 varying vec2 flow_direction;
 varying flat vec2 TANGENT_DEBUG;
 varying vec3 world_pos;
 
-float edge(float near, float far, float depth){
-	depth = 1.0 - 2.0 * depth;
-	return near * far / (far + depth * (near - far));
+// The view-space position of what is already drawn behind this fragment. The Compatibility
+// renderer's depth is OpenGL's, -1..1 in NDC; Forward+ and Mobile store 0..1 (reversed).
+vec3 scene_view_position(sampler2D depth_tex, vec2 screen_uv, mat4 inv_projection) {
+	float depth = textureLod(depth_tex, screen_uv, 0.0).r;
+#if CURRENT_RENDERER == RENDERER_COMPATIBILITY
+	vec3 ndc = vec3(screen_uv, depth) * 2.0 - 1.0;
+#else
+	vec3 ndc = vec3(screen_uv * 2.0 - 1.0, depth);
+#endif
+	vec4 view = inv_projection * vec4(ndc, 1.0);
+	return view.xyz / view.w;
 }
 
 void vertex() {
@@ -125,9 +129,7 @@ void fragment() {
 	_suv.x += distortion_x;
 	_suv.y += distortion_y;
 	
-	float depth_r = textureLod(depth_texture, SCREEN_UV, 0.0).r;
-	vec4 world = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, depth_r, 1.0);
-	world.xyz /= world.w;
+	vec3 world = scene_view_position(depth_texture, SCREEN_UV, INV_PROJECTION_MATRIX);
 
 	float depth_blend = 1.0 - smoothstep(world.z + depth_distance, world.z, VERTEX.z);
 	depth_blend = exp(depth_blend * -beers_law);
@@ -149,10 +151,8 @@ void fragment() {
 	ROUGHNESS = roughness_scale;
 
 	if (use_foam) {
-		float z_depth = edge(camera_near, camera_far, textureLod(depth_texture, SCREEN_UV, 0.0).r);
-		float z_pos = edge(camera_near, camera_far, FRAGCOORD.z);
-		float waterDepth = z_depth - z_pos;
-		waterDepth = max(waterDepth, 0.0);
+		// How far behind the surface the bed is, along the view axis.
+		float waterDepth = max(VERTEX.z - world.z, 0.0);
 
 		float edgePatternScroll = TIME * foam_speed;
 

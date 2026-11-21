@@ -1,0 +1,21 @@
+[remap]
+
+importer="scene"
+importer_version=1
+type="PackedScene"
+uid="uid://bia91s2ay4xe6"
+
+[params]
+
+_subresources={
+"materials": {
+"BridgeCable": {
+"use_external/enabled": true,
+"use_external/path": "res://Levels/materials/BridgeCable.tres"
+},
+"BridgeGreybox": {
+"use_external/enabled": true,
+"use_external/path": "res://Levels/materials/BridgeGreybox.tres"
+}
+}
+}
