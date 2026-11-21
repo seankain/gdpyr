@@ -9,7 +9,7 @@
 [ext_resource type="Script" uid="uid://cxvwabhyxemfo" path="res://Scripts/Rts/ResourceNode.cs" id="7_b2ou4"]
 [ext_resource type="PackedScene" uid="uid://bc54wonqgl4in" path="res://Scenes/Environment/Gully.tscn" id="8_s26th"]
 [ext_resource type="Material" uid="uid://b41znuitt85ms" path="res://Levels/materials/RiverWater.tres" id="9_river"]
-[ext_resource type="PackedScene" uid="uid://bia91s2ay4xe6" path="res://Models/Environment/GullyBridge.glb" id="10_bridge"]
+[ext_resource type="PackedScene" uid="uid://biba1s2ay4xe6" path="res://Models/Environment/GullyBridge.glb" id="10_bridge"]
 
 [sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_7cc7q"]
 panorama = ExtResource("2_hqqso")
@@ -57,7 +57,7 @@ shader_parameter/foam_color = Color(0.8, 0.8, 0.8, 1)
 
 [sub_resource type="Curve3D" id="Curve3D_et2sl"]
 _data = {
-"points": PackedVector3Array(0, 0, 0, -1.733, 0, -6.667, -1.75, 0, 100, 1.653, 0, 6.667, -1.653, 0, -6.667, -6.95, 0, 80, 0.908, 0, 6.667, -0.908, 0, -6.667, -11.667, 0, 60, 0.492, 0, 6.667, -0.492, 0, -6.667, -12.4, 0, 40, 1.128, 0, 6.667, -1.128, 0, -6.667, -14.617, 0, 20, 1.85, 0, 6.667, -1.85, 0, -6.667, -19.167, 0, 0, 0.422, 0, 6.667, -0.422, 0, -6.667, -25.717, 0, -20, -3.692, 0, 6.667, 3.692, 0, -6.667, -21.7, 0, -40, -4.242, 0, 6.667, 4.242, 0, -6.667, -3.567, 0, -60, -1.469, 0, 6.667, 1.469, 0, -6.667, 3.75, 0, -80, -0.5, 0, 6.667, 0, 0, 0, 5.25, 0, -100),
+"points": PackedVector3Array(0, 0, 0, 0, 0, -6.667, -1.75, 0, 100, 1.653, 0, 6.667, -1.653, 0, -6.667, -6.95, 0, 80, 0.908, 0, 6.667, -0.908, 0, -6.667, -11.667, 0, 60, 0.492, 0, 6.667, -0.492, 0, -6.667, -12.4, 0, 40, 1.128, 0, 6.667, -1.128, 0, -6.667, -14.617, 0, 20, 1.85, 0, 6.667, -1.85, 0, -6.667, -19.167, 0, 0, 0.422, 0, 6.667, -0.422, 0, -6.667, -25.717, 0, -20, -3.692, 0, 6.667, 3.692, 0, -6.667, -21.7, 0, -40, -4.242, 0, 6.667, 4.242, 0, -6.667, -3.567, 0, -60, -1.469, 0, 6.667, 1.469, 0, -6.667, 3.75, 0, -80, 0, 0, 6.667, 0, 0, 0, 5.25, 0, -100),
 "tilts": PackedFloat32Array(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 }
 point_count = 11

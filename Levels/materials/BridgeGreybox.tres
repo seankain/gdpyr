@@ -3,7 +3,7 @@
 [ext_resource type="Texture2D" uid="uid://dvcvlg5lxgnsr" path="res://Textures/kenney_prototype/PNG/Light/texture_02.png" id="1_grid"]
 
 [resource]
-albedo_color = Color(0.8, 0.8, 0.78, 1)
+albedo_color = Color(0.5, 0.5, 0.48, 1)
 albedo_texture = ExtResource("1_grid")
 roughness = 0.85
 uv1_scale = Vector3(0.5, 0.5, 0.5)
