@@ -121,6 +121,39 @@ public class MapSceneTests
 
 	[Theory]
 	[MemberData(nameof(Maps))]
+	public void NoColliderIsScaled(string scenePath)
+	{
+		// Godot's physics does not support a scaled body or shape (docs/MAPS.md §3.1, item 8).
+		// Its segment–triangle test has an absolute epsilon in the shape's own space, so a
+		// trimesh authored small and scaled up misses short rays: Gully's terrain, 2 m across and
+		// scaled ×100, missed every ray of ±2 m or less on flat ground, so the structure check's
+		// corner probes found no ground and every site was refused as too steep.
+		MapScene scene = MapScene.Load(scenePath);
+		foreach (SceneNode node in scene.Nodes.Where(n => IsCollider(scene, n)))
+		{
+			Vec3 scale = scene.GlobalScale(node.Path);
+			Assert.True(MathF.Abs(scale.X - 1f) < 1e-3f && MathF.Abs(scale.Y - 1f) < 1e-3f && MathF.Abs(scale.Z - 1f) < 1e-3f,
+				$"{scenePath}: {node.Path} ({node.Type ?? node.Instance}) is scaled ({scale.X}, {scale.Y}, {scale.Z});"
+				+ " put the scale in the collider's vertices or the CSG's size, and scale only the mesh");
+		}
+	}
+
+	/// <summary>
+	/// A node the physics engine collides with: a body, a shape, the root of a CSG tree (its
+	/// children are merged into its mesh, and only the root has a body), or an imported model,
+	/// whose <c>-col</c> objects import as static bodies.
+	/// </summary>
+	private static bool IsCollider(MapScene scene, SceneNode node) =>
+		node.Type is "StaticBody3D" or "RigidBody3D" or "CharacterBody3D" or "AnimatableBody3D" or "VehicleBody3D"
+			or "Area3D" or "CollisionShape3D" or "CollisionPolygon3D"
+		|| (IsCsg(node) && (node.Path == "." || !IsCsg(scene.Get(ParentPath(node.Path)))))
+		|| node.Instance?.EndsWith(".glb", StringComparison.Ordinal) == true
+		|| node.Instance?.EndsWith(".gltf", StringComparison.Ordinal) == true;
+
+	private static bool IsCsg(SceneNode node) => node?.Type?.StartsWith("CSG", StringComparison.Ordinal) == true;
+
+	[Theory]
+	[MemberData(nameof(Maps))]
 	public void NothingARoundNeedsIsUnderTheKillPlane(string scenePath)
 	{
 		// The first node in the group is the plane (CombatManager.KillPlaneOfMap): a second
@@ -224,6 +257,9 @@ public class MapSceneTests
 		/// <summary>Basis rows then origin, as a .tscn writes a Transform3D. Null is identity.</summary>
 		public float[] Transform;
 
+		/// <summary>The res:// path of an imported model (a .glb) this node instances, or null.</summary>
+		public string Instance;
+
 		public SceneNode Clone(string path) => new()
 		{
 			Path = path,
@@ -231,6 +267,7 @@ public class MapSceneTests
 			Script = Script,
 			Groups = new HashSet<string>(Groups, StringComparer.Ordinal),
 			Transform = Transform,
+			Instance = Instance,
 		};
 	}
 
@@ -257,22 +294,14 @@ public class MapSceneTests
 
 		public IEnumerable<SceneNode> WithScript(string script) => _nodes.Values.Where(n => n.Script == script);
 
+		public IEnumerable<SceneNode> Nodes => _nodes.Values;
+
 		/// <summary>Where a node is in the map: its transform composed with every ancestor's.</summary>
 		public Vec3 GlobalOrigin(string path)
 		{
-			var chain = new List<SceneNode>();
-			for (string at = path; ; at = ParentOf(at))
-			{
-				chain.Add(_nodes[at]);
-				if (at == ".")
-				{
-					break;
-				}
-			}
-
 			// Applied from the node outwards: p' = B·p + o at each level.
 			float x = 0f, y = 0f, z = 0f;
-			foreach (SceneNode node in chain)
+			foreach (SceneNode node in Chain(path))
 			{
 				float[] t = node.Transform;
 				if (t == null)
@@ -287,6 +316,56 @@ public class MapSceneTests
 			}
 
 			return new Vec3(x, y, z);
+		}
+
+		/// <summary>
+		/// How much a node's own axes are stretched in the map: the lengths of its global
+		/// basis's columns, its basis composed with every ancestor's.
+		/// </summary>
+		public Vec3 GlobalScale(string path)
+		{
+			// Row-major, as a .tscn writes it: G = A_root · … · A_parent · A_node, built from the
+			// node outwards as G ← A · G.
+			float[] g = { 1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f };
+			foreach (SceneNode node in Chain(path))
+			{
+				float[] a = node.Transform;
+				if (a == null)
+				{
+					continue;
+				}
+
+				var product = new float[9];
+				for (int row = 0; row < 3; row++)
+				{
+					for (int column = 0; column < 3; column++)
+					{
+						product[(row * 3) + column] = (a[row * 3] * g[column]) + (a[(row * 3) + 1] * g[3 + column])
+							+ (a[(row * 3) + 2] * g[6 + column]);
+					}
+				}
+
+				g = product;
+			}
+
+			static float Column(float[] m, int c) => MathF.Sqrt((m[c] * m[c]) + (m[3 + c] * m[3 + c]) + (m[6 + c] * m[6 + c]));
+			return new Vec3(Column(g, 0), Column(g, 1), Column(g, 2));
+		}
+
+		/// <summary>The node, then each ancestor up to the root.</summary>
+		private List<SceneNode> Chain(string path)
+		{
+			var chain = new List<SceneNode>();
+			for (string at = path; ; at = ParentOf(at))
+			{
+				chain.Add(_nodes[at]);
+				if (at == ".")
+				{
+					break;
+				}
+			}
+
+			return chain;
 		}
 
 		private static string ParentOf(string path)
@@ -377,6 +456,13 @@ public class MapSceneTests
 			{
 				node = new SceneNode { Path = path };
 				nodes[path] = node;
+			}
+
+			if (attributes.TryGetValue("instance", out string model)
+				&& resources[Quoted.Match(model).Groups[1].Value] is { } modelPath
+				&& !modelPath.EndsWith(".tscn", StringComparison.Ordinal))
+			{
+				node.Instance = modelPath;
 			}
 
 			if (attributes.TryGetValue("type", out string type))
