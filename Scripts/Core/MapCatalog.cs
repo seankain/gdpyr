@@ -124,6 +124,9 @@ public static class MapCatalog
 		new("greybox", "Greybox", "res://Scenes/Test.tscn",
 			"the prototype map: three resource nodes, a barracks, cover and the vehicle strip"),
 
+		new("gully", "Gully", "res://Scenes/Maps/Gully.tscn",
+			"two plateaus split by a river gully and joined by one bridge; the node is at the bridge's east end"),
+
 		// docs/LEVEL_EDITOR.md LE3: `gdpyr-map generate --seed 3 --name Hills`, unchanged since.
 		// The hash is the file's; BundledMapTests fails if either moves without the other.
 		MapInfo.Data("hills", "Hills", BundledDirectory + "hills.map", BundledHillsHash,

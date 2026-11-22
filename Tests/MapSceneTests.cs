@@ -310,14 +310,23 @@ public class MapSceneTests
 				? "."
 				: Unquote(parent) == "." ? name : Unquote(parent) + "/" + name;
 
-			// An instanced (or, at the root, inherited) scene brings its whole tree with it.
+			// An instanced (or, at the root, inherited) scene brings its whole tree with it. An
+			// imported model (a .glb) is a binary the engine turns into a scene at import: it is
+			// read as the one node it is instanced as, which is all a map's groups and scripts see.
 			if (attributes.TryGetValue("instance", out string instance))
 			{
-				string id = Quoted.Match(instance).Groups[1].Value;
-				foreach ((string subPath, SceneNode sub) in Flatten(ToFile(resources[id]), depth + 1))
+				string instanced = resources[Quoted.Match(instance).Groups[1].Value];
+				if (instanced.EndsWith(".tscn", StringComparison.Ordinal))
 				{
-					string at = subPath == "." ? path : path == "." ? subPath : path + "/" + subPath;
-					nodes[at] = sub.Clone(at);
+					foreach ((string subPath, SceneNode sub) in Flatten(ToFile(instanced), depth + 1))
+					{
+						string at = subPath == "." ? path : path == "." ? subPath : path + "/" + subPath;
+						nodes[at] = sub.Clone(at);
+					}
+				}
+				else
+				{
+					Assert.True(File.Exists(ToFile(instanced)), $"{instanced} is not in the checkout");
 				}
 			}
 

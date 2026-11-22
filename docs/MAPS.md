@@ -126,6 +126,32 @@ the same thing. Move things however the map needs, but keep the nodes and the gr
 outside every barracks' ring. A ground bot's goal is pulled back to the edge of an enemy ring
 (`BotPilot.OutsideDefences`), so bots never take a node inside one.
 
+### 2.4 Gully, a map that does not inherit the template
+
+`Scenes/Maps/Gully.tscn` (catalog id `gully`) is a scene of its own with `WorldRoot.cs` on its root,
+like the greybox. Its ground is a sculpted terrain, `Scenes/Environment/Gully.tscn` instanced at
+scale 100: 200 × 200 m, from 0 m in the gully to 70 m on two flat plateaus, west and east, with the
+gully running north–south between them. The template's flat ground and 4 m walls would sit under and
+inside it, and an inherited scene cannot delete them, so Gully keeps only what §3.1 asks for.
+
+| | Position (x, y, z) | Why |
+|---|---|---|
+| `Geometry/Terrain` | the origin, scale 100 | under `Geometry`, so the bake reads its trimesh collider |
+| `Geometry/Bridge` | (−2, 70.15, 30) | `Models/Environment/GullyBridge.glb`: the only walkable way between the plateaus |
+| `Geometry/Perimeter` | four 0.5 m colliders, inner faces at ±100 m, y −10…110 | there is no ground past ±100 m and no kill plane for a body; 0.5 m so the bake's 0.4 m radius leaves no walkable strip on their tops; up to 110 m so an aircraft at `CrewField`'s 100 m ceiling stays in |
+| Ground force spawn line | (−80, 71, 66.6), four markers 4 m apart | west plateau, 1 m above it |
+| Weapon locker | (−80, 70, 72.6) | 6 m behind the spawn line |
+| Barracks | (82, 70, −80), door south at (82, 70, −74) | east plateau, north-east corner |
+| Resource node | (65, 70, 45) | east plateau, at the bridge's east end: 126 m from the barracks, outside its 107 m ring and the bots' 117 m standoff |
+| Strategist anchor | (65, 70, −20) | east plateau, between the barracks and the node |
+
+Measured on its navigation mesh: spawn line to node 169 m, over the bridge; barracks door to node
+120 m. The gully floor is an island of its own: its walls are steeper than the 45° a body and the
+bake walk, so nothing paths into it and a player who drops in cannot climb out.
+
+The terrain mesh `Models/Environment/gully_Landscape.res` carries no material; the scene sets one
+from `GullyBaked.png`, `GullyNormals.png` and `GullyRoughness.png`.
+
 ---
 
 ## 3. What the engine looks for
@@ -177,7 +203,9 @@ dotnet test Tests/Gdpyr.Tests.csproj --filter "FullyQualifiedName~MapSceneTests|
 
 It runs every §3.1 check on the template and on each catalog map. That covers the root script,
 spawns, navigation region and source, barracks count and doors, node count, locker, the cover's node
-types and count, and positions inside the field. It does not bake, path or play.
+types and count, and positions inside the field. It does not bake, path or play. An instanced
+imported model, such as a `.glb`, is read as the one node it is instanced as: the file must be in the
+checkout, and nothing inside it is looked at.
 
 **In the engine.** Host from the main menu with the map picked. The server log should show:
 
@@ -204,8 +232,13 @@ pointed at the scene in a scratch copy:
 | `Scenes/Test.tscn` (greybox, reference) | 565 | 26 | round live; kills, a pillbox placed and destroyed within 70 s |
 | `Scenes/Maps/MapBase.tscn` | 30 | 0 | round live; units trained 0 → 9; ground bots took the node at ~40 s, and the strategist retook it at ~90 s; deaths, ticket loss, respawns; a sandbag wall and a pillbox placed |
 | a map inheriting it (node moved, second node, second barracks, two cover boxes) | 87 | 2 | round live; 2 barracks, 2 nodes, 2 cover boxes read; units trained 0 → 9; a node captured; combat |
+| `Scenes/Maps/Gully.tscn` (§2.4) | 4164 | 0 | `--map gully` and the host panel: round live. Over two 3-minute seeds of HTN bots on both sides: 22–24 units trained, 23–29 kills, the node taken by each side once |
 
 The only new log line on any of them was the CSG warning above, from the inherited map's cover boxes.
+
+Gully also has scenarios: `Tests/Scenarios/gully_spawn_points_shared.json` (six bodies on four
+markers stay on the plateau), `gully_strategist_economy.json` and `gully_ground_takes_node.json` (HTN
+ground bots cross the bridge and take the node).
 
 ---
 
