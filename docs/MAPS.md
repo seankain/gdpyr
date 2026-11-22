@@ -254,7 +254,8 @@ The only new log line on any of them was the CSG warning above, from the inherit
 
 Gully also has scenarios: `Tests/Scenarios/gully_spawn_points_shared.json` (six bodies on four
 markers stay on the plateau), `gully_strategist_economy.json`, `gully_ground_takes_node.json` (HTN
-ground bots cross the bridge and take the node), `gully_water_kills.json` (a player and a rifleman
+ground bots cross the bridge and take the node within 80 s; seeds 1 and 2 take it 63.1 s and 54.3 s
+after the round starts, against 48.0 s and 39.8 s when the bridge was at z 30), `gully_water_kills.json` (a player and a rifleman
 dropped into the river are killed by the world, and a player on the dry floor beside it is not) and
 `gully_strategist_builds.json` (the HTN strategist's builder places and finishes a structure on the
 east plateau; with the terrain scaled ×100 it placed none, §2.4).
