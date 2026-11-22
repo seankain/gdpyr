@@ -1,0 +1,18 @@
+{
+  "name": "HTN ground bots leave Gully's west plateau, cross the bridge and take the node at its east end",
+  "map": "gully",
+  "bot_ai": "htn",
+  "seeds": [1, 2],
+  "duration_ticks": 3600,
+  "warmup_ticks": 60,
+  "roster": { "ground": 6, "strategists": 0 },
+
+  "seats": [
+    { "id": "idle", "team": "ground", "policy": "ground", "step_mul": 4, "script": "scripts/hold_still.json" }
+  ],
+
+  "assert": [
+    { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
+    { "metric": "events.node_captured[node=0,owner=1].count", "op": ">=", "value": 1 }
+  ]
+}

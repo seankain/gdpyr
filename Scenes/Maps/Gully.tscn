@@ -62,9 +62,15 @@ _data = {
 }
 point_count = 11
 
+[sub_resource type="BoxShape3D" id="BoxShape3D_wall_ns"]
+size = Vector3(201, 120, 0.5)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_wall_ew"]
+size = Vector3(0.5, 120, 201)
+
 [sub_resource type="NavigationMesh" id="NavigationMesh_map"]
 
-[node name="MapBase" type="Node3D" unique_id=2085247266]
+[node name="Gully" type="Node3D" unique_id=2085247266]
 script = ExtResource("1_8jm1r")
 
 [node name="Sun" type="DirectionalLight3D" parent="." unique_id=522486645]
@@ -76,6 +82,9 @@ environment = SubResource("Environment_world")
 
 [node name="Geometry" type="Node3D" parent="." unique_id=1206005255 groups=["navmesh"]]
 
+[node name="Terrain" parent="Geometry" unique_id=536665162 instance=ExtResource("8_s26th")]
+transform = Transform3D(100, 0, 0, 0, 100, 0, 0, 0, 100, 0, 0, 0)
+
 [node name="Ground" type="StaticBody3D" parent="Geometry" unique_id=7741536]
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="Geometry/Ground" unique_id=1604561433]
@@ -83,6 +92,24 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 7.5690384, 0)
 visible = false
 mesh = SubResource("BoxMesh_ground")
 surface_material_override/0 = SubResource("ShaderMaterial_xmdeh")
+
+[node name="Perimeter" type="StaticBody3D" parent="Geometry"]
+
+[node name="NorthShape" type="CollisionShape3D" parent="Geometry/Perimeter"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 50, -100.25)
+shape = SubResource("BoxShape3D_wall_ns")
+
+[node name="SouthShape" type="CollisionShape3D" parent="Geometry/Perimeter"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 50, 100.25)
+shape = SubResource("BoxShape3D_wall_ns")
+
+[node name="WestShape" type="CollisionShape3D" parent="Geometry/Perimeter"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -100.25, 50, 0)
+shape = SubResource("BoxShape3D_wall_ew")
+
+[node name="EastShape" type="CollisionShape3D" parent="Geometry/Perimeter"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 100.25, 50, 0)
+shape = SubResource("BoxShape3D_wall_ew")
 
 [node name="Cover" type="Node3D" parent="Geometry" unique_id=1615128101]
 
@@ -99,6 +126,8 @@ Width = 24.0
 Steps = 40
 WidthSubdivisions = 2
 
+[node name="KillPlane" type="Marker3D" parent="Geometry/River" groups=["kill_plane"]]
+
 [node name="Bridge" parent="Geometry" unique_id=1319136569 instance=ExtResource("10_bridge")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 70.15, 30)
 
@@ -106,7 +135,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 70.15, 30)
 navigation_mesh = SubResource("NavigationMesh_map")
 
 [node name="PlayerSpawns" type="Node3D" parent="." unique_id=1682082418]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -90, 75.28356, 66.595604)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -80, 70, 66.6)
 
 [node name="Spawn1" type="Marker3D" parent="PlayerSpawns" unique_id=1967788798 groups=["player_spawn"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6, 1, 0)
@@ -121,18 +150,15 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 1, 0)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 1, 0)
 
 [node name="WeaponLocker1" type="Node3D" parent="." unique_id=491049562 groups=["weapon_locker"]]
-transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -90, 75.28356, 96)
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -80, 70, 72.6)
 script = ExtResource("5_kvmkk")
 
 [node name="Barracks1" parent="." unique_id=1392093851 instance=ExtResource("6_bnapj")]
-transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 69.44207, 69.872246, 42.87622)
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 82, 70, -80)
 
 [node name="ResourceNode1" type="Node3D" parent="." unique_id=1103279471 groups=["resource_node"]]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 65.22269, 70.71206, -16.869823)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 65, 70, 45)
 script = ExtResource("7_b2ou4")
 
 [node name="StrategistAnchor" type="Marker3D" parent="." unique_id=273331545 groups=["strategist_anchor"]]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 45, 75.28356, -45)
-
-[node name="StaticBody3D" parent="." unique_id=536665162 instance=ExtResource("8_s26th")]
-transform = Transform3D(100, 0, 0, 0, 100, 0, 0, 0, 100, 0, 0, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 65, 70, -20)

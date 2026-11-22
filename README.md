@@ -232,7 +232,7 @@ Four more choose the map and play it on your own, make one, or let a server be s
 
 | Flag | Effect |
 |---|---|
-| `--map <map>` | with `--server`, `--listen` or `--practice`: a catalog id (`greybox`, `hills`), a map's name in `user://maps`, 8 or more hex digits of a map file's SHA-256 (one's own, bundled or received), or a path ending `.map`. A map file that does not read or does not pass the validator is a launch error. A client that has not got the map fetches it from the server |
+| `--map <map>` | with `--server`, `--listen` or `--practice`: a catalog id (`greybox`, `gully`, `hills`), a map's name in `user://maps`, 8 or more hex digits of a map file's SHA-256 (one's own, bundled or received), or a path ending `.map`. A map file that does not read or does not pass the validator is a launch error. A client that has not got the map fetches it from the server |
 | `--map-upload-token <token>` | with `--server`: take maps from clients that prove they hold this token — the editor's **Publish…** — to `user://maps/cache/`, and let them name the map it plays next. 16 characters or more; off unless given, and `deploy/gdpyr-server.service` does not give it |
 | `--practice` | the main menu's "Practice offline", with no menu |
 | `--edit [name]` | the main menu's **Map editor**, with no menu: one's own map `user://maps/<name>.map`, or a new one by that name; with no name, the editor's list of maps to open and to clone. Leaving it comes back to the menu |
