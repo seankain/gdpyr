@@ -137,13 +137,13 @@ an inherited scene cannot delete them, so Gully keeps only what §3.1 asks for.
 | | Position (x, y, z) | Why |
 |---|---|---|
 | `Geometry/Terrain` | the origin, unscaled | under `Geometry`, so the bake reads its trimesh collider. The collider's vertices are in metres; only the `MeshInstance3D` is scaled ×100, since the mesh was exported 2 m across (§3.1, item 8) |
-| `Geometry/Bridge` | (−2, 70.15, 30) | `Models/Environment/GullyBridge.glb`: the only walkable way between the plateaus |
+| `Geometry/Bridge` | (−10, 70.15, 0) | `Models/Environment/GullyBridge.glb`: the only walkable way between the plateaus. Mid-span is on the plateaus' midline (their flat tops run from z ≈ −88 to +88); the deck is 16 m wide and 136 m from ramp to ramp, and across that width the rims are 55–60 m from mid-span, so each end lies 8–13 m on flat plateau |
 | `Geometry/Perimeter` | four 0.5 m colliders, inner faces at ±100 m, y −10…110; group `map_bounds` | there is no ground past ±100 m: a body that fell off would die only at the kill plane, 70 m down, and a crew vehicle would fall for ever; 0.5 m so the bake's 0.4 m radius leaves no walkable strip on their tops; up to 110 m so an aircraft at `CrewField`'s 100 m ceiling stays in; in `map_bounds` so the strategist's clicks pass through them (§3.2) |
 | `Geometry/River/KillPlane` | (0, 0.5, 0): the river's surface | a `Marker3D` in group `kill_plane` (§3.2), at the path's origin so it moves with the water |
 | Ground force spawn line | (−80, 71, 66.6), four markers 4 m apart | west plateau, 1 m above it |
 | Weapon locker | (−80, 70, 72.6) | 6 m behind the spawn line |
 | Barracks | (82, 70, −80), door south at (82, 70, −74) | east plateau, north-east corner |
-| Resource node | (65, 70, 45) | east plateau, at the bridge's east end: 126 m from the barracks, outside its 107 m ring and the bots' 117 m standoff |
+| Resource node | (65, 70, 45) | east plateau, 45 m south of the bridge's east end: 126 m from the barracks, outside its 107 m ring and the bots' 117 m standoff. It cannot sit at the bridge's end: the east ramp, (58, 70, 0), is 83.5 m from the barracks, inside the ring |
 | Strategist anchor | (65, 70, −20) | east plateau, between the barracks and the node |
 
 Measured on its navigation mesh: spawn line to node 169 m, over the bridge; barracks door to node

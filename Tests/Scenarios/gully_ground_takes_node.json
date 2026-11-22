@@ -1,5 +1,5 @@
 {
-  "name": "HTN ground bots leave Gully's west plateau, cross the bridge and take the node at its east end",
+  "name": "HTN ground bots leave Gully's west plateau, cross the bridge and take the node south of its east end",
   "map": "gully",
   "bot_ai": "htn",
   "seeds": [1, 2],
