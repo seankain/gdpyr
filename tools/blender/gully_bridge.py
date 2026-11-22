@@ -37,17 +37,19 @@ GLB_PATH = os.path.join(REPO, "Models", "Environment", "GullyBridge.glb")
 BLEND_PATH = os.path.join(HERE, "GullyBridge.blend")
 
 PARAMS = dict(
-    # Deck, from end to end along X. The Gully's rims are about ±50 m from mid-span.
-    deck_half_length=56.0,
+    # Deck, from end to end along X. The map puts mid-span at (-10, 70.15, 0), on the plateaus'
+    # midline; across the deck's 16 m the rims are 55-60 m from mid-span. A whole number of half
+    # panels, so the railing posts end at the deck's ends.
+    deck_half_length=66.0,
     ramp_length=2.0,          # beyond each end: down to ground level
     ramp_drop=0.2,            # the deck's top stands this far above the plateau
-    deck_half_width=4.0,
+    deck_half_width=8.0,
     deck_thickness=0.5,
     curb_height=0.25,
     curb_width=0.4,
-    # Truss under the gap.
-    truss_half_length=48.0,
-    panel=8.0,
+    # Truss under the gap: 12 panels, ending at the cliffs.
+    truss_half_length=52.8,
+    panel=8.8,
     truss_depth=3.5,
     chord=0.6,
     diagonal=0.45,
@@ -60,16 +62,16 @@ PARAMS = dict(
     small_post=0.28,
     small_post_height=1.15,
     # End frames.
-    knee=40.0,                # where the chevron meets the deck, from mid-span
-    frame_offset=5.2,         # the frames stand this far out from the centre line
-    pylon_top=(49.5, 22.0),   # (x from mid-span, height)
+    knee=48.0,                # where the chevron meets the deck, from mid-span
+    frame_offset=9.2,         # the frames stand this far out from the centre line
+    pylon_top=(59.5, 26.0),   # (x from mid-span, height)
     pylon_section=(1.5, 1.0),
     pylon_top_section=(0.9, 0.8),
     pylon_tip=3.0,            # how much higher the outer face's top is than the inner's
-    strut_foot=(47.5, -15.0),
+    strut_foot=(57.0, -15.0),
     strut_section=(1.3, 0.9),
-    # Stays: where each pylon's cables meet the deck, from mid-span.
-    stay_anchors=(33.0, 25.0, 17.0),
+    # Stays: where each pylon's cables meet the deck, from mid-span (a metre past a panel point).
+    stay_anchors=(36.2, 27.4, 18.6),
     cable_radius=0.07,
     bevel=0.07,
 )
@@ -220,7 +222,7 @@ def build_posts(bm, p):
         y = s * (W - p["vertical"] / 2)
         for x in xs:
             chamfered_post(bm, x, y, -T - D - p["chord"] / 2, p["post_height"], p["vertical"])
-        # Small posts every half panel, and every 4 m over the plateaus.
+        # Small posts every half panel, out to the deck's ends.
         L = p["deck_half_length"]
         x = -L
         while x <= L + 1e-6:

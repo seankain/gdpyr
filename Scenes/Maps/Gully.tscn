@@ -128,7 +128,7 @@ WidthSubdivisions = 2
 [node name="KillPlane" type="Marker3D" parent="Geometry/River" groups=["kill_plane"]]
 
 [node name="Bridge" parent="Geometry" unique_id=1319136569 instance=ExtResource("10_bridge")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 70.15, 30)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -10, 70.15, 0)
 
 [node name="NavigationRegion3D" type="NavigationRegion3D" parent="." unique_id=462659835 groups=["navigation_region"]]
 navigation_mesh = SubResource("NavigationMesh_map")
@@ -155,9 +155,20 @@ script = ExtResource("5_kvmkk")
 [node name="Barracks1" parent="." unique_id=1392093851 instance=ExtResource("6_bnapj")]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 82, 70, -80)
 
+[node name="DefenseGunA" parent="Barracks1" index="2"]
+RangeMeters = 60.0
+
+[node name="DefenseGunB" parent="Barracks1" index="3"]
+RangeMeters = 60.0
+
+[node name="DefenseMortar" parent="Barracks1" index="4"]
+RangeMeters = 60.0
+
 [node name="ResourceNode1" type="Node3D" parent="." unique_id=1103279471 groups=["resource_node"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 65, 70, 45)
 script = ExtResource("7_b2ou4")
 
 [node name="StrategistAnchor" type="Marker3D" parent="." unique_id=273331545 groups=["strategist_anchor"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 65, 70, -20)
+
+[editable path="Barracks1"]

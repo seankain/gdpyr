@@ -137,17 +137,17 @@ an inherited scene cannot delete them, so Gully keeps only what §3.1 asks for.
 | | Position (x, y, z) | Why |
 |---|---|---|
 | `Geometry/Terrain` | the origin, unscaled | under `Geometry`, so the bake reads its trimesh collider. The collider's vertices are in metres; only the `MeshInstance3D` is scaled ×100, since the mesh was exported 2 m across (§3.1, item 8) |
-| `Geometry/Bridge` | (−2, 70.15, 30) | `Models/Environment/GullyBridge.glb`: the only walkable way between the plateaus |
+| `Geometry/Bridge` | (−10, 70.15, 0) | `Models/Environment/GullyBridge.glb`: the only walkable way between the plateaus. Mid-span is on the plateaus' midline (their flat tops run from z ≈ −88 to +88); the deck is 16 m wide and 136 m from ramp to ramp, and across that width the rims are 55–60 m from mid-span, so each end lies 8–13 m on flat plateau |
 | `Geometry/Perimeter` | four 0.5 m colliders, inner faces at ±100 m, y −10…110; group `map_bounds` | there is no ground past ±100 m: a body that fell off would die only at the kill plane, 70 m down, and a crew vehicle would fall for ever; 0.5 m so the bake's 0.4 m radius leaves no walkable strip on their tops; up to 110 m so an aircraft at `CrewField`'s 100 m ceiling stays in; in `map_bounds` so the strategist's clicks pass through them (§3.2) |
 | `Geometry/River/KillPlane` | (0, 0.5, 0): the river's surface | a `Marker3D` in group `kill_plane` (§3.2), at the path's origin so it moves with the water |
 | Ground force spawn line | (−80, 71, 66.6), four markers 4 m apart | west plateau, 1 m above it |
 | Weapon locker | (−80, 70, 72.6) | 6 m behind the spawn line |
-| Barracks | (82, 70, −80), door south at (82, 70, −74) | east plateau, north-east corner |
-| Resource node | (65, 70, 45) | east plateau, at the bridge's east end: 126 m from the barracks, outside its 107 m ring and the bots' 117 m standoff |
+| Barracks | (82, 70, −80), door south at (82, 70, −74) | east plateau, north-east corner. Its three mounts' `RangeMeters` are overridden to 60 m (the template's are 100 m, §2.3), so its defended radius is 67.1 m and a ground bot turns back inside 75.1 m. With 100 m guns the ring (107 m; 115 m for a bot) covered the bridge from x ≈ 0 eastward, and no point on the east plateau is far enough from the bridge's east ramp to clear it: HTN ground bots took the node in no seed of `gully_ground_takes_node`, even given 180 s. The nearest bridge point, the east ramp's north corner (58, 70, −8), is 75.9 m away |
+| Resource node | (65, 70, 45) | east plateau, 45 m south of the bridge's east end and 126 m from the barracks |
 | Strategist anchor | (65, 70, −20) | east plateau, between the barracks and the node |
 
-Measured on its navigation mesh: spawn line to node 169 m, over the bridge; barracks door to node
-120 m. The gully floor is an island of its own: its walls are steeper than the 45° a body and the
+Measured on its navigation mesh (4158 vertices): spawn line to node 232 m, over the bridge; barracks
+door to node 120 m; spawn line to barracks door 268 m. With the 8 m bridge at z 30 the first was 169 m. The gully floor is an island of its own: its walls are steeper than the 45° a body and the
 bake walk, so nothing paths into it and a player who drops in cannot climb out. The river is the way
 back: every walkable part of the floor runs down to ground under 0.5 m, so a player who walks into
 the water is killed by the plane and comes back at the spawn line for a ticket.
@@ -254,7 +254,8 @@ The only new log line on any of them was the CSG warning above, from the inherit
 
 Gully also has scenarios: `Tests/Scenarios/gully_spawn_points_shared.json` (six bodies on four
 markers stay on the plateau), `gully_strategist_economy.json`, `gully_ground_takes_node.json` (HTN
-ground bots cross the bridge and take the node), `gully_water_kills.json` (a player and a rifleman
+ground bots cross the bridge and take the node within 80 s; seeds 1 and 2 take it 63.1 s and 54.3 s
+after the round starts, against 48.0 s and 39.8 s when the bridge was at z 30), `gully_water_kills.json` (a player and a rifleman
 dropped into the river are killed by the world, and a player on the dry floor beside it is not) and
 `gully_strategist_builds.json` (the HTN strategist's builder places and finishes a structure on the
 east plateau; with the terrain scaled ×100 it placed none, §2.4).

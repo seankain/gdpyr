@@ -125,7 +125,7 @@ public static class MapCatalog
 			"the prototype map: three resource nodes, a barracks, cover and the vehicle strip"),
 
 		new("gully", "Gully", "res://Scenes/Maps/Gully.tscn",
-			"two plateaus split by a river gully and joined by one bridge; the node is at the bridge's east end"),
+			"two plateaus split by a river gully and joined by one bridge across their middle; the node is on the east plateau, south of the bridge"),
 
 		// docs/LEVEL_EDITOR.md LE3: `gdpyr-map generate --seed 3 --name Hills`, unchanged since.
 		// The hash is the file's; BundledMapTests fails if either moves without the other.
