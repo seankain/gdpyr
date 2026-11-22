@@ -146,8 +146,8 @@ an inherited scene cannot delete them, so Gully keeps only what §3.1 asks for.
 | Resource node | (65, 70, 45) | east plateau, 45 m south of the bridge's east end: 126 m from the barracks, outside its 107 m ring and the bots' 117 m standoff. It cannot sit at the bridge's end: the east ramp, (58, 70, 0), is 83.5 m from the barracks, inside the ring |
 | Strategist anchor | (65, 70, −20) | east plateau, between the barracks and the node |
 
-Measured on its navigation mesh: spawn line to node 169 m, over the bridge; barracks door to node
-120 m. The gully floor is an island of its own: its walls are steeper than the 45° a body and the
+Measured on its navigation mesh (4158 vertices): spawn line to node 232 m, over the bridge; barracks
+door to node 120 m; spawn line to barracks door 268 m. With the 8 m bridge at z 30 the first was 169 m. The gully floor is an island of its own: its walls are steeper than the 45° a body and the
 bake walk, so nothing paths into it and a player who drops in cannot climb out. The river is the way
 back: every walkable part of the floor runs down to ground under 0.5 m, so a player who walks into
 the water is killed by the plane and comes back at the spawn line for a ticket.
