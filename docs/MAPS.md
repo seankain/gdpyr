@@ -129,16 +129,16 @@ outside every barracks' ring. A ground bot's goal is pulled back to the edge of 
 ### 2.4 Gully, a map that does not inherit the template
 
 `Scenes/Maps/Gully.tscn` (catalog id `gully`) is a scene of its own with `WorldRoot.cs` on its root,
-like the greybox. Its ground is a sculpted terrain, `Scenes/Environment/Gully.tscn` instanced at
-scale 100: 200 × 200 m, from 0 m in the gully to 70 m on two flat plateaus, west and east, with the
-gully running north–south between them. The template's flat ground and 4 m walls would sit under and
-inside it, and an inherited scene cannot delete them, so Gully keeps only what §3.1 asks for.
+like the greybox. Its ground is a sculpted terrain, `Scenes/Environment/Gully.tscn`: 200 × 200 m,
+from 0 m in the gully to 70 m on two flat plateaus, west and east, with the gully running
+north–south between them. The template's flat ground and 4 m walls would sit under and inside it, and
+an inherited scene cannot delete them, so Gully keeps only what §3.1 asks for.
 
 | | Position (x, y, z) | Why |
 |---|---|---|
-| `Geometry/Terrain` | the origin, scale 100 | under `Geometry`, so the bake reads its trimesh collider |
+| `Geometry/Terrain` | the origin, unscaled | under `Geometry`, so the bake reads its trimesh collider. The collider's vertices are in metres; only the `MeshInstance3D` is scaled ×100, since the mesh was exported 2 m across (§3.1, item 8) |
 | `Geometry/Bridge` | (−2, 70.15, 30) | `Models/Environment/GullyBridge.glb`: the only walkable way between the plateaus |
-| `Geometry/Perimeter` | four 0.5 m colliders, inner faces at ±100 m, y −10…110 | there is no ground past ±100 m: a body that fell off would die only at the kill plane, 70 m down, and a crew vehicle would fall for ever; 0.5 m so the bake's 0.4 m radius leaves no walkable strip on their tops; up to 110 m so an aircraft at `CrewField`'s 100 m ceiling stays in |
+| `Geometry/Perimeter` | four 0.5 m colliders, inner faces at ±100 m, y −10…110; group `map_bounds` | there is no ground past ±100 m: a body that fell off would die only at the kill plane, 70 m down, and a crew vehicle would fall for ever; 0.5 m so the bake's 0.4 m radius leaves no walkable strip on their tops; up to 110 m so an aircraft at `CrewField`'s 100 m ceiling stays in; in `map_bounds` so the strategist's clicks pass through them (§3.2) |
 | `Geometry/River/KillPlane` | (0, 0.5, 0): the river's surface | a `Marker3D` in group `kill_plane` (§3.2), at the path's origin so it moves with the water |
 | Ground force spawn line | (−80, 71, 66.6), four markers 4 m apart | west plateau, 1 m above it |
 | Weapon locker | (−80, 70, 72.6) | 6 m behind the spawn line |
@@ -154,6 +154,14 @@ the water is killed by the plane and comes back at the spawn line for a ticket.
 
 The terrain mesh `Models/Environment/gully_Landscape.res` carries no material; the scene sets one
 from `GullyBaked.png`, `GullyNormals.png` and `GullyRoughness.png`.
+
+Until the collider was rescaled, the terrain was instanced at scale 100 with its collider 2 m across.
+Godot's segment–triangle test treats a ray as parallel to a face when `e1·(dir×e2)` is under 1e-5 in
+the shape's own space, and with the plateau's 1.57 m faces at 1/100 that is every ray of ±2 m or less:
+on the flat top at y 70, a ray from 2 m above to 2 m below missed and one from 3 m to 3 m hit. The
+structure check probes each footprint corner from 0.55 m above to 0.55 m below
+(`StructurePlacement.GroundWindowMeters`), so every site on both plateaus was refused as too steep:
+0 of 4,761 sites on a 2 m grid, and a computer strategist placed nothing in a 5-minute round.
 
 ---
 
@@ -177,6 +185,7 @@ A list sorted by name is an index on the wire, so every peer derives it the same
 | 5 | **Resource nodes** | nodes with `Scripts/Rts/ResourceNode.cs` (group `resource_node`) | **1 to 8** (`SimConfig.MaxResourceNodes`); any beyond 8 are dropped with a warning. Sorted by name; the sorted position is the node's index on the wire. Put the origin on the ground. A body counts as on the pad within `CaptureRadiusMeters` measured flat and within 4 m vertically (`CapturePad.VerticalToleranceMeters`). Exports: `CaptureRadiusMeters` 10, `CaptureSeconds` 8, `IncomePoints` 25, `IncomeIntervalSeconds` 5, `Perk` `None` or `Drone` ([`CONTROL_POINTS.md`](CONTROL_POINTS.md) §4). | No capture objective. The strategist lives on baseline income, and ground bots have nothing to take. |
 | 6 | **Weapon locker** | nodes with `Scripts/Fps/WeaponLocker.cs` (group `weapon_locker`) | At the ground force's spawn. **Upright and unscaled**: a tilted or scaled locker is refused with an error *(not tested)*. Its front is +Z. It has no collider by design ([`LOADOUT.md`](LOADOUT.md)). | No changing kit mid-life and no resupply. Magazines run dry, and the only way to refill is to die. |
 | 7 | **The field** | positions | Gameplay happens inside **±115 m on X and Z** (`Cargo.FieldHalfExtentMeters`). Vehicle exit slots, landing spots, aircraft destinations and drones are kept inside that square whatever the map is. The test checks spawns, the anchor, barracks and their doors, nodes and lockers. Every coordinate must also fit in the wire's ±327.67 m (`SimConfig.MaxPositionMeters`); structures need 5 m inside that, and agent observations scale positions by 256 m *(not tested)*. | Things inside the map are clamped to a square that does not match it. |
+| 8 | **Unscaled colliders** | every physics body, collision shape, CSG node and instanced `.glb`, with its ancestors' transforms | **Scale 1** in the map, as Godot's physics requires. Put the size in a trimesh's vertices, a box's `size` or a CSG's `size`, and scale only a `MeshInstance3D`. The ray–triangle test's epsilon is absolute in the shape's own space, so a small collider scaled up misses short rays: Gully's terrain at ×100 missed every ray of ±2 m or less (§2.4). What is inside a `.glb` is not read *(not tested)*. | Short ground probes miss the ground: the structure check refuses every site as too steep, and wheels and other probes fall through. |
 
 ### 3.2 Recommended and optional
 
@@ -193,6 +202,7 @@ The template has only the anchor of these. Everything else is added in the map.
 | **Bunker, set pieces** | e.g. `Scenes/Environment/Pillbox.tscn`, `VehicleTestStrip.tscn` | Scenery. A collider in `navmesh` is walked round. |
 | **Imported structures** | a `.glb` instanced under `Geometry` | A Blender object named `…-col` imports as a mesh with a trimesh `StaticBody3D` on layer 1, so it is walked on, baked into the navigation mesh and stops bullets; one without the suffix is only drawn. Example: `Models/Environment/GullyBridge.glb`, built by `tools/blender/gully_bridge.py`, whose materials its `.import` maps to `Levels/materials/BridgeGreybox.tres` and `BridgeCable.tres`. |
 | **River** | `Scripts/Tools/WaterSurfaceGenerator.cs` on a `Node` under a `Path3D` | Drawn only: no collider, and nothing in the simulation reads it. The ribbon is built from the path's curve when the scene loads, and again in the editor whenever the curve or the path moves; the path's Y is the water level. Material `Levels/materials/RiverWater.tres` (`River.gdshader`). Make it wider than the wet bed, so its edges end inside the banks. |
+| **Map bounds** | collision objects in group `map_bounds` (`StrategistController.MapBoundsGroup`) | For walls that keep bodies in and are not drawn, such as Gully's perimeter. The strategist's cursor ray passes through them (`StrategistController.CursorHit`); bodies, units, vehicles and rounds still stop at them, and the bake still reads them. Without it, a camera pulled back past Gully's 110 m walls and looking in at 45° or lower put a click on the node on the wall's face: a move there sent units to the map's edge, and a structure there was refused. A wall that is drawn, like the template's, is something to click on and stays out of the group. |
 | **Kill plane** | the first node in group `kill_plane` (`Scripts/Sim/KillPlane.cs`); use an invisible `Marker3D` | Its global Y is the plane. Once a tick the server kills every living player whose feet are below it, unless they are in a crew vehicle's seat, and every unit on the field whose origin is below it: a player through the vest, for a ticket, with `damage` and `kill` in the world's name (attacker 0, weapon 255); a unit with `unit_lost`, killer 0. A crew vehicle is not checked, since its hull rides above the bed. Read once per map. At most one, and nothing §3.1 names may be under it (`MapSceneTests`). To put it at a river's surface, make it a child of the river's `Path3D` with no offset. |
 
 ---
@@ -207,7 +217,8 @@ dotnet test Tests/Gdpyr.Tests.csproj --filter "FullyQualifiedName~MapSceneTests|
 
 It runs every §3.1 check on the template and on each catalog map. That covers the root script,
 spawns, navigation region and source, barracks count and doors, node count, locker, the cover's node
-types and count, positions inside the field, and that nothing a round needs is under the kill plane.
+types and count, positions inside the field, that no collider is scaled, and that nothing a round
+needs is under the kill plane.
 It does not bake, path or play. An instanced
 imported model, such as a `.glb`, is read as the one node it is instanced as: the file must be in the
 checkout, and nothing inside it is looked at.
@@ -243,8 +254,10 @@ The only new log line on any of them was the CSG warning above, from the inherit
 
 Gully also has scenarios: `Tests/Scenarios/gully_spawn_points_shared.json` (six bodies on four
 markers stay on the plateau), `gully_strategist_economy.json`, `gully_ground_takes_node.json` (HTN
-ground bots cross the bridge and take the node) and `gully_water_kills.json` (a player and a rifleman
-dropped into the river are killed by the world, and a player on the dry floor beside it is not).
+ground bots cross the bridge and take the node), `gully_water_kills.json` (a player and a rifleman
+dropped into the river are killed by the world, and a player on the dry floor beside it is not) and
+`gully_strategist_builds.json` (the HTN strategist's builder places and finishes a structure on the
+east plateau; with the terrain scaled ×100 it placed none, §2.4).
 
 ---
 

@@ -83,7 +83,6 @@ environment = SubResource("Environment_world")
 [node name="Geometry" type="Node3D" parent="." unique_id=1206005255 groups=["navmesh"]]
 
 [node name="Terrain" parent="Geometry" unique_id=536665162 instance=ExtResource("8_s26th")]
-transform = Transform3D(100, 0, 0, 0, 100, 0, 0, 0, 100, 0, 0, 0)
 
 [node name="Ground" type="StaticBody3D" parent="Geometry" unique_id=7741536]
 
@@ -93,7 +92,7 @@ visible = false
 mesh = SubResource("BoxMesh_ground")
 surface_material_override/0 = SubResource("ShaderMaterial_xmdeh")
 
-[node name="Perimeter" type="StaticBody3D" parent="Geometry"]
+[node name="Perimeter" type="StaticBody3D" parent="Geometry" groups=["map_bounds"]]
 
 [node name="NorthShape" type="CollisionShape3D" parent="Geometry/Perimeter"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 50, -100.25)

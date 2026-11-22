@@ -76,6 +76,15 @@ public partial class StrategistController : Node3D
 	private const float CursorRayLength = 4000f;
 
 	/// <summary>
+	/// Colliders that bound a map and are not part of it: a cursor ray passes through them
+	/// (<see cref="CursorHit"/>). Bodies, units, vehicles and rounds still stop at them.
+	/// </summary>
+	public const string MapBoundsGroup = "map_bounds";
+
+	/// <summary>Bounds a cursor ray may pass through before it gives up: a body each, and a ray leaves a field through at most two walls.</summary>
+	private const int MaxBoundsPassed = 4;
+
+	/// <summary>
 	/// A vehicle's pick radius over its size on screen: a little more than the body, so
 	/// a click on the edge of a truck is a click on the truck and not on the rifleman
 	/// beside it (docs/VEHICLES.md §7).
@@ -1667,17 +1676,49 @@ public partial class StrategistController : Node3D
 
 		Vector3 from = _camera.ProjectRayOrigin(screen);
 		Vector3 direction = _camera.ProjectRayNormal(screen);
-		var query = PhysicsRayQueryParameters3D.Create(from, from + (direction * CursorRayLength),
-			CollisionLayers.World);
-		Godot.Collections.Dictionary hit = space.IntersectRay(query);
-		if (hit.Count == 0)
+		return CursorHit(space, from, from + (direction * CursorRayLength), out point, out collider);
+	}
+
+	/// <summary>
+	/// What a cursor ray from <paramref name="from"/> to <paramref name="to"/> lands on: the
+	/// first world collider, passing through any in <see cref="MapBoundsGroup"/>.
+	///
+	/// A map's bounds are walls nobody sees and nobody means to click on. Gully's stand at
+	/// ±100 m and rise to 110 m, 40 m over the plateaus, so a camera pulled back past one
+	/// and looking in at 45° or lower put every click on the far ground on the wall
+	/// (docs/MAPS.md §3.2): a move to the node sent units to the map's edge instead, and a
+	/// structure was asked for on the wall's face. One more cast per bound the ray passes,
+	/// and none for a ray that meets none.
+	/// </summary>
+	public static bool CursorHit(PhysicsDirectSpaceState3D space, Vector3 from, Vector3 to, out Vector3 point,
+		out Node collider)
+	{
+		point = Vector3.Zero;
+		collider = null;
+
+		var query = PhysicsRayQueryParameters3D.Create(from, to, CollisionLayers.World);
+		for (int pass = 0; pass < MaxBoundsPassed; pass++)
 		{
-			return false;
+			Godot.Collections.Dictionary hit = space.IntersectRay(query);
+			if (hit.Count == 0)
+			{
+				return false;
+			}
+
+			Node node = hit["collider"].AsGodotObject() as Node;
+			if (node == null || !node.IsInGroup(MapBoundsGroup))
+			{
+				point = hit["position"].AsVector3();
+				collider = node;
+				return true;
+			}
+
+			Godot.Collections.Array<Rid> exclude = query.Exclude;
+			exclude.Add(hit["rid"].AsRid());
+			query.Exclude = exclude;
 		}
 
-		point = hit["position"].AsVector3();
-		collider = hit["collider"].AsGodotObject() as Node;
-		return true;
+		return false;
 	}
 
 	/// <summary>
