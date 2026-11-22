@@ -470,6 +470,10 @@ public partial class CombatManager : Node
 		// drone destroys throws its riders out this tick (docs/CONTROL_POINTS.md §4).
 		ServerDrones(tick);
 
+		// Anybody in the water (docs/MAPS.md §3.2): a kill like the others, so before the
+		// wrecks — a carrier that went in throws its riders out this tick — and the respawns.
+		ServerKillPlane(tick);
+
 		// After every kill of the tick — a melee kill in the roster loop earlier
 		// included — and outside every damage loop, so what a destroyed vehicle does to
 		// its riders does not depend on where they are in the registry

@@ -25,6 +25,7 @@ public class MapSceneTests
 	private const string BarracksScript = "res://Scripts/Rts/Barracks.cs";
 	private const string ResourceNodeScript = "res://Scripts/Rts/ResourceNode.cs";
 	private const string WeaponLockerScript = "res://Scripts/Fps/WeaponLocker.cs";
+	private const string WaterSurfaceScript = "res://Scripts/Tools/WaterSurfaceGenerator.cs";
 
 	public static IEnumerable<object[]> Maps()
 	{
@@ -110,19 +111,60 @@ public class MapSceneTests
 		// Exit slots, landing spots, aircraft destinations and drones are kept inside this
 		// square whatever the map is (Cargo.FieldHalfExtentMeters).
 		MapScene scene = MapScene.Load(scenePath);
-		IEnumerable<SceneNode> markers = scene.InGroup("player_spawn")
+		foreach (SceneNode node in RoundPieces(scene))
+		{
+			Vec3 at = scene.GlobalOrigin(node.Path);
+			Assert.True(MathF.Abs(at.X) <= Cargo.FieldHalfExtentMeters && MathF.Abs(at.Z) <= Cargo.FieldHalfExtentMeters,
+				$"{scenePath}: {node.Path} is at ({at.X}, {at.Z}), outside ±{Cargo.FieldHalfExtentMeters} m");
+		}
+	}
+
+	[Theory]
+	[MemberData(nameof(Maps))]
+	public void NothingARoundNeedsIsUnderTheKillPlane(string scenePath)
+	{
+		// The first node in the group is the plane (CombatManager.KillPlaneOfMap): a second
+		// would be ignored. A spawn under it is a player who dies as they appear.
+		MapScene scene = MapScene.Load(scenePath);
+		List<SceneNode> planes = scene.InGroup(KillPlane.Group).ToList();
+		Assert.InRange(planes.Count, 0, 1);
+		if (planes.Count == 0)
+		{
+			return;
+		}
+
+		float plane = scene.GlobalOrigin(planes[0].Path).Y;
+		foreach (SceneNode node in RoundPieces(scene))
+		{
+			float y = scene.GlobalOrigin(node.Path).Y;
+			Assert.True(!KillPlane.IsBelow(y, plane), $"{scenePath}: {node.Path} is at y {y}, under the kill plane at {plane}");
+		}
+	}
+
+	[Fact]
+	public void GullysKillPlaneIsAtItsRiversSurface()
+	{
+		// WaterSurfaceGenerator draws the water at its path's height.
+		MapScene scene = MapScene.Load("res://Scenes/Maps/Gully.tscn");
+		SceneNode water = Assert.Single(scene.WithScript(WaterSurfaceScript));
+		SceneNode plane = Assert.Single(scene.InGroup(KillPlane.Group));
+		Assert.Equal(scene.GlobalOrigin(ParentPath(water.Path)).Y, scene.GlobalOrigin(plane.Path).Y, 3);
+		Assert.Equal(0.5f, scene.GlobalOrigin(plane.Path).Y, 3);
+	}
+
+	/// <summary>Spawns, the anchor, barracks and their doors, nodes and lockers.</summary>
+	private static IEnumerable<SceneNode> RoundPieces(MapScene scene) =>
+		scene.InGroup("player_spawn")
 			.Concat(scene.InGroup("strategist_anchor"))
 			.Concat(scene.WithScript(BarracksScript))
 			.Concat(scene.WithScript(BarracksScript).Select(b => scene.Get(b.Path + "/SpawnPoint")).Where(n => n != null))
 			.Concat(scene.WithScript(ResourceNodeScript))
 			.Concat(scene.WithScript(WeaponLockerScript));
 
-		foreach (SceneNode node in markers)
-		{
-			Vec3 at = scene.GlobalOrigin(node.Path);
-			Assert.True(MathF.Abs(at.X) <= Cargo.FieldHalfExtentMeters && MathF.Abs(at.Z) <= Cargo.FieldHalfExtentMeters,
-				$"{scenePath}: {node.Path} is at ({at.X}, {at.Z}), outside ±{Cargo.FieldHalfExtentMeters} m");
-		}
+	private static string ParentPath(string path)
+	{
+		int slash = path.LastIndexOf('/');
+		return slash < 0 ? "." : path[..slash];
 	}
 
 	[Fact]
