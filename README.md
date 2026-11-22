@@ -56,6 +56,10 @@ dedicated-server authoritative.
 - [`docs/EFFECTS.md`](docs/EFFECTS.md) — explosions: what is drawn when a grenade, a launcher round,
   a tank shell or a drone goes off and when a vehicle is destroyed, the placeholder that draws it,
   and where art goes to replace it
+- [`docs/HURT_FEEDBACK.md`](docs/HURT_FEEDBACK.md) — what a ground-force player sees when hit: a
+  small camera shake and a red tunnel vision that fades, both deeper the more grievous the hit;
+  the look is scenes, curves, noise and a shader in `Effects/Hurt/`, edited in the Godot editor,
+  and the console's `hurt` to see it
 - [`docs/AUDIO.md`](docs/AUDIO.md) — weapon sounds: every weapon's shot, heard at the muzzle and
   at the ear of whoever fired it, and rounds heard going past the listener where they came closest;
   the placeholders synthesized for each until there are recordings, and where recordings go
@@ -117,7 +121,11 @@ Scripts/Effects/ Explosions as drawn: the pooled manager, the placeholder, and t
                 Weapon sounds as played (docs/AUDIO.md); what they are made of and when a round
                 has gone past is Scripts/Sim/WeaponSounds.cs and Scripts/Sim/Flyby.cs.
                 Muzzle flashes, smoke and cases as drawn (docs/MUZZLE_EFFECTS.md); what each
-                kind draws, how far off, and how a case falls is Scripts/Sim/Muzzles.cs
+                kind draws, how far off, and how a case falls is Scripts/Sim/Muzzles.cs.
+                The camera shake and tunnel vision of a hit on the local player
+                (docs/HURT_FEEDBACK.md); how grievous a hit was is Scripts/Sim/HurtFeedback.cs
+Effects/        Art an artist edits in the Godot editor: Effects/Hurt/, the hurt feedback's scenes
+                and shader (docs/HURT_FEEDBACK.md)
 Scenes/         Main menu, greybox map, player, humanoid body, weapon, pause menu
 Scenes/Maps/    The template new maps inherit from (docs/MAPS.md)
 Scenes/MapEditor/ The map editor's scene (docs/LEVEL_EDITOR.md §8)

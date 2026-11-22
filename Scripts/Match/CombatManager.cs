@@ -1620,11 +1620,21 @@ public partial class CombatManager : Node
 			return HitFlags.None;
 		}
 
+		int healthBefore = victim.Health;
+		int vestBefore = victim.Vest.Points;
 		float lost = BodyArmour.Absorb(ref victim.Vest, amount, explosive);
 
 		// Zero is "never" to the resupply's lockout, so a hit on tick 0 is recorded as tick 1.
 		victim.LastDamagedTick = Math.Max(tick, 1u);
 		bool killed = victim.ApplyDamage(lost);
+
+		// The hit as this screen's own player feels it, on a listen host or offline
+		// (docs/HURT_FEEDBACK.md §4); a client's is its player record's, in ApplySnapshot.
+		if (victim == Local)
+		{
+			victim.Character?.PresentHurt(HurtFeedback.Severity(healthBefore - victim.Health,
+				vestBefore - victim.Vest.Points, killed));
+		}
 
 		// Confirmed even when the vest took all of it: the shooter did something.
 		ConfirmHit(attacker, victim, killed);
@@ -2429,6 +2439,21 @@ public partial class CombatManager : Node
 			&& (combat.Health < health || (combat.Vest.Tier == vest.Tier && combat.Vest.Points < vest.Points)))
 		{
 			combat.LastDamagedTick = Math.Max(NetworkManager.Instance?.Tick ?? 1u, 1u);
+		}
+
+		// The same fall, as the player feels it (docs/HURT_FEEDBACK.md §4), the killing one
+		// included: a ground-force player still on the field or downed by it. Not one taken
+		// off the field for the role menu or the strategist's chair, whose health goes to
+		// zero with nobody having hit them. A record can carry several hits; they are felt
+		// as one, as grievous as all of them.
+		if (combat == Local && wasAlive && !LocalAwaitingRole && (combat.IsAlive || combat.IsDowned))
+		{
+			int healthLost = health - combat.Health;
+			int vestLost = combat.Vest.Tier == vest.Tier ? vest.Points - combat.Vest.Points : 0;
+			if (healthLost > 0 || vestLost > 0)
+			{
+				combat.Character?.PresentHurt(HurtFeedback.Severity(healthLost, vestLost, combat.IsDowned));
+			}
 		}
 
 		// A player the server has put back on the field is a player it has stopped

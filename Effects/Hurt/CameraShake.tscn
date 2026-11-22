@@ -1,0 +1,17 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://Scripts/Effects/CameraShake.cs" id="1_script"]
+
+[sub_resource type="Curve" id="Curve_trauma"]
+_data = [Vector2(0, 0.3), 0.0, 0.7, 0, 0, Vector2(1, 1), 0.7, 0.0, 0, 0]
+point_count = 2
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_shake"]
+seed = 7
+frequency = 0.5
+fractal_type = 0
+
+[node name="CameraShake" type="Node"]
+script = ExtResource("1_script")
+TraumaBySeverity = SubResource("Curve_trauma")
+Noise = SubResource("FastNoiseLite_shake")

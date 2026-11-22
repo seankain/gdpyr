@@ -131,6 +131,8 @@ headless, and the curves and rules tested; never looked at.
 ## 6. Not done
 
 - Sound and camera shake. Weapon shots and rounds going past are heard ([`AUDIO.md`](AUDIO.md)); explosions are not.
+  A hit on the local player shakes their camera ([`HURT_FEEDBACK.md`](HURT_FEEDBACK.md)); an explosion that misses
+  them does not, though `CameraShake.AddTrauma` is there for it.
   What is drawn at a gun when it fires — flash, smoke, spent case — is [`MUZZLE_EFFECTS.md`](MUZZLE_EFFECTS.md).
 - Structures knocked down — the pillbox, the sniper tower, a sandbag wall. `Structure` has the
   same edge (`ApplyDamage` returning true on the authority, the `Destroyed` flag arriving in
