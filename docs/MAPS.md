@@ -142,8 +142,8 @@ an inherited scene cannot delete them, so Gully keeps only what §3.1 asks for.
 | `Geometry/River/KillPlane` | (0, 0.5, 0): the river's surface | a `Marker3D` in group `kill_plane` (§3.2), at the path's origin so it moves with the water |
 | Ground force spawn line | (−80, 71, 66.6), four markers 4 m apart | west plateau, 1 m above it |
 | Weapon locker | (−80, 70, 72.6) | 6 m behind the spawn line |
-| Barracks | (82, 70, −80), door south at (82, 70, −74) | east plateau, north-east corner |
-| Resource node | (65, 70, 45) | east plateau, 45 m south of the bridge's east end: 126 m from the barracks, outside its 107 m ring and the bots' 117 m standoff. It cannot sit at the bridge's end: the east ramp, (58, 70, 0), is 83.5 m from the barracks, inside the ring |
+| Barracks | (82, 70, −80), door south at (82, 70, −74) | east plateau, north-east corner. Its three mounts' `RangeMeters` are overridden to 60 m (the template's are 100 m, §2.3), so its defended radius is 67.1 m and a ground bot turns back inside 75.1 m. With 100 m guns the ring (107 m; 115 m for a bot) covered the bridge from x ≈ 0 eastward, and no point on the east plateau is far enough from the bridge's east ramp to clear it: HTN ground bots took the node in no seed of `gully_ground_takes_node`, even given 180 s. The nearest bridge point, the east ramp's north corner (58, 70, −8), is 75.9 m away |
+| Resource node | (65, 70, 45) | east plateau, 45 m south of the bridge's east end and 126 m from the barracks |
 | Strategist anchor | (65, 70, −20) | east plateau, between the barracks and the node |
 
 Measured on its navigation mesh (4158 vertices): spawn line to node 232 m, over the bridge; barracks
