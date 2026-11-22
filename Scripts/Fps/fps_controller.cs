@@ -1,5 +1,6 @@
 using Gdpyr.Characters;
 using Gdpyr.Core;
+using Gdpyr.Effects;
 using Gdpyr.Sim;
 using Godot;
 
@@ -42,6 +43,23 @@ public partial class fps_controller : CharacterBody3D, IHumanoidPoseSource
 	CollisionObject3D selfCollider;
 	[Export]
 	public ShapeCast3D headShapeCast;
+
+	/// <summary>
+	/// What a hit on the local player shakes the camera with (docs/HURT_FEEDBACK.md §2):
+	/// <c>Effects/Hurt/CameraShake.tscn</c>, a child of the camera. Only the local player's
+	/// is ever moved.
+	/// </summary>
+	[ExportGroup("Hurt feedback")]
+	[Export]
+	public CameraShake HurtShake;
+
+	/// <summary>
+	/// What a hit on the local player closes the screen in red with (docs/HURT_FEEDBACK.md
+	/// §3): <c>Effects/Hurt/TunnelVision.tscn</c>, in the user interface, which only the local
+	/// player's character keeps.
+	/// </summary>
+	[Export]
+	public TunnelVision HurtVision;
 
 	/// <summary>The ground force's colour, which the placeholder capsule was drawn in.</summary>
 	private static readonly Color BodyColour = new(0.196078f, 1f, 1f);
@@ -330,7 +348,59 @@ public partial class fps_controller : CharacterBody3D, IHumanoidPoseSource
 			_corpse = !IsLocalPlayer;
 		}
 
+		// A killing blow's hurt is left to fade over the death screen; a new life, or a
+		// player taken off the field for the role menu or the strategist's chair, starts
+		// with a clear view (docs/HURT_FEEDBACK.md §4).
+		if (!dead || !killed)
+		{
+			ClearHurt();
+		}
+
 		ApplyPresentation();
+	}
+
+	/// <summary>
+	/// What a hit feels like to the person looking out of this character
+	/// (docs/HURT_FEEDBACK.md): the camera shakes and the screen's edge closes in red, both
+	/// by <paramref name="severity"/>, 0 to 1 (<see cref="HurtFeedback.Severity"/>). How
+	/// either looks is its scene's, in <c>Effects/Hurt/</c>.
+	///
+	/// Presentation only, on this screen only: nothing else has a camera anyone looks out
+	/// of, and a dedicated server draws nothing. Called by the combat manager where the
+	/// local player's health or vest is seen to fall — the authority's own damage on a
+	/// listen host or offline, the player record on a client — and by the console's
+	/// <c>hurt</c>.
+	/// </summary>
+	public void PresentHurt(float severity)
+	{
+		if (!IsLocalPlayer || Bootstrap.IsDedicatedServer || severity <= 0f)
+		{
+			return;
+		}
+
+		if (HurtShake != null && IsInstanceValid(HurtShake))
+		{
+			HurtShake.Hurt(severity);
+		}
+
+		if (HurtVision != null && IsInstanceValid(HurtVision))
+		{
+			HurtVision.Hurt(severity);
+		}
+	}
+
+	/// <summary>Stops any hurt feedback at once, and gives the camera back to the look.</summary>
+	public void ClearHurt()
+	{
+		if (HurtShake != null && IsInstanceValid(HurtShake))
+		{
+			HurtShake.Clear();
+		}
+
+		if (HurtVision != null && IsInstanceValid(HurtVision))
+		{
+			HurtVision.Clear();
+		}
 	}
 
 	/// <summary>

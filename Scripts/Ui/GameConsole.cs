@@ -385,6 +385,11 @@ public partial class GameConsole : CanvasLayer
 			"draw a weapon's muzzle effects 3 m ahead (own: from your own weapon), or show or set how far they are drawn",
 			Muzzle);
 
+		// What a hit on you looks and feels like, without being shot (docs/HURT_FEEDBACK.md
+		// §5): this screen only, nothing to the simulation. For tuning the effects' scenes.
+		_commands.Register("hurt", HurtUsage,
+			"shake the camera and close the red tunnel in as a hit of that severity would, or clear them", Hurt);
+
 		// A crew vehicle in front of you, offline or on a listen host, for driving one
 		// before the kiosk hands them out (docs/GROUND_VEHICLES.md §12, GV2).
 		_commands.Register("vehicle", "vehicle <4x4|helicopter|clear>",
@@ -712,6 +717,49 @@ public partial class GameConsole : CanvasLayer
 
 		return ConsoleResult.Say($"{WeaponCatalog.NameOf(id)}: {(own ? "your own shot" : $"a shot {MuzzlePreviewMeters:0} m ahead")}"
 			+ $" ({DescribeParts(parts)})");
+	}
+
+	private const string HurtUsage = "hurt <severity 0-1>|clear";
+
+	/// <summary>
+	/// The console's <c>hurt</c> (docs/HURT_FEEDBACK.md §5): the local player's camera shake
+	/// and tunnel vision, as a hit of the severity given would draw them — 0.2 a rifle round,
+	/// 0.6 a DMR's, 1 a killing blow — and what they went to, read back off the effects.
+	/// </summary>
+	private static ConsoleResult Hurt(IReadOnlyList<string> args)
+	{
+		if (args.Count != 1)
+		{
+			return ConsoleResult.Failed(HurtUsage);
+		}
+
+		if (Match.CombatManager.Instance?.Local?.Character is not { IsLocalPlayer: true } character)
+		{
+			return ConsoleResult.Failed("no character to feel it: join or host a round first");
+		}
+
+		if (args[0] == "clear")
+		{
+			character.ClearHurt();
+			return ConsoleResult.Done();
+		}
+
+		if (!float.TryParse(args[0], System.Globalization.NumberStyles.Float,
+				System.Globalization.CultureInfo.InvariantCulture, out float severity)
+			|| !float.IsFinite(severity) || severity <= 0f || severity > 1f)
+		{
+			return ConsoleResult.Failed(HurtUsage);
+		}
+
+		character.PresentHurt(severity);
+		TunnelVision vision = character.HurtVision;
+		CameraShake shake = character.HurtShake;
+		var invariant = System.Globalization.CultureInfo.InvariantCulture;
+		string tunnel = vision != null
+			? string.Create(invariant, $"{vision.Level:0.00} for {vision.Seconds:0.0} s")
+			: "none";
+		string trauma = shake != null ? string.Create(invariant, $"{shake.Trauma:0.00} trauma") : "none";
+		return ConsoleResult.Say(string.Create(invariant, $"hurt {severity:0.00}: tunnel {tunnel}, shake {trauma}"));
 	}
 
 	private static bool TryMeters(string text, out float meters) =>

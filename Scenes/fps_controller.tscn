@@ -20,6 +20,8 @@
 [ext_resource type="Script" path="res://Scripts/Fps/AimZoom.cs" id="16_aimzm"]
 [ext_resource type="Script" path="res://Scripts/Ui/ScopeOverlay.cs" id="17_scope"]
 [ext_resource type="PackedScene" uid="uid://duc3vctuedos0" path="res://Scenes/humanoid.tscn" id="18_body"]
+[ext_resource type="PackedScene" path="res://Effects/Hurt/CameraShake.tscn" id="19_shake"]
+[ext_resource type="PackedScene" path="res://Effects/Hurt/TunnelVision.tscn" id="20_tunnel"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_87822"]
 
@@ -351,7 +353,7 @@ _data = {
 
 [sub_resource type="SphereShape3D" id="SphereShape3D_iinwo"]
 
-[node name="PlayerController" type="CharacterBody3D" unique_id=1728995393 node_paths=PackedStringArray("camera", "animationPlayer", "selfCollider", "headShapeCast")]
+[node name="PlayerController" type="CharacterBody3D" unique_id=1728995393 node_paths=PackedStringArray("camera", "animationPlayer", "selfCollider", "headShapeCast", "HurtShake", "HurtVision")]
 collision_layer = 2
 collision_mask = 15
 script = ExtResource("1_orfjw")
@@ -359,6 +361,8 @@ camera = NodePath("CameraController/Camera3D")
 animationPlayer = NodePath("AnimationPlayer")
 selfCollider = NodePath(".")
 headShapeCast = NodePath("ShapeCast3D")
+HurtShake = NodePath("CameraController/Camera3D/CameraShake")
+HurtVision = NodePath("UserInterface/TunnelVision")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=169227384]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
@@ -378,6 +382,8 @@ script = ExtResource("16_aimzm")
 transform = Transform3D(-4.37114e-08, 0, -1, 0, 1, 0, 1, 0, -4.37114e-08, 0.66, -0.78, -0.688)
 script = ExtResource("3_20sfu")
 swayNoise = SubResource("NoiseTexture2D_4oumj")
+
+[node name="CameraShake" parent="CameraController/Camera3D" unique_id=1460271935 instance=ExtResource("19_shake")]
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="." unique_id=117529427]
 libraries/ = SubResource("AnimationLibrary_14aif")
@@ -438,6 +444,9 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 script = ExtResource("17_scope")
+
+[node name="TunnelVision" parent="UserInterface" unique_id=2093847116 instance=ExtResource("20_tunnel")]
+layout_mode = 1
 
 [node name="DebugPanel" type="PanelContainer" parent="UserInterface" unique_id=1036157794]
 unique_name_in_owner = true
