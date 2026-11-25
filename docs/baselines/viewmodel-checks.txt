@@ -1,0 +1,30 @@
+# GODOT=<Godot 4.6 .NET> ./scripts/viewmodel-checks.sh: a headless listen host on Test.tscn, the launcher given to its own player.
+# Run on the branch that adds it. Pictures from the same check with SHOTS on xvfb-run (Compatibility renderer, llvmpipe, 1280 x 720): viewmodel-launcher-engine.png.
+[checks] viewmodel check: listen
+[checks] PASS listen: the listen host's player is alive on the ground force
+[checks] PASS listen: there is a camera (/root/PlayerManager/Players/Player_1/CameraController/Camera3D) and a viewmodel (/root/PlayerManager/Players/Player_1/CameraController/Camera3D/WeaponRig/Weapon)
+[checks] PASS listen: the launcher is up (launcher, 1 in it, 4 spare)
+[checks] PASS listen: the launcher is drawn by its viewmodel scene (/root/PlayerManager/Players/Player_1/CameraController/Camera3D/WeaponRig/Weapon/Viewmodel), not the mesh
+[checks] PASS listen: one skeleton holds the arms and the weapon (42 bones)
+[checks] PASS listen: the scene has its muzzle (/root/PlayerManager/Players/Player_1/CameraController/Camera3D/WeaponRig/Weapon/Viewmodel/ViewmodelRig/Skeleton3D/Barrel/Muzzle_FP)
+[checks] PASS listen: every surface is drawn at 55 degrees and pulled in from walls, none casts a shadow (8 of 8; 0 casting)
+[checks] PASS listen: held, it idles (idle)
+[checks] PASS listen: the launcher fires
+[checks] PASS listen: its flash is drawn on the end of the barrel as drawn (42, 45 against 42, 45)
+[checks] PASS listen: it kicks: the fire clip, the weapon 4.4 degrees up
+[checks] PASS listen: and settles (idle, 0.5 degrees)
+[checks] PASS listen: the launcher is empty (0)
+[checks] PASS listen: an empty launcher's next pull reloads it
+[checks] measured listen: reload at 0.14: reload, barrel 0.1 degrees, round 1.00 drawn
+[checks] measured listen: reload at 0.26: reload, barrel 46.0 degrees, round 1.00 drawn
+[checks] measured listen: reload at 0.32: reload, barrel 46.0 degrees, round 1.00 drawn
+[checks] measured listen: reload at 0.55: reload, barrel 46.0 degrees, round 1.00 drawn
+[checks] measured listen: reload at 0.64: reload, barrel 46.0 degrees, round 1.00 drawn
+[checks] measured listen: reload at 0.81: reload, barrel 33.4 degrees, round 1.00 drawn
+[checks] PASS listen: part way through, the reload clip has the barrel open (46.0 degrees)
+[checks] PASS listen: at its end the barrel is shut on a round and the launcher idles (1 in it, idle, barrel 0.0 degrees)
+[checks] PASS listen: with the sights up the weapon is on the line of sight (aim 1.00; muzzle at (0.000, -0.066, -0.601) from the eye)
+[checks] PASS listen: a round from the sights plays the shot from the sights (fire, aim 1.00)
+[checks] PASS listen: and the sights come down (0.00)
+[checks] measured listen: the eye is -1.06 m above and 0.19 m across from the mannequin's head bone
+[checks] listen: 19 of 19 facts hold
