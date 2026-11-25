@@ -1,8 +1,10 @@
 using Gdpyr.Core;
 using Gdpyr.Match;
+using Gdpyr.Net;
 using Gdpyr.Sim;
 using Godot;
 using System;
+using System.Collections.Generic;
 
 namespace Gdpyr.Fps;
 
@@ -17,6 +19,10 @@ namespace Gdpyr.Fps;
 /// on a keypress would be showing a weapon the player is not holding whenever the
 /// two disagreed (docs/NETCODE.md §3.1). Sway stays on the render frame and stays
 /// cosmetic.
+///
+/// A weapon with a <see cref="WeaponDefinition.Viewmodel"/> is drawn by that scene instead of
+/// the mesh — arms and weapon, animated by its fire and reload from the same simulated state
+/// (<see cref="AnimatedViewmodel"/>, docs/VIEWMODELS.md).
 /// </summary>
 public partial class WeaponInit : Node3D
 {
@@ -24,6 +30,15 @@ public partial class WeaponInit : Node3D
 
 	public MeshInstance3D WeaponMesh;
 	public MeshInstance3D WeaponShadow;
+
+	/// <summary>Each weapon's animated viewmodel, made the first time it is drawn and kept.</summary>
+	private readonly Dictionary<WeaponDefinition, AnimatedViewmodel> _animated = new();
+
+	/// <summary>The animated viewmodel in shot, or null when the weapon is drawn as a mesh.</summary>
+	private AnimatedViewmodel _shownAnimated;
+
+	/// <summary>The weapon's animated viewmodel while one is in shot (<see cref="WeaponDefinition.Viewmodel"/>); null otherwise.</summary>
+	public AnimatedViewmodel Animated => _shownAnimated;
 
 	/// <summary>
 	/// How far into a scoped weapon's raise the viewmodel leaves the shot. Matches
@@ -73,6 +88,7 @@ public partial class WeaponInit : Node3D
 		FollowSimulation();
 		AimWeapon();
 		SwayWeapon((float)delta);
+		AnimateWeapon(delta);
 	}
 
 
@@ -120,10 +136,38 @@ public partial class WeaponInit : Node3D
 		Position = WeaponType.Position.Lerp(WeaponType.AimPosition, progress);
 		Rotation = WeaponType.Rotation.Lerp(WeaponType.AimRotation, progress);
 
+		bool inShot = !stats.IsScoped || progress < ScopeHidesViewmodelAt;
 		if (WeaponMesh != null)
 		{
-			WeaponMesh.Visible = !stats.IsScoped || progress < ScopeHidesViewmodelAt;
+			WeaponMesh.Visible = inShot && _shownAnimated == null;
 		}
+
+		if (_shownAnimated != null)
+		{
+			_shownAnimated.Visible = inShot;
+		}
+	}
+
+	/// <summary>
+	/// Poses an animated viewmodel from the local player's equipped weapon, at the tick being
+	/// drawn: the last simulated one and however far the render frame is into the next.
+	/// </summary>
+	private void AnimateWeapon(double delta)
+	{
+		if (_shownAnimated == null)
+		{
+			return;
+		}
+
+		PlayerCombat local = CombatManager.Instance?.Local;
+		if (local == null)
+		{
+			_shownAnimated.Draw(WeaponState.Empty, default, 0.0, delta, 0f);
+			return;
+		}
+
+		double now = (NetworkManager.Instance?.Tick ?? 0u) + Engine.GetPhysicsInterpolationFraction();
+		_shownAnimated.Draw(local.Equipped, local.EquippedStats, now, delta, LocalAim.Progress);
 	}
 
 	/// <summary>
@@ -138,18 +182,23 @@ public partial class WeaponInit : Node3D
 	{
 		muzzle = default;
 		forward = default;
-		if (WeaponType == null || WeaponMesh?.Mesh == null || !WeaponMesh.IsVisibleInTree())
-		{
-			return false;
-		}
-
 		Camera3D camera = GetParentOrNull<Node3D>()?.GetParentOrNull<Camera3D>() ?? GetViewport()?.GetCamera3D();
-		if (camera == null)
+		if (WeaponType == null || camera == null)
 		{
 			return false;
 		}
 
 		forward = (-camera.GlobalBasis.Z).Normalized();
+		if (_shownAnimated != null)
+		{
+			return _shownAnimated.Root.IsVisibleInTree() && _shownAnimated.TryGetMuzzle(camera, out muzzle);
+		}
+
+		if (WeaponMesh?.Mesh == null || !WeaponMesh.IsVisibleInTree())
+		{
+			return false;
+		}
+
 		Transform3D mesh = WeaponMesh.GlobalTransform;
 		Vector3 local = WeaponType.ViewmodelMuzzle;
 		if (local == Vector3.Zero)
@@ -176,6 +225,7 @@ public partial class WeaponInit : Node3D
 	private void LoadWeapon()
 	{
 		WeaponMesh.Mesh = WeaponType.Mesh;
+		ShowAnimated(WeaponType);
 		Position = WeaponType.Position;
 		Rotation = WeaponType.Rotation;
 		// reset the sway state to the new weapon's rest transform
@@ -185,6 +235,37 @@ public partial class WeaponInit : Node3D
 		idleSwayAdjustment = WeaponType.IdleSwayAdjustment;
 		idleSwayRotationStrength = WeaponType.IdleSwayRotationStrength;
 		randomSwayAmount = WeaponType.RandomSwayAmount;
+	}
+
+	/// <summary>Puts the weapon's animated viewmodel in shot, making it the first time; hides any other.</summary>
+	private void ShowAnimated(WeaponDefinition weapon)
+	{
+		if (_shownAnimated != null)
+		{
+			_shownAnimated.Visible = false;
+			_shownAnimated = null;
+		}
+
+		if (weapon.Viewmodel == null)
+		{
+			return;
+		}
+
+		if (!_animated.TryGetValue(weapon, out AnimatedViewmodel animated))
+		{
+			animated = AnimatedViewmodel.Instantiate(weapon.Viewmodel, weapon.ViewmodelFovDegrees);
+			if (animated == null)
+			{
+				GD.PushWarning($"[viewmodel] {weapon.Name}'s viewmodel is not a 3D scene; drawing its mesh");
+				return;
+			}
+
+			AddChild(animated.Root);
+			_animated[weapon] = animated;
+		}
+
+		animated.Visible = true;
+		_shownAnimated = animated;
 	}
 
 	private void SwayWeapon(float delta)
