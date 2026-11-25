@@ -67,6 +67,10 @@ dedicated-server authoritative.
   for your own shots from the viewmodel's barrel, and for anyone else's only within a few metres
   of the camera, each part to its own reach; the placeholders, what they cost, and the console's
   `muzzle`
+- [`docs/VIEWMODELS.md`](docs/VIEWMODELS.md) — what the local player sees in their hands: the
+  launcher modelled, rigged and animated by script (idle, fire, a break-open reload, sights) in
+  the arms of `Models/Weapons/arms/`, drawn at its own field of view and driven from the
+  simulation; first-person arms against the body's own, and the eye height found on the way
 - [`docs/OUTPOST.md`](docs/OUTPOST.md) — the outpost, a builder's fourth structure, and the two units
   it trains: the scout drone, which hovers 12 m up, reveals the ground force to the strategist, patrols,
   and goes off once on the strategist's explicit strike order; and the operative, fast and soft, who
@@ -102,7 +106,8 @@ Scripts/Sim/Htn/ HTN planning: the pooled FluidHTN factory, the contact memories
                 the unit domain and its squad census (H3), the strategist's commander (H4)
 Scripts/Sim/AiDebug/ The AI debugger's engine-free half: domain maps, plan traces and history,
                 the text and graph renderers, and the spectator's wire format
-Scripts/Fps/    Character controller, movement FSM, input sampler, weapons, viewmodel
+Scripts/Fps/    Character controller, movement FSM, input sampler, weapons, viewmodel (a mesh, or an
+                animated scene: docs/VIEWMODELS.md; which clip is Scripts/Sim/ViewmodelAnimation.cs)
 Scripts/Characters/ The humanoid body players and units on foot are drawn as: the rig whose
                 AnimationTree poses the Universal Animation Library's mannequin in layers —
                 the legs' stride, the arms' aim, recoil and throw over it, a death over
@@ -134,6 +139,8 @@ Units/          UnitDefinition resources: three fighting tiers, the builder, the
                 sniper and heavy gunner a sniper tower and a pillbox train, the dropship, and the
                 scout drone and operative an outpost trains
 Structures/     StructureDefinition resources: pillbox, sandbag wall, sniper tower, outpost
+Models/Weapons/ Weapon art: the launcher's world model and viewmodel (built by
+                tools/blender/launcher.py) and the first-person arms they are built from
 Tests/          xUnit over the engine-free sources — `dotnet test`, no Godot needed
 Tests/Scenarios/ Playtest scenario files: data, and authoring one needs no Godot install
 ThirdParty/     Vendored source: FluidHTN at a pinned commit (docs/HTN_BOTS.md §3.8); and assets: the
@@ -143,7 +150,8 @@ tools/          External processes that talk to a server over a socket: the agen
                 seats' action spaces, rewards and environments), the RLMatrix trainer, the
                 divergence probe, the playtest harness, a Python client, and the HTN planner
                 probes and benchmark (docs/HTN_BOTS.md §3). Never part of the
-                game assembly (docs/TRAINING.md)
+                game assembly (docs/TRAINING.md). And tools/blender/: scripts that build models
+                with Blender's `bpy` (the Gully's bridge, the launcher), and what they build
 ```
 
 The simulation runs in `_PhysicsProcess` at a fixed 60 Hz and reads nothing but the recorded

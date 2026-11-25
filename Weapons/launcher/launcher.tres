@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" path="res://Scripts/Fps/WeaponDefinition.cs" id="1_weapondef"]
 [ext_resource type="Resource" path="res://Weapons/projectiles/grenade_40mm.tres" id="2_projectile"]
+[ext_resource type="PackedScene" path="res://Models/Weapons/launcher/launcher_fp.glb" id="3_viewmodel"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_launcher"]
 size = Vector3(0.16, 0.16, 0.6)
@@ -10,10 +11,12 @@ size = Vector3(0.16, 0.16, 0.6)
 script = ExtResource("1_weapondef")
 Name = &"launcher"
 Slot = 2
-Position = Vector3(0.22, -0.24, -0.45)
+Position = Vector3(0, 0, 0)
 Rotation = Vector3(0, 0, 0)
 Scale = Vector3(1, 1, 1)
 Mesh = SubResource("BoxMesh_launcher")
+Viewmodel = ExtResource("3_viewmodel")
+ViewmodelFovDegrees = 55.0
 DamageAmount = 0.0
 FireMode = 2
 RoundsPerMinute = 40.0
@@ -22,7 +25,8 @@ ReloadSeconds = 2.5
 IsMelee = false
 AimMagnification = 1.2
 AimSeconds = 0.3
-AimPosition = Vector3(0, -0.14, -0.42)
+AimPosition = Vector3(0, 0, 0)
+AimRotation = Vector3(0, 0, 0)
 Projectile = ExtResource("2_projectile")
 CarryWeightKg = 6.0
 PouchRounds = 2

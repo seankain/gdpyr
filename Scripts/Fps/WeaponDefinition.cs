@@ -44,6 +44,27 @@ public partial class WeaponDefinition : Resource
 	public bool Shadow;
 
 	/// <summary>
+	/// An animated first-person viewmodel, drawn in place of <see cref="Mesh"/>: a scene with an
+	/// <c>AnimationPlayer</c> holding <c>idle</c>, <c>fire</c> and <c>reload</c>, and a node named
+	/// <c>Muzzle</c> (or starting so) at the end of the barrel (docs/VIEWMODELS.md §3). Authored from the eye, so
+	/// <see cref="Position"/> and <see cref="Rotation"/> are offsets from it — zero for one
+	/// framed as it should be held. Its <c>aim</c> and <c>aim_fire</c> clips are the sights up,
+	/// blended in by how far up they are, so <see cref="AimPosition"/> and
+	/// <see cref="AimRotation"/> stay at zero for one that has them. Null draws <see cref="Mesh"/>.
+	/// Presentation only.
+	/// </summary>
+	[Export]
+	public PackedScene Viewmodel;
+
+	/// <summary>
+	/// The vertical field of view <see cref="Viewmodel"/> was framed at and is drawn at [deg],
+	/// whatever the camera's is: the game's is wide enough to make anything held look small and
+	/// stretched, and the sights' zoom is the world's and not the hands'.
+	/// </summary>
+	[Export]
+	public float ViewmodelFovDegrees = 55f;
+
+	/// <summary>
 	/// Damage a melee swing does. A ranged weapon's damage lives on its
 	/// <see cref="Projectile"/>, because that is what actually arrives.
 	/// </summary>
@@ -185,7 +206,8 @@ public partial class WeaponDefinition : Resource
 	[ExportCategory("Muzzle")]
 
 	/// <summary>
-	/// Where the end of the barrel is on <see cref="Mesh"/>, in the mesh's own space: where
+	/// Where the end of the barrel is on <see cref="Mesh"/>, in the mesh's own space (a
+	/// <see cref="Viewmodel"/> carries its own, as a node named <c>Muzzle</c>…): where
 	/// the local player's own muzzle flash and smoke are drawn from, and the case thrown
 	/// from behind (docs/MUZZLE_EFFECTS.md §2.2). Zero takes it from the mesh's bounds —
 	/// the face the camera looks out of, three quarters of the way up it — which is right
