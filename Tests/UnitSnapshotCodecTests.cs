@@ -20,12 +20,13 @@ public class UnitSnapshotCodecTests
 	};
 
 	[Fact]
-	public void ARecordIsFourteenBytes()
+	public void ARecordIsFifteenBytes()
 	{
-		// docs/NETCODE.md §7: 14 B × 64 units × 20 Hz is 17.9 KB/s at a full field, the
-		// v2 record's byte more (docs/TACTICS.md §5.8) 1.3 KB/s of it.
-		Assert.Equal(14, UnitSnapshot.SizeBytes);
-		Assert.Equal(UnitSnapshotCodec.HeaderBytes + 14, UnitSnapshotCodec.PayloadBytes(1));
+		// docs/NETCODE.md §7: 15 B × 64 units × 20 Hz is 19.2 KB/s at a full field, the
+		// v2 record's byte more (docs/TACTICS.md §5.8) and the v3 record's turret byte
+		// (docs/UNIT_MODELS.md §4) 1.3 KB/s each of it.
+		Assert.Equal(15, UnitSnapshot.SizeBytes);
+		Assert.Equal(UnitSnapshotCodec.HeaderBytes + 15, UnitSnapshotCodec.PayloadBytes(1));
 	}
 
 	[Fact]
@@ -296,6 +297,7 @@ public class UnitSnapshotCodecTests
 		Assert.Equal(0, payload[UnitSnapshotCodec.HeaderBytes + 11] & 0b1111_1000);
 		Assert.Equal(0, payload[UnitSnapshotCodec.HeaderBytes + 12]);
 		Assert.Equal(unit.HealthPercent, payload[UnitSnapshotCodec.HeaderBytes + 13]);
+		Assert.Equal(0, payload[UnitSnapshotCodec.HeaderBytes + 14]);
 		Assert.Equal(Quantize.YawToU16(unit.Yaw),
 			BinaryPrimitives.ReadUInt16LittleEndian(payload.AsSpan(UnitSnapshotCodec.HeaderBytes + 9)));
 	}
@@ -332,7 +334,7 @@ public class UnitSnapshotCodecTests
 	}
 
 	[Fact]
-	public void AFullFieldOfPassengers_IsFourteenBytesEach_AndOneDatagram()
+	public void AFullFieldOfPassengers_IsFifteenBytesEach_AndOneDatagram()
 	{
 		var units = new UnitSnapshot[UnitSnapshotCodec.MaxUnits];
 		for (int i = 0; i < units.Length; i++)
@@ -344,8 +346,68 @@ public class UnitSnapshotCodecTests
 		byte[] payload = UnitSnapshotCodec.Encode(1u, units);
 
 		Assert.Equal(UnitSnapshotCodec.MaxPayloadBytes, payload.Length);
-		Assert.Equal(901, payload.Length);
+		Assert.Equal(965, payload.Length);
 		Assert.True(payload.Length < 1200);
+	}
+
+	// ---- the turret byte (docs/UNIT_MODELS.md §4) ----------------------------
+
+	[Theory]
+	[InlineData(0f)]
+	[InlineData(0.6f)]
+	[InlineData(-0.6f)]
+	[InlineData(2.9f)]
+	[InlineData(-2.9f)]
+	[InlineData(3.1f)]
+	public void ATurretsYaw_RoundTripsWithinHalfAStep_EitherWayRound(float yaw)
+	{
+		UnitSnapshot unit = Sample(3);
+		unit.TurretYaw = yaw;
+		byte[] payload = UnitSnapshotCodec.Encode(1u, new[] { unit });
+		var into = new UnitSnapshot[1];
+
+		Assert.True(UnitSnapshotCodec.TryDecode(payload, into, out _, out _));
+
+		// A step is a 256th of a turn, 1.4 degrees; within half of one, measured round the circle.
+		float error = MathF.Abs(Mathf.AngleDifference(yaw, into[0].TurretYaw));
+		Assert.True(error <= MathF.PI / 256f + 1e-5f, $"{yaw} came back as {into[0].TurretYaw}");
+		Assert.InRange(into[0].TurretYaw, -MathF.PI, MathF.PI);
+		Assert.Equal(1.75f, into[0].Yaw, 3);
+	}
+
+	[Theory]
+	[InlineData(0, 0f)]
+	[InlineData(64, MathF.PI / 2f)]
+	[InlineData(128, -MathF.PI)]
+	[InlineData(192, -MathF.PI / 2f)]
+	[InlineData(255, -MathF.PI / 128f)]
+	public void TheTurretByte_DecodesEitherSideOfStraightAhead(byte units, float radians)
+	{
+		Assert.Equal(radians, Quantize.U8ToTurretYaw(units), 5);
+		Assert.Equal(units, Quantize.TurretYawToU8(radians));
+	}
+
+	[Fact]
+	public void TheTurretByte_WrapsAWholeTurnOntoItself()
+	{
+		Assert.Equal(Quantize.TurretYawToU8(0.5f), Quantize.TurretYawToU8(0.5f + Quantize.TwoPi));
+		Assert.Equal(Quantize.TurretYawToU8(-0.5f), Quantize.TurretYawToU8(-0.5f - (3f * Quantize.TwoPi)));
+		Assert.Equal(0, Quantize.TurretYawToU8(Quantize.TwoPi - 0.001f));
+	}
+
+	[Fact]
+	public void APassengersRecord_CarriesNoTurret()
+	{
+		UnitSnapshot unit = Sample(4);
+		unit.RidingIn = 12;
+		unit.TurretYaw = 1f;
+		byte[] payload = UnitSnapshotCodec.Encode(1u, new[] { unit });
+		var into = new UnitSnapshot[1];
+
+		Assert.True(UnitSnapshotCodec.TryDecode(payload, into, out _, out _));
+		Assert.Equal(0, payload[UnitSnapshotCodec.HeaderBytes + 14]);
+		Assert.Equal(0f, into[0].TurretYaw);
+		Assert.Equal((ushort)12, into[0].RidingIn);
 	}
 
 	[Fact]

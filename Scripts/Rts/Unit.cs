@@ -26,7 +26,9 @@ namespace Gdpyr.Rts;
 /// <see cref="UnitDefinition"/>, and a .tscn would only be a second place for the
 /// capsule's height to disagree with the hitbox's. A unit on foot is drawn as a
 /// <see cref="HumanoidRig"/> as tall as that capsule, in its definition's colour; a
-/// vehicle is still drawn as the capsule, and an aircraft as its airframe.
+/// vehicle as its definition's model where it has one — the tank's, whose turret turns
+/// free of its hull (docs/UNIT_MODELS.md) — and as the capsule where it does not; an
+/// aircraft as its airframe.
 /// </summary>
 public partial class Unit : CharacterBody3D, IHumanoidPoseSource
 {
@@ -35,6 +37,9 @@ public partial class Unit : CharacterBody3D, IHumanoidPoseSource
 
 	/// <summary>How fast a unit turns to face where it is going or what it is shooting [rad/s].</summary>
 	private const float TurnRateRadians = 6f;
+
+	/// <summary>Below this speed a turreted unit's hull is not going anywhere, and keeps the way it faces [m/s].</summary>
+	private const float HullTurnSpeedMetersPerSecond = 0.5f;
 
 	/// <summary>Server-allocated, never 0.</summary>
 	public ushort UnitId { get; set; }
@@ -341,6 +346,21 @@ public partial class Unit : CharacterBody3D, IHumanoidPoseSource
 	public float Yaw { get; private set; }
 
 	/// <summary>
+	/// The turret's yaw against the hull [rad], in [-π, π), anticlockwise from above as
+	/// <see cref="Yaw"/> is (docs/UNIT_MODELS.md §3): for a unit whose definition
+	/// <see cref="UnitDefinition.HasTurret">has a turret</see>, on the server where it has
+	/// laid its gun, on a client what the snapshots said, interpolated. Zero — square to
+	/// the hull — for everything else. Cosmetic, as facing is.
+	/// </summary>
+	public float TurretYaw { get; private set; }
+
+	/// <summary>True for a unit whose gun turns on a turret free of its hull: the tank.</summary>
+	public bool HasTurret => Definition?.HasTurret == true;
+
+	/// <summary>The drawn turret, on a peer that draws a model with one; null otherwise.</summary>
+	public Node3D Turret => _turret;
+
+	/// <summary>
 	/// Standing or crouched (docs/TACTICS.md §5.8): on the server what its plan asked for
 	/// this tick, if its body can; on a client what the newest record said.
 	/// </summary>
@@ -366,6 +386,10 @@ public partial class Unit : CharacterBody3D, IHumanoidPoseSource
 	private NavigationAgent3D _agent;
 	private MeshInstance3D _mesh;
 	private HumanoidRig _body;
+	private Node3D _turret;
+
+	/// <summary>A client's copy: the last turret yaw pushed to its interpolator, unwrapped (<see cref="UnwrapTurretYaw"/>).</summary>
+	private float _turretPushed;
 
 	/// <summary>An aircraft's rotors, on a peer that draws anything, and whether they are turning: off the ground, and shown.</summary>
 	private Node3D[] _rotors;
@@ -550,6 +574,53 @@ public partial class Unit : CharacterBody3D, IHumanoidPoseSource
 		Basis = Basis.FromEuler(new Vector3(0f, Yaw, 0f));
 	}
 
+	/// <summary>
+	/// A turreted unit's facing over this tick (docs/UNIT_MODELS.md §3), in place of
+	/// <see cref="FaceTowards"/>: the hull to the way it is moving, if it is moving — it
+	/// keeps the way it faces when it stops, to fight or otherwise — and the turret to
+	/// <paramref name="point"/> when there is one, back square to the hull when there is
+	/// not. Called after the unit has moved this tick, so the turret is laid from where
+	/// the hull has turned to. Both turn at the rate a unit always turned to face its
+	/// target, so the gun is on it as soon as it ever was; and, as with
+	/// <see cref="FaceTowards"/>, where the shots go is not decided here.
+	/// </summary>
+	public void FaceTravelAndLay(Vector3 point, bool hasPoint, float dt)
+	{
+		Vector3 travel = Velocity;
+		travel.Y = 0f;
+		if (travel.LengthSquared() > HullTurnSpeedMetersPerSecond * HullTurnSpeedMetersPerSecond)
+		{
+			FaceTowards(GlobalPosition + travel, dt);
+		}
+
+		float wanted = 0f;
+		if (hasPoint)
+		{
+			Vector3 to = point - GlobalPosition;
+			to.Y = 0f;
+			if (to.LengthSquared() < 0.0004f)
+			{
+				return;
+			}
+
+			Aim.Angles(to, out float world, out _);
+			wanted = Mathf.AngleDifference(Yaw, world);
+		}
+
+		float step = TurnRateRadians * dt;
+		TurnTurretTo(TurretYaw + Mathf.Clamp(Mathf.AngleDifference(TurretYaw, wanted), -step, step));
+	}
+
+	/// <summary>Sets the turret's yaw against the hull, wrapped into [-π, π), and turns the drawn turret to it.</summary>
+	private void TurnTurretTo(float yaw)
+	{
+		TurretYaw = Mathf.Wrap(yaw, -Mathf.Pi, Mathf.Pi);
+		if (_turret != null)
+		{
+			_turret.Rotation = new Vector3(0f, TurretYaw, 0f);
+		}
+	}
+
 	/// <summary>Returns true when this damage killed the unit.</summary>
 	public bool ApplyDamage(float amount)
 	{
@@ -645,14 +716,29 @@ public partial class Unit : CharacterBody3D, IHumanoidPoseSource
 	// ---- client ------------------------------------------------------------
 
 	/// <summary>
-	/// Places a unit from an interpolated snapshot. The client's copy has no
-	/// velocity, no navigation agent and no opinions (docs/NETCODE.md §6.1).
+	/// Places a unit from an interpolated snapshot, its turret too. The client's copy has
+	/// no velocity, no navigation agent and no opinions (docs/NETCODE.md §6.1).
 	/// </summary>
-	public void ApplyRemoteTransform(Vector3 position, float yaw)
+	public void ApplyRemoteTransform(Vector3 position, float yaw, float turretYaw = 0f)
 	{
 		GlobalPosition = position;
 		Yaw = yaw;
 		Basis = Basis.FromEuler(new Vector3(0f, yaw, 0f));
+		TurnTurretTo(turretYaw);
+	}
+
+	/// <summary>
+	/// A client's copy: a record's turret yaw as its interpolator is to hold it — unwrapped
+	/// against the one before, because that channel is blended straight, and a turret
+	/// passing straight behind would otherwise be drawn turning all the way round the other
+	/// way. Records are a twentieth of a second apart and a turret turns well under half a
+	/// turn in that, so the last one pushed is the one to unwrap against, whatever order
+	/// they arrive in.
+	/// </summary>
+	public float UnwrapTurretYaw(float yaw)
+	{
+		_turretPushed += Mathf.AngleDifference(_turretPushed, yaw);
+		return _turretPushed;
 	}
 
 	/// <summary>
@@ -873,7 +959,11 @@ public partial class Unit : CharacterBody3D, IHumanoidPoseSource
 			return;
 		}
 
-		if (Definition?.IsVehicle != true && !Bootstrap.IsDedicatedServer)
+		if (Definition?.IsVehicle == true && Definition.Model is { } model && !Bootstrap.IsDedicatedServer)
+		{
+			BuildModel(model);
+		}
+		else if (Definition?.IsVehicle != true && !Bootstrap.IsDedicatedServer)
 		{
 			_body = HumanoidRig.Instantiate();
 			_body.Name = "Body";
@@ -903,6 +993,35 @@ public partial class Unit : CharacterBody3D, IHumanoidPoseSource
 		if (Definition?.IsSupply == true && !Bootstrap.IsDedicatedServer)
 		{
 			BuildSupplyRing(Definition.SupplyRadiusMeters);
+		}
+	}
+
+	/// <summary>
+	/// A vehicle drawn as its definition's model rather than its capsule (docs/UNIT_MODELS.md
+	/// §2): hung off the body with its origin at the unit's feet, and casting no shadow, as the
+	/// capsule cast none. Its node named <c>Turret</c>, if it has one, is
+	/// kept turned to <see cref="TurretYaw"/>.
+	/// </summary>
+	private void BuildModel(PackedScene scene)
+	{
+		var model = scene.Instantiate<Node3D>();
+		model.Name = "Model";
+		AddChild(model);
+		CastNoShadows(model);
+		_turret = model.FindChild("Turret", recursive: true, owned: false) as Node3D;
+		TurnTurretTo(TurretYaw);
+	}
+
+	private static void CastNoShadows(Node node)
+	{
+		if (node is GeometryInstance3D geometry)
+		{
+			geometry.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+		}
+
+		foreach (Node child in node.GetChildren())
+		{
+			CastNoShadows(child);
 		}
 	}
 

@@ -99,8 +99,8 @@ killed mid-round, and none of those may take a client down.
 
 A journalled tick is 5 bytes for the marker and 17 per character — a tag, a peer id and the frame.
 Eight players at 60 Hz is about 8.4 KB/s. The keyframes are the rest: a full player snapshot is
-`5 + 32n` bytes at 30 Hz and a unit snapshot `5 + 13n` at 20 Hz, so a busy round with fifty units
-adds roughly 24 KB/s. Since version 5 the crew vehicles' message is a third keyframe, `9 + 46n`
+`5 + 32n` bytes at 30 Hz and a unit snapshot `5 + 15n` at 20 Hz, so a busy round with fifty units
+adds roughly 25 KB/s. Since version 5 the crew vehicles' message is a third keyframe, `9 + 46n`
 bytes at 30 Hz whether a vehicle is out or not: about 0.4 KB/s with none and 3.1 KB/s with both
 kinds out, the record's tag and length included. Call it a megabyte a half-minute, or a few hundred
 megabytes for a long evening.
@@ -338,3 +338,6 @@ Stated rather than discovered:
   names ([`LEVEL_EDITOR.md`](LEVEL_EDITOR.md) §9.6). A version-5 reader would take `map:…` for a
   scene's path, and a version-5 demo recorded on a data map names `MapHost.tscn`, which is every
   data map; so a version-5 demo is refused, saying "demo format version 5; this build reads 6".
+  Version 7 is the sixth: the unit record grew from 14 bytes to 15 for a turret's yaw against its
+  hull ([`UNIT_MODELS.md`](UNIT_MODELS.md) §4). A version-6 demo's records would misread, so it is
+  refused, saying "demo format version 6; this build reads 7".

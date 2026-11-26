@@ -85,18 +85,19 @@ public class DemoCodecTests
 	[InlineData(3)]
 	[InlineData(4)]
 	[InlineData(5)]
-	public void TheVersionIsSix_SinceADataMapIsNamedByItsHash_AndAnOlderDemoIsRefusedWithItsReason(int older)
+	[InlineData(6)]
+	public void TheVersionIsSeven_SinceAUnitRecordCarriesATurret_AndAnOlderDemoIsRefusedWithItsReason(int older)
 	{
-		// docs/LEVEL_EDITOR.md §9.6: the header names a data map as map:<hash>, which a version-5
-		// reader would take for a scene path; a version-5 demo of a data map names MapHost.tscn and
-		// not which map. Refused, saying why, as version 5 refused version 4 (docs/GROUND_VEHICLES.md
+		// docs/UNIT_MODELS.md §4: the unit record grew to 15 bytes for a turret's yaw, and a
+		// version-6 demo's 14-byte records would misread. Refused, saying why, as version 6 refused
+		// version 5 (docs/LEVEL_EDITOR.md §9.6), version 5 refused version 4 (docs/GROUND_VEHICLES.md
 		// §7.4) and version 4 refused version 3's 29-byte player records (docs/LOADOUT.md §6.3).
-		Assert.Equal(6, DemoFormat.Version);
+		Assert.Equal(7, DemoFormat.Version);
 
 		DemoHeader old = Header();
 		old.Version = (byte)older;
 		Assert.False(old.IsPlayable(out string reason));
-		Assert.Equal($"demo format version {older}; this build reads 6", reason);
+		Assert.Equal($"demo format version {older}; this build reads 7", reason);
 	}
 
 	[Fact]

@@ -6,7 +6,7 @@ namespace Gdpyr.Sim;
 /// <summary>
 /// One unit's authoritative state at a server tick (docs/NETCODE.md §6.1, §7).
 ///
-/// Fourteen bytes, against twenty-nine for a player, because almost nothing about
+/// Fifteen bytes, against thirty-two for a player, because almost nothing about
 /// a unit is worth a client's attention: it is never predicted, never reconciled
 /// and never simulated anywhere but the server, so there is no acknowledgement to
 /// carry and no velocity to restore. Position, facing, what it is doing and how
@@ -23,11 +23,15 @@ namespace Gdpyr.Sim;
 /// Version 2 (docs/TACTICS.md §5.8) split version 1's one flag byte in two: the
 /// body's (<see cref="UnitBodyFlags"/>, with the posture) and an aircraft's flight
 /// (<see cref="UnitFlightFlags"/>), which mean nothing to each other.
+///
+/// Version 3 (docs/UNIT_MODELS.md §4) added a byte for a turret's yaw against its hull: the
+/// tank's hull faces where it is going and its turret what it is shooting at, and a client
+/// has no other way to know the second.
 /// </summary>
 public struct UnitSnapshot
 {
-	/// <summary>Bytes on the wire: 2 + 1 + 6 + 2 + 1 + 1 + 1.</summary>
-	public const int SizeBytes = 14;
+	/// <summary>Bytes on the wire: 2 + 1 + 6 + 2 + 1 + 1 + 1 + 1.</summary>
+	public const int SizeBytes = 15;
 
 	/// <summary>Server-allocated, never 0 (docs/IMPLEMENTATION_PLAN.md §M3).</summary>
 	public ushort UnitId;
@@ -57,6 +61,12 @@ public struct UnitSnapshot
 
 	/// <summary>Standing or crouched (docs/TACTICS.md §5.8); standing for anything that cannot crouch.</summary>
 	public UnitPosture Posture;
+
+	/// <summary>
+	/// A turret's yaw against its hull [rad], in [-π, π), anticlockwise from above as a yaw is
+	/// (docs/UNIT_MODELS.md §4); 0 for a unit without one, and on a passenger's record.
+	/// </summary>
+	public float TurretYaw;
 
 	public readonly bool IsAlive => State != UnitStateId.Dead && HealthPercent > 0;
 

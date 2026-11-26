@@ -1,0 +1,41 @@
+# GODOT=<Godot 4.6 .NET> ./scripts/tank-model-checks.sh: a headless listen host on Test.tscn, then a headless dedicated server and client.
+# Run on the branch that adds it (docs/UNIT_MODELS.md §5).
+[checks] tank model check: listen
+[checks] PASS listen: a tank is placed, and has a turret
+[checks] PASS listen: it is drawn as Models/Vehicles/tank/tank.glb and not as the capsule (res://Models/Vehicles/tank/tank.glb)
+[checks] PASS listen: its turret carries the gun, the gun the muzzle (/root/UnitManager/Units/Unit_1/Model/Hull/Turret, Gun, Muzzle)
+[checks] PASS listen: the turret turns on the hull's middle line (0, 1.3, -0.15000153), the muzzle 5.92 m ahead of its axis
+[checks] PASS listen: it casts no shadow, as the capsule cast none
+[checks] PASS listen: it still collides, and is hit, as its 3 m by 1.3 m capsule
+[checks] PASS listen: at rest its turret is square to the hull (hull 0.00°, turret -0.00° against it, drawn at -0.00°)
+[checks] PASS listen: the hull stays as it was (0.00° → 0.00°)
+[checks] PASS listen: the turret lays on the place to its right (-90.00° against the hull; off by 0.00°)
+[checks] PASS listen: the drawn turret is where it is laid
+[checks] PASS listen: and the tank fires on it
+[checks] measured listen: moved 15.0 m; hull 45.00°, travel 45.00°, turret -154.11°
+[checks] PASS listen: it drives off (15.0 m, 149 ticks moving)
+[checks] PASS listen: its hull turns to the way it is going (0.00° → 45.00°, off by 0.00°)
+[checks] PASS listen: its turret stays on the place as it drives, never more than 0.00° off
+[checks] PASS listen: so the turret stands round against the hull, as far as 154.11°
+[checks] PASS listen: and the drawn turret with it
+[checks] PASS listen: with nothing to shoot at, the turret comes back square (-0.00°)
+[checks] listen: 17 of 17 facts hold
+[checks] tank model check: server
+[checks] PASS server: a client has joined
+[checks] PASS server: a tank is placed (unit 1)
+[checks] measured server: laid: hull 0.00°, turret 45.00° against it
+[checks] measured server: swung to -150.00° against the hull
+[checks] server: 2 of 2 facts hold
+[checks] tank model check: client
+[checks] PASS client: the client has the server's tank (unit 1), as a puppet
+[checks] PASS client: it is drawn as Models/Vehicles/tank/tank.glb and not as the capsule (res://Models/Vehicles/tank/tank.glb)
+[checks] PASS client: its turret carries the gun, the gun the muzzle (/root/UnitManager/Units/Unit_1/Model/Hull/Turret, Gun, Muzzle)
+[checks] PASS client: the turret turns on the hull's middle line (0, 1.3, -0.15000153), the muzzle 5.92 m ahead of its axis
+[checks] PASS client: it casts no shadow, as the capsule cast none
+[checks] PASS client: it still collides, and is hit, as its 3 m by 1.3 m capsule
+[checks] PASS client: its turret is where the server laid it: 45.00° against 45.00°, hull 0.00° against 0.00°
+[checks] PASS client: and is drawn there
+[checks] PASS client: the drawn turret swings round through straight behind (now -150.47°)
+[checks] PASS client: turning the short way: never more than 18.28° in a tick
+[checks] client: 10 of 10 facts hold
+# exit 0

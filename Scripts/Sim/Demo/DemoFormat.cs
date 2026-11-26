@@ -120,8 +120,11 @@ public static class DemoFormat
 	/// the map it names (docs/LEVEL_EDITOR.md §9.6). A version-5 reader would take that for a scene
 	/// path, and a version-5 demo of a data map names <c>MapHost.tscn</c>, which says nothing of which
 	/// map; so a version-5 demo is refused, saying why.
+	///
+	/// 7: the unit record is 15 bytes, the last a turret's yaw against its hull
+	/// (docs/UNIT_MODELS.md §4). A version-6 demo's 14-byte records would misread.
 	/// </summary>
-	public const byte Version = 6;
+	public const byte Version = 7;
 
 	/// <summary>What a header's map starts with when it is a data map, before its hash (docs/LEVEL_EDITOR.md §9.6).</summary>
 	public const string DataMapPrefix = "map:";

@@ -1,6 +1,7 @@
 [gd_resource type="Resource" script_class="UnitDefinition" format=3]
 
 [ext_resource type="Script" path="res://Scripts/Rts/UnitDefinition.cs" id="1_unitdef"]
+[ext_resource type="PackedScene" uid="uid://ewnofbouca3l" path="res://Models/Vehicles/tank/tank.glb" id="2_model"]
 
 [resource]
 script = ExtResource("1_unitdef")
@@ -25,4 +26,6 @@ MaxRounds = 30
 Grenades = 0
 GivesCoveringFire = true
 Doctrine = 0
-Color = Color(0.45, 0.16, 0.14, 1)
+HasTurret = true
+Color = Color(0.75, 0.65, 0.49, 1)
+Model = ExtResource("2_model")

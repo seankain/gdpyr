@@ -380,9 +380,10 @@ public partial class UnitManager : Node
 				interpolator.DropBefore(changeTick);
 			}
 
-			if (interpolator.TrySample(renderTick, out Vector3 position, out float yaw, out _))
+			// The pitch channel carries a turret's yaw, unwrapped (PushRecord); a unit has no pitch.
+			if (interpolator.TrySample(renderTick, out Vector3 position, out float yaw, out float turretYaw))
 			{
-				unit.ApplyRemoteTransform(position, yaw);
+				unit.ApplyRemoteTransform(position, yaw, turretYaw);
 			}
 			interpolator.Prune(renderTick);
 		}
@@ -695,7 +696,16 @@ public partial class UnitManager : Node
 		{
 			unit.Steer(destination, hasDestination && !holding, SimConfig.TickDelta);
 		}
-		unit.FaceTowards(hasTarget ? targetPoint : working ? site.Pose.Base : destination, SimConfig.TickDelta);
+		if (unit.HasTurret)
+		{
+			// The hull the way it is going, the turret at what it is shooting
+			// (docs/UNIT_MODELS.md §3).
+			unit.FaceTravelAndLay(targetPoint, hasTarget, SimConfig.TickDelta);
+		}
+		else
+		{
+			unit.FaceTowards(hasTarget ? targetPoint : working ? site.Pose.Base : destination, SimConfig.TickDelta);
+		}
 
 		// A marksman holding its fire leaves a target beyond its hold-fire range alone
 		// (docs/TACTICS.md §5.3): it still sees it, and stands to it, but does not shoot.
@@ -2299,6 +2309,7 @@ public partial class UnitManager : Node
 				Phase = unit.Phase,
 				CannotLand = unit.CannotLand,
 				Posture = unit.Posture,
+				TurretYaw = unit.TurretYaw,
 			};
 		}
 
@@ -2537,11 +2548,14 @@ public partial class UnitManager : Node
 
 	/// <summary>
 	/// One record into a unit's interpolator. A passenger's has no heading — its yaw
-	/// field named its vehicle — so it keeps the one it is drawn with.
+	/// field named its vehicle — so it keeps the one it is drawn with. A turret's yaw
+	/// rides in the pitch channel, which a unit has no other use for, unwrapped so that
+	/// blending it straight turns the turret the short way (docs/UNIT_MODELS.md §4).
 	/// </summary>
 	private static void PushRecord(SnapshotInterpolator interpolator, Unit unit, in UnitSnapshot record, uint tick)
 	{
-		interpolator.Push(tick, record.Position, record.IsAboard ? unit.Yaw : record.Yaw, 0f);
+		interpolator.Push(tick, record.Position, record.IsAboard ? unit.Yaw : record.Yaw,
+			unit.UnwrapTurretYaw(record.TurretYaw));
 	}
 
 	/// <summary>

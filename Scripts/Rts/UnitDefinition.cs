@@ -305,10 +305,29 @@ public partial class UnitDefinition : Resource
 	[Export]
 	public UnitDoctrine Doctrine = UnitDoctrine.Rifleman;
 
+	/// <summary>
+	/// Whether its gun is on a turret that turns free of its hull (docs/UNIT_MODELS.md §3): the
+	/// tank's. Its hull then faces the way it is moving and its turret what it is shooting at,
+	/// and the unit snapshot carries the turret's yaw. False for everything else, which turns
+	/// whole to face its target, and is what a file that says nothing gets. Where its shots
+	/// come from and go is the same either way.
+	/// </summary>
+	[Export]
+	public bool HasTurret;
+
 	[ExportCategory("Presentation")]
 
 	[Export]
 	public Color Color = new(0.85f, 0.25f, 0.2f);
+
+	/// <summary>
+	/// A model a vehicle is drawn as in place of its capsule (docs/UNIT_MODELS.md §2): the tank's
+	/// <c>Models/Vehicles/tank/tank.glb</c>. Its origin is the unit's feet and it faces -Z, as a
+	/// unit at yaw 0 does; a node in it named <c>Turret</c> is turned to the turret's yaw. Null
+	/// draws the capsule. Drawn only: what it collides with and is hit as stays the capsule.
+	/// </summary>
+	[Export]
+	public PackedScene Model;
 
 	public byte WeaponDefinitionId => (byte)Mathf.Clamp(WeaponId, 0, SimConfig.MaxWeaponDefinitions - 1);
 

@@ -272,8 +272,9 @@ best debugging aid you will have: dump it on a disputed kill.
 
 **M3 took the custom packed replicator, not `MultiplayerSpawner` + `MultiplayerSynchronizer`.**
 One unreliable message at 20 Hz carrying an array of `{id, def, quantized pos, yaw, body, flight,
-health%}` — the body byte is state, team, whether the unit is aboard and its posture, the flight byte
-how an aircraft is flying (below) — 14 bytes each, 901 bytes for a full field of 64 — plus a reliable
+health%, turret}` — the body byte is state, team, whether the unit is aboard and its posture, the
+flight byte how an aircraft is flying, the turret byte a turret's yaw against its hull (below) — 15
+bytes each, 965 bytes for a full field of 64 — plus a reliable
 spawn and despawn per unit per life. `Scripts/Sim/UnitSnapshotCodec.cs`, decoded into a `SnapshotInterpolator` per unit,
 the same one remote characters use. Units never simulate on clients.
 
@@ -291,7 +292,7 @@ codebase they are not, and there were three reasons to change:
    in its packet and therefore no node. M4 does not need the spike.
 
 Cost: ~180 lines of codec and roster plumbing, and a manual roster replay to joining peers.
-Budget check at 50 units: 50 × 14 B × 20 Hz ≈ **14 KB/s** per client (17.9 KB/s at a full 64),
+Budget check at 50 units: 50 × 15 B × 20 Hz ≈ **15 KB/s** per client (19.2 KB/s at a full 64),
 against the ~25 KB/s §7 budgets for everything.
 
 **Passengers cost nothing extra** ([`VEHICLES.md`](VEHICLES.md) §6). The body byte packs the state
@@ -307,6 +308,12 @@ bits 3–7 are spare, and it is 0 for everything that does not fly. These were o
 the tactics plan — state, team, aboard, phase and cannot-land in 13 bytes, with one bit spare — and
 the record grew a byte rather than squeeze a posture into it (`UnitBodyFlags`, `UnitFlightFlags`;
 `DemoFormat.Version` 3).
+
+**The turret byte** ([`UNIT_MODELS.md`](UNIT_MODELS.md) §4) is byte 14: a turret's yaw against its
+hull over a whole turn, 256 steps of 1.4° (`Quantize.TurretYawToU8`), decoded either side of
+straight ahead. The tank's hull faces where it is going and its turret what it is shooting at, and
+a client has no other way to know the second. It is 0 for every unit without a turret and on a
+passenger's record. The record grew from 14 bytes to 15 for it (`DemoFormat.Version` 7).
 Riders stay in the packet: leaving them out would make demo playback despawn them and freeze live
 puppets, visible, where they boarded.
 
@@ -456,7 +463,7 @@ route, so there is no second behaviour to write.
 |---|---|---|---|---|
 | `Input` (3 frames) | C→S | Unreliable | 60 Hz | ~48 B: 2 B of header — the count, and how far behind the newest frame the client drew the crew vehicles, in quarter ticks ([`GROUND_VEHICLES.md`](GROUND_VEHICLES.md) §5.6) — and 12 B a frame |
 | `PlayerSnapshot` (visible players) | S→C | Unreliable | 30 Hz | 32 B × players |
-| `UnitSnapshot` (visible units) | S→C | Unreliable | 20 Hz | 5 B + 14 B × units |
+| `UnitSnapshot` (visible units) | S→C | Unreliable | 20 Hz | 5 B + 15 B × units |
 | `ServerSpawnUnit` / `ServerDespawnUnit` | S→C | Reliable | per unit per life | ~24 B / 8 B |
 | `ProjectileSpawn` | S→C | Reliable | per shot | 23 B |
 | `ProjectileHit` | S→C | Reliable | per hit | 15 B |
@@ -502,8 +509,8 @@ Quantize positions to three `int16` at 1 cm resolution (±327 m covers the map) 
 `uint16`. Rough budget at 8 players + 50 visible units, at the rates actually shipped (players
 30 Hz, units 20 Hz):
 
-- Downstream per client: 8 × 32 B × 30 Hz ≈ 7.7 KB/s + (5 + 50 × 13) B × 20 Hz ≈ 13 KB/s ≈
-  **21 KB/s**, plus whatever is being shot.
+- Downstream per client: 8 × 32 B × 30 Hz ≈ 7.7 KB/s + (5 + 50 × 15) B × 20 Hz ≈ 15 KB/s ≈
+  **23 KB/s**, plus whatever is being shot.
 - Upstream per client: ≈ **3 KB/s**.
 
 Comfortable. The unit snapshot is now the larger half, so it is the one to thin first — drop it to
