@@ -363,6 +363,19 @@ public sealed partial class BotPilot
 			keepMoving = false;
 		}
 
+		// On a ladder it keeps climbing whatever it sees — a strafe there is a bob up and down
+		// the rungs — and with nowhere to be it comes down off it (docs/LADDERS.md §5).
+		if (character.IsClimbing)
+		{
+			keepMoving = true;
+			ReadOnlySpan<LadderSpan> ladders = Ladder.All;
+			if (!hasGoal && Ladders.Holding(ladders, character.SimPosition) is int held and >= 0)
+			{
+				goal = OffTheFoot(ladders[held]);
+				hasGoal = true;
+			}
+		}
+
 		if (hasGoal)
 		{
 			goal = OutsideDefences(character, combat.Team, goal);
@@ -1374,6 +1387,12 @@ public sealed partial class BotPilot
 		Vector3 next = _plan != null && Flat(character.SimPosition, goal) <= FinalApproachMeters
 			? goal
 			: NextPathPosition(goal);
+
+		if (ClimbDirection(character, next, out Vector3 climb))
+		{
+			return climb;
+		}
+
 		Vector3 direction = next - character.SimPosition;
 		direction.Y = 0f;
 
@@ -1393,8 +1412,47 @@ public sealed partial class BotPilot
 			direction = direction.Rotated(Vector3.Up, sign * Mathf.Pi * 0.5f);
 		}
 
-		return direction;
+		return OffLadders(character, next, direction);
 	}
+
+	/// <summary>
+	/// On a ladder, the way to walk to <paramref name="next"/>: up or down by which of its ends
+	/// the corner is nearer in height, because the level line to it swings round as the bot
+	/// passes under or over it (docs/LADDERS.md §5). False off every ladder.
+	/// </summary>
+	public static bool ClimbDirection(fps_controller character, Vector3 next, out Vector3 direction)
+	{
+		ReadOnlySpan<LadderSpan> ladders = Ladder.All;
+		int held = character.IsClimbing ? Ladders.Holding(ladders, character.SimPosition) : -1;
+		direction = held >= 0 ? Ladders.Steer(ladders[held], next) : Vector3.Zero;
+		return held >= 0;
+	}
+
+	/// <summary>
+	/// <paramref name="direction"/>, the level walk towards <paramref name="next"/>, kept off
+	/// the ladders unless the path goes up or down one there: a bot passing a ladder's foot, or
+	/// walking along its landing, does not take it (docs/LADDERS.md §5).
+	/// </summary>
+	public static Vector3 OffLadders(fps_controller character, Vector3 next, Vector3 direction)
+	{
+		ReadOnlySpan<LadderSpan> ladders = Ladder.All;
+		return !ladders.IsEmpty && MathF.Abs(next.Y - character.SimPosition.Y) <= LadderRiseMeters
+			? Ladders.WithoutGrab(ladders, character.SimPosition, direction)
+			: direction;
+	}
+
+	/// <summary>
+	/// A next corner this much above or below the feet is the far end of a ladder's navigation
+	/// link (docs/LADDERS.md §5): the ground's own corners are within the bake's half-metre climb
+	/// of each other on any slope a scene map has.
+	/// </summary>
+	private const float LadderRiseMeters = 1f;
+
+	/// <summary>
+	/// Where a bot on a ladder with nowhere to be goes: off it at the foot, out in front, so it
+	/// does not hang there.
+	/// </summary>
+	private static Vector3 OffTheFoot(in LadderSpan ladder) => ladder.Foot + (ladder.Normal * 2f);
 
 	/// <summary>
 	/// The next corner of the path, or the goal itself when the map has no navigation
@@ -1430,24 +1488,30 @@ public sealed partial class BotPilot
 			return null;
 		}
 
-		var agent = new NavigationAgent3D
-		{
-			Name = "BotNavigationAgent",
-			Radius = 0.5f,
-			Height = 2f,
-			PathDesiredDistance = 1f,
-			TargetDesiredDistance = 1.5f,
-
-			// Off for the same reason units have it off: RVO across everything on the
-			// field is a per-tick cost this prototype has no budget for, and character
-			// bodies already push each other out of the way.
-			AvoidanceEnabled = false,
-		};
-
+		NavigationAgent3D agent = NewNavigationAgent();
 		_character.AddChild(agent);
 		agent.TargetPosition = _character.SimPosition;
 		return agent;
 	}
+
+	/// <summary>A ground bot's navigation agent, not yet in the tree.</summary>
+	public static NavigationAgent3D NewNavigationAgent() => new()
+	{
+		Name = "BotNavigationAgent",
+		Radius = 0.5f,
+		Height = 2f,
+		PathDesiredDistance = 1f,
+		TargetDesiredDistance = 1.5f,
+
+		// The ground's layer and the ladders' (docs/LADDERS.md §5): a body climbs, so its
+		// paths may go up and down the ladders' links. A unit's agent stays on the ground's.
+		NavigationLayers = 1u | Ladder.NavigationLayer,
+
+		// Off for the same reason units have it off: RVO across everything on the
+		// field is a per-tick cost this prototype has no budget for, and character
+		// bodies already push each other out of the way.
+		AvoidanceEnabled = false,
+	};
 
 	/// <summary>
 	/// Decides whether the bot is wedged: it wanted to move, and a half-second later

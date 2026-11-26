@@ -16,6 +16,13 @@ public partial class PlayerIdleState : State
 	{
 		base.Tick(input, dt);
 
+		// A ladder walked into is taken before anything else is decided (docs/LADDERS.md §4.1).
+		if (playerController.TryGrabLadder(input))
+		{
+			OnStateTransition("PlayerClimbingState");
+			return;
+		}
+
 		if (playerController.Velocity.Y < -3.0 && !playerController.IsOnFloor())
 		{
 			OnStateTransition("PlayerFallingState");

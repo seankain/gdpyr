@@ -13,6 +13,7 @@
 [ext_resource type="PackedScene" path="res://Scenes/Environment/VehicleTestStrip.tscn" id="11_strip"]
 [ext_resource type="Script" uid="uid://dfryvl8vlrxbw" path="res://Scripts/Fps/VehicleKiosk.cs" id="12_kiosk"]
 [ext_resource type="Script" uid="uid://b6e0kpmpyq4i3" path="res://Scripts/Fps/MortarLauncher.cs" id="13_mortar"]
+[ext_resource type="PackedScene" path="res://Scenes/Environment/ScaffoldBuilding.tscn" id="14_scaffold"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_xaant"]
 sky_top_color = Color(0.335715, 0.270978, 1, 1)
@@ -435,6 +436,9 @@ transform = Transform3D(-0.7202122, 0, -0.69375384, 0, 1, 0, 0.69375384, 0, -0.7
 
 [node name="VehicleTestStrip" parent="." instance=ExtResource("11_strip")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -104, 0.5, 52.5)
+
+[node name="ScaffoldBuilding" parent="." instance=ExtResource("14_scaffold")]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -40, 0.5, 100)
 
 [node name="VehicleKiosk1" type="Node3D" parent="." groups=["vehicle_kiosk"]]
 transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, -82.95, 0.8084, 91.375694)

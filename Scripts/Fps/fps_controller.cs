@@ -132,6 +132,9 @@ public partial class fps_controller : CharacterBody3D, IHumanoidPoseSource
 
 	public string StateName => _stateMachine?.CurrentState?.Name ?? string.Empty;
 
+	/// <summary>On a ladder (docs/LADDERS.md §4): what a bot steers by, and what the body is drawn as.</summary>
+	public bool IsClimbing => _stateMachine?.CurrentState is PlayerClimbingState;
+
 	/// <summary>
 	/// The body this character is drawn as; null on a dedicated server, which draws
 	/// nothing. The character looked out of draws only its shadow.
@@ -653,6 +656,37 @@ public partial class fps_controller : CharacterBody3D, IHumanoidPoseSource
 	public void ApplyJump(float jumpVelocity) => Velocity = Movement.ApplyJump(Velocity, jumpVelocity);
 
 	public void Move() => MoveAndSlide();
+
+	/// <summary>The level unit direction the walk asks for this tick, or zero: the input turned by the look.</summary>
+	public Vector3 WishDirection(Vector2 moveAxes) => Movement.Direction(moveAxes, Yaw);
+
+	/// <summary>
+	/// Whether the walk takes a ladder this tick (docs/LADDERS.md §4.1): squarely into one in
+	/// reach from below, on the ground or coming down — not on the way up from a jump — or
+	/// squarely off the landing at its top. Asked by the walking states after they move, before
+	/// their own transitions; true hands the body to <see cref="PlayerClimbingState"/>.
+	/// </summary>
+	public bool TryGrabLadder(in InputContext input)
+	{
+		System.ReadOnlySpan<LadderSpan> ladders = Ladder.All;
+		if (ladders.IsEmpty)
+		{
+			return false;
+		}
+
+		bool onFloor = IsOnFloor();
+		bool rising = !onFloor && Velocity.Y > 0f;
+		return Ladders.TryGrab(ladders, GlobalPosition, WishDirection(input.MoveAxes), onFloor, rising, out _);
+	}
+
+	/// <summary>The ladder the body is on, found from its feet; false once it is off every one.</summary>
+	public bool TryHoldLadder(out LadderSpan ladder)
+	{
+		System.ReadOnlySpan<LadderSpan> ladders = Ladder.All;
+		int index = Ladders.Holding(ladders, GlobalPosition);
+		ladder = index >= 0 ? ladders[index] : default;
+		return index >= 0;
+	}
 
 	private void ApplyLook(float yaw, float pitch)
 	{
