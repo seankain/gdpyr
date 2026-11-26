@@ -22,6 +22,7 @@
 [ext_resource type="PackedScene" uid="uid://duc3vctuedos0" path="res://Scenes/humanoid.tscn" id="18_body"]
 [ext_resource type="PackedScene" path="res://Effects/Hurt/CameraShake.tscn" id="19_shake"]
 [ext_resource type="PackedScene" path="res://Effects/Hurt/TunnelVision.tscn" id="20_tunnel"]
+[ext_resource type="Script" uid="uid://dqd2djrpbgou3" path="res://Scripts/Fps/PlayerClimbingState.cs" id="21_climb"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_87822"]
 
@@ -526,6 +527,14 @@ PlayerAnimation = NodePath("../../AnimationPlayer")
 [node name="PlayerFallingState" type="Node" parent="PlayerStateMachine" unique_id=1362166956 node_paths=PackedStringArray("playerController", "PlayerAnimation")]
 script = ExtResource("12_x0vuy")
 StatePlayerMoveSpeed = 6.0
+StatePlayerAcceleration = 0.1
+StatePlayerDeceleration = 0.25
+playerController = NodePath("../..")
+PlayerAnimation = NodePath("../../AnimationPlayer")
+
+[node name="PlayerClimbingState" type="Node" parent="PlayerStateMachine" unique_id=1587203316 node_paths=PackedStringArray("playerController", "PlayerAnimation")]
+script = ExtResource("21_climb")
+StatePlayerMoveSpeed = 5.0
 StatePlayerAcceleration = 0.1
 StatePlayerDeceleration = 0.25
 playerController = NodePath("../..")

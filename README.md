@@ -60,6 +60,11 @@ dedicated-server authoritative.
   small camera shake and a red tunnel vision that fades, both deeper the more grievous the hit;
   the look is scenes, curves, noise and a shader in `Effects/Hurt/`, edited in the Godot editor,
   and the console's `hurt` to see it
+- [`docs/LADDERS.md`](docs/LADDERS.md) — ladders: walk into one to take it, towards it to climb
+  and away to come down, over the top onto its landing, a jump to push off; predicted like any
+  other movement, and climbed by ground bots along navigation links units do not use; and the
+  scaffold building on the greybox to try them on — two floors, a roof and a two-lift scaffold,
+  joined by four ladders of four kinds
 - [`docs/AUDIO.md`](docs/AUDIO.md) — weapon sounds: every weapon's shot, heard at the muzzle and
   at the ear of whoever fired it, and rounds heard going past the listener where they came closest;
   the placeholders synthesized for each until there are recordings, and where recordings go
@@ -107,7 +112,8 @@ Scripts/Sim/Htn/ HTN planning: the pooled FluidHTN factory, the contact memories
 Scripts/Sim/AiDebug/ The AI debugger's engine-free half: domain maps, plan traces and history,
                 the text and graph renderers, and the spectator's wire format
 Scripts/Fps/    Character controller, movement FSM, input sampler, weapons, viewmodel (a mesh, or an
-                animated scene: docs/VIEWMODELS.md; which clip is Scripts/Sim/ViewmodelAnimation.cs)
+                animated scene: docs/VIEWMODELS.md; which clip is Scripts/Sim/ViewmodelAnimation.cs),
+                ladders and the climbing state (docs/LADDERS.md; the rules are Scripts/Sim/Ladders.cs)
 Scripts/Characters/ The humanoid body players and units on foot are drawn as: the rig whose
                 AnimationTree poses the Universal Animation Library's mannequin in layers —
                 the legs' stride, the arms' aim, recoil and throw over it, a death over
@@ -134,7 +140,8 @@ Effects/        Art an artist edits in the Godot editor: Effects/Hurt/, the hurt
 Scenes/         Main menu, greybox map, player, humanoid body, weapon, pause menu
 Scenes/Maps/    The template new maps inherit from (docs/MAPS.md)
 Scenes/MapEditor/ The map editor's scene (docs/LEVEL_EDITOR.md §8)
-Scenes/Environment/ Map pieces: the barracks, the pillbox, the vehicle test strip
+Scenes/Environment/ Map pieces: the barracks, the pillbox, the vehicle test strip, the scaffold
+                building (docs/LADDERS.md §7)
 Units/          UnitDefinition resources: three fighting tiers, the builder, the supply truck, the
                 sniper and heavy gunner a sniper tower and a pillbox train, the dropship, and the
                 scout drone and operative an outpost trains

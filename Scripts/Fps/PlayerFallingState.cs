@@ -13,6 +13,13 @@ public partial class PlayerFallingState : State
 	{
 		base.Tick(input, dt);
 
+		// Coming down past a ladder and walking into it catches it (docs/LADDERS.md §4.1).
+		if (playerController.TryGrabLadder(input))
+		{
+			OnStateTransition("PlayerClimbingState");
+			return;
+		}
+
 		if (playerController.IsOnFloor())
 		{
 			// The animation is named "jumpend"; the mismatched case here used to log an

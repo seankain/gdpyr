@@ -17,6 +17,13 @@ public partial class PlayerWalkingState : State
 	{
 		base.Tick(input, dt);
 
+		// A ladder walked into is taken before anything else is decided (docs/LADDERS.md §4.1).
+		if (playerController.TryGrabLadder(input))
+		{
+			OnStateTransition("PlayerClimbingState");
+			return;
+		}
+
 		if (input.JustPressed(InputButtons.Sprint))
 		{
 			OnStateTransition("PlayerSprintingState");

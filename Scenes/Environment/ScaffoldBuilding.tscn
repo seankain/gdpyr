@@ -1,0 +1,329 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" uid="uid://dcieni327f846" path="res://Scripts/Fps/Ladder.cs" id="1_ladder"]
+[ext_resource type="Texture2D" uid="uid://2v377pkkvw0v" path="res://Textures/kenney_prototype/PNG/Light/texture_01.png" id="2_tex"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_wall"]
+albedo_color = Color(0.86, 0.84, 0.78, 1)
+albedo_texture = ExtResource("2_tex")
+uv1_triplanar = true
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_slab"]
+albedo_color = Color(0.62, 0.6, 0.56, 1)
+albedo_texture = ExtResource("2_tex")
+uv1_triplanar = true
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_tube"]
+albedo_color = Color(0.5, 0.55, 0.6, 1)
+metallic = 0.6
+roughness = 0.45
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_deck"]
+albedo_color = Color(0.58, 0.42, 0.24, 1)
+roughness = 0.85
+
+[node name="ScaffoldBuilding" type="Node3D" unique_id=1700000001]
+
+[node name="Building" type="CSGCombiner3D" parent="." unique_id=1700007920 groups=["navmesh"]]
+use_collision = true
+
+[node name="Shell" type="CSGBox3D" parent="Building" unique_id=1700015839]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4, 0)
+size = Vector3(12, 8, 8)
+material = SubResource("StandardMaterial3D_wall")
+
+[node name="Hollow" type="CSGBox3D" parent="Building" unique_id=1700023758]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4, 0)
+operation = 2
+size = Vector3(11.4, 8.2, 7.4)
+material = SubResource("StandardMaterial3D_wall")
+
+[node name="FirstFloor" type="CSGBox3D" parent="Building" unique_id=1700031677]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.35, 0)
+size = Vector3(11.4, 0.3, 7.4)
+material = SubResource("StandardMaterial3D_slab")
+
+[node name="Roof" type="CSGBox3D" parent="Building" unique_id=1700039596]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6.85, 0)
+size = Vector3(11.4, 0.3, 7.4)
+material = SubResource("StandardMaterial3D_slab")
+
+[node name="Hatch" type="CSGBox3D" parent="Building" unique_id=1700047515]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.05, 3.35, -2.95)
+operation = 2
+size = Vector3(1.3, 0.5, 1.5)
+material = SubResource("StandardMaterial3D_slab")
+
+[node name="DoorGround" type="CSGBox3D" parent="Building" unique_id=1700055434]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.85, 1.15, 0.9)
+operation = 2
+size = Vector3(0.5, 2.5, 1.4)
+material = SubResource("StandardMaterial3D_wall")
+
+[node name="DoorFirst" type="CSGBox3D" parent="Building" unique_id=1700063353]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.7, 3.85)
+operation = 2
+size = Vector3(1.4, 2.4, 0.5)
+material = SubResource("StandardMaterial3D_wall")
+
+[node name="WindowNorthGround1" type="CSGBox3D" parent="Building" unique_id=1700071272]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.75, 1.5, -3.85)
+operation = 2
+size = Vector3(1.5, 1, 0.5)
+material = SubResource("StandardMaterial3D_wall")
+
+[node name="WindowSouthGround1" type="CSGBox3D" parent="Building" unique_id=1700079191]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.75, 1.5, 3.85)
+operation = 2
+size = Vector3(1.5, 1, 0.5)
+material = SubResource("StandardMaterial3D_wall")
+
+[node name="WindowNorthFirst1" type="CSGBox3D" parent="Building" unique_id=1700087110]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.75, 5, -3.85)
+operation = 2
+size = Vector3(1.5, 1, 0.5)
+material = SubResource("StandardMaterial3D_wall")
+
+[node name="WindowSouthFirst1" type="CSGBox3D" parent="Building" unique_id=1700095029]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.75, 5, 3.85)
+operation = 2
+size = Vector3(1.5, 1, 0.5)
+material = SubResource("StandardMaterial3D_wall")
+
+[node name="WindowNorthGround2" type="CSGBox3D" parent="Building" unique_id=1700102948]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.75, 1.5, -3.85)
+operation = 2
+size = Vector3(1.5, 1, 0.5)
+material = SubResource("StandardMaterial3D_wall")
+
+[node name="WindowSouthGround2" type="CSGBox3D" parent="Building" unique_id=1700110867]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.75, 1.5, 3.85)
+operation = 2
+size = Vector3(1.5, 1, 0.5)
+material = SubResource("StandardMaterial3D_wall")
+
+[node name="WindowNorthFirst2" type="CSGBox3D" parent="Building" unique_id=1700118786]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.75, 5, -3.85)
+operation = 2
+size = Vector3(1.5, 1, 0.5)
+material = SubResource("StandardMaterial3D_wall")
+
+[node name="WindowSouthFirst2" type="CSGBox3D" parent="Building" unique_id=1700126705]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.75, 5, 3.85)
+operation = 2
+size = Vector3(1.5, 1, 0.5)
+material = SubResource("StandardMaterial3D_wall")
+
+[node name="WindowEastGround1" type="CSGBox3D" parent="Building" unique_id=1700134624]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.85, 1.5, -2.5)
+operation = 2
+size = Vector3(0.5, 1, 1.5)
+material = SubResource("StandardMaterial3D_wall")
+
+[node name="WindowEastFirst1" type="CSGBox3D" parent="Building" unique_id=1700142543]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.85, 5, -2.5)
+operation = 2
+size = Vector3(0.5, 1, 1.5)
+material = SubResource("StandardMaterial3D_wall")
+
+[node name="WindowEastGround2" type="CSGBox3D" parent="Building" unique_id=1700150462]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.85, 1.5, 2.5)
+operation = 2
+size = Vector3(0.5, 1, 1.5)
+material = SubResource("StandardMaterial3D_wall")
+
+[node name="WindowEastFirst2" type="CSGBox3D" parent="Building" unique_id=1700158381]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.85, 5, 2.5)
+operation = 2
+size = Vector3(0.5, 1, 1.5)
+material = SubResource("StandardMaterial3D_wall")
+
+[node name="WindowWestFirst" type="CSGBox3D" parent="Building" unique_id=1700166300]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.85, 5, 0)
+operation = 2
+size = Vector3(0.5, 1, 1.5)
+material = SubResource("StandardMaterial3D_wall")
+
+[node name="GapEastLadder" type="CSGBox3D" parent="Building" unique_id=1700174219]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.85, 7.55, 0)
+operation = 2
+size = Vector3(0.5, 1.1, 1.6)
+material = SubResource("StandardMaterial3D_wall")
+
+[node name="GapSouthLadder" type="CSGBox3D" parent="Building" unique_id=1700182138]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.3, 7.55, 3.85)
+operation = 2
+size = Vector3(1.6, 1.1, 0.5)
+material = SubResource("StandardMaterial3D_wall")
+
+[node name="GapSouthLift" type="CSGBox3D" parent="Building" unique_id=1700190057]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.75, 7.55, 3.85)
+operation = 2
+size = Vector3(1.5, 1.1, 0.5)
+material = SubResource("StandardMaterial3D_wall")
+
+[node name="Scaffold" type="CSGCombiner3D" parent="." unique_id=1700197976 groups=["navmesh"]]
+use_collision = true
+
+[node name="Lift1" type="CSGBox3D" parent="Scaffold" unique_id=1700205895]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.46, 5.05)
+size = Vector3(13, 0.08, 1.7)
+material = SubResource("StandardMaterial3D_deck")
+
+[node name="Lift2" type="CSGBox3D" parent="Scaffold" unique_id=1700213814]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.15, 6.96, 5.05)
+size = Vector3(8.7, 0.08, 1.7)
+material = SubResource("StandardMaterial3D_deck")
+
+[node name="StandardInW6" type="CSGBox3D" parent="Scaffold" unique_id=1700221733]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.4, 4, 4.3)
+size = Vector3(0.08, 8, 0.08)
+material = SubResource("StandardMaterial3D_tube")
+
+[node name="StandardOutW6" type="CSGBox3D" parent="Scaffold" unique_id=1700229652]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.4, 4, 5.8)
+size = Vector3(0.08, 8, 0.08)
+material = SubResource("StandardMaterial3D_tube")
+
+[node name="StandardInW2" type="CSGBox3D" parent="Scaffold" unique_id=1700237571]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.1, 4, 4.3)
+size = Vector3(0.08, 8, 0.08)
+material = SubResource("StandardMaterial3D_tube")
+
+[node name="StandardOutW2" type="CSGBox3D" parent="Scaffold" unique_id=1700245490]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.1, 4, 5.8)
+size = Vector3(0.08, 8, 0.08)
+material = SubResource("StandardMaterial3D_tube")
+
+[node name="StandardInE2" type="CSGBox3D" parent="Scaffold" unique_id=1700253409]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.1, 4, 4.3)
+size = Vector3(0.08, 8, 0.08)
+material = SubResource("StandardMaterial3D_tube")
+
+[node name="StandardOutE2" type="CSGBox3D" parent="Scaffold" unique_id=1700261328]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.1, 4, 5.8)
+size = Vector3(0.08, 8, 0.08)
+material = SubResource("StandardMaterial3D_tube")
+
+[node name="StandardInE6" type="CSGBox3D" parent="Scaffold" unique_id=1700269247]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.4, 2.275, 4.3)
+size = Vector3(0.08, 4.55, 0.08)
+material = SubResource("StandardMaterial3D_tube")
+
+[node name="StandardOutE6" type="CSGBox3D" parent="Scaffold" unique_id=1700277166]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.4, 2.275, 5.8)
+size = Vector3(0.08, 4.55, 0.08)
+material = SubResource("StandardMaterial3D_tube")
+
+[node name="Ledger1In" type="CSGBox3D" parent="Scaffold" unique_id=1700285085]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.39, 4.3)
+size = Vector3(13, 0.06, 0.06)
+material = SubResource("StandardMaterial3D_tube")
+
+[node name="Ledger2In" type="CSGBox3D" parent="Scaffold" unique_id=1700293004]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.15, 6.89, 4.3)
+size = Vector3(8.7, 0.06, 0.06)
+material = SubResource("StandardMaterial3D_tube")
+
+[node name="Ledger1Out" type="CSGBox3D" parent="Scaffold" unique_id=1700300923]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.39, 5.8)
+size = Vector3(13, 0.06, 0.06)
+material = SubResource("StandardMaterial3D_tube")
+
+[node name="Ledger2Out" type="CSGBox3D" parent="Scaffold" unique_id=1700308842]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.15, 6.89, 5.8)
+size = Vector3(8.7, 0.06, 0.06)
+material = SubResource("StandardMaterial3D_tube")
+
+[node name="Rail1MidOuterW" type="CSGBox3D" parent="Scaffold" unique_id=1700316761]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.775, 4, 5.87)
+size = Vector3(1.45, 0.06, 0.06)
+material = SubResource("StandardMaterial3D_tube")
+
+[node name="Rail1MidOuterE" type="CSGBox3D" parent="Scaffold" unique_id=1700324680]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.475, 4, 5.87)
+size = Vector3(10.05, 0.06, 0.06)
+material = SubResource("StandardMaterial3D_tube")
+
+[node name="Rail1MidEndW" type="CSGBox3D" parent="Scaffold" unique_id=1700332599]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.47, 4, 5.05)
+size = Vector3(0.06, 0.06, 1.7)
+material = SubResource("StandardMaterial3D_tube")
+
+[node name="Rail1MidEndE" type="CSGBox3D" parent="Scaffold" unique_id=1700340518]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.47, 4, 5.05)
+size = Vector3(0.06, 0.06, 1.7)
+material = SubResource("StandardMaterial3D_tube")
+
+[node name="Rail1TopOuterW" type="CSGBox3D" parent="Scaffold" unique_id=1700348437]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.775, 4.5, 5.87)
+size = Vector3(1.45, 0.06, 0.06)
+material = SubResource("StandardMaterial3D_tube")
+
+[node name="Rail1TopOuterE" type="CSGBox3D" parent="Scaffold" unique_id=1700356356]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.475, 4.5, 5.87)
+size = Vector3(10.05, 0.06, 0.06)
+material = SubResource("StandardMaterial3D_tube")
+
+[node name="Rail1TopEndW" type="CSGBox3D" parent="Scaffold" unique_id=1700364275]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.47, 4.5, 5.05)
+size = Vector3(0.06, 0.06, 1.7)
+material = SubResource("StandardMaterial3D_tube")
+
+[node name="Rail1TopEndE" type="CSGBox3D" parent="Scaffold" unique_id=1700372194]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.47, 4.5, 5.05)
+size = Vector3(0.06, 0.06, 1.7)
+material = SubResource("StandardMaterial3D_tube")
+
+[node name="Rail2MidOuter" type="CSGBox3D" parent="Scaffold" unique_id=1700380113]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.15, 7.5, 5.87)
+size = Vector3(8.7, 0.06, 0.06)
+material = SubResource("StandardMaterial3D_tube")
+
+[node name="Rail2MidEndW" type="CSGBox3D" parent="Scaffold" unique_id=1700388032]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.47, 7.5, 5.05)
+size = Vector3(0.06, 0.06, 1.7)
+material = SubResource("StandardMaterial3D_tube")
+
+[node name="Rail2MidEndE" type="CSGBox3D" parent="Scaffold" unique_id=1700395951]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.17, 7.5, 5.05)
+size = Vector3(0.06, 0.06, 1.7)
+material = SubResource("StandardMaterial3D_tube")
+
+[node name="Rail2TopOuter" type="CSGBox3D" parent="Scaffold" unique_id=1700403870]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.15, 8, 5.87)
+size = Vector3(8.7, 0.06, 0.06)
+material = SubResource("StandardMaterial3D_tube")
+
+[node name="Rail2TopEndW" type="CSGBox3D" parent="Scaffold" unique_id=1700411789]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.47, 8, 5.05)
+size = Vector3(0.06, 0.06, 1.7)
+material = SubResource("StandardMaterial3D_tube")
+
+[node name="Rail2TopEndE" type="CSGBox3D" parent="Scaffold" unique_id=1700419708]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.17, 8, 5.05)
+size = Vector3(0.06, 0.06, 1.7)
+material = SubResource("StandardMaterial3D_tube")
+
+[node name="LadderScaffold" type="Node3D" parent="." unique_id=1700427627]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.3, 0, 5.9)
+script = ExtResource("1_ladder")
+Height = 3.5
+
+[node name="LadderToRoof" type="Node3D" parent="." unique_id=1700435546]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.3, 3.5, 4.25)
+script = ExtResource("1_ladder")
+Height = 3.5
+LinkOutMeters = 1.2
+
+[node name="LadderEndWall" type="Node3D" parent="." unique_id=1700443465]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 6, 0, 0)
+script = ExtResource("1_ladder")
+Height = 7
+Solid = false
+
+[node name="LadderHatch" type="Node3D" parent="." unique_id=1700451384]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -4.4, 0, -2.95)
+script = ExtResource("1_ladder")
+Height = 3.5
+LinkOutMeters = 0.9

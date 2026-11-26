@@ -24,6 +24,14 @@ public partial class PlayerJumpingState : State
 			StatePlayerDeceleration, StatePlayerAcceleration);
 		playerController.Move();
 
+		// On the way down, a ladder walked into is caught; on the way up it is not, so a jump
+		// off one does not take it again at once (docs/LADDERS.md §4.1).
+		if (playerController.TryGrabLadder(input))
+		{
+			OnStateTransition("PlayerClimbingState");
+			return;
+		}
+
 		if (playerController.IsOnFloor())
 		{
 			PlayerAnimation.Play("jumpend");
