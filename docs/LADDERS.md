@@ -28,8 +28,8 @@ It is there to test whether height makes the levels better before other maps get
 - **From the top, walk off the landing towards the ladder** — within 0.6 m of its face — and it
   is taken from above: the body is drawn out over the edge and goes down.
 - **At the foot,** standing on the ground and not climbing, it lets go.
-- **Jump** to push off: 3.5 m/s out and 3 m/s up. With the walk still into the ladder, it is
-  caught again on the way down.
+- **Jump** to push off: 4.5 m/s out and 3 m/s up, which lands the body about 1.2 m out from the
+  face with nothing held. With the walk still into the ladder, it is caught again on the way down.
 - Crouching and sliding do not take a ladder. Weapons work as they do on the ground.
 
 There is no fall damage (`docs/GROUND_VEHICLES.md`), so a missed rung is a drop, not a death.
@@ -182,7 +182,24 @@ SHOTS=/some/dir ./scripts/ladder-checks.sh listen
   to the first floor, and out onto the ground beyond the scaffold.
 - **net** — a dedicated server and a client. The client climbs the 7 m wall ladder, goes over onto
   the roof, takes it again and comes down, predicted; the server has the body where the client does
-  at the top and at the foot, and the mispredictions are counted.
+  at the top and at the foot, and the mispredictions are counted. A tick the server stepped on a
+  repeated frame because the client's had not arrived (`ServerInputQueue.Starvations`) mispredicts on
+  any ground, so the check holds the mispredictions to no more than those ticks.
 
 With `SHOTS`, the listen part runs on a display and saves views of the building and of each kind of
 ladder first.
+
+### 8.1 What they measured
+
+On the 2026-11-26 build, Godot 4.6 .NET, headless on one machine:
+
+| | |
+|---|---|
+| listen | 49 of 49 facts. Each ladder climbed at 3.00 m/s, held 0.55 m off its face and 0.00 m off its middle; up and over a 3.5 m ladder in 1.7 s, the 7 m one in 2.9 s; down to the foot and let go 0.55 m out at the foot's height. A jump off landed 1.26 m out; with the walk into the ladder it was caught again at the top of the jump's arc, 3.48 m up, having left it at 3.0 m. Steered as a bot: ground to roof in 5.6 s by `LadderEndWall`, roof to first floor in 5.1 s by `LadderToRoof`, first floor to the ground beyond the scaffold in 4.9 s by `LadderScaffold` |
+| net | 10 of 10 facts, three runs: up and down the 7 m ladder with 0 mispredictions and 0 starved ticks each time; the worst error at reconciliation 0.6 cm, under the ledger's threshold for a correction; the server's body and the client's the same to the centimetre at the top and at the foot |
+
+The engine check found three faults in the first build of the building, fixed before these numbers:
+a 0.2 m void between the wall and the lifts left the top lift off the navigation mesh, so the lifts
+now meet the wall; a standard 0.44 m from a building corner wedged a body the navigation mesh (baked
+for a 0.4 m radius) sent through, so the scaffold now stops at the building's ends; and a 3.5 m/s
+jump-off was spent by the fall's deceleration within 0.45 m, so it is 4.5 m/s.

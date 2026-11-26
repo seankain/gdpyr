@@ -166,143 +166,143 @@ material = SubResource("StandardMaterial3D_wall")
 use_collision = true
 
 [node name="Lift1" type="CSGBox3D" parent="Scaffold" unique_id=1700205895]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.46, 5.05)
-size = Vector3(13, 0.08, 1.7)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.46, 4.95)
+size = Vector3(12, 0.08, 1.9)
 material = SubResource("StandardMaterial3D_deck")
 
 [node name="Lift2" type="CSGBox3D" parent="Scaffold" unique_id=1700213814]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.15, 6.96, 5.05)
-size = Vector3(8.7, 0.08, 1.7)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.9, 6.96, 4.95)
+size = Vector3(8.2, 0.08, 1.9)
 material = SubResource("StandardMaterial3D_deck")
 
 [node name="StandardInW6" type="CSGBox3D" parent="Scaffold" unique_id=1700221733]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.4, 4, 4.3)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.9, 4, 4.1)
 size = Vector3(0.08, 8, 0.08)
 material = SubResource("StandardMaterial3D_tube")
 
 [node name="StandardOutW6" type="CSGBox3D" parent="Scaffold" unique_id=1700229652]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.4, 4, 5.8)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.9, 4, 5.8)
 size = Vector3(0.08, 8, 0.08)
 material = SubResource("StandardMaterial3D_tube")
 
 [node name="StandardInW2" type="CSGBox3D" parent="Scaffold" unique_id=1700237571]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.1, 4, 4.3)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 4, 4.1)
 size = Vector3(0.08, 8, 0.08)
 material = SubResource("StandardMaterial3D_tube")
 
 [node name="StandardOutW2" type="CSGBox3D" parent="Scaffold" unique_id=1700245490]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.1, 4, 5.8)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 4, 5.8)
 size = Vector3(0.08, 8, 0.08)
 material = SubResource("StandardMaterial3D_tube")
 
 [node name="StandardInE2" type="CSGBox3D" parent="Scaffold" unique_id=1700253409]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.1, 4, 4.3)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 4, 4.1)
 size = Vector3(0.08, 8, 0.08)
 material = SubResource("StandardMaterial3D_tube")
 
 [node name="StandardOutE2" type="CSGBox3D" parent="Scaffold" unique_id=1700261328]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.1, 4, 5.8)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 4, 5.8)
 size = Vector3(0.08, 8, 0.08)
 material = SubResource("StandardMaterial3D_tube")
 
 [node name="StandardInE6" type="CSGBox3D" parent="Scaffold" unique_id=1700269247]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.4, 2.275, 4.3)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.9, 2.275, 4.1)
 size = Vector3(0.08, 4.55, 0.08)
 material = SubResource("StandardMaterial3D_tube")
 
 [node name="StandardOutE6" type="CSGBox3D" parent="Scaffold" unique_id=1700277166]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.4, 2.275, 5.8)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.9, 2.275, 5.8)
 size = Vector3(0.08, 4.55, 0.08)
 material = SubResource("StandardMaterial3D_tube")
 
 [node name="Ledger1In" type="CSGBox3D" parent="Scaffold" unique_id=1700285085]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.39, 4.3)
-size = Vector3(13, 0.06, 0.06)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.39, 4.1)
+size = Vector3(12, 0.06, 0.06)
 material = SubResource("StandardMaterial3D_tube")
 
 [node name="Ledger2In" type="CSGBox3D" parent="Scaffold" unique_id=1700293004]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.15, 6.89, 4.3)
-size = Vector3(8.7, 0.06, 0.06)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.9, 6.89, 4.1)
+size = Vector3(8.2, 0.06, 0.06)
 material = SubResource("StandardMaterial3D_tube")
 
 [node name="Ledger1Out" type="CSGBox3D" parent="Scaffold" unique_id=1700300923]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.39, 5.8)
-size = Vector3(13, 0.06, 0.06)
+size = Vector3(12, 0.06, 0.06)
 material = SubResource("StandardMaterial3D_tube")
 
 [node name="Ledger2Out" type="CSGBox3D" parent="Scaffold" unique_id=1700308842]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.15, 6.89, 5.8)
-size = Vector3(8.7, 0.06, 0.06)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.9, 6.89, 5.8)
+size = Vector3(8.2, 0.06, 0.06)
 material = SubResource("StandardMaterial3D_tube")
 
 [node name="Rail1MidOuterW" type="CSGBox3D" parent="Scaffold" unique_id=1700316761]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.775, 4, 5.87)
-size = Vector3(1.45, 0.06, 0.06)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.525, 4, 5.87)
+size = Vector3(0.95, 0.06, 0.06)
 material = SubResource("StandardMaterial3D_tube")
 
 [node name="Rail1MidOuterE" type="CSGBox3D" parent="Scaffold" unique_id=1700324680]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.475, 4, 5.87)
-size = Vector3(10.05, 0.06, 0.06)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.225, 4, 5.87)
+size = Vector3(9.55, 0.06, 0.06)
 material = SubResource("StandardMaterial3D_tube")
 
 [node name="Rail1MidEndW" type="CSGBox3D" parent="Scaffold" unique_id=1700332599]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.47, 4, 5.05)
-size = Vector3(0.06, 0.06, 1.7)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.97, 4, 4.95)
+size = Vector3(0.06, 0.06, 1.9)
 material = SubResource("StandardMaterial3D_tube")
 
 [node name="Rail1MidEndE" type="CSGBox3D" parent="Scaffold" unique_id=1700340518]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.47, 4, 5.05)
-size = Vector3(0.06, 0.06, 1.7)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.97, 4, 4.95)
+size = Vector3(0.06, 0.06, 1.9)
 material = SubResource("StandardMaterial3D_tube")
 
 [node name="Rail1TopOuterW" type="CSGBox3D" parent="Scaffold" unique_id=1700348437]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.775, 4.5, 5.87)
-size = Vector3(1.45, 0.06, 0.06)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.525, 4.5, 5.87)
+size = Vector3(0.95, 0.06, 0.06)
 material = SubResource("StandardMaterial3D_tube")
 
 [node name="Rail1TopOuterE" type="CSGBox3D" parent="Scaffold" unique_id=1700356356]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.475, 4.5, 5.87)
-size = Vector3(10.05, 0.06, 0.06)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.225, 4.5, 5.87)
+size = Vector3(9.55, 0.06, 0.06)
 material = SubResource("StandardMaterial3D_tube")
 
 [node name="Rail1TopEndW" type="CSGBox3D" parent="Scaffold" unique_id=1700364275]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.47, 4.5, 5.05)
-size = Vector3(0.06, 0.06, 1.7)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.97, 4.5, 4.95)
+size = Vector3(0.06, 0.06, 1.9)
 material = SubResource("StandardMaterial3D_tube")
 
 [node name="Rail1TopEndE" type="CSGBox3D" parent="Scaffold" unique_id=1700372194]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.47, 4.5, 5.05)
-size = Vector3(0.06, 0.06, 1.7)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.97, 4.5, 4.95)
+size = Vector3(0.06, 0.06, 1.9)
 material = SubResource("StandardMaterial3D_tube")
 
 [node name="Rail2MidOuter" type="CSGBox3D" parent="Scaffold" unique_id=1700380113]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.15, 7.5, 5.87)
-size = Vector3(8.7, 0.06, 0.06)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.9, 7.5, 5.87)
+size = Vector3(8.2, 0.06, 0.06)
 material = SubResource("StandardMaterial3D_tube")
 
 [node name="Rail2MidEndW" type="CSGBox3D" parent="Scaffold" unique_id=1700388032]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.47, 7.5, 5.05)
-size = Vector3(0.06, 0.06, 1.7)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.97, 7.5, 4.95)
+size = Vector3(0.06, 0.06, 1.9)
 material = SubResource("StandardMaterial3D_tube")
 
 [node name="Rail2MidEndE" type="CSGBox3D" parent="Scaffold" unique_id=1700395951]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.17, 7.5, 5.05)
-size = Vector3(0.06, 0.06, 1.7)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.17, 7.5, 4.95)
+size = Vector3(0.06, 0.06, 1.9)
 material = SubResource("StandardMaterial3D_tube")
 
 [node name="Rail2TopOuter" type="CSGBox3D" parent="Scaffold" unique_id=1700403870]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.15, 8, 5.87)
-size = Vector3(8.7, 0.06, 0.06)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.9, 8, 5.87)
+size = Vector3(8.2, 0.06, 0.06)
 material = SubResource("StandardMaterial3D_tube")
 
 [node name="Rail2TopEndW" type="CSGBox3D" parent="Scaffold" unique_id=1700411789]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.47, 8, 5.05)
-size = Vector3(0.06, 0.06, 1.7)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.97, 8, 4.95)
+size = Vector3(0.06, 0.06, 1.9)
 material = SubResource("StandardMaterial3D_tube")
 
 [node name="Rail2TopEndE" type="CSGBox3D" parent="Scaffold" unique_id=1700419708]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.17, 8, 5.05)
-size = Vector3(0.06, 0.06, 1.7)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.17, 8, 4.95)
+size = Vector3(0.06, 0.06, 1.9)
 material = SubResource("StandardMaterial3D_tube")
 
 [node name="LadderScaffold" type="Node3D" parent="." unique_id=1700427627]

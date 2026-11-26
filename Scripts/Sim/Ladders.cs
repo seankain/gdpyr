@@ -156,7 +156,11 @@ public static class Ladders
 	public const float FootBandMeters = 0.5f;
 
 	/// <summary>A jump off a ladder: out from it, and up.</summary>
-	public const float JumpOffSpeed = 3.5f;
+	/// <remarks>
+	/// Out at 4.5 m/s because the fall after it has the ground's deceleration with nothing held
+	/// (0.25 m/s a tick): it carries the body about 0.7 m clear of the hold line.
+	/// </remarks>
+	public const float JumpOffSpeed = 4.5f;
 
 	public const float JumpOffLift = 3f;
 
