@@ -44,6 +44,21 @@ public static class Quantize
 	/// <summary>Decoded yaw is always in [0, 2π).</summary>
 	public static float U16ToYaw(ushort units) => units / YawScale;
 
+	private const float TurretScale = 256f / TwoPi;
+
+	/// <summary>
+	/// A turret's yaw against its hull to 8 bits over a full turn (~1.4° per step): the unit
+	/// snapshot's turret byte (docs/NETCODE.md §6.1). Wraps, as a yaw does.
+	/// </summary>
+	public static byte TurretYawToU8(float radians)
+	{
+		float wrapped = radians - TwoPi * MathF.Floor(radians / TwoPi);
+		return (byte)((int)MathF.Round(wrapped * TurretScale) & 0xFF);
+	}
+
+	/// <summary>Decoded in [-π, π): either way round from straight ahead, the way a turret is turned.</summary>
+	public static float U8ToTurretYaw(byte units) => (units < 128 ? units : units - 256) / TurretScale;
+
 	/// <summary>Pitch to 16 bits over ±90°, clamped: looking past vertical is not a thing.</summary>
 	public static short PitchToI16(float radians) =>
 		(short)MathF.Round(Math.Clamp(radians, -HalfPi, HalfPi) * PitchScale);

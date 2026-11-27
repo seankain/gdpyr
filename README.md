@@ -76,6 +76,9 @@ dedicated-server authoritative.
   launcher modelled, rigged and animated by script (idle, fire, a break-open reload, sights) in
   the arms of `Models/Weapons/arms/`, drawn at its own field of view and driven from the
   simulation; first-person arms against the body's own, and the eye height found on the way
+- [`docs/UNIT_MODELS.md`](docs/UNIT_MODELS.md) — the tank drawn from a low-poly model built by
+  script in Blender instead of its capsule: its hull faces the way it goes and its turret what it
+  shoots at, the turret's yaw one byte more in the unit record, and what still is the capsule
 - [`docs/OUTPOST.md`](docs/OUTPOST.md) — the outpost, a builder's fourth structure, and the two units
   it trains: the scout drone, which hovers 12 m up, reveals the ground force to the strategist, patrols,
   and goes off once on the strategist's explicit strike order; and the operative, fast and soft, who
@@ -148,6 +151,8 @@ Units/          UnitDefinition resources: three fighting tiers, the builder, the
 Structures/     StructureDefinition resources: pillbox, sandbag wall, sniper tower, outpost
 Models/Weapons/ Weapon art: the launcher's world model and viewmodel (built by
                 tools/blender/launcher.py) and the first-person arms they are built from
+Models/Vehicles/ Vehicle art: the tank, whose turret turns free of its hull (built by
+                tools/blender/tank.py; docs/UNIT_MODELS.md)
 Tests/          xUnit over the engine-free sources — `dotnet test`, no Godot needed
 Tests/Scenarios/ Playtest scenario files: data, and authoring one needs no Godot install
 ThirdParty/     Vendored source: FluidHTN at a pinned commit (docs/HTN_BOTS.md §3.8); and assets: the
@@ -158,7 +163,7 @@ tools/          External processes that talk to a server over a socket: the agen
                 divergence probe, the playtest harness, a Python client, and the HTN planner
                 probes and benchmark (docs/HTN_BOTS.md §3). Never part of the
                 game assembly (docs/TRAINING.md). And tools/blender/: scripts that build models
-                with Blender's `bpy` (the Gully's bridge, the launcher), and what they build
+                with Blender's `bpy` (the Gully's bridge, the launcher, the tank), and what they build
 ```
 
 The simulation runs in `_PhysicsProcess` at a fixed 60 Hz and reads nothing but the recorded

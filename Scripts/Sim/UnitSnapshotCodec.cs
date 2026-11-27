@@ -32,7 +32,7 @@ public static class UnitSnapshotCodec
 {
 	/// <summary>
 	/// Units in one packet. At <see cref="UnitSnapshot.SizeBytes"/> each this is
-	/// 901 bytes with the header, which stays inside a single datagram — the
+	/// 965 bytes with the header, which stays inside a single datagram — the
 	/// broadcast is unreliable, so a fragmented one would be a packet that is
 	/// mostly lost rather than mostly late.
 	/// </summary>
@@ -78,6 +78,9 @@ public static class UnitSnapshotCodec
 			into[offset + 11] = UnitBodyFlags.Pack(u.State, u.Team, aboard, u.Posture);
 			into[offset + 12] = UnitFlightFlags.Pack(u.Phase, u.CannotLand);
 			into[offset + 13] = u.HealthPercent;
+
+			// A passenger's turret, like its heading, means nothing (and nothing that rides has one).
+			into[offset + 14] = aboard ? (byte)0 : Quantize.TurretYawToU8(u.TurretYaw);
 			offset += UnitSnapshot.SizeBytes;
 		}
 
@@ -120,6 +123,7 @@ public static class UnitSnapshotCodec
 				Phase = UnitFlightFlags.PhaseOf(flight),
 				CannotLand = UnitFlightFlags.CannotLand(flight),
 				Posture = UnitBodyFlags.PostureOf(body),
+				TurretYaw = ridingIn != 0 ? 0f : Quantize.U8ToTurretYaw(payload[offset + 14]),
 			};
 			offset += UnitSnapshot.SizeBytes;
 		}
