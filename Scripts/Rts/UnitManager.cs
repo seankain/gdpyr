@@ -696,10 +696,10 @@ public partial class UnitManager : Node
 		{
 			unit.Steer(destination, hasDestination && !holding, SimConfig.TickDelta);
 		}
-		if (unit.HasTurret)
+		if (unit.FacesTravel)
 		{
-			// The hull the way it is going, the turret at what it is shooting
-			// (docs/UNIT_MODELS.md §3).
+			// The hull the way it is going, a turret at what it is shooting
+			// (docs/UNIT_MODELS.md §3, §7.3).
 			unit.FaceTravelAndLay(targetPoint, hasTarget, SimConfig.TickDelta);
 		}
 		else

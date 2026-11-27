@@ -1,6 +1,7 @@
 [gd_resource type="Resource" script_class="UnitDefinition" format=3]
 
 [ext_resource type="Script" path="res://Scripts/Rts/UnitDefinition.cs" id="1_unitdef"]
+[ext_resource type="PackedScene" uid="uid://bq78pntw728va" path="res://Models/Vehicles/supply_truck/supply_truck.glb" id="2_model"]
 
 [resource]
 script = ExtResource("1_unitdef")
@@ -24,4 +25,6 @@ MaxRounds = 48
 Grenades = 0
 SupplyRadiusMeters = 12.0
 Doctrine = 0
-Color = Color(0.3, 0.75, 0.45, 1)
+FacesTravel = true
+Color = Color(0.77, 0.67, 0.51, 1)
+Model = ExtResource("2_model")

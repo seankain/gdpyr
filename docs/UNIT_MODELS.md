@@ -1,8 +1,10 @@
-# gdpyr — Unit models: the tank, drawn from a model whose turret turns free of its hull
+# gdpyr — Unit models: the tank, whose turret turns free of its hull, and the supply truck
 
 The tank was drawn as its collision capsule: a 3 m by 1.3 m pill in its colour. It is now drawn as a
 low-poly, faceted main battle tank built in Blender, whose turret turns on its own: the hull faces
-the way the tank is going and the turret what it is shooting at.
+the way the tank is going and the turret what it is shooting at. The supply truck, also a capsule
+until now, is drawn as a six-wheeled cargo truck with a canvas tilt, built the same way, and faces
+the way it is going too (§7). §1 to §6 are the tank's.
 
 | What | Where |
 |---|---|
@@ -97,8 +99,9 @@ the wreck's debris is the definition's `Color`, now the model's tan.
 to face its target, or else where it is going (`Unit.FaceTowards`), a turreted unit calls
 `Unit.FaceTravelAndLay` after it has moved:
 
-- **the hull** turns to its velocity when it is going faster than 0.5 m/s, and otherwise keeps the
-  way it faces — so a tank that stops to fight does not swing its hull round;
+- **the hull** turns to its velocity when it is going faster than 0.5 m/s and is not yet within its
+  arrival radius of where it is going, and otherwise keeps the way it faces — so a tank that stops
+  to fight does not swing its hull round, and one parked on a move order does not shake (§7.3);
 - **the turret** turns to the target, or to the place it is firing on, and back square to the hull
   when it has neither. Its yaw against the hull is `Unit.TurretYaw`, in [−π, π).
 
@@ -174,5 +177,129 @@ check also keeps the tank from scanning (`Unit.NextScanTick`).
   check's facts.
 - **The gun does not elevate** in the game: it is drawn level. The `Gun` node turns about its
   trunnions for it, but the record carries no pitch.
-- **No other unit has a model** yet; the technical and the supply truck are still capsules.
-  `UnitDefinition.Model` is how one would be given one.
+- **The technical has no model** yet, and is still a capsule. `UnitDefinition.Model` is how it
+  would be given one; the supply truck has been (§7).
+
+---
+
+## 7. The supply truck
+
+| What | Where |
+|---|---|
+| generator (geometry, materials, export, a closed-and-outward check, preview renders) | `tools/blender/supply_truck.py` |
+| the scene it builds, to open by hand | `tools/blender/SupplyTruck.blend` |
+| the model the game draws | `Models/Vehicles/supply_truck/supply_truck.glb` |
+| which unit draws it, and that it faces the way it goes | `Units/supply_truck.tres` (`Model`, `FacesTravel`) |
+| facing, and the ring's colour | `Scripts/Rts/Unit.cs` (`FacesTravel`, `FaceTravelAndLay`, `AtDestination`, `SupplyRingColor`), `Scripts/Rts/UnitManager.cs` |
+| engine check | `tools/EngineChecks/SupplyTruckModelChecks.cs`, `scripts/supply-truck-model-checks.sh` |
+
+### 7.1 What is asked, and what is not
+
+The capsule — 2.4 m by 1.1 m, in the green of its ring — needed replacing with a model after a concept
+rendering: a bonneted six-wheeled cargo truck. A long, crowned, faceted bonnet over a grille of four
+tall slots; angular front wings flaring out over the front wheels; a heavy bumper with a round lamp on
+it either side, two rectangular recesses, three round holes and a towing eye; a square cab with a
+two-pane windscreen under a peaked roof, doors with windows and handles, and tall mirrors on braced
+arms; a dark fuel tank behind the cab; single, big-lugged tyres on three axles; and a dropside bed of
+louvred panels between stakes, under an olive canvas tilt that hangs in scallops between its bows.
+Sand-coloured, the running gear dark.
+
+Not changed: what it collides with and is hit as (still its capsule), its stats, how far it
+resupplies, and its ring. No markings.
+
+### 7.2 The model
+
+Built by script, as the tank is (§2), every dimension a number in `PARAMS`:
+
+```bash
+python3 tools/blender/supply_truck.py                    # needs bpy (§2)
+python3 tools/blender/supply_truck.py --render /some/dir # also preview renders (Cycles on the CPU)
+```
+
+It writes `Models/Vehicles/supply_truck/supply_truck.glb` and `tools/blender/SupplyTruck.blend`, and
+prints the triangles and extents in Godot's axes, and whether every piece is closed and faces
+outward. At the time of writing: 6,358 triangles in 286 closed pieces, none facing inward, no open
+edge. That last check is there because Godot culls back faces and the Cycles previews do not: a face
+turned the wrong way would be a hole in the game that no preview shows. As with the tank, two runs
+give the same model but not the same bytes.
+
+**Axes and origin** as the tank's: the bumper down Godot's −Z, where a unit at yaw 0 faces; the
+origin on the ground under the middle of its length. **One mesh**, `Truck`: nothing on it moves on its
+own in the game.
+
+**Size.** 7.43 m from bumper to tailboard, 2.66 m across the wings and 3.02 m across the mirrors; the
+cab roof 2.65 m up and the tilt's ridge 2.80 m. Wheels 1.15 m across, axles 4.0 m and 1.4 m apart. It
+stands out of its 2.2 m-wide capsule by about 2.6 m fore and aft: §3.3 holds for it as for the tank.
+
+**Paint.** Nine materials, flat-shaded, no textures: sand, olive canvas, a dark grey for the chassis
+and fittings, tyre, hub, glass, black for the grille's slots and the bumper's holes, pale lamp lenses
+and red tail lamps (`TruckSand`, `TruckCanvas`, `TruckDark`, `TruckTyre`, `TruckHub`, `TruckGlass`,
+`TruckBlack`, `TruckLens`, `TruckTailLamp`). The engine check finds the lamps and the tilt by name.
+
+![In Blender: front three-quarter, side, top, rear three-quarter](baselines/supply-truck-model-blender.png)
+
+![In Godot 4.6, from the imported .glb, beside the tank: from the front, from behind, and from a strategist's height](baselines/supply-truck-model-godot.png)
+
+### 7.3 In the game
+
+- **Drawn** by `Unit.BuildModel`, as the tank is (§3.1): `Units/supply_truck.tres` names the model; it
+  casts no shadow; it has no node named `Turret`, so nothing on it is turned.
+- **Its colour.** The definition's `Color` is now the model's sand, so the debris of its wreck is the
+  colour of what was drawn. The ring keeps the green it had: it is a colour of its own
+  (`Unit.SupplyRingColor`), as the barracks' ring has its red, where it used to be the truck's.
+- **It faces the way it goes.** It used to turn whole to its target, or to where it was going — the
+  end of its path, not the next corner of it. On a capsule that cannot be seen; on a truck it is a
+  truck driving sideways at whatever it fires on, or across the bend of its path.
+  `UnitDefinition.FacesTravel`, true for the supply truck alone, gives it the tank's hull (§3.2): it
+  turns to its velocity when it is going faster than 0.5 m/s, keeps the way it faces when it stops,
+  and never turns to its target. It has no turret: `Unit.FaceTravelAndLay` lays nothing for it, and
+  its turret byte on the wire stays 0. Facing is cosmetic, and nothing about its shots changed: they
+  leave from its eye along the direction the caller computes.
+- **Where it was sent, it holds still to the eye.** A ground unit on a move order does not stop dead
+  at the point: `Unit.Steer` sets full speed towards it every tick, so for as long as the order names
+  it the unit steps over it and back, 0.11 m a tick — the check measured 6.5 m/s within 2.5 m of where
+  it was sent. A capsule does not show it; a hull turned to that velocity shook on the spot, 5.73° a
+  tick (the check, with the guard taken out). So a hull turns to its velocity only while it is
+  farther than its arrival radius from where it is going (`Unit.AtDestination`). The tank's hull had
+  the same shake when parked on a move order, and now does not; its check, which never arrives, is
+  unchanged.
+
+Nothing on the wire changed: a unit's yaw was always in its record, and a client draws the model from
+it.
+
+### 7.4 Checks
+
+- `scripts/supply-truck-model-checks.sh` (Godot 4.6 .NET, headless):
+  - **listen** — a listen host places a supply truck: it faces the way it goes and has no turret;
+    drawn as `supply_truck.glb` and not the capsule; 7.43 m long, 3.02 m across, 2.80 m high, centred
+    on its feet and standing on the ground; its lamps down −Z and its tilt behind; no shadows; still
+    its 2.4 m by 1.1 m capsule; its 12 m ring still drawn, in the supply green. Firing for a second on
+    a place 15 m to its right, it does not turn; driving off ahead and to its right with the place in
+    reach all the way, firing still, it turns to the way it goes, never more than 5° off it; where it
+    was sent, its order standing and its feet never still, it holds the way it faces; held, firing
+    still, it keeps it. Its turret byte is 0 every tick.
+  - **net** — a server places a supply truck and drives it off; the client draws it as the model, the
+    same facts as above on how it is drawn, facing the way the server parked it. (The editor binary's
+    `--server` is not a `dedicated_server` build, so it draws the model as well; nothing is claimed
+    here about what a dedicated server draws.)
+- `python3 tools/blender/supply_truck.py --render DIR`: front three-quarter, side, top, rear
+  three-quarter.
+
+**Result, on the branch that adds it** (Godot 4.6 .NET, headless): listen 16 of 16, server 2 of 2,
+client 9 of 9 (`docs/baselines/supply-truck-model-checks.txt`). The check does tell: with
+`FacesTravel` taken out of `Units/supply_truck.tres`, four facts fail — it turns 90° to the place it
+fires on, drives up to 80° off the way it goes, and shifts 13° where it was sent; with the guard on
+the arrival radius taken out, one fails, the 5.73° shake. `scripts/tank-model-checks.sh` still 17 of
+17, and 2 and 10 of 10. `dotnet test` 4,091 of 4,091, which compiles none of `Scripts/Rts`.
+
+The Godot picture in §7.2 is the imported `.glb` rendered by Godot 4.6's Compatibility renderer
+(Mesa llvmpipe, under Xvfb): back faces culled, nothing missing.
+
+### 7.5 Not done
+
+- **Its wheels do not turn or steer**: one mesh, nothing on it moving.
+- **The capsule is still what it is hit as** (§3.3), and the truck stands out of it further than the
+  tank does: a round can pass through the drawn bonnet or tailboard.
+- **Its muzzle flash** is drawn at the capsule's edge on the line of fire
+  ([`MUZZLE_EFFECTS.md`](MUZZLE_EFFECTS.md) §2.1), which on this model can be inside the cab or bed;
+  the model has no node for a gun to fire from.

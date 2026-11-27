@@ -315,15 +315,27 @@ public partial class UnitDefinition : Resource
 	[Export]
 	public bool HasTurret;
 
+	/// <summary>
+	/// Whether its body faces the way it is moving rather than what it is shooting at
+	/// (docs/UNIT_MODELS.md §7.3): the supply truck's, drawn as a truck with a front and a back,
+	/// which turned whole to its target would be drawn driving sideways. It keeps the way it
+	/// faces when it stops. A turreted unit's hull does this whatever this says
+	/// (<see cref="HasTurret"/>). False for everything else, and what a file that says nothing
+	/// gets. Cosmetic, as facing is: where its shots come from and go is the same either way.
+	/// </summary>
+	[Export]
+	public bool FacesTravel;
+
 	[ExportCategory("Presentation")]
 
 	[Export]
 	public Color Color = new(0.85f, 0.25f, 0.2f);
 
 	/// <summary>
-	/// A model a vehicle is drawn as in place of its capsule (docs/UNIT_MODELS.md §2): the tank's
-	/// <c>Models/Vehicles/tank/tank.glb</c>. Its origin is the unit's feet and it faces -Z, as a
-	/// unit at yaw 0 does; a node in it named <c>Turret</c> is turned to the turret's yaw. Null
+	/// A model a vehicle is drawn as in place of its capsule (docs/UNIT_MODELS.md §2, §7): the
+	/// tank's <c>Models/Vehicles/tank/tank.glb</c>, the supply truck's
+	/// <c>Models/Vehicles/supply_truck/supply_truck.glb</c>. Its origin is the unit's feet and it
+	/// faces -Z, as a unit at yaw 0 does; a node in it named <c>Turret</c> is turned to the turret's yaw. Null
 	/// draws the capsule. Drawn only: what it collides with and is hit as stays the capsule.
 	/// </summary>
 	[Export]
