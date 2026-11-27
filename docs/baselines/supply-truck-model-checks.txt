@@ -1,0 +1,40 @@
+# GODOT=<Godot 4.6 .NET> ./scripts/supply-truck-model-checks.sh: a headless listen host on Test.tscn, then a headless server and client.
+# Run on the branch that adds it (docs/UNIT_MODELS.md §7.4).
+[checks] supply truck model check: listen
+[checks] PASS listen: a supply truck is placed; it faces the way it goes, and has no turret
+[checks] PASS listen: it is drawn as res://Models/Vehicles/supply_truck/supply_truck.glb and not as the capsule (res://Models/Vehicles/supply_truck/supply_truck.glb)
+[checks] measured listen: extents x -1.51..1.51, y 0.000..2.80, z -3.68..3.75; tilt z 0.29..3.75, lamps z -3.53..-3.51
+[checks] PASS listen: it is a truck's size, 7.43 m long, 3.02 m across its mirrors and 2.80 m high, over its feet, standing on the ground
+[checks] PASS listen: its lamps are ahead, down -Z, the way a unit at yaw 0 faces, and its tilt behind
+[checks] PASS listen: it casts no shadow, as the capsule cast none
+[checks] PASS listen: it still collides, and is hit, as its 2.4 m by 1.1 m capsule
+[checks] PASS listen: it still draws its 12 m supply ring, in the supply green ((0.3, 0.75, 0.45, 1))
+[checks] PASS listen: it fires on a place 15 m to its right
+[checks] PASS listen: standing a second, firing, it does not turn to it (0.00° → 0.00°; turret byte 0)
+[checks] measured listen: moved 11.3 m; facing -45.00°, last travel -45.00°; 159 ticks within 2.5 m of where it was sent, moving at up to 6.5 m/s there
+[checks] PASS listen: it drives off (11.3 m, 50 ticks on the way)
+[checks] PASS listen: it turns to the way it is going (0.00° → -45.00°), never more than 0.00° off it
+[checks] PASS listen: firing on the place as it goes
+[checks] PASS listen: there, on its move order still, it holds the way it faces, its feet never still: 0.00° over 159 ticks
+[checks] PASS listen: and is drawn facing that way
+[checks] PASS listen: its turret yaw stays zero on the wire, every tick (-0.00°)
+[checks] PASS listen: held and firing still, it keeps the way it faces (-45.00° → -45.00°)
+[checks] listen: 16 of 16 facts hold
+[checks] supply truck model check: server
+[checks] PASS server: a client has joined
+[checks] PASS server: a supply truck is placed (unit 1)
+[checks] measured server: parked facing -71.57°
+[checks] server: 2 of 2 facts hold
+[checks] supply truck model check: client
+[checks] PASS client: the client has the server's supply truck (unit 1), as a puppet
+[checks] PASS client: it is drawn as res://Models/Vehicles/supply_truck/supply_truck.glb and not as the capsule (res://Models/Vehicles/supply_truck/supply_truck.glb)
+[checks] measured client: extents x -1.51..1.51, y 0.000..2.80, z -3.68..3.75; tilt z 0.29..3.75, lamps z -3.53..-3.51
+[checks] PASS client: it is a truck's size, 7.43 m long, 3.02 m across its mirrors and 2.80 m high, over its feet, standing on the ground
+[checks] PASS client: its lamps are ahead, down -Z, the way a unit at yaw 0 faces, and its tilt behind
+[checks] PASS client: it casts no shadow, as the capsule cast none
+[checks] PASS client: it still collides, and is hit, as its 2.4 m by 1.1 m capsule
+[checks] PASS client: it still draws its 12 m supply ring, in the supply green ((0.3, 0.75, 0.45, 1))
+[checks] PASS client: it faces the way the server parked it: 288.44° against -71.57°
+[checks] PASS client: and is drawn that way
+[checks] client: 9 of 9 facts hold
+# exit 0

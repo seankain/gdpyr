@@ -27,8 +27,8 @@ namespace Gdpyr.Rts;
 /// capsule's height to disagree with the hitbox's. A unit on foot is drawn as a
 /// <see cref="HumanoidRig"/> as tall as that capsule, in its definition's colour; a
 /// vehicle as its definition's model where it has one — the tank's, whose turret turns
-/// free of its hull (docs/UNIT_MODELS.md) — and as the capsule where it does not; an
-/// aircraft as its airframe.
+/// free of its hull, and the supply truck's (docs/UNIT_MODELS.md) — and as the capsule
+/// where it does not; an aircraft as its airframe.
 /// </summary>
 public partial class Unit : CharacterBody3D, IHumanoidPoseSource
 {
@@ -357,6 +357,13 @@ public partial class Unit : CharacterBody3D, IHumanoidPoseSource
 	/// <summary>True for a unit whose gun turns on a turret free of its hull: the tank.</summary>
 	public bool HasTurret => Definition?.HasTurret == true;
 
+	/// <summary>
+	/// True for a unit whose body faces the way it is moving, not its target, and keeps the way
+	/// it faces when it stops (<see cref="FaceTravelAndLay"/>): a turreted unit's hull, and the
+	/// supply truck (<see cref="UnitDefinition.FacesTravel"/>).
+	/// </summary>
+	public bool FacesTravel => Definition is { } definition && (definition.HasTurret || definition.FacesTravel);
+
 	/// <summary>The drawn turret, on a peer that draws a model with one; null otherwise.</summary>
 	public Node3D Turret => _turret;
 
@@ -575,22 +582,29 @@ public partial class Unit : CharacterBody3D, IHumanoidPoseSource
 	}
 
 	/// <summary>
-	/// A turreted unit's facing over this tick (docs/UNIT_MODELS.md §3), in place of
-	/// <see cref="FaceTowards"/>: the hull to the way it is moving, if it is moving — it
-	/// keeps the way it faces when it stops, to fight or otherwise — and the turret to
+	/// The facing over this tick of a unit that <see cref="FacesTravel">faces the way it
+	/// goes</see> (docs/UNIT_MODELS.md §3, §7.3), in place of <see cref="FaceTowards"/>:
+	/// the hull to the way it is moving, if it is moving — it keeps the way it faces when
+	/// it stops, to fight or otherwise — and, for a turreted unit, the turret to
 	/// <paramref name="point"/> when there is one, back square to the hull when there is
 	/// not. Called after the unit has moved this tick, so the turret is laid from where
 	/// the hull has turned to. Both turn at the rate a unit always turned to face its
 	/// target, so the gun is on it as soon as it ever was; and, as with
-	/// <see cref="FaceTowards"/>, where the shots go is not decided here.
+	/// <see cref="FaceTowards"/>, where the shots go is not decided here. A unit without
+	/// a turret has nothing to lay: its turret yaw is left alone, and goes on the wire as zero.
 	/// </summary>
 	public void FaceTravelAndLay(Vector3 point, bool hasPoint, float dt)
 	{
 		Vector3 travel = Velocity;
 		travel.Y = 0f;
-		if (travel.LengthSquared() > HullTurnSpeedMetersPerSecond * HullTurnSpeedMetersPerSecond)
+		if (travel.LengthSquared() > HullTurnSpeedMetersPerSecond * HullTurnSpeedMetersPerSecond && !AtDestination())
 		{
 			FaceTowards(GlobalPosition + travel, dt);
+		}
+
+		if (!HasTurret)
+		{
+			return;
 		}
 
 		float wanted = 0f;
@@ -609,6 +623,24 @@ public partial class Unit : CharacterBody3D, IHumanoidPoseSource
 
 		float step = TurnRateRadians * dt;
 		TurnTurretTo(TurretYaw + Mathf.Clamp(Mathf.AngleDifference(TurretYaw, wanted), -step, step));
+	}
+
+	/// <summary>
+	/// Whether it is going nowhere, or is within its arrival radius of where it is going. A
+	/// ground unit there does not stop dead: on an order that still names the point it steps
+	/// over it and back at full speed, tick by tick (<see cref="Steer"/>), so its velocity
+	/// there is not a way it is going, and a hull turned to it would shake on the spot.
+	/// </summary>
+	private bool AtDestination()
+	{
+		if (!_hasDestination)
+		{
+			return true;
+		}
+
+		Vector3 left = _destination - GlobalPosition;
+		left.Y = 0f;
+		return left.LengthSquared() <= Traits.ArrivalRadiusMeters * Traits.ArrivalRadiusMeters;
 	}
 
 	/// <summary>Sets the turret's yaw against the hull, wrapped into [-π, π), and turns the drawn turret to it.</summary>
@@ -1127,6 +1159,9 @@ public partial class Unit : CharacterBody3D, IHumanoidPoseSource
 		MaterialOverride = material,
 	};
 
+	/// <summary>The supply ring's green: its own, as the barracks' ring has its red, whatever colour the truck is.</summary>
+	private static readonly Color SupplyRingColor = new(0.3f, 0.75f, 0.45f);
+
 	/// <summary>
 	/// A line on the ground at a supply truck's reach, as a barracks draws its ring:
 	/// a strategist sending units to it, and a player deciding whether it is worth
@@ -1150,7 +1185,7 @@ public partial class Unit : CharacterBody3D, IHumanoidPoseSource
 			CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
 			MaterialOverride = new StandardMaterial3D
 			{
-				AlbedoColor = Definition?.Color ?? new Color(0.3f, 0.75f, 0.45f),
+				AlbedoColor = SupplyRingColor,
 				ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
 			},
 		});
