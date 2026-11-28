@@ -104,6 +104,12 @@ dedicated-server authoritative.
   rule to show a test fails, and the engine checks in `scripts/level-editor-checks.sh`; and what is
   left for a person — the box, two machines, and everything drawn looked at
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — AWS EC2 dedicated-server runbook
+- [`docs/UNIT_STRESS_TEST.md`](docs/UNIT_STRESS_TEST.md) — a development scene for finding how many
+  strategist units can fight on screen before a frame gets too slow: an offline round, run on its own
+  (`Scenes/Dev/UnitStressTest.tscn`), where the player is the ground force with the locker and the
+  kiosk, and a panel on `F10` puts units round a barracks — waves, a count kept alive, or a ramp that
+  stops under a frame-rate floor — and reads the frame, the unit pass and the physics tick; nothing in
+  the game is changed for it
 
 ## Layout
 
@@ -133,6 +139,8 @@ Scripts/Ui/     Main menu and server browser, role select, pause menu, reticle, 
 Scripts/Ui/Spectator/ The spectator's camera, and the AI debugger's panel, graph and world overlay
 Scripts/MapEditor/ The map editor (docs/LEVEL_EDITOR.md §8): its scene's root, panels and keys; what
                 it does to a map is Scripts/Sim/Level/MapEditSession.cs and MapStore.cs
+Scripts/Dev/    Development tools in scenes of their own: the unit stress test's node, panel and the
+                rules they share (docs/UNIT_STRESS_TEST.md). Nothing in a round uses them
 Scripts/Effects/ Explosions as drawn: the pooled manager, the placeholder, and the contract art
                 replaces it under (docs/EFFECTS.md); what they decide is Scripts/Sim/Explosions.cs.
                 Weapon sounds as played (docs/AUDIO.md); what they are made of and when a round
@@ -146,6 +154,7 @@ Effects/        Art an artist edits in the Godot editor: Effects/Hurt/, the hurt
 Scenes/         Main menu, greybox map, player, humanoid body, weapon, pause menu
 Scenes/Maps/    The template new maps inherit from (docs/MAPS.md)
 Scenes/MapEditor/ The map editor's scene (docs/LEVEL_EDITOR.md §8)
+Scenes/Dev/     Development scenes, run on their own and in no catalog: the unit stress test
 Scenes/Environment/ Map pieces: the barracks, the pillbox, the vehicle test strip, the scaffold
                 building (docs/LADDERS.md §7)
 Units/          UnitDefinition resources: three fighting tiers, the builder, the supply truck, the
