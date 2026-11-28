@@ -17,7 +17,7 @@
 #   ./scripts/crew-vehicle-checks.sh net        # GV3: a dedicated server and four clients
 #   ./scripts/crew-vehicle-checks.sh combat     # GV4: a dedicated server, a driver, a gunner, a passenger
 #   ./scripts/crew-vehicle-checks.sh heli       # GV5: the helicopter on a listen host
-#   ./scripts/crew-vehicle-checks.sh heli-net   # GV5: a dedicated server, a pilot and a door passenger
+#   ./scripts/crew-vehicle-checks.sh heli-net   # GV5: a dedicated server, a pilot and a passenger
 #   ./scripts/crew-vehicle-checks.sh kiosk      # GV6: the vehicle kiosk on a listen host
 #   ./scripts/crew-vehicle-checks.sh kiosk-pad  # GV6: the same map with the helicopter's pad in a wall
 #   ./scripts/crew-vehicle-checks.sh kiosk-net  # GV6: a dedicated server and a client asking the kiosk
@@ -28,8 +28,8 @@
 # RTT, 20 ms jitter — DEPLOYMENT.md §4's tc netem line, in user space, for kernels
 # without sch_netem), and a driver, a passenger and a strategist through it; a fourth
 # client joins once the server asks. `combat` is the same set-up with a driver, a gunner
-# and a passenger, firing from the 4x4 and at it; `heli-net` a pilot and a passenger in the
-# helicopter's door. All three require python3 as well.
+# and a passenger, firing from the 4x4 and at it; `heli-net` a pilot and a passenger on the
+# helicopter's left seat. All three require python3 as well.
 #
 # Requires a Godot 4.6 .NET binary on PATH (or $GODOT) and the .NET SDK. One line per
 # fact, PASS or FAIL; exits non-zero when any fails. KEEP=1 keeps the copy and its logs.

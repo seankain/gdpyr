@@ -294,7 +294,7 @@ public static class ScenarioVehicles
 	public static readonly string[][] Roles =
 	{
 		new[] { "driver", "gunner", "passenger" },
-		new[] { "driver", "passenger" },
+		new[] { "driver", "passenger", "passenger" },
 	};
 
 	/// <summary>

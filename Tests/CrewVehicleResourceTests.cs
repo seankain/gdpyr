@@ -224,17 +224,19 @@ public class CrewVehicleResourceTests
 		Assert.Equal(new[] { SeatRole.Driver, SeatRole.Gunner, SeatRole.Passenger }, Array.ConvertAll(truck, s => s.Role));
 		Assert.Equal(new[] { true, false, false }, Array.ConvertAll(truck, s => s.Enclosed));
 
+		// §17: the helicopter's two passengers sit on its outer seats, one each side — the left
+		// seat ahead of the stub wing, the right one behind it.
 		CrewSeat[] helicopter = CrewVehicleFiles.Seats(CrewVehicleFiles.HelicopterPath);
-		Assert.Equal(new[] { SeatRole.Driver, SeatRole.Passenger }, Array.ConvertAll(helicopter, s => s.Role));
-		Assert.Equal(new[] { true, false }, Array.ConvertAll(helicopter, s => s.Enclosed));
-
-		// The helicopter's passenger is in the left door: their capsule is on the −X side.
+		Assert.Equal(new[] { SeatRole.Driver, SeatRole.Passenger, SeatRole.Passenger }, Array.ConvertAll(helicopter, s => s.Role));
+		Assert.Equal(new[] { true, false, false }, Array.ConvertAll(helicopter, s => s.Enclosed));
 		Assert.True(helicopter[1].Capsule.Center.X < -0.9f);
+		Assert.True(helicopter[2].Capsule.Center.X > 0.9f);
+		Assert.True(helicopter[1].Capsule.Center.Z < 0f && helicopter[2].Capsule.Center.Z > 0f);
 	}
 
 	[Theory]
 	[InlineData(CrewVehicleFiles.FourByFourPath, 3, 4)]
-	[InlineData(CrewVehicleFiles.HelicopterPath, 2, 2)]
+	[InlineData(CrewVehicleFiles.HelicopterPath, 3, 4)]
 	public void EverySeatArray_HoldsOneEntryASeat_AndEveryHullArrayOneABox(string path, int seats, int boxes)
 	{
 		Dictionary<string, string> file = CrewVehicleFiles.Resource(path);

@@ -18,7 +18,7 @@ namespace Gdpyr.Fps;
 /// <see cref="SpringArm3D"/> behind and above the hull, turned by the player's look, so
 /// it does not pass through walls. The 4x4's look follows the truck
 /// (<see cref="TryDrivenHullYaw"/>); the helicopter turns to the look.</item>
-/// <item><b>At the gun or in the bed or the door</b>: first person, through the body's
+/// <item><b>At the gun, in the bed or on an outer seat</b>: first person, through the body's
 /// own camera, which the pin has put at the seat's eye. The viewmodel is kept for a
 /// passenger, whose weapon is their own, and hidden at the gun, whose is the vehicle's.</item>
 /// </list>
@@ -27,6 +27,13 @@ public partial class CrewSeatView : Node3D
 {
 	/// <summary>How far above the vehicle's origin the chase camera's arm pivots [m].</summary>
 	private const float PivotHeightMeters = 2.2f;
+
+	/// <summary>
+	/// The helicopter's arm pivots at its rotor's head (docs/GROUND_VEHICLES.md §17): from
+	/// 2.2 m the middle of the view, which runs through the pivot, crossed its fin and T-tail,
+	/// 3.45 m up and 6 m behind it; from here it passes 1.3 m over them.
+	/// </summary>
+	private const float HelicopterPivotHeightMeters = 3.4f;
 
 	/// <summary>How far back the arm reaches, before a wall shortens it [m].</summary>
 	private const float ArmLengthMeters = 7f;
@@ -108,7 +115,8 @@ public partial class CrewSeatView : Node3D
 		}
 
 		// The hull as it is drawn, a driver's correction still being drawn away included (§8.2).
-		_pivot.GlobalPosition = vehicle.DrawnPose.Position + (Vector3.Up * PivotHeightMeters);
+		float pivotHeight = vehicle.Kind == CrewVehicleKind.Helicopter ? HelicopterPivotHeightMeters : PivotHeightMeters;
+		_pivot.GlobalPosition = vehicle.DrawnPose.Position + (Vector3.Up * pivotHeight);
 		float pitch = Mathf.Clamp(character.Pitch - ArmDownRadians, ArmPitchMinRadians, ArmPitchMaxRadians);
 		_pivot.GlobalBasis = Basis.FromEuler(new Vector3(pitch, character.Yaw, 0f));
 

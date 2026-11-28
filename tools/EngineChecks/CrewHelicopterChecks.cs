@@ -32,8 +32,8 @@ namespace Gdpyr.EngineChecks;
 /// against it in the air, in its shells' reach and out of it, and on the ground (§14); and
 /// the bunker, solid since GV5: its wall, its door's sill and the units' way round it.</item>
 /// <item><c>server</c>, <c>pilot</c>, <c>passenger</c>: a dedicated server and two
-/// clients behind the relay (40 ± 10 ms each way): both in over the link; the door's arc
-/// on the floor; the passenger firing from the door while the pilot flies at full speed,
+/// clients behind the relay (40 ± 10 ms each way): both in over the link; the left seat's arc
+/// on the floor; the passenger firing from the left seat while the pilot flies at full speed,
 /// each round's two origins logged by projectile id, at a strategist rifleman on the
 /// floor; landing on the floor; the pilot out at 4 m and it settling with the passenger
 /// aboard; landing on the bunker's roof and both out on it; and the mortar letting go of
@@ -972,13 +972,13 @@ public partial class CrewHelicopterChecks : Node
 		Place(_passenger, heli, SeatRole.Passenger);
 		Mark("board");
 		foreach (bool _ in Until(() => crew.IsDriving(_pilot, out _) && heli.Aboard == 2, 20 * Second)) yield return true;
-		Fact(!_timedOut, "over the link, the pilot is at the controls and the passenger in the door");
+		Fact(!_timedOut, "over the link, the pilot is at the controls and the passenger on the left seat");
 
-		// 2. The door's arc, parked: the passenger's own facts.
+		// 2. The left seat's arc, parked: the passenger's own facts.
 		Mark("arc");
 		foreach (bool _ in Until(() => Has("passenger-arc"), 30 * Second)) yield return true;
 
-		// 3. Up, and a pass at full speed with the passenger firing from the door.
+		// 3. Up, and a pass at full speed with the passenger firing from the left seat.
 		Mark("fly");
 		foreach (bool _ in Until(() => Has("pilot-climbed"), 30 * Second)) yield return true;
 		Measured($"climbed: {F(heli.HeightAboveGround)} m up");
@@ -1001,7 +1001,7 @@ public partial class CrewHelicopterChecks : Node
 			+ $" {hits} times; their rounds on their own helicopter {ownHull}; the hull hit {hullHits} times,"
 			+ $" {F(healthBefore, "0")} → {F(heli.Health, "0")}; the passenger {combat.Find(_passenger).Health}");
 		Fact(fastest > 21.5f, $"the pilot flew the pass at full speed ({F(fastest)} m/s)");
-		Fact(hits >= 3, $"the passenger's rounds from the door hit the rifleman on the floor ({hits})");
+		Fact(hits >= 3, $"the passenger's rounds from the left seat hit the rifleman on the floor ({hits})");
 		Fact(ownHull == 0, "and none of them hit their own helicopter");
 		units.ClearUnits();
 
@@ -1226,7 +1226,7 @@ public partial class CrewHelicopterChecks : Node
 		foreach (bool _ in GetIn("board", SeatRole.Passenger)) yield return true;
 		CrewVehicle heli = crew.VehicleAt(0);
 
-		// 2. The door's arc, on the floor, facing east: the door is on the left, -Z.
+		// 2. The left seat's arc, on the floor, facing east: the seat is on the left, -Z.
 		foreach (bool _ in Until(() => Has("arc"), 30 * Second)) yield return true;
 		Sampler.Align(YawFacing(Vector3.Back), 0f);
 		foreach (bool _ in Wait(10)) yield return true;
@@ -1238,7 +1238,7 @@ public partial class CrewHelicopterChecks : Node
 		foreach (bool _ in Wait(10)) yield return true;
 		string under = SeatedLine(local);
 		Fact(right.EndsWith("no shot") && !left.EndsWith("no shot") && under.EndsWith("no shot"),
-			$"in the door, no shot to the right or straight down, a shot to the left ({right}; {left}; {under})");
+			$"on the left seat, no shot to the right or straight down, a shot to the left ({right}; {left}; {under})");
 
 		short rounds = local.Weapons[SimConfig.LargeSlot].Ammo;
 		Sampler.Align(YawFacing(Vector3.Back), 0f);
@@ -1309,9 +1309,9 @@ public partial class CrewHelicopterChecks : Node
 		}
 
 		mean = apart.Count > 0 ? mean / apart.Count : float.MaxValue;
-		Measured($"{F(fireTicks / (float)Second)} s of fire from the door at full speed: {apart.Count} rounds adopted, origins"
+		Measured($"{F(fireTicks / (float)Second)} s of fire from the left seat at full speed: {apart.Count} rounds adopted, origins"
 			+ $" {F(mean, "0.000")} m apart on average, {F(worst, "0.000")} m at worst");
-		Fact(apart.Count >= 10, $"at least ten rounds fired from the door at full speed ({apart.Count})");
+		Fact(apart.Count >= 10, $"at least ten rounds fired from the left seat at full speed ({apart.Count})");
 		Fact(worst < 0.3f, $"this client's tracer and the server's round leave within 0.3 m of each other ({F(worst, "0.000")} m)");
 
 		// 5. The pilot gets out at 4 m; the passenger rides it down.
@@ -1320,7 +1320,7 @@ public partial class CrewHelicopterChecks : Node
 		crew.TrySeat(local.PeerId, out CrewVehicle seatedIn, out int seat);
 		Vector3 eye = heli.DrawnPose.ToWorld(heli.Seats[Mathf.Max(seat, 0)].Eye);
 		Fact(seatedIn == heli && heli.Grounded && me.EyePosition.DistanceTo(eye) < 0.01f,
-			$"riding it down with nobody at the controls, this client is still in the door of a helicopter on the ground ({F(me.EyePosition.DistanceTo(eye), "0.000")} m from the seat's eye)");
+			$"riding it down with nobody at the controls, this client is still on the left seat of a helicopter on the ground ({F(me.EyePosition.DistanceTo(eye), "0.000")} m from the seat's eye)");
 
 		// 6. Out on the roof.
 		foreach (bool _ in GetOut("roof-out")) yield return true;

@@ -81,7 +81,7 @@ public class CrewVehicleAgentTests
 	[InlineData("""{ "unit": "technical", "id": "truck" }, { "peer": "me", "seat": { "vehicle": "truck", "role": "driver" } }""",
 		"which is not the 'id' of an earlier vehicle spawn")]
 	[InlineData("""{ "vehicle": "helicopter", "id": "heli" }, { "peer": "me", "seat": { "vehicle": "heli", "role": "gunner" } }""",
-		"the helicopter has no 'gunner' seat; its seats are driver, passenger")]
+		"the helicopter has no 'gunner' seat; its seats are driver, passenger, passenger")]
 	[InlineData("""{ "vehicle": "4x4", "id": "truck" }, { "peer": "me", "seat": { "vehicle": "truck", "role": "roof" } }""",
 		"the 4x4 has no 'roof' seat")]
 	[InlineData("""{ "vehicle": "4x4", "id": "truck" }, { "peer": "me", "seat": { "vehicle": "truck", "role": "gunner" } }, { "peer": "you", "seat": { "vehicle": "truck", "role": "gunner" } }""",

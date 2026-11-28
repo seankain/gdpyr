@@ -1,0 +1,33 @@
+# GODOT=<Godot 4.6 .NET> ./scripts/helicopter-model-checks.sh: headless, --fixed-fps 60, a floor built by the check.
+# Run on the branch that adds it (docs/GROUND_VEHICLES.md §17.5).
+[checks] helicopter model check
+[checks] measured: made with its model in 20.4 ms
+[checks] PASS the helicopter's definition names a model (res://Models/Vehicles/helicopter/helicopter.glb)
+[checks] PASS it is drawn as the model's body and its two rotors, not the greybox's boxes
+[checks] measured: the body spans x -1.72..1.72, y 0.007..3.45, z -4.72..6.12
+[checks] PASS parked, it stands on its wheels on the floor: their lowest 0.007 m from its origin, which is 0.000 m above the floor
+[checks] measured: the hull's boxes span x -0.65..0.65, y 0.60..3.45, z -4.20..6.12
+[checks] PASS the hull's boxes reach from the nose — all but the chin gun's barrel — to the end of the tail and the top of the fin
+[checks] measured: seat 0 (Driver): the model's PilotSeat at (0.00, 1.00, -2.25), the capsule's foot at (0.00, 1.00, -2.25)
+[checks] measured: seat 1 (Passenger): the model's LeftSeat at (-1.02, 1.05, -1.05), the capsule's foot at (-1.02, 1.05, -1.05)
+[checks] measured: seat 2 (Passenger): the model's RightSeat at (1.02, 1.05, 1.05), the capsule's foot at (1.02, 1.05, 1.05)
+[checks] PASS the model marks a cushion for each of the definition's 3 seats (3)
+[checks] PASS each seat's capsule rests on its cushion, within 0.000 m
+[checks] PASS the pilot's seat and eye are inside the hull's boxes; the outer seats' are outside them
+[checks] measured: the rotor's hub at (0.00, 3.38, 0.00), the fan at (0.00, 1.75, 5.20)
+[checks] PASS the main rotor's hub is over the origin, which the helicopter tilts about, and above the cabin's box
+[checks] PASS the tail rotor is in the fenestron's box, the last of the hull's
+[checks] PASS parked, with the rotor stopped, neither rotor has turned
+[checks] measured: a second at full rotor: the main rotor turned 28.00 rad, the tail rotor 47.60 rad
+[checks] PASS at full rotor the main rotor turns anticlockwise from above at 28 rad/s, within 2 %
+[checks] PASS and the tail rotor at 1.7 times that
+[checks] PASS turning, each stays on its axis
+[checks] PASS at half rotor, half as fast (14.00 rad in a second)
+[checks] PASS tilted 20° nose down and 15° rolled, each seat where the rules put a seated body is on its drawn cushion, within 0.000 m, and the hub where the pose puts it
+[checks] measured: flown: 22.6 m up at 20.0 m/s, the nose down to 20.0°, the rotor at 1.00
+[checks] PASS flown off the floor and ahead, the model tilts as the step does, nose down to accelerate
+[checks] PASS and throughout, every seat is on its drawn cushion, within 0.000 m
+[checks] PASS a wreck is drawn burnt to the last mesh, rotors included: 3 of 3
+[checks] measured: made with the greybox in 0.9 ms
+[checks] PASS with no model the greybox is drawn: its four boxes, a rotor over the origin above them and a tail rotor
+[checks] 19 of 19 facts hold

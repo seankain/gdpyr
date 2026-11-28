@@ -584,8 +584,9 @@ a tap of `use` — pressed then released inside 30 ticks — gets out, and a hol
 seat.
 At a 4x4's wheel `move` is throttle and steering, `jump` the handbrake; at a helicopter's controls
 `move` flies it along and across its heading, `jump` and `crouch` climb and descend, and the look's
-yaw is the heading it turns to. At the gun `fire` and `reload` work the 4x4's gun; in the bed or the
-door `fire`, `ads`, `reload`, `weapon2` and `weapon3` are the seat's own pistol and primary, and
+yaw is the heading it turns to. At the gun `fire` and `reload` work the 4x4's gun; in the bed or on
+a helicopter's outer seats `fire`, `ads`, `reload`, `weapon2` and `weapon3` are the seat's own pistol
+and primary, and
 `fire` does nothing outside the seat's arc. `grenade`, `drone`, `melee` and `weapon1`, the hammer,
 do nothing in any seat. The kiosk's request is not a button but the `vehicle` op (§7.1).
 
@@ -925,7 +926,8 @@ rider more than the vehicle seats.
 z], "yaw": 0, "health": 600}`, `y` the ground the 4x4 stands on and a helicopter's skids — one put
 off the ground hovers with its rotor at full speed, so a pilot seated in it holds its height — and
 `health` left out for full; then `{"peer": "me", "seat": {"vehicle": "truck", "role": "gunner"}}`,
-the role `driver` (or `pilot`), `gunner` or `passenger`. A seat in a vehicle is put where the
+the role `driver` (or `pilot`), `gunner` or `passenger` — the helicopter has two `passenger` seats,
+the first such placement taking its left seat and the second its right. A seat in a vehicle is put where the
 vehicle was and looks the way it faces unless the spawn says otherwise; a pilot's look is the heading
 the helicopter turns to. A crew vehicle's label is only a seat placement's to name: a unit's
 `aboard` and a strategist's command name unit spawns. Refused when the file is read, each with a

@@ -33,7 +33,8 @@ dedicated-server authoritative.
 - [`docs/GROUND_VEHICLES.md`](docs/GROUND_VEHICLES.md) — vehicles the ground force drives; GV0–GV9,
   all built: a 4x4 — a six-wheeled buggy on three sprung axles, drawn as a model whose wheels
   roll, steer and ride on their wishbones — with a mounted gun and a passenger in the bed, and a
-  helicopter with a passenger in its door, predicted on the driver's client; passengers fire their
+  light helicopter, an open space frame drawn as a model whose rotors turn, with a passenger on a
+  seat outside it either side, predicted on the driver's client; passengers fire their
   own weapons, from where their own screen drew the seat; a kiosk beside the weapon locker hands one
   of each out on a respawn timer; 200 rifle hits destroy the 4x4, one direct hit from a tank either;
   either kills a strategist's unit on foot that it strikes at 8 m/s or more; HTN bots ride along
@@ -156,7 +157,8 @@ Models/Weapons/ Weapon art: the launcher's world model and viewmodel (built by
 Models/Vehicles/ Vehicle art: the tank, whose turret turns free of its hull, and the supply truck
                 (built by tools/blender/tank.py and supply_truck.py; docs/UNIT_MODELS.md); the
                 ground force's 4x4, its wheels, wishbones, coilovers and gun in pieces that move
-                (tools/blender/four_by_four.py; docs/GROUND_VEHICLES.md §16)
+                (tools/blender/four_by_four.py; docs/GROUND_VEHICLES.md §16); and its helicopter,
+                an open space frame whose two rotors turn (tools/blender/helicopter.py; §17)
 Tests/          xUnit over the engine-free sources — `dotnet test`, no Godot needed
 Tests/Scenarios/ Playtest scenario files: data, and authoring one needs no Godot install
 ThirdParty/     Vendored source: FluidHTN at a pinned commit (docs/HTN_BOTS.md §3.8); and assets: the
@@ -167,7 +169,8 @@ tools/          External processes that talk to a server over a socket: the agen
                 divergence probe, the playtest harness, a Python client, and the HTN planner
                 probes and benchmark (docs/HTN_BOTS.md §3). Never part of the
                 game assembly (docs/TRAINING.md). And tools/blender/: scripts that build models
-                with Blender's `bpy` (the Gully's bridge, the launcher, the tank, the supply truck, the 4x4), and what they build
+                with Blender's `bpy` (the Gully's bridge, the launcher, the tank, the supply truck, the 4x4,
+                the helicopter), and what they build
 ```
 
 The simulation runs in `_PhysicsProcess` at a fixed 60 Hz and reads nothing but the recorded
@@ -591,11 +594,12 @@ is out at a time; both are ready when a round starts, and the next is ready 45 s
 it. The line under the round's clock says which (`4x4 ready · helicopter 0:42`), and a refusal says
 why at the panel's foot (`refused (not_ready): ready in 0:42`). Walk up to one, carrying no gun or
 can, and the prompt says which seat a tap gets you (`[E] drive 4x4`, `[E] 4x4 gun`, `[E] 4x4 bed`,
-`[E] fly helicopter`, `[E] helicopter door`); it has to be stopped, and a helicopter on the ground.
-The 4x4 seats a driver, a gunner at its 12.7 mm gun and a passenger in the bed; the helicopter a
-pilot and a passenger in the left door. Drivers and pilots do not shoot; the gunner fires the gun,
+`[E] fly helicopter`, `[E] helicopter left seat`, `[E] helicopter right seat`); it has to be stopped,
+and a helicopter on the ground. The 4x4 seats a driver, a gunner at its 12.7 mm gun and a passenger
+in the bed; the helicopter a pilot in its cockpit and two passengers on the seats outside its frame,
+the left one ahead of the stub wing and the right one behind it. Drivers and pilots do not shoot; the gunner fires the gun,
 and a passenger their own primary and pistol, within the seat's arc — `· no shot` under the reticle
-says you are looking through the cab or the cabin, or too steeply up or down. The driver and the
+says you are looking through the cab or the helicopter's frame, or too steeply up or down. The driver and the
 pilot are behind the hull, which takes 200 rifle hits on the 4x4 and 113 on the helicopter; the
 gunner and a passenger are out in the open. A tank's direct hit wrecks either, throwing everybody
 aboard out with 50 damage — out of a helicopter more than 4 m up, nobody lives. At 8 m/s or more the
@@ -650,7 +654,7 @@ round full of bots starts without waiting for anybody.
   pouches, 3 grenades and a medium vest — and `--bot-kits default` gives them the default kit
   instead ([`docs/LOADOUT.md`](docs/LOADOUT.md) §8).
   Bots never drive or fly, but an HTN bot with nothing in sight within 15 m of a person's stopped
-  4x4 or helicopter gets in — at the gun first, then the bed or the door — fights from the seat, and
+  4x4 or helicopter gets in — at the gun first, then the bed or an outer seat — fights from the seat, and
   gets out when the person leaves the controls; the legacy bots never get in
   ([`docs/GROUND_VEHICLES.md`](docs/GROUND_VEHICLES.md) GV8).
 - **In the strategist's chair** one queues infantry at every barracks while the points last, keeps

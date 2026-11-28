@@ -17,7 +17,10 @@ and gets out when the person does; with nobody or nobody but a bot at the contro
 a legacy bot never does. And GV9's docs (§12): the README's controls, NETCODE.md §10.11, M12,
 AGENT_API.md, DEMOS.md and EFFECTS.md say what was built. And the 4x4's model and third axle (§16):
 a six-wheeled buggy built in Blender from two concept renderings, drawn in place of the greybox, its
-wheels rolling, steering and riding on wishbones and coilovers, on a step grown to three axles. What is left is a person's: everything
+wheels rolling, steering and riding on wishbones and coilovers, on a step grown to three axles. And
+the helicopter's model and outer seats (§17): a light attack helicopter built in Blender from a
+concept rendering, an open tube space frame drawn in place of the greybox with its two rotors
+turning, and two passengers on seats outside the frame, one each side. What is left is a person's: everything
 drawn has been driven headless and never looked at, and none of it has run on a dedicated server
 over a real link.** Written against `6699b03`; GV4 amends GV-D16 (§3). The
 decisions (GV-D1–GV-D17, §3) are the defaults the plan is written against; each is one line to
@@ -43,7 +46,8 @@ by looking); [`LOADOUT.md`](LOADOUT.md) §7.2 (the locker panel the kiosk's pane
 
 1. The ground force can drive vehicles.
 2. A **4x4 technical** with **springy suspension**, a **mounted gun** and a **passenger seat**.
-3. A **helicopter** with **one passenger seat** besides the pilot's.
+3. A **helicopter** with **one passenger seat** besides the pilot's. *Changed by §17: two, on seats
+   outside its frame, one each side.*
 4. **Passengers fire their weapons from the seat.**
 5. Vehicles are **spawned on a timer from a vehicle kiosk near the weapon locker**.
 6. A vehicle **tolerates a significant amount of small-arms fire** and is **destroyed by a direct
@@ -82,7 +86,7 @@ Facts this plan stands on, each read in the source at `6699b03`.
 | | Decision | Why |
 |---|---|---|
 | GV-D1 | **A system of their own, not `Unit`.** A crew vehicle is a `CharacterBody3D` (`CrewVehicle`) in its own registry (`CrewVehicleManager`). | Units are never predicted, never fogged (NETCODE.md §6.2), count towards the strategist's defeat (`LiveUnitCount`), and take orders and plans. Each is wrong for a vehicle a player drives. |
-| GV-D2 | **Seats.** 4x4: driver (enclosed), gunner at the mounted gun (exposed), passenger in the bed (exposed). Helicopter: pilot (enclosed), passenger in the left door (exposed). Drivers and pilots do not fire. | The request. A driver's mouse belongs to the camera, a pilot's to the heading. |
+| GV-D2 | **Seats.** 4x4: driver (enclosed), gunner at the mounted gun (exposed), passenger in the bed (exposed). Helicopter: pilot (enclosed), passenger in the left door (exposed). Drivers and pilots do not fire. *Changed by §17: the helicopter's passengers are two, on outer seats — the left ahead of the stub wing, the right behind it.* | The request. A driver's mouse belongs to the camera, a pilot's to the heading. |
 | GV-D3 | **Movement: a kinematic body with a sprung chassis, engine-free.** The 4x4's step is a pure function of its state, the input frame and four wheel-ray contacts; four spring-dampers set its ride height, pitch and roll. *Changed by §16: six of each, on a steered front axle and a rear tandem.* The body stays upright; the attitude is drawn on the mesh and applied to the seats and the hull's hit boxes, and the 4x4's collider shape takes it on the upright body. No `RigidBody3D` or `VehicleBody3D`. *Changed for hills: the collider stayed upright, and level it beached on a 10° slope off its wheels (LEVEL_EDITOR.md LE-D24, §5.1 here).* | The springs are the request, and a pure step is what a replay re-runs and what xUnit tests (§5.1). A rigid body cannot be stepped alone for a replay, and the solver's state is not the same on two peers (IMPLEMENTATION_PLAN.md §2). The dropship already keeps its tilt off the body (VEHICLES.md §8.4). |
 | GV-D4 | **The driver's client predicts its vehicle** as it predicts its character: the same input ring, a second ledger, a replay through the same step. Everybody else interpolates it. Getting in, getting out and changing seat are not predicted. | Unpredicted, steering would answer a round trip plus the 100 ms interpolation delay late — about 200 ms at 100 ms RTT. The drone accepts a round trip (CONTROL_POINTS.md §4.4); a truck that steers that late does not feel like one. NETCODE.md §10.2's rule for transitions stands. |
 | GV-D5 | **Controls, with no new key and no new input bit.** Tap `E` beside a vehicle: the free seat whose door is nearest. Seated: tap `E` gets out, hold `E` moves to the next free seat. 4x4: `W`/`S` throttle, brake and reverse; `A`/`D` steer; `Space` handbrake; the mouse looks, and the camera follows the truck. Helicopter: `W`/`S`/`A`/`D` move, `Space`/`Ctrl` climb and descend, and the mouse turns it towards where the pilot looks. | The frame stays twelve bytes and every recorded frame keeps its meaning; U, T and G keep one action each. Steering by looking is the drone's, which players already know. |
@@ -91,7 +95,7 @@ Facts this plan stands on, each read in the source at `6699b03`.
 | GV-D8 | **Bodies are solid to vehicles; vehicles are not solid to bodies.** A vehicle collides with the world, structures and other vehicles. Players and units collide with vehicles: they cannot walk into one, and one that drives into them pushes them aside through their own `MoveAndSlide`. Below GV-D17's speed, contact hurts nobody. | A body that blocked a vehicle would let one rifleman stop a truck. A vehicle that passed through bodies both ways would let a player stand inside a hull that takes every round meant for them. And the driver's prediction never collides with an interpolated body. |
 | GV-D9 | **Armour.** The 4x4: 600 health, bullets do 0.15. The helicopter: 450, bullets do 0.2. Explosives do their damage times the round's `VehicleDamageScale`. | 200 rifle hits to destroy the 4x4 and 113 the helicopter, against 25 for the strategist's technical and 40 for its dropship (§9). |
 | GV-D10 | **A direct hit by the tank's round destroys either.** `ProjectileDefinition` gains `VehicleImpactDamage`, used in place of `Damage` against a vehicle it strikes when above zero; `cannon_76.tres` sets 1,000. Its blast is unchanged, so a near miss does up to 80. | The request, as one number on the round that has it — the drone's 800 against the tank's 700 is the precedent (CONTROL_POINTS.md §4.3). The tank never strikes its own side's units (§2), so nothing else moves. |
-| GV-D11 | **Enclosed seats are shielded; exposed seats are not.** A driver's or pilot's capsule lies inside its hull box, so a round reaches the hull first, and a blast skips them. A gunner or a passenger is a player like any other above the bed or in the door. Friendly fire is as for players. | The hull's health is the driver's armour; the people shooting out of it are what can be picked off. |
+| GV-D11 | **Enclosed seats are shielded; exposed seats are not.** A driver's or pilot's capsule lies inside its hull box, so a round reaches the hull first, and a blast skips them. A gunner or a passenger is a player like any other above the bed or in the door (*on an outer seat since §17*). Friendly fire is as for players. | The hull's health is the driver's armour; the people shooting out of it are what can be picked off. |
 | GV-D12 | **A wreck** throws everybody aboard out at an exit point, each taking 50 as explosive damage, the vest its share, in the killer's name. A helicopter destroyed more than 4 m above the ground kills everybody aboard. The wreck burns for 2 s and goes. It costs no ticket of its own. | VEHICLES.md V-D7's rule for units, at a player's 100. 4 m is `CapturePad.VerticalToleranceMeters`. |
 | GV-D13 | **The kiosk and its timer.** One kiosk, beside the locker. Per kind, at most one alive; both are ready when the round starts; once one is lost — destroyed, or abandoned and removed — the next is ready 45 s (4x4) or 90 s (helicopter) later. A request at the kiosk puts the vehicle on its kind's pad outside the bunker. A vehicle that is empty, with nobody of the ground force within 15 m, for 60 s is removed. | "Spawned on a timer from a kiosk". A cap of one each puts at most five of six players in vehicles. Removal keeps a truck left in a corner from holding its kind's only slot for the rest of the round. |
 | GV-D14 | **Fog: the players' rule.** A strategist is told about a vehicle while the side's sensors see its hull's centre with a clear line, and about its occupants exactly when it is told about the vehicle. | One rule, the one players already have (NETCODE.md §6.2). |
@@ -264,7 +268,7 @@ arc at its edges.
   slab test with the half extents grown by the round's sweep radius, and `Hitbox.DistanceTo(in HitObb,
   point)` for blasts.
 - A hull is up to four boxes: the 4x4's cab, bonnet, bed and gun shield; the helicopter's cabin and
-  tail boom.
+  tail boom (*since §17 its cockpit, cabin, boom and fenestron*).
 
 Tests: hits through all six faces, parallel misses, a segment that starts inside; zero distance
 inside; **every enclosed seat's capsule lies inside its hull box by at least 5 cm on every axis** —
@@ -388,7 +392,8 @@ radius from every box is no contact, and one inside a box is; the credit's 3 s, 
   catching on them. It casts its own rays and moves itself; its presentation — the greybox hull,
   wheels placed by their compression, rotor discs, the gun on its mount — is built only off a
   dedicated server, as the dropship's is. *Changed by §16: the 4x4 is drawn as a model, its wheels
-  rolling, steering and riding on wishbones and coilovers; the greybox is what is drawn without one.*
+  rolling, steering and riding on wishbones and coilovers; the greybox is what is drawn without one.
+  And by §17: the helicopter is drawn as a model, its two rotors turning.*
 - **`Scripts/Fps/CrewVehicleManager.cs`** — a sixth autoload, beside `EmplacementManager`: the
   registry (`MaxCrewVehicles`, fixed), the seats, the kiosk, the tick, the message, a client's
   puppets and the driver's prediction.
@@ -624,7 +629,8 @@ reconciled while seated (§6.7); its health, ammunition and kit apply as before.
 ### 8.5 HUD, panel and presentation
 
 - **Prompts** under the reticle: `[E] drive 4x4`, `[E] 4x4 gun`, `[E] 4x4 bed`, `[E] fly helicopter`,
-  `[E] helicopter door`, `[E] vehicle kiosk`.
+  `[E] helicopter door`, `[E] vehicle kiosk`. *Since §17 the helicopter's passengers' seats are
+  `left seat` and `right seat`: `[E] helicopter left seat`, `helicopter · right seat · no shot`.*
 - **Seated:** `4x4 · driver · 412/600 · 14 m/s`, `4x4 · gun · 87/100`, `helicopter · pilot · 380/450
   · 12 m up`; under it `[E] get out · hold [E] gun` (the next free seat's name), or `too high to get
   out` — for as long as it is true, on every client — or, on the authority for two seconds after a
@@ -637,7 +643,7 @@ reconciled while seated (§6.7); its health, ammunition and kit apply as before.
 - **Debug HUD:** `vehicles 2 · 3 aboard · 4x4 out · helicopter 0:42 · run over 3 · mispredicted 0.4/s · replay 9`;
   `off` for a kind the kiosk does not offer, and on the authority `· helicopter pad failed`.
 - **Presentation:** greybox boxes, cylinders for wheels and discs for rotors, in the ground force's
-  colour (*the 4x4 a model since §16*); a seated body in its pose; a wreck burning as a unit vehicle's does. A unit run over falls
+  colour (*the 4x4 a model since §16, the helicopter since §17*); a seated body in its pose; a wreck burning as a unit vehicle's does. A unit run over falls
   as a shot one does, a round trip after the driver struck it, and the driver gets a hit marker.
 
 ---
@@ -1945,7 +1951,7 @@ down (every value the same in each seed but where a range is given):
 | Scenario | Set-up as built | Measured |
 |---|---|---|
 | `htn_bots_ride_with_person` | three ground: a person (a policy seat) at the wheel of a 4x4 at the 4x4's pad, (−92.4, 0.5, 103.4), facing north, and two HTN bots at the spawn points, whose centres are 13–19 m from it; 6 s still, 2 s of W, 1.5 s of S, 1 s still, a tap of E | the gun taken at +165..+175, the bed at +170..+221, each by a bot and the gun first; both out 4 ticks after the driver, at z 108.9 and 110.3, 5.5 and 6.9 m north of the pad |
-| `htn_bot_rides_helicopter` | a person as pilot of the helicopter on its pad, two HTN bots: 7 s on the ground, 3 s of Space, 3 s of W, 7 s of Ctrl, a tap of E | one bot in the door at +181..+209; the other never in; the pilot out at (−72.8, 60.7), the bot 4 ticks later at (−75.8, 58.5), 45 m from the pad; no damage |
+| `htn_bot_rides_helicopter` | a person as pilot of the helicopter on its pad, two HTN bots: 7 s on the ground, 3 s of Space, 3 s of W, 7 s of Ctrl, a tap of E | one bot in the door at +181..+209; the other never in; the pilot out at (−72.8, 60.7), the bot 4 ticks later at (−75.8, 58.5), 45 m from the pad; no damage *Since §17 two outer seats: both bots in, one on each, and both out after the pilot (§17.5).* |
 | `htn_bots_fight_from_seats` | the 4x4 at (−92.4, 0.5, 108) facing east, a rifleman with its autonomy off at (−15, 0.5, 108), 87 m or more from the spawn points, past the bots' 80 m; 6 s still, 5 s of W, 2 s of S | both in, at +125..+157 and +142..+171; the gunner hits the rifleman three times with the mounted gun (weapon 14) and kills it, from 26–41 m, in every seed; nothing hits the 4x4; nobody out |
 | `htn_bots_need_a_driver` | a person in the bed of a 4x4 with nobody at its wheel at the pad, an empty 4x4 11 m from it towards the spawn, two HTN bots, 15 s | nobody gets into either |
 | `vehicle_legacy_bots_never_ride` | `htn_bots_ride_with_person`'s 4x4 and person, two legacy bots, 15 s | nobody gets in |
@@ -2242,3 +2248,147 @@ riders standing on the deck look right with a body in each seat; the model's cos
 the box (18,498 triangles drawn, against the greybox's few dozen); and `net`'s passenger stutter
 above, on a quieter machine. Nothing here has run on a dedicated server over a real link; a
 dedicated server builds none of it.
+
+---
+
+## 17. The helicopter's model and its outer seats
+
+**Asked:** replace the helicopter's greybox with a model after a concept rendering — an olive drab
+light attack helicopter whose fuselage is an open tube space frame: a faceted armoured nose with a
+chin gun, a tandem two-seat cockpit inside the cage, the engine and transmission in the cabin under
+a faceted fairing and the mast, a stub wing either side with a rocket pod and missiles, a
+triangulated truss boom to a faceted fenestron with a fin and a T-tail, a four-bladed main rotor, two
+wheels under the cockpit and a tail wheel; and outside the frame, outward-facing bench seats with
+soldiers on them. The soldiers are not to be modelled: those seats are for passengers who shoot
+their primary weapons. The polycount is to be what is typical of a vehicle in an online shooter.
+
+![In Blender: front three-quarter, side, front, rear three-quarter](baselines/helicopter-model-blender.png)
+
+![In Godot 4.6, from the imported .glb, drawn by CrewVehicle: parked; from the side; from the pilot's chase camera; flown ahead, nose down, rotors turning](baselines/helicopter-model-godot.png)
+
+### 17.1 Decisions
+
+| | Decision | Why |
+|---|---|---|
+| GV-D22 | **One outer seat each side: the left ahead of the stub wing, the right behind it.** The concept shows two outer seats, both on its left, one either side of the wing. Asked, the person chose one per side. The helicopter seats three: the pilot, in the cockpit's front seat, and two passengers. The cockpit's rear seat is drawn and seats nobody. | Three is `CrewLayout.MaxSeats`, the three peer ids the vehicle record carries (§7.1), so nothing on the wire, in a demo or in the agent schema changes; four outer seats would have grown all three. A seat each side puts a shooter on either side of the line the pilot flies. |
+| GV-D23 | **The passengers' weapons are GV-D6's**: their own primary and pistol, the hammer, grenades and the drone never. Each outer seat fires out of its own side only: yaw 15°–165° from the nose on the left seat, −165° to −15° on the right, pitch −70° to +20°, as the door was. | "Passengers that can shoot their primary weapons" is what a passenger already did. The arc keeps a round off the frame, the nose, the tail and the rotor; a round fired from a seat never hits its own vehicle anyway (GV-D6). |
+| GV-D24 | **The hit volumes follow the model.** Four boxes where there were two: the cockpit, which holds the pilot by 0.35 m or more on every side (GV-D11); the cabin, up to the mast's fairing; the boom; and the fenestron with its fin. The collider covers the nose to the cabin's end, its floor at the wheels as the greybox's was at its skids; the boom passes through walls as the greybox's did. The stub wings, their stores, the outer seats and the rotor are not hit volumes. | A round through the nose, the boom or the fin now strikes the hull. The outer seats stand 0.07 m or more clear of every box on the side they face, so a passenger is a player like any other (GV-D11). |
+| GV-D25 | **8,474 triangles**, every one drawn once; a test holds the model to 12,000. | About a vehicle's budget in an online shooter of this look; the 4x4 draws 18,498. The open frame is most of it: 300-odd tubes, six- and eight-sided. |
+| GV-D26 | **The pilot's chase camera pivots at the rotor's head, 3.4 m over the origin**, where it pivoted 2.2 m up. | The middle of the view runs through the pivot, 0.22 rad below the look (§8.4): from 2.2 m it crossed the new fin and T-tail, 3.45 m up and 6 m back, under the reticle; from 3.4 m it passes 1.3 m over them, and the helicopter is in the lower half of the view. The arm is 10 m as before. |
+
+### 17.2 The model — `tools/blender/helicopter.py`
+
+```bash
+python3 -m pip install bpy==5.3.0                   # Blender as a module; needs Python 3.13
+python3 tools/blender/helicopter.py                 # or: blender --background --python ...
+python3 tools/blender/helicopter.py --render DIR    # also preview renders (Cycles on the CPU)
+```
+
+It writes `Models/Vehicles/helicopter/helicopter.glb` and `tools/blender/Helicopter.blend` from
+`PARAMS` and the numbers it shares with `Vehicles/helicopter.tres` (the seats' cushions, the rotor's
+hub, the fan), and prints each piece's triangles and extents in Godot's axes and whether every piece
+is closed and faces outward. At the time of writing: 8,474 triangles — the body 7,916, the main
+rotor 366, the tail rotor 192 — in 352 closed pieces, none facing inward, no open edge. The body
+spans x ±1.72 m (the stub wings), y 0.007–3.45 m (the wheels to the T-tail) and z −4.72 to +6.12 m
+(the chin gun's muzzle to the fin); the rotor's blades reach 5.0 m from the hub. As with the 4x4, a
+re-run gives the same model but not the same bytes.
+
+**Axes and origin.** Blender +Y forward, +Z up; the exporter's (x, y, z) → (x, z, −y) puts the nose
+down Godot's −Z. The origin is the vehicle's: on the ground under the wheels, below the mast, which
+is what the helicopter tilts about (§5.2). **Pieces**, each named for `CrewVehicle` to find, exported
+unturned:
+
+| Node | What it is | How it moves |
+|---|---|---|
+| `Body` | the space frame, the nose, the cockpit and its two seats, the cabin's engine, gearbox and fuel cell, the fairing and the mast, the stub wings and their stores, the boom, the fenestron's shroud, stator and gearbox, the fin and T-tail, the wheels, the chin gun, the two outer seats with their footrests and grab handles | tilts with the helicopter |
+| `PilotSeat`, `LeftSeat`, `RightSeat` (under `Body`) | empties on the top of each seat's cushion, where the definition's seated capsule rests | with the body |
+| `Rotor` | the hub and four blades, at the hub (0, 3.38, 0) | turns about +Y, anticlockwise from above |
+| `TailRotor` | the fenestron's ten-bladed fan, at its middle (0, 1.75, 5.20) | turns about +X |
+
+No glass: the cockpit is the concept's open cage. The pilot is still shielded by the hull's box
+(GV-D11), a rule rather than something drawn. No markings, and no figures on the seats.
+
+### 17.3 The definition — `Vehicles/helicopter.tres`
+
+| Seat | Role | Capsule (bottom → top, r 0.3) | Eye | Door → exit | Arc |
+|---|---|---|---|---|---|
+| 0, pilot | driver, enclosed | (0, 1.30, −2.25) → (0, 1.62, −2.25) | (0, 1.80, −2.25) | (1.5, 0, −2.25) → (1.7, 0, −2.25), the cockpit's right | none |
+| 1, left seat | passenger | (−1.02, 1.35, −1.05) → (−1.02, 1.65, −1.05) | (−1.02, 1.83, −1.05) | (−1.9, 0, −1.05) → (−2.1, 0, −1.05) | 15° to 165°, −70° to 20° |
+| 2, right seat | passenger | (1.02, 1.35, 1.05) → (1.02, 1.65, 1.05) | (1.02, 1.83, 1.05) | (1.9, 0, 1.05) → (2.1, 0, 1.05) | −165° to −15°, −70° to 20° |
+
+Hull boxes, centre ± half extents: the cockpit (0, 1.5, −2.45) ± (0.65, 0.9, 1.75); the cabin
+(0, 1.835, 0.45) ± (0.65, 1.215, 1.15); the boom (0, 1.72, 3.0) ± (0.48, 0.64, 1.4); the fenestron
+and fin (0, 2.15, 5.21) ± (0.26, 1.3, 0.91). The collider: (0, 1.25, −1.3) ± (0.85, 1.25, 2.9),
+bevelled 0.3. Health, armour, timers and flight are as they were; 113 rifle hits still destroy it.
+
+**Seat names.** The HUD names a helicopter passenger's seat by its side (`CrewVehicleManager.
+SeatName`): `[E] helicopter left seat`, `helicopter · right seat · no shot`, `hold [E] right seat`.
+A scenario's `passenger` placements (§11) take the left seat, then the right
+(`ScenarioVehicles.Roles`: driver, passenger, passenger). A riding bot (GV8) takes the left seat,
+then the right; `htn_bot_rides_helicopter` now expects both of its bots aboard, one on each.
+
+### 17.4 Drawn — `Scripts/Fps/CrewVehicle.cs`
+
+`CrewVehicleDefinition.Model` names the `.glb` for the helicopter as for the 4x4. Off a dedicated
+server, `BuildHelicopterModel` moves `Body`, `Rotor` and `TailRotor` onto the part that tilts; the
+rotors turn as they did on the greybox, by the rotor's speed. A model without one of the three is
+reported and the greybox drawn; without a model, the greybox — its rotor now over the origin above
+the highest box, its tail rotor beside the last. A wreck burns all three meshes.
+
+**Fixed on the way:** the tail rotor was drawn at 1.7 times the main rotor's angle *after* that
+angle wrapped, so it jumped back 0.7 of a turn on every turn of the main rotor, four times a second
+at full speed — on the greybox too. It keeps an angle of its own now, wrapped on its own.
+
+### 17.5 Checked
+
+- **`dotnet test`**: 4,106 of 4,106 (4,100 before; 6 new: `HelicopterModelTests` +5, reading the
+  `.glb`'s JSON — the definition loads it; a body and two rotors, the rotors unturned; each seat's
+  capsule on its cushion; the hub over the origin above the cabin's box and the fan in the
+  fenestron's; at most 12,000 triangles, one node a mesh — and `CrewSeatTests` +1, a tap at each
+  door gets that door's seat, the helicopter standing three ways). Changed with the seats:
+  `CrewVehicleResourceTests` (three seats, four boxes, the left seat ahead and the right behind),
+  `CrewSeatTests` (a riding bot gets the left seat, then the right; each outer seat fires out of its
+  own side only, never through the nose, along the tail or up into the rotor) and
+  `CrewVehicleAgentTests` (a scenario's helicopter has driver, passenger, passenger). Of four full
+  runs since these tests were written one held all 4,106; each of the others failed one allocation count, a
+  different one each time — `MarksmanTests`, `HtnDebugTests` and `EscortTests` — which passed alone.
+  None reaches vehicle code.
+- **`scripts/helicopter-model-checks.sh`** (new; `tools/EngineChecks/HelicopterModelChecks.cs`;
+  output in `docs/baselines/helicopter-model-checks.txt`): 19 of 19, headless at 60 fixed frames a
+  second. Parked: drawn as the model, standing on its wheels, their lowest 0.007 m from the origin
+  (the tyre's lowest facet) and the origin on the floor; the hull's boxes reach the body's ends but
+  for the gun's barrel; every seat's capsule on its cushion to 0.000 m, the pilot's inside the boxes
+  and the outer seats' outside them; the hub over the origin above the cabin's box, the fan in the
+  fenestron's. The rotors still with the rotor stopped; a second at full rotor turns the main one
+  28.00 rad anticlockwise and the tail 47.60 rad; at half rotor 14.00. Tilted 20° nose down and 15°
+  rolled, and flown off the floor to 22.6 m and 20 m/s, nose down to 20°, every seat stays on its
+  drawn cushion to 0.000 m. A wreck burns 3 of 3 meshes; with no model, the greybox's four boxes and
+  its rotors. Made in 20–26 ms with the model, 0.9–1.4 ms with the greybox. With `SHOTS`, under Xvfb with
+  the Compatibility renderer (Mesa llvmpipe), it saved the pictures above. Broken on purpose: the tail
+  rotor drawn from the main rotor's wrapped angle again, its fact reads 55.14 rad and fails.
+- **`scripts/crew-vehicle-checks.sh`**: `heli` 39 of 39 — the chase camera now 9.76 m behind along
+  the look and 11.24 m from the skids; on the roof, out on it and standing; the mortar's three
+  readings as before but for which shells struck the new hull, 2 of 6 at 63 m and 5 of 5 on the
+  floor. `heli-net` 39 of 39 in three runs of four, the passenger on the left seat: `helicopter · left
+  seat · no shot` to the right and straight down, a shot to the left; the pass at 22 m/s with 5 hits
+  on the rifleman and none on their own helicopter; tracer and round 0.002–0.008 m apart. In the
+  first run the pilot's client replayed 7 times during the pass, a 2.57 m correction shown at once,
+  and five facts from the roof on failed after it — the same class GV5 recorded (one 1.24 m
+  correction in five runs). `kiosk` 40 of 40 — the helicopter's pad, with four boxes now, is clear — `kiosk-pad`
+  5 of 5, `game` 37 of 37, `net` 57 of 57 — its driver flies the helicopter 13.3 m up and ahead
+  with no replay and a largest correction of 0.1 cm.
+- **The scenarios** (`scripts/playtest.sh`): `heli_flies_and_lands` (2 seeds), the passenger on the
+  left seat, both out at x −48.89 and z 38.83, no damage; `heli_wreck_at_height` (2 seeds), the
+  pilot and the left seat's passenger both killed; `htn_bot_rides_helicopter` (3 seeds), its claims
+  changed from one bot aboard and the other never in to both — 3 `vehicle_entered`, 2 of them bots
+  on passenger seats, 3 `vehicle_exited`, the pilot's first, the bots out at x −75.22 or more, no
+  damage — in every seed.
+
+### 17.6 Left for a person
+
+At the controls on a display: the frame, the rotor and the fan at speed and in a bank; the chase
+camera's new height over the arena and over the bunker's roof; what a passenger sees from each outer
+seat, and whether their legs, which nothing draws, are missed under the footrest; whether a pilot
+behind an open cage that rounds do not pass through reads as fair; and the model's cost in a round
+on the box (8,474 triangles, against the greybox's few dozen). Nothing here has run on a dedicated
+server over a real link; a dedicated server builds none of it.
