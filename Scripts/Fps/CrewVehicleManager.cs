@@ -1362,7 +1362,7 @@ public partial class CrewVehicleManager : Node
 	/// <summary>
 	/// A seat as the HUD names it (§8.5): the driver's seat is the 4x4's "driver" and the
 	/// helicopter's "pilot"; the gunner's is the "gun"; a passenger's is the 4x4's "bed"
-	/// and the helicopter's "door".
+	/// and, on the helicopter, the side of it the seat is on: "left seat" or "right seat" (§17).
 	/// </summary>
 	public static string SeatName(CrewVehicle vehicle, int seat)
 	{
@@ -1371,14 +1371,15 @@ public partial class CrewVehicleManager : Node
 		{
 			SeatRole.Driver => helicopter ? "pilot" : "driver",
 			SeatRole.Gunner => "gun",
-			_ => helicopter ? "door" : "bed",
+			_ when helicopter => vehicle.Seats[seat].Capsule.Center.X < 0f ? "left seat" : "right seat",
+			_ => "bed",
 		};
 	}
 
 	/// <summary>
 	/// What a tap would get a player at <paramref name="feet"/> into (§8.5):
 	/// <c>[E] drive 4x4</c>, <c>[E] 4x4 gun</c>, <c>[E] 4x4 bed</c>, <c>[E] fly helicopter</c>,
-	/// <c>[E] helicopter door</c>.
+	/// <c>[E] helicopter left seat</c>, <c>[E] helicopter right seat</c>.
 	/// </summary>
 	public string EnterPrompt(int slot, Vector3 feet)
 	{

@@ -301,7 +301,7 @@ public class CrewSeatTests
 	}
 
 	[Fact]
-	public void TheFilesSeats_GiveARiderThe4x4sGunThenItsBed_AndTheHelicoptersDoor()
+	public void TheFilesSeats_GiveARiderThe4x4sGunThenItsBed_AndTheHelicoptersLeftSeatThenItsRight()
 	{
 		CrewSeat[] truck = CrewVehicleFiles.Seats(CrewVehicleFiles.FourByFourPath);
 		CrewSeat[] heli = CrewVehicleFiles.Seats(CrewVehicleFiles.HelicopterPath);
@@ -313,8 +313,29 @@ public class CrewSeatTests
 		int bed = CrewSeats.PickRiderSeat(truck, occupants, personDriving: true);
 		Assert.Equal(SeatRole.Passenger, truck[bed].Role);
 
-		int door = CrewSeats.PickRiderSeat(heli, new[] { 7, 0 }, personDriving: true);
-		Assert.Equal(SeatRole.Passenger, heli[door].Role);
+		int left = CrewSeats.PickRiderSeat(heli, new[] { 7, 0, 0 }, personDriving: true);
+		Assert.Equal(SeatRole.Passenger, heli[left].Role);
+		Assert.True(heli[left].Capsule.Center.X < 0f);
+		int right = CrewSeats.PickRiderSeat(heli, new[] { 7, 8, 0 }, personDriving: true);
+		Assert.Equal(SeatRole.Passenger, heli[right].Role);
+		Assert.True(heli[right].Capsule.Center.X > 0f);
+		Assert.Equal(-1, CrewSeats.PickRiderSeat(heli, new[] { 7, 8, 9 }, personDriving: true));
+	}
+
+	[Fact]
+	public void AtEachOfTheHelicoptersDoors_ATapGetsThatDoorsSeat()
+	{
+		// §17: the pilot's door on the cockpit's right, the outer seats' outboard of them. Any
+		// way the helicopter stands, a person at a seat's door with every seat free gets that seat.
+		CrewSeat[] heli = CrewVehicleFiles.Seats(CrewVehicleFiles.HelicopterPath);
+		foreach (float yaw in new[] { 0f, 1.1f, -2.5f })
+		{
+			var pose = new CrewPose(new Vector3(30f, 0.5f, -12f), yaw);
+			for (int seat = 0; seat < heli.Length; seat++)
+			{
+				Assert.Equal(seat, CrewSeats.PickSeat(heli, new int[3], pose, pose.ToWorld(heli[seat].Door)));
+			}
+		}
 	}
 
 	private static bool Offers(bool destroyed = false, float speed = 0f,
@@ -465,7 +486,7 @@ public class CrewSeatTests
 	}
 
 	[Fact]
-	public void TheBedPassenger_CannotFireThroughTheCab_AndTheDoorPassenger_OnlyOutOfTheDoor()
+	public void TheBedPassenger_CannotFireThroughTheCab_AndEachOuterSeat_OnlyOutOfItsOwnSide()
 	{
 		CrewSeat bed = Array.Find(CrewVehicleFiles.Seats(CrewVehicleFiles.FourByFourPath), s => s.Role == SeatRole.Passenger);
 		Assert.False(CrewSeats.MayFire(bed, 0f, 0f), "dead ahead, through the cab");
@@ -473,10 +494,21 @@ public class CrewSeatTests
 		Assert.True(CrewSeats.MayFire(bed, -MathF.PI / 2f, 0f), "out to the right");
 		Assert.True(CrewSeats.MayFire(bed, MathF.PI, 0f), "behind");
 
-		CrewSeat door = Array.Find(CrewVehicleFiles.Seats(CrewVehicleFiles.HelicopterPath), s => s.Role == SeatRole.Passenger);
-		Assert.True(CrewSeats.MayFire(door, MathF.PI / 2f, -0.5f), "out of the left door, and down");
-		Assert.False(CrewSeats.MayFire(door, -MathF.PI / 2f, 0f), "across the cabin to the right");
-		Assert.False(CrewSeats.MayFire(door, 0f, 0f), "through the nose");
+		// The helicopter's outer seats (§17): each fires out of its own side and down, never
+		// across the frame to the other side, through the nose or back along the tail.
+		CrewSeat[] heli = CrewVehicleFiles.Seats(CrewVehicleFiles.HelicopterPath);
+		CrewSeat left = Array.Find(heli, s => s.Role == SeatRole.Passenger && s.Capsule.Center.X < 0f);
+		CrewSeat right = Array.Find(heli, s => s.Role == SeatRole.Passenger && s.Capsule.Center.X > 0f);
+		Assert.True(CrewSeats.MayFire(left, MathF.PI / 2f, -0.5f), "out to the left, and down");
+		Assert.False(CrewSeats.MayFire(left, -MathF.PI / 2f, 0f), "from the left seat, across the frame to the right");
+		Assert.True(CrewSeats.MayFire(right, -MathF.PI / 2f, -0.5f), "out to the right, and down");
+		Assert.False(CrewSeats.MayFire(right, MathF.PI / 2f, 0f), "from the right seat, across the frame to the left");
+		foreach (CrewSeat seat in new[] { left, right })
+		{
+			Assert.False(CrewSeats.MayFire(seat, 0f, 0f), "through the nose");
+			Assert.False(CrewSeats.MayFire(seat, MathF.PI, 0f), "back along the tail");
+			Assert.False(CrewSeats.MayFire(seat, MathF.Sign(seat.Capsule.Center.X) * -MathF.PI / 2f, 0.6f), "up into the rotor");
+		}
 	}
 
 	[Fact]

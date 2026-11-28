@@ -268,13 +268,16 @@ public partial class CrewVehicleDefinition : Resource
 	public Color Color = new(0.25f, 0.45f, 0.75f);
 
 	/// <summary>
-	/// The model a 4x4 is drawn as in place of its greybox (docs/GROUND_VEHICLES.md §6.1):
-	/// <c>Models/Vehicles/four_by_four/four_by_four.glb</c>, built by
-	/// <c>tools/blender/four_by_four.py</c>. Its origin is the vehicle's, forward −Z; its nodes
-	/// <c>Body</c>, <c>GunYaw</c>/<c>GunPitch</c>, and per wheel <c>Wheel</c>, <c>Knuckle</c>,
-	/// <c>LowerArm</c>, <c>UpperArm</c> and <c>Shock</c> are what <see cref="CrewVehicle"/> moves.
-	/// Null draws the greybox. Drawn only: what it collides with and is hit as are the collider
-	/// and the hull's boxes.
+	/// The model the vehicle is drawn as in place of its greybox (docs/GROUND_VEHICLES.md §6.1).
+	/// Its origin is the vehicle's, forward −Z. The 4x4's,
+	/// <c>Models/Vehicles/four_by_four/four_by_four.glb</c> from <c>tools/blender/four_by_four.py</c>:
+	/// its nodes <c>Body</c>, <c>GunYaw</c>/<c>GunPitch</c>, and per wheel <c>Wheel</c>,
+	/// <c>Knuckle</c>, <c>LowerArm</c>, <c>UpperArm</c> and <c>Shock</c> are what
+	/// <see cref="CrewVehicle"/> moves. The helicopter's,
+	/// <c>Models/Vehicles/helicopter/helicopter.glb</c> from <c>tools/blender/helicopter.py</c>
+	/// (§17): <c>Body</c>, and <c>Rotor</c> and <c>TailRotor</c>, which turn. Null draws the
+	/// greybox. Drawn only: what it collides with and is hit as are the collider and the hull's
+	/// boxes.
 	/// </summary>
 	[Export]
 	public PackedScene Model;

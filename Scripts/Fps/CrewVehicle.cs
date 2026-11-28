@@ -46,6 +46,9 @@ public partial class CrewVehicle : CharacterBody3D
 	/// <summary>How fast a rotor turns at full speed [rad/s]. Cosmetic.</summary>
 	private const float RotorRadiansPerSecond = 28f;
 
+	/// <summary>How many times faster than the main rotor the tail rotor turns. Cosmetic.</summary>
+	private const float TailRotorMultiple = 1.7f;
+
 	/// <summary>A wheel's width, drawn [m].</summary>
 	private const float WheelWidthMeters = 0.3f;
 
@@ -71,6 +74,12 @@ public partial class CrewVehicle : CharacterBody3D
 	private Node3D _gun;
 	private Node3D _gunPitch;
 	private float _rotorAngle;
+
+	/// <summary>
+	/// The tail rotor's own angle, wrapped on its own: a multiple of the main rotor's wrapped
+	/// angle jumped by 0.7 of a turn each time the main rotor's wrapped.
+	/// </summary>
+	private float _tailRotorAngle;
 
 	/// <summary>Which of <see cref="SimConfig.MaxCrewVehicles"/> it is: what the vehicle record names on the wire (§7.1).</summary>
 	public int Slot { get; private set; }
@@ -706,7 +715,9 @@ public partial class CrewVehicle : CharacterBody3D
 			return;
 		}
 
-		_rotorAngle = Mathf.Wrap(_rotorAngle + (Flight.Rotor * RotorRadiansPerSecond * (float)delta), 0f, Mathf.Tau);
+		float turned = Flight.Rotor * RotorRadiansPerSecond * (float)delta;
+		_rotorAngle = Mathf.Wrap(_rotorAngle + turned, 0f, Mathf.Tau);
+		_tailRotorAngle = Mathf.Wrap(_tailRotorAngle + (turned * TailRotorMultiple), 0f, Mathf.Tau);
 		if (_rotor != null)
 		{
 			_rotor.Rotation = new Vector3(0f, _rotorAngle, 0f);
@@ -714,7 +725,7 @@ public partial class CrewVehicle : CharacterBody3D
 
 		if (_tailRotor != null)
 		{
-			_tailRotor.Rotation = new Vector3(_rotorAngle * 1.7f, 0f, 0f);
+			_tailRotor.Rotation = new Vector3(_tailRotorAngle, 0f, 0f);
 		}
 	}
 
@@ -1006,6 +1017,53 @@ public partial class CrewVehicle : CharacterBody3D
 		return true;
 	}
 
+	// TODO(§17, docs/GROUND_VEHICLES.md): check on a display, at the controls: the rotor and the fan
+	// at speed, the frame in a bank, the chase camera from the rotor's head, what each outer seat
+	// sees. Pictured headless under Xvfb by scripts/helicopter-model-checks.sh; never flown by a person.
+	/// <summary>
+	/// The helicopter drawn as its model (<see cref="CrewVehicleDefinition.Model"/>,
+	/// docs/GROUND_VEHICLES.md §17) in place of the greybox: everything that does not turn
+	/// (<c>Body</c>) and the two rotors (<c>Rotor</c> at its hub, <c>TailRotor</c> at the
+	/// fenestron's middle) on the part that tilts, each found by the name
+	/// <c>tools/blender/helicopter.py</c> gives it and exported unturned, so the turn
+	/// <see cref="_Process"/> sets on a rotor is the whole of its pose. False, with nothing
+	/// built, when the model lacks one of the three: the greybox is drawn instead.
+	/// </summary>
+	private bool BuildHelicopterModel(PackedScene scene)
+	{
+		var model = scene.Instantiate<Node3D>();
+		Node3D Find(string name) => model.FindChild(name, recursive: true, owned: false) as Node3D;
+
+		Node3D bodyNode = Find("Body");
+		Node3D rotor = Find("Rotor");
+		Node3D tailRotor = Find("TailRotor");
+		if (bodyNode == null || rotor == null || tailRotor == null)
+		{
+			GD.PushError($"{Definition.ResourcePath}: its model lacks Body, Rotor or TailRotor; drawing the greybox");
+			model.Free();
+			return false;
+		}
+
+		foreach (Node3D node in new[] { bodyNode, rotor, tailRotor })
+		{
+			// Owned by the model's root, which is freed once its pieces are out of it.
+			node.Owner = null;
+			node.GetParent().RemoveChild(node);
+			_visual.AddChild(node);
+		}
+
+		_rotor = rotor;
+		_tailRotor = tailRotor;
+		model.Free();
+		return true;
+	}
+
+	/// <summary>The main rotor as drawn, which turns about +Y at its hub: null before it is built or on a dedicated server.</summary>
+	public Node3D RotorNode => _rotor;
+
+	/// <summary>The tail rotor as drawn, which turns about +X: null before it is built or on a dedicated server.</summary>
+	public Node3D TailRotorNode => _tailRotor;
+
 	// TODO(GV4, docs/GROUND_VEHICLES.md §12): check on a display: the wreck going up and burning, the
 	// gun turning with its gunner, tracers leaving the gun and the bed of a moving 4x4, the bed's
 	// "no shot". Driven headless by scripts/crew-vehicle-checks.sh combat, never looked at.
@@ -1076,6 +1134,11 @@ public partial class CrewVehicle : CharacterBody3D
 			return;
 		}
 
+		if (Kind == CrewVehicleKind.Helicopter && Definition.Model is { } heliModel && BuildHelicopterModel(heliModel))
+		{
+			return;
+		}
+
 		for (int i = 0; i < Hull.Length; i++)
 		{
 			_visual.AddChild(new MeshInstance3D
@@ -1132,11 +1195,8 @@ public partial class CrewVehicle : CharacterBody3D
 			return;
 		}
 
-		// TODO(GV5, docs/GROUND_VEHICLES.md §12): check on a display, on a listen host and a dedicated
-		// server: the cabin and boom, the rotor spinning up and its blades at speed, the tilt in flight,
-		// landing on the bunker's roof. Flown headless by scripts/crew-vehicle-checks.sh heli and
-		// heli-net, never looked at.
-		// The helicopter: two skids under the cabin, and the rotors.
+		// The helicopter without its model: two skids under the origin, and the rotors — the main
+		// one over the origin, above the highest box; the tail's beside the last box.
 		for (int side = -1; side <= 1; side += 2)
 		{
 			_visual.AddChild(new MeshInstance3D
@@ -1147,8 +1207,13 @@ public partial class CrewVehicle : CharacterBody3D
 			});
 		}
 
-		HitObb cabin = Hull.Length > 0 ? Hull[0].Local : HitObb.Aligned(Vector3.Up, Vector3.One);
-		_rotor = new Node3D { Name = "Rotor", Position = cabin.Center + new Vector3(0f, cabin.HalfExtents.Y + 0.25f, 0f) };
+		float hullTop = Hull.Length > 0 ? float.MinValue : 1f;
+		foreach (HullBox box in Hull)
+		{
+			hullTop = Mathf.Max(hullTop, box.Center.Y + box.HalfExtents.Y);
+		}
+
+		_rotor = new Node3D { Name = "Rotor", Position = new Vector3(0f, hullTop + 0.25f, 0f) };
 		for (int blade = 0; blade < 2; blade++)
 		{
 			_rotor.AddChild(new MeshInstance3D
@@ -1162,7 +1227,7 @@ public partial class CrewVehicle : CharacterBody3D
 
 		if (Hull.Length > 1)
 		{
-			HitObb boom = Hull[1].Local;
+			HitObb boom = Hull[^1].Local;
 			_tailRotor = new Node3D
 			{
 				Name = "TailRotor",

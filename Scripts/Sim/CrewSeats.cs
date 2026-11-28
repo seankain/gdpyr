@@ -18,7 +18,7 @@ public enum CrewVehicleKind : byte
 	/// <summary>The 4x4 technical: a driver, a gunner at the mounted gun, a passenger in the bed.</summary>
 	FourByFour = 0,
 
-	/// <summary>The helicopter: a pilot and a passenger in the left door.</summary>
+	/// <summary>The helicopter: a pilot, and two passengers on seats outside its frame, one each side (§17).</summary>
 	Helicopter = 1,
 }
 
@@ -31,7 +31,7 @@ public enum SeatRole : byte
 	/// <summary>At the 4x4's mounted gun: its trigger is the gun's.</summary>
 	Gunner = 1,
 
-	/// <summary>In the bed or the door, firing their own primary or pistol inside the seat's arc.</summary>
+	/// <summary>In the 4x4's bed or on a helicopter's outer seat, firing their own primary or pistol inside the seat's arc.</summary>
 	Passenger = 2,
 }
 

@@ -1,5 +1,5 @@
 {
-  "name": "an HTN ground bot gets into the passenger's door of a person's helicopter on its pad, a second finds no seat, and the one aboard gets out after the pilot lands and does",
+  "name": "two HTN ground bots get onto the outer seats of a person's helicopter on its pad, one each side, and both get out after the pilot lands and does",
   "bot_ai": "htn",
   "seeds": [1, 2, 3],
   "duration_ticks": 1380,
@@ -25,9 +25,9 @@
 
   "assert": [
     { "metric": "counters.pilot_fallbacks", "op": "==", "value": 0 },
-    { "metric": "events.vehicle_entered.count", "op": "==", "value": 2 },
-    { "metric": "events.vehicle_entered[seat=2,peer!=@pilot].count", "op": "==", "value": 1 },
-    { "metric": "events.vehicle_exited.count", "op": "==", "value": 2 },
+    { "metric": "events.vehicle_entered.count", "op": "==", "value": 3 },
+    { "metric": "events.vehicle_entered[seat=2,peer!=@pilot].count", "op": "==", "value": 2 },
+    { "metric": "events.vehicle_exited.count", "op": "==", "value": 3 },
     { "metric": "events.vehicle_exited.seat.first", "op": "==", "value": 0 },
     { "metric": "events.vehicle_exited[seat=0,peer=@pilot].count", "op": "==", "value": 1 },
     { "metric": "events.vehicle_exited[peer!=@pilot].x.min", "op": ">=", "value": -90 },
