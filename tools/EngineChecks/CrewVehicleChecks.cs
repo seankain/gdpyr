@@ -365,7 +365,13 @@ public partial class CrewVehicleChecks : Node
 				+ $" ride after {F(finalRide, "0.000")} m");
 			Fact(truck.Drive.Position.X > 12f, $"at {speed} m/s it crosses the strip");
 			Fact(bumpPitchMax - bumpPitchMin > 2f, $"at {speed} m/s the springs pitch it over the bumps ({F(bumpPitchMin, "0.0")}..{F(bumpPitchMax, "0.0")}°)");
-			Fact(rampAir > 0, $"at {speed} m/s it leaves the ground off the ramp");
+			// On three axles (docs/GROUND_VEHICLES.md §16) the front pair are down on the floor
+			// before the tandem leaves the drop at walking pace: it walks off where, on two, it
+			// high-centred and fell. At speed it still flies.
+			Fact(speed >= 12f ? rampAir > 0 : rampAir == 0,
+				speed >= 12f
+					? $"at {speed} m/s it leaves the ground off the ramp"
+					: $"at {speed} m/s it walks down off the ramp, two wheels or more down throughout");
 			Fact(Mathf.Max(rampPitchMax, bumpPitchMax) < 35.01f && Mathf.Min(rampPitchMin, bumpPitchMin) > -35.01f, $"at {speed} m/s the attitude stays inside ±35°");
 			Fact(minSpeed > speed * 0.5f, $"at {speed} m/s nothing on the strip stops it (slowest {F(minSpeed, "0.0")} m/s)");
 			Fact(held && settle < 4f && Mathf.Abs(finalRide - ride) < 0.01f, $"at {speed} m/s it is back at its ride height, settled for good {F(settle, "0.00")} s after the ramp's foot");

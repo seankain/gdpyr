@@ -55,11 +55,26 @@ public readonly struct WheelContact
 /// the step is testable without an engine. Angles are radians; every value is clamped
 /// to something the step can run on, so a file that says zero is a truck that does
 /// little, never one that divides by it.
+///
+/// <para>Three axles (§5.1): a steered front axle and a rear tandem. Along the body, in its
+/// own frame (forward is −Z), the front axle stands <see cref="FrontAxleMeters"/> ahead of the
+/// origin, the tandem's middle <see cref="WheelbaseMeters"/> behind the front axle, and its two
+/// axles <see cref="TandemSpacingMeters"/> apart about that middle. The origin is the centre of
+/// mass, so the front pair carry the share of the weight the lever rule gives them and the
+/// tandem's four the rest; each spring's rate is set to its share
+/// (<see cref="WheelStiffness"/>), so at rest every spring is compressed alike and the chassis
+/// stands level.</para>
 /// </summary>
 public readonly struct FourByFourTraits
 {
-	/// <summary>Axle to axle [m].</summary>
+	/// <summary>From the front axle to the middle of the rear tandem [m]: what the steering turns about.</summary>
 	public readonly float WheelbaseMeters;
+
+	/// <summary>How far ahead of the origin, the centre of mass, the front axle is [m].</summary>
+	public readonly float FrontAxleMeters;
+
+	/// <summary>Between the tandem's two axles [m].</summary>
+	public readonly float TandemSpacingMeters;
 
 	/// <summary>Half of wheel to wheel across an axle [m].</summary>
 	public readonly float HalfTrackMeters;
@@ -123,7 +138,8 @@ public readonly struct FourByFourTraits
 	/// <summary>How fast the chassis's turning and rocking die away in the air [1/s].</summary>
 	public readonly float AirborneRateDamping;
 
-	public FourByFourTraits(float wheelbaseMeters, float halfTrackMeters, float wheelRadiusMeters,
+	public FourByFourTraits(float wheelbaseMeters, float frontAxleMeters, float tandemSpacingMeters,
+		float halfTrackMeters, float wheelRadiusMeters,
 		float springRestMeters, float springTravelMeters, float springFrequencyHz, float dampingRatio,
 		float centreOfMassHeightMeters, float pitchGyrationMeters, float rollGyrationMeters,
 		float maxSpeed, float reverseSpeed, float driveAcceleration, float brakeDeceleration,
@@ -131,6 +147,11 @@ public readonly struct FourByFourTraits
 		float steerRate, float steerLimitAtRest, float steerLimitAtTop, float airborneRateDamping)
 	{
 		WheelbaseMeters = AtLeast(wheelbaseMeters, 0.5f);
+
+		// Both ends must carry some of the weight: the centre of mass between the front axle
+		// and the tandem's middle, never on either.
+		FrontAxleMeters = Math.Clamp(Finite(frontAxleMeters), 0.1f * WheelbaseMeters, 0.9f * WheelbaseMeters);
+		TandemSpacingMeters = Math.Clamp(Finite(tandemSpacingMeters), 0f, WheelbaseMeters);
 		HalfTrackMeters = AtLeast(halfTrackMeters, 0.25f);
 		WheelRadiusMeters = AtLeast(wheelRadiusMeters, 0.05f);
 		SpringTravelMeters = AtLeast(springTravelMeters, 2f * FourByFourSim.BumpStopMeters);
@@ -159,7 +180,9 @@ public readonly struct FourByFourTraits
 	/// carries: what the tests check the step against, and what a file is checked against.
 	/// </summary>
 	public static FourByFourTraits Default => new(
-		wheelbaseMeters: 3.0f,
+		wheelbaseMeters: 3.15f,
+		frontAxleMeters: 1.75f,
+		tandemSpacingMeters: 0.86f,
 		halfTrackMeters: 0.85f,
 		wheelRadiusMeters: 0.4f,
 		springRestMeters: 0.4f,
@@ -182,27 +205,51 @@ public readonly struct FourByFourTraits
 		steerLimitAtTop: Mathf.DegToRad(9f),
 		airborneRateDamping: 2f);
 
+	/// <summary>From the origin back to the middle of the rear tandem [m]: the wheelbase less the front axle's lead.</summary>
+	public float TandemCentreMeters => WheelbaseMeters - FrontAxleMeters;
+
+	/// <summary>
+	/// An axle's place along the body, in its own frame, forward −Z [m]: 0 the front axle,
+	/// 1 the tandem's leading axle, 2 its trailing one.
+	/// </summary>
+	public float AxleZ(int axle) => axle switch
+	{
+		0 => -FrontAxleMeters,
+		1 => TandemCentreMeters - (TandemSpacingMeters * 0.5f),
+		_ => TandemCentreMeters + (TandemSpacingMeters * 0.5f),
+	};
+
+	/// <summary>
+	/// Of the truck's weight, what the front axle carries at rest: the lever rule about the
+	/// centre of mass, the tandem's middle over the wheelbase. The tandem carries the rest,
+	/// half on each of its axles.
+	/// </summary>
+	public float FrontShare => TandemCentreMeters / WheelbaseMeters;
+
+	/// <summary>The farthest any axle stands from the origin along the body [m].</summary>
+	public float LongestAxleMeters => MathF.Max(FrontAxleMeters, AxleZ(FourByFourSim.Axles - 1));
+
 	/// <summary>
 	/// The most the chassis's attitude, at its ±<see cref="FourByFourSim.MaxAttitudeRadians"/>
 	/// stop, moves a corner above or below its hardpoint [m]: what a wheel's ray reaches
 	/// past the spring's own range, up and down (<see cref="FourByFourSim.CornerLift"/>).
 	/// </summary>
 	public float AttitudeReachMeters =>
-		((WheelbaseMeters * 0.5f) + HalfTrackMeters) * MathF.Sin(FourByFourSim.MaxAttitudeRadians);
+		(LongestAxleMeters + HalfTrackMeters) * MathF.Sin(FourByFourSim.MaxAttitudeRadians);
 
 	/// <summary>
 	/// How far below its hardpoint each wheel's ray reaches: a spring at full length, its
 	/// travel and the wheel, and <see cref="AttitudeReachMeters"/> [m]. The rays are cast
-	/// straight down from the upright body, so on a slope the downhill pair's hardpoints
-	/// stand half the wheelbase × the grade higher off the ground than on the level; without
-	/// the last term their rays miss from about 13° and the truck is left on its uphill pair.
+	/// straight down from the upright body, so on a slope the downhill axle's hardpoints
+	/// stand its distance from the origin × the grade higher off the ground than on the level;
+	/// without the last term their rays miss from about 13° and the truck is left on its uphill wheels.
 	/// A hit too far down for the spring is a wheel off the ground, as a miss is.
 	/// </summary>
 	public float RayLengthMeters => SpringRestMeters + SpringTravelMeters + WheelRadiusMeters + AttitudeReachMeters;
 
 	/// <summary>
 	/// How far above its hardpoint each wheel's ray starts: <see cref="AttitudeReachMeters"/>
-	/// [m]. The uphill pair's hardpoints stand half the wheelbase × the grade lower to the
+	/// [m]. The uphill axle's hardpoints stand its distance from the origin × the grade lower to the
 	/// ground than on the level, and from about 25° below it, where a ray started at the
 	/// hardpoint would start under the ground and find nothing.
 	/// </summary>
@@ -212,14 +259,24 @@ public readonly struct FourByFourTraits
 	public float Omega => MathF.Tau * SpringFrequencyHz;
 
 	/// <summary>
-	/// One spring's stiffness per kilogram of truck [N/m/kg]: four of them put the chassis
-	/// at <see cref="SpringFrequencyHz"/>, which is what makes the result independent of
-	/// the truck's mass, so the file has none to tune.
+	/// One wheel's spring stiffness per kilogram of truck [N/m/kg]: its axle's share of the
+	/// weight (<see cref="FrontShare"/>) over its axle's two springs, times ω². All six
+	/// together put the chassis at <see cref="SpringFrequencyHz"/> in heave, which is what makes
+	/// the result independent of the truck's mass, so the file has none to tune; and their
+	/// moments about the centre of mass cancel with every spring compressed alike, so the
+	/// truck stands level.
 	/// </summary>
-	public float CornerStiffness => Omega * Omega / FourByFourSim.Wheels;
+	public float WheelStiffness(int wheel) => Omega * Omega * WheelShare(wheel);
 
-	/// <summary>One damper's coefficient per kilogram [N·s/m/kg]: four make <see cref="DampingRatio"/>.</summary>
-	public float CornerDamping => 2f * DampingRatio * Omega / FourByFourSim.Wheels;
+	/// <summary>
+	/// One wheel's damper coefficient per kilogram [N·s/m/kg], in proportion to its spring:
+	/// together they make <see cref="DampingRatio"/> in heave.
+	/// </summary>
+	public float WheelDamping(int wheel) => 2f * DampingRatio * Omega * WheelShare(wheel);
+
+	/// <summary>Of the truck's weight, what one wheel carries at rest.</summary>
+	public float WheelShare(int wheel) =>
+		FourByFourSim.AxleOf(wheel) == 0 ? FrontShare * 0.5f : (1f - FrontShare) * 0.25f;
 
 	/// <summary>A spring's compression with the truck standing still on it: g / ω² [m].</summary>
 	public float StaticCompressionMeters => Ballistics.Gravity / (Omega * Omega);
@@ -280,9 +337,10 @@ public struct FourByFourState
 }
 
 /// <summary>
-/// How the 4x4 drives (docs/GROUND_VEHICLES.md §5.1, GV-D3): a kinematic body on four
-/// spring-dampers, as a pure function of its state, its traits, the driver's input
-/// frame and what its four wheel rays found.
+/// How the 4x4 drives (docs/GROUND_VEHICLES.md §5.1, GV-D3): a kinematic body on six
+/// spring-dampers on three axles, as a pure function of its state, its traits, the
+/// driver's input frame and what its six wheel rays found. "4x4" is its name in the game;
+/// it runs on a steered front axle and a rear tandem.
 ///
 /// Pure because the driver's client replays it: a correction rewinds to the server's
 /// state and re-runs this over the frames since, through the same
@@ -304,11 +362,16 @@ public struct FourByFourState
 /// <item><b>Airborne</b>, with fewer: gravity, and the rates damped.</item>
 /// </list>
 ///
-/// Wheels in order: front left, front right, rear left, rear right.
+/// Wheels in order: front left, front right, then the tandem's leading axle left and right,
+/// then its trailing axle left and right. Wheel <c>w</c> is on axle <c>w / 2</c>, on the left
+/// when <c>w</c> is even.
 /// </summary>
 public static class FourByFourSim
 {
-	public const int Wheels = 4;
+	public const int Wheels = 6;
+
+	/// <summary>The front axle, which steers, and the rear tandem's two.</summary>
+	public const int Axles = 3;
 
 	/// <summary>The last stretch of a spring's travel that is its bump stop [m].</summary>
 	public const float BumpStopMeters = 0.05f;
@@ -322,12 +385,42 @@ public static class FourByFourSim
 	/// <summary>The wheels a 4x4 needs on the ground to drive.</summary>
 	public const int WheelsForTraction = 2;
 
-	/// <summary>A wheel's hardpoint in the body's frame: ± half the track across, ± half the wheelbase along.</summary>
+	/// <summary>Which axle a wheel is on: 0 the front, 1 and 2 the tandem's.</summary>
+	public static int AxleOf(int wheel) => Math.Clamp(wheel / 2, 0, Axles - 1);
+
+	/// <summary>Whether a wheel steers: the front pair do.</summary>
+	public static bool Steers(int wheel) => AxleOf(wheel) == 0;
+
+	/// <summary>A wheel's hardpoint in the body's frame: ± half the track across, at its axle along (<see cref="FourByFourTraits.AxleZ"/>).</summary>
 	public static Vector3 HardpointLocal(in FourByFourTraits traits, int wheel)
 	{
 		float x = (wheel & 1) == 0 ? -traits.HalfTrackMeters : traits.HalfTrackMeters;
-		float z = wheel < 2 ? -traits.WheelbaseMeters * 0.5f : traits.WheelbaseMeters * 0.5f;
-		return new Vector3(x, 0f, z);
+		return new Vector3(x, 0f, traits.AxleZ(AxleOf(wheel)));
+	}
+
+	/// <summary>
+	/// The angle a wheel is drawn turned to [rad], right positive, for the steering at
+	/// <paramref name="steer"/> (<see cref="FourByFourState.Steer"/>, the angle the step turns the
+	/// truck by): none for the tandem's; for the front pair, Ackermann's, each turned so that
+	/// its axle points at the one turning centre on the line through the tandem's middle — the
+	/// inside wheel more than <paramref name="steer"/>, the outside one less. Presentation only:
+	/// the step turns the truck by <paramref name="steer"/> and nothing else.
+	/// </summary>
+	public static float WheelSteer(in FourByFourTraits traits, int wheel, float steer)
+	{
+		if (!Steers(wheel) || !(MathF.Abs(steer) > 1e-6f) || !float.IsFinite(steer))
+		{
+			return 0f;
+		}
+
+		// From the turning centre to the truck's middle line, along the tandem's line.
+		float wheelbase = traits.WheelbaseMeters;
+		float radius = wheelbase / MathF.Tan(MathF.Min(MathF.Abs(steer), 1.4f));
+		bool rightWheel = (wheel & 1) == 1;
+		bool inside = rightWheel == steer > 0f;
+		float offset = inside ? radius - traits.HalfTrackMeters : radius + traits.HalfTrackMeters;
+		float angle = MathF.Atan2(wheelbase, MathF.Max(offset, 1e-3f));
+		return MathF.CopySign(angle, steer);
 	}
 
 	/// <summary>Where a wheel's ray starts, on the upright body: the engine half casts it straight down from here.</summary>
@@ -335,19 +428,20 @@ public static class FourByFourSim
 		state.Position + new Basis(Vector3.Up, state.Yaw) * HardpointLocal(traits, wheel);
 
 	/// <summary>
-	/// A spring's push, per kilogram of truck [m/s²], at <paramref name="compression"/>
+	/// One wheel's spring's push, per kilogram of truck [m/s²], at <paramref name="compression"/>
 	/// (clamped to its travel) with its corner rising at <paramref name="cornerSpeed"/>
 	/// faster than the ground under its wheel — the rate the spring is lengthening at:
 	/// stiffness × compression, plus <see cref="BumpStopStiffnessScale"/> − 1 times that
 	/// again past the start of the bump stop, less damping × the corner's speed. Never
-	/// negative: a spring pushes, and a wheel lifting off the ground lets go.
+	/// negative: a spring pushes, and a wheel lifting off the ground lets go. Stiffness and
+	/// damping are the wheel's own (<see cref="FourByFourTraits.WheelStiffness"/>).
 	/// </summary>
-	public static float SpringForce(in FourByFourTraits traits, float compression, float cornerSpeed)
+	public static float SpringForce(in FourByFourTraits traits, int wheel, float compression, float cornerSpeed)
 	{
 		float c = Math.Clamp(compression, 0f, traits.SpringTravelMeters);
-		float k = traits.CornerStiffness;
+		float k = traits.WheelStiffness(wheel);
 		float bump = MathF.Max(c - (traits.SpringTravelMeters - BumpStopMeters), 0f);
-		float force = (k * c) + ((BumpStopStiffnessScale - 1f) * k * bump) - (traits.CornerDamping * cornerSpeed);
+		float force = (k * c) + ((BumpStopStiffnessScale - 1f) * k * bump) - (traits.WheelDamping(wheel) * cornerSpeed);
 		return MathF.Max(force, 0f);
 	}
 
@@ -456,7 +550,7 @@ public static class FourByFourSim
 			float cornerSpeed = state.Velocity.Y + (liftPerPitch * state.PitchRate) + (liftPerRoll * state.RollRate)
 				- GroundRise(contact, state.Velocity);
 
-			float force = SpringForce(traits, compression, cornerSpeed);
+			float force = SpringForce(traits, wheel, compression, cornerSpeed);
 			heave += force;
 			pitchTorque += force * liftPerPitch;
 			rollTorque += force * liftPerRoll;

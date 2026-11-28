@@ -15,7 +15,9 @@ back, version 5. And GV8's riding bots (§12): an HTN ground bot with nothing in
 person's stopped 4x4 or helicopter gets in by the use key, at the gun first, fights from the seat
 and gets out when the person does; with nobody or nobody but a bot at the controls none gets in, and
 a legacy bot never does. And GV9's docs (§12): the README's controls, NETCODE.md §10.11, M12,
-AGENT_API.md, DEMOS.md and EFFECTS.md say what was built. What is left is a person's: everything
+AGENT_API.md, DEMOS.md and EFFECTS.md say what was built. And the 4x4's model and third axle (§16):
+a six-wheeled buggy built in Blender from two concept renderings, drawn in place of the greybox, its
+wheels rolling, steering and riding on wishbones and coilovers, on a step grown to three axles. What is left is a person's: everything
 drawn has been driven headless and never looked at, and none of it has run on a dedicated server
 over a real link.** Written against `6699b03`; GV4 amends GV-D16 (§3). The
 decisions (GV-D1–GV-D17, §3) are the defaults the plan is written against; each is one line to
@@ -81,7 +83,7 @@ Facts this plan stands on, each read in the source at `6699b03`.
 |---|---|---|
 | GV-D1 | **A system of their own, not `Unit`.** A crew vehicle is a `CharacterBody3D` (`CrewVehicle`) in its own registry (`CrewVehicleManager`). | Units are never predicted, never fogged (NETCODE.md §6.2), count towards the strategist's defeat (`LiveUnitCount`), and take orders and plans. Each is wrong for a vehicle a player drives. |
 | GV-D2 | **Seats.** 4x4: driver (enclosed), gunner at the mounted gun (exposed), passenger in the bed (exposed). Helicopter: pilot (enclosed), passenger in the left door (exposed). Drivers and pilots do not fire. | The request. A driver's mouse belongs to the camera, a pilot's to the heading. |
-| GV-D3 | **Movement: a kinematic body with a sprung chassis, engine-free.** The 4x4's step is a pure function of its state, the input frame and four wheel-ray contacts; four spring-dampers set its ride height, pitch and roll. The body stays upright; the attitude is drawn on the mesh and applied to the seats and the hull's hit boxes, and the 4x4's collider shape takes it on the upright body. No `RigidBody3D` or `VehicleBody3D`. *Changed for hills: the collider stayed upright, and level it beached on a 10° slope off its wheels (LEVEL_EDITOR.md LE-D24, §5.1 here).* | The springs are the request, and a pure step is what a replay re-runs and what xUnit tests (§5.1). A rigid body cannot be stepped alone for a replay, and the solver's state is not the same on two peers (IMPLEMENTATION_PLAN.md §2). The dropship already keeps its tilt off the body (VEHICLES.md §8.4). |
+| GV-D3 | **Movement: a kinematic body with a sprung chassis, engine-free.** The 4x4's step is a pure function of its state, the input frame and four wheel-ray contacts; four spring-dampers set its ride height, pitch and roll. *Changed by §16: six of each, on a steered front axle and a rear tandem.* The body stays upright; the attitude is drawn on the mesh and applied to the seats and the hull's hit boxes, and the 4x4's collider shape takes it on the upright body. No `RigidBody3D` or `VehicleBody3D`. *Changed for hills: the collider stayed upright, and level it beached on a 10° slope off its wheels (LEVEL_EDITOR.md LE-D24, §5.1 here).* | The springs are the request, and a pure step is what a replay re-runs and what xUnit tests (§5.1). A rigid body cannot be stepped alone for a replay, and the solver's state is not the same on two peers (IMPLEMENTATION_PLAN.md §2). The dropship already keeps its tilt off the body (VEHICLES.md §8.4). |
 | GV-D4 | **The driver's client predicts its vehicle** as it predicts its character: the same input ring, a second ledger, a replay through the same step. Everybody else interpolates it. Getting in, getting out and changing seat are not predicted. | Unpredicted, steering would answer a round trip plus the 100 ms interpolation delay late — about 200 ms at 100 ms RTT. The drone accepts a round trip (CONTROL_POINTS.md §4.4); a truck that steers that late does not feel like one. NETCODE.md §10.2's rule for transitions stands. |
 | GV-D5 | **Controls, with no new key and no new input bit.** Tap `E` beside a vehicle: the free seat whose door is nearest. Seated: tap `E` gets out, hold `E` moves to the next free seat. 4x4: `W`/`S` throttle, brake and reverse; `A`/`D` steer; `Space` handbrake; the mouse looks, and the camera follows the truck. Helicopter: `W`/`S`/`A`/`D` move, `Space`/`Ctrl` climb and descend, and the mouse turns it towards where the pilot looks. | The frame stays twelve bytes and every recorded frame keeps its meaning; U, T and G keep one action each. Steering by looking is the drone's, which players already know. |
 | GV-D6 | **Passengers fire their own primary and pistol** — sights, reload and swap too; not the hammer, a grenade or a drone. Each seat has a fire arc, outside which the trigger does nothing. A round fired from a seat never hits that vehicle or anybody in it. | The request. The arc keeps a passenger from shooting through the cab; the exclusion keeps a round at the arc's edge off its own hull. Grenades and the hammer from a moving seat are rules of their own (§15). |
@@ -137,6 +139,11 @@ All of it in `Scripts/Sim`, which `Tests/Gdpyr.Tests.csproj` compiles directly, 
 and drone rules are.
 
 ### 5.1 The 4x4 — `Scripts/Sim/FourByFour.cs`, `Tests/FourByFourTests.cs`
+
+*Changed by §16: the 4x4 runs on six wheels on three axles — a steered front axle 1.75 m ahead of
+the origin and a rear tandem whose middle is 3.15 m behind it, its two axles 0.86 m apart — each
+wheel on a spring of its own, rated to its axle's share of the weight so that the chassis still
+stands level. What follows says four where it now means six; the rules are otherwise as written.*
 
 **State** (`FourByFourState`): position, velocity, yaw and yaw rate, the chassis's pitch and roll and
 their rates, steering angle, ticks airborne. **Inputs**: traits (from `Vehicles/four_by_four.tres`),
@@ -380,7 +387,8 @@ radius from every box is no contact, and one inside a box is; the credit's 3 s, 
   World | Vehicles. Its collider is a bevelled convex hull, so it slides off wall ends rather than
   catching on them. It casts its own rays and moves itself; its presentation — the greybox hull,
   wheels placed by their compression, rotor discs, the gun on its mount — is built only off a
-  dedicated server, as the dropship's is.
+  dedicated server, as the dropship's is. *Changed by §16: the 4x4 is drawn as a model, its wheels
+  rolling, steering and riding on wishbones and coilovers; the greybox is what is drawn without one.*
 - **`Scripts/Fps/CrewVehicleManager.cs`** — a sixth autoload, beside `EmplacementManager`: the
   registry (`MaxCrewVehicles`, fixed), the seats, the kiosk, the tick, the message, a client's
   puppets and the driver's prediction.
@@ -629,7 +637,7 @@ reconciled while seated (§6.7); its health, ammunition and kit apply as before.
 - **Debug HUD:** `vehicles 2 · 3 aboard · 4x4 out · helicopter 0:42 · run over 3 · mispredicted 0.4/s · replay 9`;
   `off` for a kind the kiosk does not offer, and on the authority `· helicopter pad failed`.
 - **Presentation:** greybox boxes, cylinders for wheels and discs for rotors, in the ground force's
-  colour; a seated body in its pose; a wreck burning as a unit vehicle's does. A unit run over falls
+  colour (*the 4x4 a model since §16*); a seated body in its pose; a wreck burning as a unit vehicle's does. A unit run over falls
   as a shot one does, a round trip after the driver struck it, and the driver gets a hit marker.
 
 ---
@@ -965,7 +973,7 @@ Measured by the `physics` check:
 | Over the two 0.3 m bumps at 5 m/s | pitch −7.1° to +7.2°; never fewer than two wheels down; the collider touches a bump on 13 ticks — 0.3 m bumps against 0.25 m of clearance between the axles |
 | Over the bumps at 12 m/s | pitch −3.7° to +4.3°; fewer than two wheels down on 60 ticks; the collider touches on 5 |
 | Off the 1 m ramp at 12 m/s | pitch −2.8° to +19.1°; fewer than two wheels down on 53 ticks, 48 of them in one jump; settled for good, at its ride height, 2.2 s after its centre passes the drop |
-| Off the ramp at 5 m/s | at walking pace it high-centres on the drop: all four wheels off, the collider sliding over the edge, the nose down to the ±35° stop, a hard landing; slowest 4.1 m/s; settled for good 3.2 s after its centre passes the drop |
+| Off the ramp at 5 m/s | at walking pace it high-centres on the drop: all four wheels off, the collider sliding over the edge, the nose down to the ±35° stop, a hard landing; slowest 4.1 m/s; settled for good 3.2 s after its centre passes the drop. *On three axles it walks off instead (§16.5)* |
 | Full lock from 12 m/s | 63° in 1.5 s, no sideways slip; on the handbrake 59°, sliding at up to 4.0 m/s sideways |
 | A wall's end at 18 m/s, overlapping the hull by 0.1 / 0.2 / 0.3 / 0.5 m | shipped bevel (0.25 m): past at 16.1 and 15.5 m/s; stopped dead at 0.3 and 0.5. No bevel: stopped dead at all four |
 | A player or a rifleman on a 4x4's line, at 5 and 15 m/s | in the hull by one tick's travel (0.08, 0.25 m) after the truck moves; 0.000–0.003 m after its own `MoveAndSlide`; carried ahead of the truck; the truck's speed untouched |
@@ -2087,3 +2095,150 @@ read off the code, the `.tres` files, `Scenes/Test.tscn` or §12's measurements,
 - **More kinds, more seats, a second kiosk**, or a seat held for whoever asked at the kiosk.
 - **Rewound hits against vehicles**: a hull is tested where it is now, as a unit's capsule is
   (NETCODE.md §5).
+
+---
+
+## 16. The 4x4's model and its third axle
+
+**Asked:** replace the 4x4's greybox with a model generated from two concept renderings — an olive,
+six-wheeled desert buggy: a tube roll cage over an open two-seat cab with a raked windscreen and a
+flat roof, angular panels, a bull bar round two hexagonal lamps, a long flat deck over a rear tandem
+carrying jerrycans and ammunition crates, and a heavy machine gun on a pedestal behind a faceted
+shield; seen from the side and from the front. Its wheels to roll and steer with the controls, and
+offroad suspension on its three axles, "with Godot's vehicle tools".
+
+![In Blender: front three-quarter, side, front, rear three-quarter](baselines/four-by-four-model-blender.png)
+
+![In Godot 4.6, from the imported .glb, posed by CrewVehicle: parked, from the front and behind; at full right lock; the leading tandem axle up on the strip's bump](baselines/four-by-four-model-godot.png)
+
+### 16.1 Decisions
+
+| | Decision | Why |
+|---|---|---|
+| GV-D18 | **Three axles in the engine-free step, not `VehicleBody3D`.** `FourByFourSim` grows from four spring-dampers to six; `VehicleBody3D` and `VehicleWheel3D` are not used. Asked which, the person chose this. | GV-D3's reasons stand: the driver's client predicts the truck by replaying the step (GV-D4), which a rigid body's solver cannot do the same on two peers. Nothing on the wire changes — a record carries the pose, the velocity and the steering, not the wheels — so prediction, demos and the agent schema are untouched. |
+| GV-D19 | **The axles where the concept has them, the origin still the centre of mass.** The front axle 1.75 m ahead of the origin; the tandem's middle 3.15 m behind the front axle (`WheelbaseMeters`, the length the steering turns about: 3.0 before); its two axles 0.86 m apart. Each spring is rated to its axle's share of the weight by the lever rule — the front pair carry 44.4 %, the tandem's four 55.6 % — with the six together as stiff and as damped as the four were. | The hull's boxes, the seats, the collider and the gun are all placed from the origin; moving it would move them all. Rated so, every spring is compressed alike at rest, and the chassis stands level at the same ride height (0.703 m) and rides at the same 1.6 Hz and 0.3 in heave. |
+| GV-D20 | **The hit volumes follow the model.** The cab's box stops at the roof, 1.10 m above the origin where it stood at 1.45; the bed's box at the deck, 0.40 where it was 0.25; the gunner and the bed passenger stand 0.15 m higher, on the deck; the gun's pivot is 1.35 m up where it was 1.25, its shield's box with it; the collider's top at the roof. Its floor — and so every slope clearance in §5.1 — is unchanged. | A round over the roof should miss, and a person in the bed should stand on the deck that is drawn. The driver is still 0.15 m or more inside the cab on every side (GV-D11). |
+| GV-D21 | **The running gear is drawn, never read back.** Each wheel rolls by the distance its tread covers — the body's speed along its nose and what the turn adds on the outside and takes off the inside; the front pair turn at Ackermann angles about the one centre on the tandem's middle line that the step turns about; each wheel hangs along its corner's own down, the chassis's, until its tyre is on the ground its ray found; the wishbones and coilovers are posed between. | It is the look the request asks for, and none of it is a rule: a puppet rolls and steers its wheels from the record's velocity and steering, and a dedicated server builds none of it. |
+
+### 16.2 The step on three axles
+
+`Scripts/Sim/FourByFour.cs`: `FourByFourSim.Wheels` is 6 and `Axles` 3, wheels in the order front
+left and right, then the tandem's leading axle, then its trailing one (`AxleOf`, `Steers`).
+`FourByFourTraits` gains `FrontAxleMeters` and `TandemSpacingMeters` (and the file their keys);
+`AxleZ` places each axle along the body, at −1.75, +0.97 and +1.83 m (forward is −Z).
+`WheelStiffness` and `WheelDamping` are each wheel's (`WheelShare` of ω², and of 2ζω), in place of
+the one corner's; `SpringForce` takes the wheel. The rays reach from the axle farthest from the
+middle, so `AttitudeReachMeters` is (1.83 + 0.85) × sin 35° = 1.54 m, where it was 1.35. Everything
+else in §5.1 holds as written for six: two wheels down still give traction, and the yaw rate still
+follows v · tan(steer) / wheelbase, the wheelbase now to the tandem's middle — at the same lock the
+truck turns about 5 % wider. `WheelSteer` gives each front wheel its Ackermann angle for drawing.
+
+Tests (`Tests/FourByFourTests.cs`; every earlier one runs over six wheels unchanged but for a wheel
+argument): six wheels on three axles, left then right, the tandem's tyres clear of each other; the
+springs at rest carry exactly g with no pitch or roll moment, the shares sum to one and the front's
+springs are the stiffer; the ray reach from the farthest axle; a front axle on the centre of mass or
+past the tandem clamped between them; the bump stop ten times as stiff on a front and two tandem
+wheels; and for steering right, left and slightly, both front wheels turn the way steered, the
+inside one more than the step's angle and the outside one less, their axles meeting the tandem's
+middle line at one point, v / tan(steer) across, and the tandem never turning.
+
+### 16.3 The model — `tools/blender/four_by_four.py`
+
+```bash
+python3 -m pip install bpy==5.3.0                     # Blender as a module; needs Python 3.13
+python3 tools/blender/four_by_four.py                 # or: blender --background --python ...
+python3 tools/blender/four_by_four.py --render DIR    # also preview renders (Cycles on the CPU)
+```
+
+It writes `Models/Vehicles/four_by_four/four_by_four.glb` and `tools/blender/FourByFour.blend` from
+`PARAMS` and the numbers it shares with `Vehicles/four_by_four.tres` (wheelbase, front axle, tandem,
+track, wheel radius, spring, ride height, gun mount, barrel), and prints each piece's triangles and
+extents in Godot's axes and whether every piece is closed and faces outward. At the time of writing:
+11,394 triangles in its meshes, 18,498 drawn — the body 3,090, the gun 196 and 392, a wheel 1,668
+(one mesh a side, three wheels each), a knuckle 108, a wishbone 130–132, a coilover 432; every piece
+closed, none facing inward. As with the tank (UNIT_MODELS.md §2), a re-run gives the same model but
+not the same bytes.
+
+**Axes and origin.** Blender +Y forward, +Z up; the exporter's (x, y, z) → (x, z, −y) puts the nose
+down Godot's −Z. The origin is the vehicle's: the middle of the hardpoints' plane, the ground 0.703 m
+below it at rest. **Pieces**, each named for `CrewVehicle` to find:
+
+| Node | What it is | How it moves |
+|---|---|---|
+| `Body` | cage, panels, hood, bull bar, lamps, seats, deck, cargo, pedestal, the frame and the suspension's brackets | with the chassis's pitch and roll |
+| `GunYaw` → `GunPitch` → `Muzzle` | pintle head and shield; the gun, its ammunition box; the end of the bore, 1.1 m ahead of the pivot | yaw about +Y, then elevation about +X |
+| `Wheel0`–`5` | tyre (two staggered rows of tread blocks) and ten-spoke beadlock rim, at its hub | rolls about +X; the front pair also steer |
+| `Knuckle0`–`5`, with `LowerJoint`/`UpperJoint` | the upright inside the rim and its ball joints | steers with its wheel about the kingpin through the joints; never rolls |
+| `LowerArm0`–`5` (with `ShockMount`), `UpperArm0`–`5` | wishbones from their inboard pivots on the chassis to the joints | swing about Z |
+| `Shock0`–`5` | coilover from its top mount, down −Y | pointed at its foot on the lower wishbone, stretched to reach it |
+
+Glass is the one transparent material (alpha 0.3, glTF `BLEND`). No markings or lettering from the
+concepts are reproduced.
+
+### 16.4 Drawn — `Scripts/Fps/CrewVehicle.cs`
+
+`CrewVehicleDefinition.Model` names the `.glb` (`Vehicles/four_by_four.tres`). Off a dedicated
+server, `BuildModel` instantiates it, reads its rest pose off the pieces, and moves them: the body
+and the gun onto the sprung chassis (`Visual`), each wheel and knuckle onto a mount of its own on the
+upright body, the wishbones and coilovers onto the chassis. A model that lacks a piece is reported
+and the greybox is drawn; with no model, too — on six wheels, which roll.
+
+Each frame, `RollWheels` turns each wheel on by its tread's distance over its radius, and
+`PlaceWheels` puts each mount on its spring along the chassis's down, clamped to the spring's travel,
+turned by `WheelSteer` about the kingpin; `WheelRig.Pose` then swings each wishbone about its pivot
+to point at its joint, drawn up to a tenth longer or shorter in its own plane to reach it (a hub
+that moves straight leaves a rigid arm's arc), and points each coilover at its foot. `PointGun` turns
+the pintle head and elevates the gun in it. A wreck burns every mesh under the vehicle, wheels
+included.
+
+### 16.5 Checked
+
+- **`dotnet test`**: 4,100 of 4,100 (4,091 before: 9 new in `FourByFourTests`). One full run failed
+  `SquadDrillTests.EightSquads_AllocateNothingOnTheTick_WithThePooledFactory(pooled: True)`, an
+  allocation count, which passed alone and in two more full runs; it reaches no vehicle code.
+- **`scripts/four-by-four-model-checks.sh`** (new; `tools/EngineChecks/FourByFourModelChecks.cs`;
+  output in `docs/baselines/four-by-four-model-checks.txt`): 26 of 26, headless at 60 fixed frames a
+  second. Parked: drawn as the model; the model's hubs at rest within 0.000 m of the rules'; every
+  wheel at its rest place and on the floor; the wishbones and coilovers at rest and meeting their
+  joints and feet; the gun at the definition's mount, its muzzle 1.1 m down the bore, and pointed
+  90° left and 30° up it points 90.0° and 30.0°. Three seconds ahead at half throttle, 17.03 m: every
+  wheel rolls forward 42.57 rad, the distance over its radius, to 0.0 %. At full right lock at
+  6.9 m/s, the step's 23.1° is drawn as 25.7° inside and 20.9° outside, the rules' Ackermann angles,
+  the tandem straight, the left wheels rolling 132.3 rad to the right's 107.6; at full left lock
+  35.2° and 27.1°, the wishbones within 0.003 m of their joints. Over the strip's two 0.3 m bumps at
+  6 m/s every wheel rides 0.214 m or more on its own spring and inside its travel, the front axle
+  climbing the bump first, then the leading, then the trailing axle (ticks 281, 308, 316); the front
+  left lower wishbone swings −14.5° to 11.6°; every wishbone's end on its joint to 0.000 m, drawn at
+  most 11.7 % long or short; every coilover on its foot to 0.000 m. A wreck burns 33 of 33 meshes;
+  with no model, the greybox on six rolling wheels. With `SHOTS`, under Xvfb with the Compatibility
+  renderer (Mesa llvmpipe), it saved the pictures above: back faces culled and nothing missing.
+- **`scripts/crew-vehicle-checks.sh`**: `game` 37 of 37. `physics` 66 of 66, one fact changed: at
+  5 m/s off the strip's 1 m ramp the truck used to high-centre and fall, fewer than two wheels down
+  for 33 ticks (§12, GV2); on three axles its front pair are on the floor before the tandem leaves
+  the drop, and it walks off it, never fewer than two down, its nose at −23.9°, slowest 4.8 m/s,
+  settled 2.25 s after — so the fact now says that, and at 12 m/s still that it leaves the ground
+  (19 ticks, −11.5° to +11.9°). Over the bumps at 5 m/s −9.5° to +7.6°, the collider touching on 5
+  ticks; at 12 m/s −8.3° to +14.7°; full lock from 12 m/s turns 63°, and 58° on the handbrake
+  sliding at up to 3.9 m/s. `combat`: server 26 of 26, driver 11, gunner 11 and passenger 9 of
+  theirs, with the gun 0.10 m higher and the riders on the deck. `net` (real time, over the 40 ms
+  relay) **is flaky on this VM with or without the change**: an untouched worktree of the parent
+  commit failed 2 runs of 8, each on the driver's "nothing snaps" facts; this branch failed 5 of 10 —
+  in three of them the passenger's view stepped 60 cm on a tick, its render clock past the newest
+  record, and in the others the same driver facts. Run alternately, four each, both failed one, on
+  the same driver fact. Without the model referenced (the step's changes alone) one run held all its
+  facts. The model costs 16 µs a frame and allocates nothing (0 bytes over 2,000 frames, no
+  collection), and about 10 ms once, where a vehicle is made (1 ms for the greybox). Whether the
+  passenger's stutter is the model's is not settled: worth rerunning on a quieter box.
+- **`scripts/level-editor-checks.sh slopes`**: 32 of 32 on the triangle mesh and 5 of 5 on the
+  heightmap. From rest at the foot the 4x4 climbs every grade to 20.0° (20° in 3.0 s, off its wheels
+  10 ticks at most); at 18 m/s it rides up faces to 70° and 75° stops it, as before (§5.1); held on
+  its handbrake on 4.9° it moves 0.00 m, driven or left empty.
+
+### 16.6 Left for a person
+
+At the controls on a display: the wheels and wishbones at speed, on the hills and the gully;
+whether the gun's height over the roof (higher than the concept's, for a standing gunner) and the
+riders standing on the deck look right with a body in each seat; the model's cost in a round on
+the box (18,498 triangles drawn, against the greybox's few dozen); and `net`'s passenger stutter
+above, on a quieter machine. Nothing here has run on a dedicated server over a real link; a
+dedicated server builds none of it.

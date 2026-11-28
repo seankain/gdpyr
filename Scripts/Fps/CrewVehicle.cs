@@ -56,10 +56,20 @@ public partial class CrewVehicle : CharacterBody3D
 
 	private Node3D _visual;
 	private Node3D _presentation;
+
+	/// <summary>Each wheel's mount on the upright body: placed on its spring and turned by its steering.</summary>
 	private readonly Node3D[] _wheelNodes = new Node3D[FourByFourSim.Wheels];
+
+	/// <summary>The model's running gear, by wheel (null with the greybox): see <see cref="WheelRig"/>.</summary>
+	private WheelRig[] _rigs;
+
+	/// <summary>How far round each wheel has rolled [rad], about its axle: drawn only.</summary>
+	private readonly float[] _wheelSpin = new float[FourByFourSim.Wheels];
+
 	private Node3D _rotor;
 	private Node3D _tailRotor;
 	private Node3D _gun;
+	private Node3D _gunPitch;
 	private float _rotorAngle;
 
 	/// <summary>Which of <see cref="SimConfig.MaxCrewVehicles"/> it is: what the vehicle record names on the wire (§7.1).</summary>
@@ -518,7 +528,9 @@ public partial class CrewVehicle : CharacterBody3D
 
 	/// <summary>
 	/// The gun drawn pointing along <paramref name="local"/>, a direction in the hull's own
-	/// frame: where its gunner's look puts it (§6.4). Presentation only.
+	/// frame: where its gunner's look puts it (§6.4). The model's pintle head and shield turn
+	/// with the yaw and its gun elevates in them; the greybox's one mount does both.
+	/// Presentation only.
 	/// </summary>
 	public void PointGun(Vector3 local)
 	{
@@ -528,8 +540,33 @@ public partial class CrewVehicle : CharacterBody3D
 		}
 
 		Aim.Angles(local, out float yaw, out float pitch);
+		if (_gunPitch != null)
+		{
+			_gun.Rotation = new Vector3(0f, yaw, 0f);
+			_gunPitch.Rotation = new Vector3(pitch, 0f, 0f);
+			return;
+		}
+
 		_gun.Rotation = new Vector3(pitch, yaw, 0f);
 	}
+
+	/// <summary>The gun's pintle head as drawn, which turns with its yaw: null before it is built or on a dedicated server.</summary>
+	public Node3D GunYawNode => _gun;
+
+	/// <summary>The model's gun as drawn, which elevates in the pintle head: null for the greybox.</summary>
+	public Node3D GunPitchNode => _gunPitch;
+
+	/// <summary>Wheel <paramref name="wheel"/>'s mount as drawn — on its spring, turned by its steering — or null.</summary>
+	public Node3D WheelMount(int wheel) => wheel >= 0 && wheel < _wheelNodes.Length ? _wheelNodes[wheel] : null;
+
+	/// <summary>The model's running gear at wheel <paramref name="wheel"/>, or null with the greybox or none drawn.</summary>
+	public WheelRig Rig(int wheel) => _rigs != null && wheel >= 0 && wheel < _rigs.Length ? _rigs[wheel] : null;
+
+	/// <summary>The sprung part as drawn — what pitches and rolls with the chassis — or null.</summary>
+	public Node3D Chassis => _visual;
+
+	/// <summary>How far round wheel <paramref name="wheel"/> has rolled [rad], as drawn.</summary>
+	public float WheelSpin(int wheel) => wheel >= 0 && wheel < _wheelSpin.Length ? _wheelSpin[wheel] : 0f;
 
 	/// <summary>Client: hides it from a strategist the fog no longer tells about it (§7.3). Presentation only; it is still solid.</summary>
 	public void SetFogHidden(bool hidden)
@@ -664,7 +701,8 @@ public partial class CrewVehicle : CharacterBody3D
 
 		if (Kind == CrewVehicleKind.FourByFour)
 		{
-			PlaceWheels();
+			RollWheels((float)delta);
+			PlaceWheels(pose.Pitch, pose.Roll);
 			return;
 		}
 
@@ -680,11 +718,44 @@ public partial class CrewVehicle : CharacterBody3D
 		}
 	}
 
-	/// <summary>Each wheel where its spring holds it: on the ground its ray found, or hanging at full length.</summary>
-	private void PlaceWheels()
+	/// <summary>
+	/// Each wheel rolled on by how far its tread went over the ground this frame: the body's
+	/// speed along its nose, and what its turning adds on the outside and takes off the
+	/// inside. Forward is −Z, so a wheel rolling forward turns about −X. Drawn only.
+	/// </summary>
+	private void RollWheels(float delta)
+	{
+		Vector3 forward = Aim.Direction(Drive.Yaw, 0f);
+		float along = Drive.Velocity.Dot(forward);
+		float radius = DriveTraits.WheelRadiusMeters;
+		for (int wheel = 0; wheel < FourByFourSim.Wheels; wheel++)
+		{
+			float x = FourByFourSim.HardpointLocal(DriveTraits, wheel).X;
+			float speed = along + (Drive.YawRate * x);
+			if (float.IsFinite(speed))
+			{
+				_wheelSpin[wheel] = Mathf.Wrap(_wheelSpin[wheel] - (speed / radius * delta), -Mathf.Pi, Mathf.Pi);
+			}
+		}
+	}
+
+	/// <summary>
+	/// Each wheel where its spring holds it: slid along its corner's own down — the chassis's,
+	/// pitched and rolled, as wishbones guide a wheel — until its tyre stands on the ground its
+	/// ray found, or hanging at full length; never further from its corner than the spring's
+	/// free length nor nearer than its travel allows. The front pair turned by their steering
+	/// (<see cref="FourByFourSim.WheelSteer"/>) — on the model about the kingpin through their
+	/// ball joints — and every wheel rolled by <see cref="RollWheels"/>; and on the model, each
+	/// wheel's wishbones and coilover put between the chassis and its knuckle.
+	/// </summary>
+	private void PlaceWheels(float pitch, float roll)
 	{
 		FourByFourTraits traits = DriveTraits;
 		float shortest = traits.SpringRestMeters - traits.SpringTravelMeters;
+		Basis chassis = CrewPose.Rotation(0f, pitch, roll);
+		Vector3 down = chassis * Vector3.Down;
+		float drop = Mathf.Max(-down.Y, 0.1f);
+		Transform3D toChassis = new Transform3D(chassis, Vector3.Zero).AffineInverse();
 		for (int wheel = 0; wheel < FourByFourSim.Wheels; wheel++)
 		{
 			if (_wheelNodes[wheel] == null)
@@ -692,17 +763,247 @@ public partial class CrewVehicle : CharacterBody3D
 				continue;
 			}
 
+			// The ray's distance is from the hardpoint on the upright body straight down: the
+			// tyre's foot is there, its centre a radius up, reached along the chassis's down.
+			Vector3 corner = chassis * FourByFourSim.HardpointLocal(traits, wheel);
 			WheelContact contact = _wheels[wheel];
 			float spring = contact.Hit
-				? Mathf.Clamp(contact.Distance - traits.WheelRadiusMeters, shortest, traits.SpringRestMeters)
+				? Mathf.Clamp((corner.Y + contact.Distance - traits.WheelRadiusMeters) / drop, shortest, traits.SpringRestMeters)
 				: traits.SpringRestMeters;
+			var hub = new Transform3D(chassis, corner + (down * spring));
 
-			Vector3 hardpoint = FourByFourSim.HardpointLocal(traits, wheel);
-			_wheelNodes[wheel].Position = hardpoint + (Vector3.Down * spring);
+			// Positive is to the right, which is a turn about −Y.
+			var steer = new Basis(Vector3.Up, -FourByFourSim.WheelSteer(traits, wheel, Drive.Steer));
+			if (_rigs?[wheel] is { } rig)
+			{
+				Vector3 kingpin = rig.Kingpin;
+				_wheelNodes[wheel].Transform = hub * new Transform3D(steer, kingpin - (steer * kingpin));
+				rig.Pose(_wheelNodes[wheel].Transform, toChassis, _wheelSpin[wheel]);
+				continue;
+			}
 
-			// The front pair steer: positive is to the right, which is a turn about −Y.
-			_wheelNodes[wheel].Rotation = new Vector3(0f, wheel < 2 ? -Drive.Steer : 0f, 0f);
+			_wheelNodes[wheel].Transform = hub * new Transform3D(steer, Vector3.Zero);
+			if (_wheelNodes[wheel].GetChildCount() > 0 && _wheelNodes[wheel].GetChild(0) is Node3D tyre)
+			{
+				tyre.Rotation = new Vector3(_wheelSpin[wheel], 0f, tyre.Rotation.Z);
+			}
 		}
+	}
+
+	/// <summary>
+	/// One wheel's running gear on the model (docs/GROUND_VEHICLES.md §6.1), from the nodes
+	/// <c>tools/blender/four_by_four.py</c> names: the tyre and rim (<c>Wheel</c>), which roll,
+	/// and the upright (<c>Knuckle</c>), which does not, both on the wheel's mount; and on the
+	/// chassis, the two wishbones, each swung about its inboard pivot until it points at its
+	/// ball joint on the upright, and the coilover, pointed from its top mount at its foot on
+	/// the lower wishbone and stretched or squeezed to reach it. The rest pose — where the
+	/// model was exported, at rest on flat ground — is where each piece is unswung.
+	/// </summary>
+	public sealed class WheelRig
+	{
+		public Node3D Wheel { get; init; }
+
+		public Node3D Knuckle { get; init; }
+
+		public Node3D LowerArm { get; init; }
+
+		public Node3D UpperArm { get; init; }
+
+		public Node3D Shock { get; init; }
+
+		/// <summary>+1 for a wheel on the right, −1 on the left: which way along X its wishbones reach.</summary>
+		public float Side { get; init; }
+
+		/// <summary>The ball joints, in the knuckle's (the mount's) frame.</summary>
+		public Vector3 LowerJoint { get; init; }
+
+		public Vector3 UpperJoint { get; init; }
+
+		/// <summary>The coilover's foot, in the lower wishbone's frame.</summary>
+		public Vector3 ShockFoot { get; init; }
+
+		/// <summary>
+		/// Where the steering axis crosses the axle's height, in the mount's frame: between the
+		/// two ball joints, inboard of the hub, so that a wheel steered turns about its joints
+		/// and they stay where the wishbones reach.
+		/// </summary>
+		public Vector3 Kingpin => new((LowerJoint.X + UpperJoint.X) * 0.5f, 0f, (LowerJoint.Z + UpperJoint.Z) * 0.5f);
+
+		/// <summary>The wheel's centre at rest, on the upright body, as the model was exported.</summary>
+		public Vector3 RestHub { get; init; }
+
+		/// <summary>The inboard pivots and the coilover's top mount, on the chassis.</summary>
+		public Vector3 LowerPivot { get; init; }
+
+		public Vector3 UpperPivot { get; init; }
+
+		public Vector3 ShockTop { get; init; }
+
+		/// <summary>Each wishbone's angle to its ball joint and its span to it, and the coilover's length, at rest.</summary>
+		public float LowerRestAngle { get; init; }
+
+		public float UpperRestAngle { get; init; }
+
+		public float LowerRestLength { get; init; }
+
+		public float UpperRestLength { get; init; }
+
+		public float ShockRestLength { get; init; }
+
+		/// <summary>Where the coilover's foot is now, on the chassis: what its length is measured to.</summary>
+		public Vector3 ShockFootNow => LowerArm.Transform * ShockFoot;
+
+		/// <summary>
+		/// The wishbones and the coilover for the wheel's mount at <paramref name="mount"/> on
+		/// the upright body, the chassis being <paramref name="toChassis"/>'s inverse from it, and
+		/// the tyre rolled to <paramref name="spin"/>.
+		/// </summary>
+		public void Pose(Transform3D mount, Transform3D toChassis, float spin)
+		{
+			Wheel.Transform = new Transform3D(new Basis(Vector3.Right, spin), Vector3.Zero);
+
+			Swing(LowerArm, LowerPivot, toChassis * (mount * LowerJoint), LowerRestAngle, LowerRestLength);
+			Swing(UpperArm, UpperPivot, toChassis * (mount * UpperJoint), UpperRestAngle, UpperRestLength);
+
+			Vector3 along = ShockTop - ShockFootNow;
+			float length = along.Length();
+			if (!(length > 1e-4f))
+			{
+				return;
+			}
+
+			Vector3 up = along / length;
+			Vector3 right = up.Cross(Vector3.Back).Normalized();
+			Vector3 back = right.Cross(up);
+			Shock.Transform = new Transform3D(new Basis(right, up * (length / ShockRestLength), back), ShockTop);
+		}
+
+		/// <summary>
+		/// A wishbone swung about its pivot, in the chassis's cross-section, until it points at
+		/// <paramref name="joint"/>, and drawn as much longer or shorter in that section as it
+		/// takes to reach it: a hub that moves straight along the chassis's down leaves a rigid
+		/// arm's arc by up to a tenth of its length at the ends of the travel.
+		/// </summary>
+		private void Swing(Node3D arm, Vector3 pivot, Vector3 joint, float restAngle, float restLength)
+		{
+			float angle = Side * (AngleOf(Side, pivot, joint) - restAngle);
+			float stretch = SpanOf(pivot, joint) / restLength;
+			arm.Transform = new Transform3D(new Basis(Vector3.Back, angle) * Basis.FromScale(new Vector3(stretch, stretch, 1f)),
+				pivot);
+		}
+
+		/// <summary>The angle up from the horizontal, outward (towards <paramref name="side"/>), from a pivot to a point, in the chassis's cross-section.</summary>
+		public static float AngleOf(float side, Vector3 pivot, Vector3 point) =>
+			Mathf.Atan2(point.Y - pivot.Y, side * (point.X - pivot.X));
+
+		/// <summary>From a pivot to a point in the chassis's cross-section, fore and aft left out [m].</summary>
+		public static float SpanOf(Vector3 pivot, Vector3 point) => Mathf.Max(new Vector2(point.X - pivot.X, point.Y - pivot.Y).Length(), 1e-3f);
+	}
+
+	/// <summary>
+	/// The 4x4 drawn as its model (<see cref="CrewVehicleDefinition.Model"/>, docs/GROUND_VEHICLES.md
+	/// §6.1) in place of the greybox: the body and the gun on the sprung chassis, and for each
+	/// wheel a mount on the upright body carrying its tyre and its knuckle, with the wishbones and
+	/// the coilover between them and the chassis (<see cref="WheelRig"/>). Every piece is found by
+	/// the name <c>tools/blender/four_by_four.py</c> gives it; the rest pose it was exported in
+	/// is read off the pieces before they are moved. False, with nothing built, when the model
+	/// lacks a piece: the greybox is drawn instead.
+	/// </summary>
+	private bool BuildModel(PackedScene scene)
+	{
+		var model = scene.Instantiate<Node3D>();
+		Node3D Find(string name) => model.FindChild(name, recursive: true, owned: false) as Node3D;
+
+		var parts = new Node3D[FourByFourSim.Wheels, 5];
+		var joints = new Node3D[FourByFourSim.Wheels, 3];
+		Node3D bodyNode = Find("Body");
+		Node3D gunYaw = Find("GunYaw");
+		bool whole = bodyNode != null && gunYaw != null && gunYaw.FindChild("GunPitch", true, false) is Node3D;
+		string[] names = { "Wheel", "Knuckle", "LowerArm", "UpperArm", "Shock" };
+		for (int wheel = 0; wheel < FourByFourSim.Wheels && whole; wheel++)
+		{
+			for (int part = 0; part < names.Length; part++)
+			{
+				parts[wheel, part] = Find($"{names[part]}{wheel}");
+				whole &= parts[wheel, part] != null;
+			}
+
+			joints[wheel, 0] = whole ? parts[wheel, 1].FindChild($"LowerJoint{wheel}", true, false) as Node3D : null;
+			joints[wheel, 1] = whole ? parts[wheel, 1].FindChild($"UpperJoint{wheel}", true, false) as Node3D : null;
+			joints[wheel, 2] = whole ? parts[wheel, 2].FindChild($"ShockMount{wheel}", true, false) as Node3D : null;
+			whole &= joints[wheel, 0] != null && joints[wheel, 1] != null && joints[wheel, 2] != null;
+		}
+
+		if (!whole)
+		{
+			GD.PushError($"{Definition.ResourcePath}: its model lacks a piece CrewVehicle moves; drawing the greybox");
+			model.Free();
+			return false;
+		}
+
+		// Owned by the model's root, which is freed once its pieces are out of it.
+		void Move(Node3D node, Node3D parent)
+		{
+			node.Owner = null;
+			node.GetParent().RemoveChild(node);
+			parent.AddChild(node);
+		}
+
+		Move(bodyNode, _visual);
+		Move(gunYaw, _visual);
+		_gun = gunYaw;
+		_gunPitch = gunYaw.FindChild("GunPitch", true, false) as Node3D;
+
+		_rigs = new WheelRig[FourByFourSim.Wheels];
+		for (int wheel = 0; wheel < FourByFourSim.Wheels; wheel++)
+		{
+			Node3D tyre = parts[wheel, 0], knuckle = parts[wheel, 1], lower = parts[wheel, 2], upper = parts[wheel, 3],
+				shock = parts[wheel, 4];
+
+			// The rest pose, before anything moves: the hub where the knuckle stands, the pivots
+			// and the top mount where the arms and the coilover start.
+			Vector3 hub = knuckle.Position;
+			Vector3 lowerJoint = joints[wheel, 0].Position;
+			Vector3 upperJoint = joints[wheel, 1].Position;
+			Vector3 foot = joints[wheel, 2].Position;
+			float side = hub.X >= 0f ? 1f : -1f;
+
+			var mount = new Node3D { Name = $"Wheel{wheel}Mount" };
+			_presentation.AddChild(mount);
+			_wheelNodes[wheel] = mount;
+			Move(tyre, mount);
+			Move(knuckle, mount);
+			tyre.Transform = Transform3D.Identity;
+			knuckle.Transform = Transform3D.Identity;
+			Move(lower, _visual);
+			Move(upper, _visual);
+			Move(shock, _visual);
+
+			_rigs[wheel] = new WheelRig
+			{
+				Wheel = tyre,
+				Knuckle = knuckle,
+				LowerArm = lower,
+				UpperArm = upper,
+				Shock = shock,
+				Side = side,
+				LowerJoint = lowerJoint,
+				UpperJoint = upperJoint,
+				ShockFoot = foot,
+				RestHub = hub,
+				LowerPivot = lower.Position,
+				UpperPivot = upper.Position,
+				ShockTop = shock.Position,
+				LowerRestAngle = WheelRig.AngleOf(side, lower.Position, hub + lowerJoint),
+				UpperRestAngle = WheelRig.AngleOf(side, upper.Position, hub + upperJoint),
+				LowerRestLength = WheelRig.SpanOf(lower.Position, hub + lowerJoint),
+				UpperRestLength = WheelRig.SpanOf(upper.Position, hub + upperJoint),
+				ShockRestLength = Mathf.Max((shock.Position - (lower.Transform * foot)).Length(), 1e-3f),
+			};
+		}
+
+		model.Free();
+		return true;
 	}
 
 	// TODO(GV4, docs/GROUND_VEHICLES.md §12): check on a display: the wreck going up and burning, the
@@ -722,13 +1023,7 @@ public partial class CrewVehicle : CharacterBody3D
 		}
 
 		var burnt = new StandardMaterial3D { AlbedoColor = new Color(0.08f, 0.08f, 0.08f), Roughness = 1f };
-		foreach (Node child in _visual.GetChildren())
-		{
-			if (child is MeshInstance3D mesh)
-			{
-				mesh.MaterialOverride = burnt;
-			}
-		}
+		Burn(_presentation, burnt);
 
 		if (!effect || Gdpyr.Effects.ExplosionEffects.Instance is not { } effects || Hull.Length == 0)
 		{
@@ -749,6 +1044,20 @@ public partial class CrewVehicle : CharacterBody3D
 			Definition.Color);
 	}
 
+	/// <summary>Every mesh under <paramref name="node"/> drawn in <paramref name="material"/>: the wreck's.</summary>
+	private static void Burn(Node node, Material material)
+	{
+		if (node is MeshInstance3D mesh)
+		{
+			mesh.MaterialOverride = material;
+		}
+
+		foreach (Node child in node.GetChildren())
+		{
+			Burn(child, material);
+		}
+	}
+
 	private void BuildPresentation()
 	{
 		var body = new StandardMaterial3D { AlbedoColor = Definition.Color, Roughness = 0.7f };
@@ -760,6 +1069,12 @@ public partial class CrewVehicle : CharacterBody3D
 		AddChild(_presentation);
 		_visual = new Node3D { Name = "Visual" };
 		_presentation.AddChild(_visual);
+
+		if (Kind == CrewVehicleKind.FourByFour && Definition.Model is { } model && BuildModel(model))
+		{
+			PlaceWheels(Drive.Pitch, Drive.Roll);
+			return;
+		}
 
 		for (int i = 0; i < Hull.Length; i++)
 		{
@@ -813,7 +1128,7 @@ public partial class CrewVehicle : CharacterBody3D
 				_wheelNodes[wheel] = node;
 			}
 
-			PlaceWheels();
+			PlaceWheels(Drive.Pitch, Drive.Roll);
 			return;
 		}
 

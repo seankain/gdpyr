@@ -1426,7 +1426,7 @@ the HUD and the agent API call them the 4x4 and the helicopter.
 crew vehicle is a `CharacterBody3D` on a fourth physics layer, Vehicles, in a registry of its own
 with four slots, never a `Unit`: a unit is never predicted, never fogged, and counts towards the
 strategist's defeat. Its step is a pure function of its state, the input frame and its ray contacts
-— four wheel rays and four spring-dampers for the 4x4, one height ray for the helicopter — so a
+— six wheel rays and six spring-dampers on three axles for the 4x4, one height ray for the helicopter — so a
 replay re-runs it; the collider stays upright and the attitude is drawn on the mesh. **Seats are the
 use key**: beside a hull a tap of `E` gets in at the free seat whose door is nearest; seated, a tap
 gets out and a hold moves to the next free seat — rows of the one table that already answered for
