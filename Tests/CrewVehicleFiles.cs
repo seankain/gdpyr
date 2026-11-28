@@ -50,7 +50,8 @@ internal static class CrewVehicleFiles
 	{
 		Dictionary<string, string> f = Resource(FourByFourPath);
 		return new FourByFourTraits(
-			F(f, "WheelbaseMeters"), F(f, "HalfTrackMeters"), F(f, "WheelRadiusMeters"), F(f, "SpringRestMeters"),
+			F(f, "WheelbaseMeters"), F(f, "FrontAxleMeters"), F(f, "TandemSpacingMeters"), F(f, "HalfTrackMeters"),
+			F(f, "WheelRadiusMeters"), F(f, "SpringRestMeters"),
 			F(f, "SpringTravelMeters"), F(f, "SpringFrequencyHz"), F(f, "DampingRatio"),
 			F(f, "CentreOfMassHeightMeters"), F(f, "PitchGyrationMeters"), F(f, "RollGyrationMeters"),
 			F(f, "MaxSpeed"), F(f, "ReverseSpeed"), F(f, "DriveAcceleration"), F(f, "BrakeDeceleration"),

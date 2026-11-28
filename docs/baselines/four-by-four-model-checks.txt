@@ -1,0 +1,33 @@
+# GODOT=<Godot 4.6 .NET> ./scripts/four-by-four-model-checks.sh: headless, --fixed-fps 60, a floor and the vehicle test strip built by the check.
+# Run on the branch that adds it (docs/GROUND_VEHICLES.md §16.5).
+[checks] 4x4 model check
+[checks] PASS the 4x4's definition names a model (res://Models/Vehicles/four_by_four/four_by_four.glb)
+[checks] PASS it is drawn as the model's body, not the greybox's boxes
+[checks] PASS all six wheels have their running gear: 6
+[checks] PASS the model's hubs at rest are where the rules put the wheels at rest, within 0.000 m
+[checks] PASS parked, every wheel is drawn at its rest place (0.000 m) on the floor (0.000 m)
+[checks] PASS parked, the wishbones are at rest (0.0°) and so are the coilovers (0.000 m)
+[checks] PASS parked, the wishbones meet their joints (0.000 m) and the coilovers their feet (0.000 m)
+[checks] PASS the gun's pintle head is at the definition's mount ((0, 1.35, 0.95))
+[checks] PASS its muzzle is 1.1 m down the bore from the pivot ((0, 0, -1.1))
+[checks] PASS pointed 90° left and 30° up, the bore points 90.0° and 30.0°, the shield turning with it
+[checks] measured: 17.03 m in 3 s; rolled 42.57, 42.57, 42.57, 42.57, 42.57, 42.57 rad against 42.57
+[checks] PASS driving ahead, every wheel rolls forward: about −X, its top towards the nose
+[checks] PASS every wheel rolls by the distance driven over its radius, within 0.0 %
+[checks] measured: at full right lock, 6.9 m/s, steer 23.1°: front left 20.9°, front right 25.7°
+[checks] PASS steered right, both front wheels turn right, the inside one more (25.7°) and the outside one less (20.9°) than the step's 23.1°
+[checks] PASS they are drawn at the rules' Ackermann angles, which meet at one centre
+[checks] PASS the tandem's four wheels do not steer
+[checks] PASS turning right, the left wheels roll further than the right ones (132.34 against 107.56 rad)
+[checks] PASS steered left, they turn left, the left one, inside, more (35.2° and 27.1°)
+[checks] PASS at full lock the wishbones still meet the knuckles' joints, within 0.003 m: the wheel turns about them
+[checks] measured: over the bumps at 6 m/s, springs 0: 0.189..0.400 m from tick 281; 1: 0.189..0.400 m from tick 281; 2: 0.150..0.400 m from tick 308; 3: 0.150..0.400 m from tick 308; 4: 0.163..0.400 m from tick 316; 5: 0.163..0.400 m from tick 316
+[checks] PASS over the bumps every wheel rides up and down on its own spring, by 0.211 m at least
+[checks] PASS and never past its free length nor its bump stop
+[checks] PASS the wheels climb the first bump the front axle first, then the tandem's leading axle, then its trailing one (ticks 281, 281, 308, 308, 316, 316)
+[checks] PASS the front left lower wishbone swings -14.5°..11.6° with its wheel
+[checks] PASS throughout, every wishbone's end is within 0.000 m of its ball joint, drawn at most 11.7 % long or short to reach it
+[checks] PASS throughout, every coilover reaches its foot, within 0.000 m
+[checks] PASS a wreck is drawn burnt to the last wheel: 33 of 33 meshes
+[checks] PASS with no model the greybox is drawn, on six wheels that roll
+[checks] 26 of 26 facts hold

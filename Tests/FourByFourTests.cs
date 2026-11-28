@@ -20,7 +20,7 @@ public class FourByFourTests
 
 	private static readonly FourByFourTraits Traits = FourByFourTraits.Default;
 
-	/// <summary>What four rays straight down onto flat ground at <paramref name="ground"/> find.</summary>
+	/// <summary>What the six rays straight down onto flat ground at <paramref name="ground"/> find.</summary>
 	private static WheelContact[] Flat(in FourByFourState state, float ground = 0f)
 	{
 		var wheels = new WheelContact[FourByFourSim.Wheels];
@@ -168,15 +168,134 @@ public class FourByFourTests
 		Assert.True(Energy(state) - rest < 0.01f * start);
 	}
 
-	[Fact]
-	public void TheLastFiveCentimetresOfTravel_AreTenTimesAsStiff()
+	[Theory]
+	[InlineData(0)]
+	[InlineData(3)]
+	[InlineData(4)]
+	public void TheLastFiveCentimetresOfTravel_AreTenTimesAsStiff(int wheel)
 	{
 		float travel = Traits.SpringTravelMeters;
-		float soft = FourByFourSim.SpringForce(Traits, 0.11f, 0f) - FourByFourSim.SpringForce(Traits, 0.10f, 0f);
-		float stop = FourByFourSim.SpringForce(Traits, travel - 0.01f, 0f) - FourByFourSim.SpringForce(Traits, travel - 0.02f, 0f);
+		float soft = FourByFourSim.SpringForce(Traits, wheel, 0.11f, 0f) - FourByFourSim.SpringForce(Traits, wheel, 0.10f, 0f);
+		float stop = FourByFourSim.SpringForce(Traits, wheel, travel - 0.01f, 0f)
+			- FourByFourSim.SpringForce(Traits, wheel, travel - 0.02f, 0f);
 
-		Assert.Equal(Traits.CornerStiffness * 0.01f, soft, 4);
+		Assert.Equal(Traits.WheelStiffness(wheel) * 0.01f, soft, 4);
 		Assert.Equal(10f * soft, stop, 3);
+	}
+
+	// ---- three axles ---------------------------------------------------------------------
+
+	[Fact]
+	public void SixWheels_OnASteeredFrontAxleAndARearTandem_LeftThenRight()
+	{
+		Assert.Equal(6, FourByFourSim.Wheels);
+		Assert.Equal(3, FourByFourSim.Axles);
+
+		var front = FourByFourSim.HardpointLocal(Traits, 0);
+		var leading = FourByFourSim.HardpointLocal(Traits, 2);
+		var trailing = FourByFourSim.HardpointLocal(Traits, 4);
+		Assert.Equal(-1.75f, front.Z, 5);
+		Assert.Equal(1.40f - 0.43f, leading.Z, 5);
+		Assert.Equal(1.40f + 0.43f, trailing.Z, 5);
+		Assert.Equal(3.15f, ((leading.Z + trailing.Z) * 0.5f) - front.Z, 5);
+
+		for (int w = 0; w < FourByFourSim.Wheels; w++)
+		{
+			Vector3 p = FourByFourSim.HardpointLocal(Traits, w);
+			Assert.Equal(w % 2 == 0 ? -Traits.HalfTrackMeters : Traits.HalfTrackMeters, p.X);
+			Assert.Equal(0f, p.Y);
+			Assert.Equal(w / 2, FourByFourSim.AxleOf(w));
+			Assert.Equal(w < 2, FourByFourSim.Steers(w));
+		}
+
+		// The tyres of the tandem's two axles do not overlap.
+		Assert.True(trailing.Z - leading.Z > 2f * Traits.WheelRadiusMeters);
+	}
+
+	[Fact]
+	public void TheSprings_CarryTheWholeWeight_AndTheirMomentsAboutTheCentreOfMassCancel()
+	{
+		// Every spring compressed alike, as at rest: their sum is g, and the pitch and roll
+		// they make are none, so the truck stands level.
+		float c = Traits.StaticCompressionMeters;
+		float heave = 0f;
+		float pitch = 0f;
+		float roll = 0f;
+		float shares = 0f;
+		for (int w = 0; w < FourByFourSim.Wheels; w++)
+		{
+			Vector3 p = FourByFourSim.HardpointLocal(Traits, w);
+			float force = FourByFourSim.SpringForce(Traits, w, c, 0f);
+			heave += force;
+			pitch += force * p.Z;
+			roll += force * p.X;
+			shares += Traits.WheelShare(w);
+		}
+
+		Assert.Equal(Ballistics.Gravity, heave, 4);
+		Assert.Equal(0f, pitch, 4);
+		Assert.Equal(0f, roll, 4);
+		Assert.Equal(1f, shares, 5);
+
+		// The lever rule: the front axle carries the tandem's middle over the wheelbase.
+		Assert.Equal(1.40f / 3.15f, Traits.FrontShare, 5);
+		Assert.True(Traits.WheelStiffness(0) > Traits.WheelStiffness(2));
+		Assert.Equal(Traits.WheelStiffness(2), Traits.WheelStiffness(5));
+	}
+
+	[Theory]
+	[InlineData(0.3f)]
+	[InlineData(-0.3f)]
+	[InlineData(0.05f)]
+	public void TheFrontPair_AreDrawnTurnedAboutOneCentre_TheInsideWheelMore_TheTandemNot(float steer)
+	{
+		float left = FourByFourSim.WheelSteer(Traits, 0, steer);
+		float right = FourByFourSim.WheelSteer(Traits, 1, steer);
+		float inside = steer > 0f ? right : left;
+		float outside = steer > 0f ? left : right;
+
+		Assert.Equal(MathF.Sign(steer), MathF.Sign(left));
+		Assert.Equal(MathF.Sign(steer), MathF.Sign(right));
+		Assert.True(MathF.Abs(inside) > MathF.Abs(steer) && MathF.Abs(outside) < MathF.Abs(steer),
+			$"inside {inside}, outside {outside}, steer {steer}");
+
+		// Each front wheel's axle, carried across to the tandem's middle line, meets it at the
+		// same point: one turning centre, which is what the step turns the truck about.
+		float back = Traits.WheelbaseMeters;
+		float Centre(int wheel, float angle) =>
+			FourByFourSim.HardpointLocal(Traits, wheel).X + (back / MathF.Tan(angle));
+		Assert.Equal(Centre(0, left), Centre(1, right), 3);
+		Assert.Equal(back / MathF.Tan(steer), Centre(0, left), 3);
+
+		for (int w = 2; w < FourByFourSim.Wheels; w++)
+		{
+			Assert.Equal(0f, FourByFourSim.WheelSteer(Traits, w, steer));
+		}
+
+		Assert.Equal(0f, FourByFourSim.WheelSteer(Traits, 0, 0f));
+		Assert.Equal(0f, FourByFourSim.WheelSteer(Traits, 1, float.NaN));
+	}
+
+	[Fact]
+	public void TheRaysReach_IsFromTheAxleFarthestFromTheMiddle()
+	{
+		float farthest = MathF.Max(Traits.FrontAxleMeters, FourByFourSim.HardpointLocal(Traits, 4).Z);
+		Assert.Equal((farthest + Traits.HalfTrackMeters) * MathF.Sin(FourByFourSim.MaxAttitudeRadians),
+			Traits.AttitudeReachMeters, 5);
+	}
+
+	[Fact]
+	public void AFrontAxleOnTheCentreOfMass_OrPastTheTandem_IsClampedBetweenThem()
+	{
+		var onIt = new FourByFourTraits(3f, 0f, 0.8f, 0.85f, 0.4f, 0.4f, 0.25f, 1.6f, 0.3f, 0.55f, 1.5f, 0.85f,
+			18f, 6f, 4f, 9f, 1f, 6f, 1f / 3f, 9f, 2.5f, 0.5f, 0.15f, 2f);
+		var pastIt = new FourByFourTraits(3f, 5f, 0.8f, 0.85f, 0.4f, 0.4f, 0.25f, 1.6f, 0.3f, 0.55f, 1.5f, 0.85f,
+			18f, 6f, 4f, 9f, 1f, 6f, 1f / 3f, 9f, 2.5f, 0.5f, 0.15f, 2f);
+
+		Assert.Equal(0.3f, onIt.FrontAxleMeters, 5);
+		Assert.Equal(2.7f, pastIt.FrontAxleMeters, 5);
+		Assert.InRange(onIt.FrontShare, 0.05f, 0.95f);
+		Assert.InRange(pastIt.FrontShare, 0.05f, 0.95f);
 	}
 
 	[Fact]
@@ -203,9 +322,12 @@ public class FourByFourTests
 	[Fact]
 	public void ASpringNeverPulls()
 	{
-		Assert.Equal(0f, FourByFourSim.SpringForce(Traits, 0.05f, 20f));
-		Assert.Equal(0f, FourByFourSim.SpringForce(Traits, -0.1f, 0f));
-		Assert.True(FourByFourSim.SpringForce(Traits, 0.05f, -1f) > FourByFourSim.SpringForce(Traits, 0.05f, 0f));
+		for (int w = 0; w < FourByFourSim.Wheels; w++)
+		{
+			Assert.Equal(0f, FourByFourSim.SpringForce(Traits, w, 0.05f, 20f));
+			Assert.Equal(0f, FourByFourSim.SpringForce(Traits, w, -0.1f, 0f));
+			Assert.True(FourByFourSim.SpringForce(Traits, w, 0.05f, -1f) > FourByFourSim.SpringForce(Traits, w, 0.05f, 0f));
+		}
 	}
 
 	// ---- driving --------------------------------------------------------------------------
@@ -387,7 +509,7 @@ public class FourByFourTests
 	// ---- slopes ----------------------------------------------------------------------------
 
 	/// <summary>
-	/// What four rays straight down onto a plane rising <paramref name="grade"/> towards −Z
+	/// What the six rays straight down onto a plane rising <paramref name="grade"/> towards −Z
 	/// find — the ground under a truck heading uphill at yaw 0 — through z = 0 at y = 0:
 	/// the engine half's rays, from <see cref="FourByFourTraits.RayLiftMeters"/> above each
 	/// hardpoint to <see cref="FourByFourTraits.RayLengthMeters"/> below, with the plane's normal.
@@ -446,7 +568,7 @@ public class FourByFourTests
 	[InlineData(10f)]
 	[InlineData(20f)]
 	[InlineData(25f)]
-	public void ClimbingASteadySlopeFlatOut_ItsFourWheelsStayDown_OffTheirBumpStops(float degrees)
+	public void ClimbingASteadySlopeFlatOut_ItsSixWheelsStayDown_OffTheirBumpStops(float degrees)
 	{
 		// A truck climbing steadily is not lengthening its springs: damped on its own vertical
 		// speed rather than on its speed over the ground, it sagged onto its bump stops as it
@@ -609,10 +731,10 @@ public class FourByFourTests
 
 		float stored = 0f;
 		WheelContact[] wheels = Flat(state);
-		float k = Traits.CornerStiffness;
 		float bumpStart = Traits.SpringTravelMeters - FourByFourSim.BumpStopMeters;
 		for (int w = 0; w < FourByFourSim.Wheels; w++)
 		{
+			float k = Traits.WheelStiffness(w);
 			float c = FourByFourSim.Compression(Traits, w, wheels[w], state.Pitch, state.Roll);
 			if (c > 0f)
 			{

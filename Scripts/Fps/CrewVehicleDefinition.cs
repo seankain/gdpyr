@@ -140,8 +140,17 @@ public partial class CrewVehicleDefinition : Resource
 
 	[ExportCategory("Driving")]
 
+	/// <summary>From the front axle to the middle of the rear tandem [m] (<see cref="FourByFourTraits.WheelbaseMeters"/>).</summary>
 	[Export]
-	public float WheelbaseMeters = 3f;
+	public float WheelbaseMeters = 3.15f;
+
+	/// <summary>How far ahead of the origin, the centre of mass, the front axle is [m].</summary>
+	[Export]
+	public float FrontAxleMeters = 1.75f;
+
+	/// <summary>Between the rear tandem's two axles [m].</summary>
+	[Export]
+	public float TandemSpacingMeters = 0.86f;
 
 	[Export]
 	public float HalfTrackMeters = 0.85f;
@@ -258,6 +267,18 @@ public partial class CrewVehicleDefinition : Resource
 	[Export]
 	public Color Color = new(0.25f, 0.45f, 0.75f);
 
+	/// <summary>
+	/// The model a 4x4 is drawn as in place of its greybox (docs/GROUND_VEHICLES.md §6.1):
+	/// <c>Models/Vehicles/four_by_four/four_by_four.glb</c>, built by
+	/// <c>tools/blender/four_by_four.py</c>. Its origin is the vehicle's, forward −Z; its nodes
+	/// <c>Body</c>, <c>GunYaw</c>/<c>GunPitch</c>, and per wheel <c>Wheel</c>, <c>Knuckle</c>,
+	/// <c>LowerArm</c>, <c>UpperArm</c> and <c>Shock</c> are what <see cref="CrewVehicle"/> moves.
+	/// Null draws the greybox. Drawn only: what it collides with and is hit as are the collider
+	/// and the hull's boxes.
+	/// </summary>
+	[Export]
+	public PackedScene Model;
+
 	public CrewVehicleKind VehicleKind => (CrewVehicleKind)Mathf.Clamp(Kind, 0, (int)CrewVehicleKind.Helicopter);
 
 	public bool HasGun => GunWeaponId >= 0;
@@ -281,6 +302,8 @@ public partial class CrewVehicleDefinition : Resource
 	/// <summary>How the 4x4 drives (<see cref="FourByFourSim"/>).</summary>
 	public FourByFourTraits ToFourByFourTraits() => new(
 		WheelbaseMeters,
+		FrontAxleMeters,
+		TandemSpacingMeters,
 		HalfTrackMeters,
 		WheelRadiusMeters,
 		SpringRestMeters,

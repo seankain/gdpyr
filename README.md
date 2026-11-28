@@ -31,7 +31,8 @@ dedicated-server authoritative.
 - [`docs/VEHICLES.md`](docs/VEHICLES.md) — vehicles that carry units: the technical with seats,
   boarding and unloading, and a vertical take-off and landing dropship
 - [`docs/GROUND_VEHICLES.md`](docs/GROUND_VEHICLES.md) — vehicles the ground force drives; GV0–GV9,
-  all built: a 4x4 with sprung suspension, a mounted gun and a passenger in the bed, and a
+  all built: a 4x4 — a six-wheeled buggy on three sprung axles, drawn as a model whose wheels
+  roll, steer and ride on their wishbones — with a mounted gun and a passenger in the bed, and a
   helicopter with a passenger in its door, predicted on the driver's client; passengers fire their
   own weapons, from where their own screen drew the seat; a kiosk beside the weapon locker hands one
   of each out on a respawn timer; 200 rifle hits destroy the 4x4, one direct hit from a tank either;
@@ -153,7 +154,9 @@ Structures/     StructureDefinition resources: pillbox, sandbag wall, sniper tow
 Models/Weapons/ Weapon art: the launcher's world model and viewmodel (built by
                 tools/blender/launcher.py) and the first-person arms they are built from
 Models/Vehicles/ Vehicle art: the tank, whose turret turns free of its hull, and the supply truck
-                (built by tools/blender/tank.py and supply_truck.py; docs/UNIT_MODELS.md)
+                (built by tools/blender/tank.py and supply_truck.py; docs/UNIT_MODELS.md); the
+                ground force's 4x4, its wheels, wishbones, coilovers and gun in pieces that move
+                (tools/blender/four_by_four.py; docs/GROUND_VEHICLES.md §16)
 Tests/          xUnit over the engine-free sources — `dotnet test`, no Godot needed
 Tests/Scenarios/ Playtest scenario files: data, and authoring one needs no Godot install
 ThirdParty/     Vendored source: FluidHTN at a pinned commit (docs/HTN_BOTS.md §3.8); and assets: the
@@ -164,7 +167,7 @@ tools/          External processes that talk to a server over a socket: the agen
                 divergence probe, the playtest harness, a Python client, and the HTN planner
                 probes and benchmark (docs/HTN_BOTS.md §3). Never part of the
                 game assembly (docs/TRAINING.md). And tools/blender/: scripts that build models
-                with Blender's `bpy` (the Gully's bridge, the launcher, the tank, the supply truck), and what they build
+                with Blender's `bpy` (the Gully's bridge, the launcher, the tank, the supply truck, the 4x4), and what they build
 ```
 
 The simulation runs in `_PhysicsProcess` at a fixed 60 Hz and reads nothing but the recorded
